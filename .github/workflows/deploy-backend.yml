@@ -1,0 +1,58 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mashuk-backend/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mashuk
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install, test and build
+        working-directory: mashuk-backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mashuk?sslmode=disable
+          SKIP_VK_SIGN: 'true'
+          ADMIN_SECRET: dev-admin-secret
+        run: |
+          npm ci
+          npm run db:push
+          npm run db:seed
+          npm test
+          npm run build
+
+      - name: Build Docker image
+        run: |
+          cd mashuk-backend
+          docker build -t mashuk-backend:${{ github.sha }} .
+
+      - name: Deploy to Timeweb (webhook)
+        if: ${{ secrets.TIMEWEB_DEPLOY_WEBHOOK != '' }}
+        run: |
+          curl -X POST "${{ secrets.TIMEWEB_DEPLOY_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{"service":"backend","sha":"${{ github.sha }}"}'

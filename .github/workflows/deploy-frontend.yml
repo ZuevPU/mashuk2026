@@ -1,0 +1,39 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mashuk-frontend/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install and Build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+        run: |
+          cd mashuk-frontend
+          npm ci --legacy-peer-deps
+          npm run build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mashuk-frontend-dist
+          path: mashuk-frontend/dist
+
+      - name: Deploy to Timeweb Static (webhook)
+        if: ${{ secrets.TIMEWEB_STATIC_WEBHOOK != '' }}
+        run: |
+          curl -X POST "${{ secrets.TIMEWEB_STATIC_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{"service":"frontend","sha":"${{ github.sha }}"}'

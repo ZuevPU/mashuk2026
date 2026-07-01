@@ -1,0 +1,1120 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Мокап бота Машук 2026 · VK Mini App</title>
+<style>
+html,body{margin:0;padding:0;height:100%;background:#fafafa;color:#1a1d24;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;color-scheme:light dark}
+@media (prefers-color-scheme: dark){html,body{background:#000;color:#8a94a6}}
+iframe{position:fixed;inset:0;width:100%;height:100%;border:0}
+#k-badge{position:fixed;top:12px;right:12px;z-index:2147483647;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;color:rgba(30,33,38,.78);background:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);border:1px solid rgba(0,0,0,.08);user-select:none;pointer-events:none;opacity:.9}
+@media (prefers-color-scheme: dark){#k-badge{color:rgba(255,255,255,.78);background:rgba(30,33,38,.72);border-color:rgba(255,255,255,.08)}}
+</style>
+</head>
+<body>
+<iframe sandbox="allow-scripts allow-modals allow-popups allow-popups-to-escape-sandbox allow-forms allow-downloads" allow="clipboard-write; clipboard-read; web-share; fullscreen; picture-in-picture; autoplay; encrypted-media" referrerpolicy="no-referrer" loading="eager" title="Мокап бота Машук 2026 · VK Mini App" srcdoc="&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;ru&quot;&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;title&gt;Машук 2026 · Бот · Мокап v8&lt;/title&gt;
+&lt;style&gt;
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:-apple-system,&#39;SF Pro Display&#39;,Arial,sans-serif;background:#E8E2D8;color:#1A1714}
+body{display:flex;flex-direction:column;align-items:center;padding:24px 16px 32px;min-height:100vh}
+
+.page-header{text-align:center;margin-bottom:20px}
+.page-title{font-size:15px;font-weight:700;color:#1A1714}
+.page-sub{font-size:11px;color:#888;margin-top:3px}
+
+.time-sw{display:flex;gap:6px;margin-bottom:16px;background:#D8D2C8;border-radius:22px;padding:4px}
+.tsb{padding:6px 14px;border-radius:18px;border:none;background:transparent;font-size:12px;font-weight:500;color:#888;cursor:pointer;transition:all .2s;font-family:inherit}
+.tsb.on{background:#1A1714;color:#fff}
+
+/* Phone */
+.phone{width:300px;background:#F5F0E8;border-radius:44px;padding:14px 12px 0;border:2px solid #C0BAB2;box-shadow:0 28px 70px rgba(0,0,0,.22),0 6px 16px rgba(0,0,0,.1),inset 0 1px 0 rgba(255,255,255,.15)}
+.notch{width:72px;height:5px;background:#B8B2AA;border-radius:3px;margin:0 auto 12px}
+.scr{max-height:560px;overflow-y:auto;scrollbar-width:none;display:flex;flex-direction:column;gap:7px;padding-bottom:6px}
+.scr::-webkit-scrollbar{display:none}
+
+/* Cards */
+.card{background:#fff;border-radius:14px;padding:11px 13px;box-shadow:0 2px 10px rgba(0,0,0,.08),0 0 0 1px rgba(0,0,0,.05)}
+
+/* HOME header */
+.hdr{background:#1A1714;border-radius:18px;padding:13px 14px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.hdr-row{display:flex;justify-content:space-between;align-items:flex-start}
+.hdr-n{font-size:13px;font-weight:700;color:#fff}
+.hdr-dir{font-size:10px;color:#FF5500;font-weight:600;margin-top:2px}
+.hdr-d{font-size:10px;color:#888}
+.hdr-dhl{font-size:10px;color:#FF5500;font-weight:700;margin-top:2px}
+.hdr-fl{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#FF5500;margin-top:9px}
+.hdr-fv{font-size:13px;font-weight:600;color:#F5F0E8;margin-top:3px;line-height:1.35}
+.dots{display:flex;gap:4px;margin-top:8px}
+.d{height:4px;border-radius:2px;flex:1}
+.d.dn{background:#4A4540}.d.td{background:#FF5500}.d.ft{background:#2A2622}
+
+/* Priority orange */
+.prio{background:#FF5500;border-radius:16px;padding:13px 14px;position:relative;overflow:hidden;cursor:pointer;box-shadow:0 4px 16px rgba(255,85,0,.35)}
+.prio::after{content:&#39;&#39;;position:absolute;top:-18px;right:-18px;width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.1)}
+.prio-tag{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.8);margin-bottom:4px}
+.prio-title{font-size:16px;font-weight:800;color:#fff;line-height:1.25}
+.prio-sub{font-size:11px;color:rgba(255,255,255,.85);margin-top:3px}
+.prio-btn{display:inline-block;background:#fff;color:#FF5500;font-size:11px;font-weight:700;border-radius:9px;padding:6px 14px;margin-top:10px}
+
+/* Missed card */
+.miss{background:#FFF0F0;border-radius:13px;padding:10px 12px;display:flex;align-items:center;gap:9px;cursor:pointer;box-shadow:0 2px 10px rgba(229,62,62,.12),0 0 0 1.5px rgba(229,62,62,.25)}
+.m-dot{width:8px;height:8px;border-radius:50%;background:#E53E3E;flex-shrink:0}
+.m-t{font-size:12px;font-weight:700;color:#C53030}
+.m-s{font-size:10px;color:#888;margin-top:2px}
+.m-arr{font-size:14px;color:#E53E3E;font-weight:700}
+
+/* NOW / NEXT badges */
+.nbg{display:inline-flex;align-items:center;gap:5px;background:#1A1714;color:#fff;font-size:9px;font-weight:700;letter-spacing:.06em;border-radius:6px;padding:3px 8px;margin-bottom:6px}
+.pul{width:5px;height:5px;border-radius:50%;background:#FF5500;animation:pp 1.4s ease-in-out infinite}
+@keyframes pp{0%,100%{opacity:1}50%{opacity:.2}}
+.soon-bdg{display:inline-flex;align-items:center;gap:5px;background:#4A4540;color:#fff;font-size:9px;font-weight:700;border-radius:6px;padding:3px 8px;margin-bottom:6px}
+.avail-bdg{display:inline-flex;align-items:center;gap:5px;background:#888;color:#fff;font-size:9px;font-weight:700;border-radius:6px;padding:3px 8px;margin-bottom:6px}
+.now-t{font-size:15px;font-weight:700}
+.now-tm{font-size:11px;color:#888;margin-top:2px}
+.cap-row{display:flex;gap:5px;margin-top:9px}
+.cap{flex:1;background:#F5F0E8;border:1px solid #E0DAD0;border-radius:9px;padding:7px 4px;text-align:center;cursor:pointer}
+.cap .ci{font-size:14px;display:block}
+.cap .cl{font-size:9px;color:#666;margin-top:2px;font-weight:500}
+
+/* Next event */
+.nxt{background:#fff;border-radius:12px;padding:9px 13px;display:flex;align-items:center;gap:10px;opacity:.78;box-shadow:0 1px 4px rgba(0,0,0,.06),0 0 0 1px rgba(0,0,0,.04)}
+.nxt-l{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:#bbb;min-width:38px}
+.nxt-dv{width:1px;height:28px;background:#EAE4DA}
+.nxt-ev{font-size:12px;font-weight:600}
+.nxt-t{font-size:10px;color:#888}
+
+/* Touchpoints */
+.tp{background:#fff;border-radius:13px;padding:10px 13px;box-shadow:0 2px 8px rgba(0,0,0,.07),0 0 0 1px rgba(0,0,0,.05)}
+.tp-l{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:#aaa;margin-bottom:6px;font-weight:600}
+.pdots{display:flex;gap:5px}
+.pd{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.pd.ok{background:#EBF5EB;border:1.5px solid #7DC27D;color:#3A7A3A}
+.pd.bd{background:#FDECEA;border:1.5px solid #E08080;color:#C0392B}
+.pd.ac{background:#FF5500;border:1.5px solid #FF5500;color:#fff}
+.pd.ft{background:#F0EBE3;border:1.5px solid #D5CFC7;color:#C8C2BA}
+.tp-tx{font-size:10px;color:#888;margin-top:5px}
+
+/* Tasks mini */
+.tmi{background:#fff;border-radius:13px;padding:10px 13px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.07),0 0 0 1px rgba(255,85,0,.15)}
+.tmi-l{display:flex;align-items:center;gap:10px}
+.tmi-t{font-size:12px;font-weight:700}
+.tmi-s{font-size:10px;color:#888;margin-top:1px}
+.tmbdg{color:#fff;font-size:11px;font-weight:800;border-radius:10px;padding:3px 10px;background:#888}
+.tmbdg.new{background:#FF5500}
+
+/* Stats row */
+.stats{display:flex;gap:5px}
+.st{flex:1;background:#fff;border-radius:11px;padding:8px 5px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.06),0 0 0 1px rgba(0,0,0,.05)}
+.sv{font-size:14px;font-weight:800}
+.sl{font-size:9px;color:#888;margin-top:2px}
+
+/* Screen headers */
+.scr-hdr{display:flex;justify-content:space-between;align-items:flex-start;padding:2px 2px 0}
+.scr-ttl{font-size:16px;font-weight:800}
+.scr-sub{font-size:10px;color:#888;margin-top:2px}
+
+/* ═══ PROGRAM SUB-TABS ══════════════════════════════════════════ */
+.prog-subtabs{display:flex;background:#EAE4DA;border-radius:12px;padding:3px;gap:2px}
+.pst{flex:1;padding:7px 0;text-align:center;font-size:11px;font-weight:600;color:#888;border-radius:9px;cursor:pointer;border:none;background:transparent;font-family:inherit;transition:all .18s}
+.pst.on{background:#fff;color:#1A1714;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+
+/* Day switcher (horizontal scroll) */
+.day-sw{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.day-sw::-webkit-scrollbar{display:none}
+.dsb{min-width:44px;padding:5px 8px;border-radius:9px;border:none;background:#fff;font-size:10px;font-weight:600;color:#888;cursor:pointer;font-family:inherit;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.07);transition:all .18s;flex-shrink:0}
+.dsb .dn{font-size:8px;display:block;margin-top:1px;color:#bbb}
+.dsb.on{background:#1A1714;color:#fff}
+.dsb.on .dn{color:rgba(255,255,255,.6)}
+.dsb.today{border:1.5px solid #FF5500}
+.dsb.on.today{border-color:#1A1714}
+.dsb.done .dn{color:#7DC27D}
+
+/* Recommendation block */
+.rec-block{background:#fff;border-radius:13px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.07),0 0 0 1px rgba(0,0,0,.05)}
+.rec-block-hdr{padding:9px 13px 6px;font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:#FF5500;font-weight:700}
+.rec-item{display:flex;align-items:center;gap:10px;padding:8px 13px;border-top:1px solid #F5F0E8;cursor:pointer}
+.rec-cb{width:18px;height:18px;border-radius:4px;border:1.5px solid #D5CFC7;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px}
+.rec-cb.ck{background:#FF5500;border-color:#FF5500;color:#fff}
+.rec-item-t{font-size:12px;font-weight:600;flex:1}
+.rec-item-s{font-size:10px;color:#888;margin-top:1px}
+.rec-arr{font-size:15px;color:#D5CFC7}
+
+/* Timeline */
+.tl-wrap{background:#fff;border-radius:13px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.07),0 0 0 1px rgba(0,0,0,.05)}
+.tl-row{display:flex;align-items:flex-start;padding:10px 13px;border-bottom:1px solid #F5F0E8;cursor:pointer}
+.tl-row:last-child{border-bottom:none}
+.tl-row.past{opacity:.5}
+.tl-row.now-row{background:#FF5500;padding:12px 13px}
+.tl-row.now-row .tl-time,.tl-row.now-row .tl-sub{color:rgba(255,255,255,.8)}
+.tl-row.now-row .tl-title{color:#fff}
+.tl-time{font-size:12px;font-weight:700;min-width:40px;flex-shrink:0;padding-top:1px}
+.tl-body{flex:1}
+.tl-title{font-size:12px;font-weight:700}
+.tl-sub{font-size:10px;color:#888;margin-top:2px}
+.tl-badge{display:inline-block;font-size:9px;font-weight:700;border-radius:5px;padding:2px 7px;margin-top:4px;background:#FF5500;color:#fff}
+.tl-row.now-row .tl-badge{background:rgba(255,255,255,.25);color:#fff}
+.tl-check{font-size:14px;color:#7DC27D;flex-shrink:0;margin-left:8px;padding-top:1px}
+.tl-arr{font-size:15px;color:#D5CFC7;margin-left:8px;padding-top:1px}
+
+/* ═══ KNOWLEDGE BASE ════════════════════════════════════════════ */
+/* Day card — unlocked */
+.kb-day{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.07),0 0 0 1px rgba(0,0,0,.05)}
+.kb-day-hdr{padding:11px 13px;display:flex;align-items:center;gap:10px;cursor:pointer}
+.kb-day-lbl{font-size:13px;font-weight:800;flex:1}
+.kb-day-sub{font-size:10px;color:#888;font-weight:500}
+.kb-xp-pill{background:#EBF5EB;border:1px solid #7DC27D;border-radius:8px;padding:2px 9px;font-size:10px;font-weight:700;color:#3A7A3A;flex-shrink:0}
+.kb-xp-pill.warn{background:#FFF8F5;border-color:#FFD0B8;color:#FF5500}
+.kb-day-arr{font-size:16px;color:#D5CFC7;transition:transform .2s}
+.kb-day-arr.open{transform:rotate(90deg)}
+
+/* Speaker block */
+.kb-speaker{border-top:1px solid #F5F0E8}
+.kb-sp-row{display:flex;align-items:center;gap:9px;padding:9px 13px;cursor:pointer}
+.kb-sp-av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#FF5500,#FF8040);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;flex-shrink:0}
+.kb-sp-av.b{background:linear-gradient(135deg,#1A1714,#4A4540)}
+.kb-sp-av.g{background:linear-gradient(135deg,#3A7A3A,#5DA85D)}
+.kb-sp-nm{font-size:11px;font-weight:700;flex:1}
+.kb-sp-ev{font-size:9px;color:#FF5500;font-weight:600;margin-top:1px}
+.kb-sp-arr{font-size:14px;color:#D5CFC7}
+
+/* Materials */
+.kb-mats{background:#F8F4EE;display:flex;flex-direction:column;gap:0}
+.kb-mat{display:flex;align-items:center;gap:10px;padding:8px 13px 8px 20px;border-top:1px solid #EAE4DA;cursor:pointer}
+.kb-mat-ic{font-size:16px;flex-shrink:0}
+.kb-mat-t{font-size:11px;font-weight:600;flex:1}
+.kb-mat-s{font-size:9px;color:#888;margin-top:1px}
+.kb-mat-new{font-size:8px;font-weight:800;background:#FF5500;color:#fff;border-radius:5px;padding:2px 6px;flex-shrink:0}
+.kb-mat-arr{font-size:13px;color:#D5CFC7}
+
+/* Locked day card */
+.kb-day.locked{opacity:1}
+.kb-day.locked .kb-day-hdr{opacity:.65}
+.kb-lock-banner{background:#F5F0E8;border-top:1px solid #EAE4DA;padding:10px 13px;display:flex;align-items:center;gap:9px}
+.kb-lock-ic{font-size:18px;flex-shrink:0}
+.kb-lock-t{font-size:11px;font-weight:600;color:#888}
+.kb-lock-s{font-size:9px;color:#bbb;margin-top:2px}
+.kb-lock-bar-w{background:#EAE4DA;border-radius:3px;height:5px;margin-top:6px}
+.kb-lock-bar-f{background:#FF5500;border-radius:3px;height:5px}
+
+/* ═══ TASKS ════════════════════════════════════════════════════ */
+.pb-w{background:#fff;border-radius:13px;padding:11px 13px;box-shadow:0 2px 8px rgba(0,0,0,.07),0 0 0 1px rgba(0,0,0,.05)}
+.pb-r{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+.pb-t{font-size:12px;font-weight:700}
+.pb-c{font-size:11px;color:#FF5500;font-weight:700}
+.pb-tr{background:#EAE4DA;border-radius:4px;height:7px}
+.pb-fi{background:#FF5500;border-radius:4px;height:7px}
+.chips{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.chips::-webkit-scrollbar{display:none}
+.chip{background:#fff;border:1.5px solid #EAE4DA;border-radius:16px;padding:5px 12px;font-size:10px;font-weight:600;white-space:nowrap;cursor:pointer;color:#1A1714;transition:all .15s}
+.chip.on{background:#1A1714;color:#fff;border-color:#1A1714}
+.tk{background:#fff;border-radius:13px;padding:11px 13px;display:flex;align-items:flex-start;gap:10px;box-shadow:0 2px 6px rgba(0,0,0,.06),0 0 0 1px rgba(0,0,0,.05)}
+.tk.hot{box-shadow:0 2px 10px rgba(255,85,0,.14),0 0 0 1.5px rgba(255,85,0,.22)}
+.tk-ch{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;margin-top:1px}
+.tk-ch.dk{background:#EBF5EB;border:1.5px solid #7DC27D}
+.tk-ch.av{background:#F5F0E8;border:1.5px solid #D5CFC7}
+.tk-ch.lk{background:#F5F0E8;border:1.5px solid #D5CFC7;opacity:.5;font-size:10px}
+.tk-b{flex:1}
+.tk-t{font-size:12px;font-weight:600}
+.tk-t.dk{color:#999;text-decoration:line-through}
+.tk-t.lk{color:#bbb}
+.tk-c{font-size:9px;color:#888;margin-top:2px}
+.tk-x{font-size:11px;font-weight:700;color:#FF5500;margin-left:auto;flex-shrink:0;white-space:nowrap}
+.tk-x.dk{color:#7DC27D}
+.tk-x.lk{color:#bbb}
+
+/* ═══ CHAT ══════════════════════════════════════════════════════ */
+.ask-btn{background:#fff;border-radius:13px;padding:12px 13px;display:flex;align-items:center;gap:11px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.07),0 0 0 1px rgba(0,0,0,.05)}
+.ask-sub{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap}
+.ask-tag{background:#F5F0E8;border:1px solid #E0DAD0;border-radius:7px;padding:3px 9px;font-size:9px;color:#555;cursor:pointer;font-weight:600}
+.sec-l{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:#aaa;padding:0 1px;margin-bottom:5px;font-weight:600}
+.q-incoming{background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.07),0 0 0 1px rgba(0,0,0,.05)}
+.qi{padding:11px 13px;display:flex;flex-direction:column;gap:2px}
+.qi+.qi{border-top:1px solid #F0EBE3}
+.qi-fr{font-size:10px;color:#888}
+.qi-tx{font-size:12px;font-weight:600;line-height:1.4;margin-top:2px}
+.qi-bt{display:inline-block;background:#FF5500;color:#fff;font-size:10px;font-weight:700;border-radius:7px;padding:5px 11px;margin-top:6px;cursor:pointer}
+.myq{background:#F8F4EE;border-radius:13px;padding:11px 13px;border:1px solid #E8E2D8}
+.myq-t{font-size:12px;font-weight:600;line-height:1.4;font-style:italic}
+.myq-a{font-size:11px;color:#FF5500;font-weight:700;margin-top:5px}
+.dir-strip{padding:9px 4px 2px;text-align:center;cursor:pointer}
+.dir-strip-t{font-size:10px;color:#C8C2BA;text-decoration:underline;text-underline-offset:2px}
+
+/* ═══ ME / PROFILE ══════════════════════════════════════════════ */
+.pf-hdr{background:#fff;border-radius:14px;padding:13px 14px;display:flex;align-items:center;gap:11px;box-shadow:0 2px 8px rgba(0,0,0,.07),0 0 0 1px rgba(0,0,0,.05)}
+.pf-av{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#FF5500,#FF8040);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#fff;flex-shrink:0;box-shadow:0 2px 8px rgba(255,85,0,.3)}
+.pf-n{font-size:14px;font-weight:800}
+.pf-r{font-size:10px;color:#FF5500;font-weight:600;margin-top:2px}
+.pf-sm{font-size:10px;color:#888;margin-top:1px}
+.pf-cfg{margin-left:auto;font-size:20px;color:#C8C2BA;cursor:pointer;line-height:1}
+.ab-card{background:#fff;border-radius:14px;padding:12px 14px;box-shadow:0 2px 8px rgba(0,0,0,.07),0 0 0 1px rgba(0,0,0,.05)}
+.ab-row{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.ab-pt{min-width:44px}
+.ab-pt-l{font-size:8px;text-transform:uppercase;letter-spacing:.07em;color:#aaa}
+.ab-pt-d{font-size:11px;font-weight:700;margin-top:1px}
+.ab-track{flex:1;height:7px;background:#EAE4DA;border-radius:4px;position:relative}
+.ab-fill{height:7px;background:#FF5500;border-radius:4px}
+.ab-dot-wrap{position:absolute;top:50%;left:43%;transform:translate(-50%,-50%)}
+.ab-dot{width:14px;height:14px;border-radius:50%;background:#FF5500;border:2.5px solid #fff;box-shadow:0 0 0 1.5px #FF5500}
+.ab-stats{display:flex;border-top:1px solid #F0EBE3;padding-top:9px}
+.abs{flex:1;text-align:center}
+.abs+.abs{border-left:1px solid #F0EBE3}
+.abs-v{font-size:13px;font-weight:800}
+.abs-l{font-size:8px;color:#888;margin-top:2px}
+.pb{background:#fff;border-radius:13px;padding:11px 13px;box-shadow:0 2px 6px rgba(0,0,0,.06),0 0 0 1px rgba(0,0,0,.05)}
+.pb-lbl{display:flex;align-items:center;gap:5px;font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:#FF5500;font-weight:700;margin-bottom:7px}
+.pb-text{font-size:12px;line-height:1.5;color:#1A1714;font-style:italic}
+.pb-checks{display:flex;flex-direction:column;gap:5px}
+.pbc{font-size:11px;display:flex;align-items:flex-start;gap:7px;line-height:1.4}
+.pbc::before{content:&#39;✓&#39;;color:#FF5500;font-weight:800;flex-shrink:0;font-size:12px}
+.pb-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px}
+.ptag{font-size:10px;background:#F5F0E8;border:1px solid #E0DAD0;border-radius:6px;padding:3px 8px;color:#555;font-weight:600}
+.pb-link{font-size:11px;color:#FF5500;font-weight:700;cursor:pointer}
+.pb-steps{display:flex;flex-direction:column;gap:6px}
+.ps{font-size:11px;display:flex;align-items:flex-start;gap:8px;line-height:1.4}
+.ps-n{width:17px;height:17px;border-radius:50%;background:#FF5500;color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.ai-rec{background:#FFF8F5;border:1.5px solid #FFD0B8;border-radius:13px;padding:11px 13px}
+.ai-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:#FF5500;font-weight:700;margin-bottom:6px}
+.ai-text{font-size:11px;line-height:1.5}
+.ai-link{font-size:11px;color:#FF5500;font-weight:700;margin-top:6px;cursor:pointer}
+
+/* NAV */
+.nav{display:flex;justify-content:space-around;background:#fff;border-top:1px solid #EAE4DA;padding:9px 0 11px;border-radius:0 0 30px 30px;margin:9px -12px 0}
+.ni{display:flex;flex-direction:column;align-items:center;gap:2px;padding:0 5px;cursor:pointer;position:relative}
+.nii{font-size:20px;line-height:1.2}
+.nil{font-size:8px;color:#aaa;font-weight:500}
+.ni.on .nil{color:#FF5500}
+.nb{position:absolute;top:-3px;right:0;background:#E53E3E;color:#fff;font-size:7px;font-weight:800;min-width:14px;height:14px;border-radius:7px;display:flex;align-items:center;justify-content:center;padding:0 3px}
+
+.hidden{display:none!important}
+.page-footer{margin-top:18px;text-align:center;font-size:10px;color:#B0A898}
+
+/* ── KNOTTA NAV ── */
+.knotta-tabs-wrap{display:block;width:100vw;max-width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);margin-top:0;margin-bottom:22px;background:#1E1E1E;border-bottom:2px solid #F05A28;box-sizing:border-box;position:relative;z-index:10;}
+.knotta-tabs{margin:0 auto;padding:0;display:flex;font-family:-apple-system,Arial,sans-serif;max-width:900px;height:46px;width:100%;box-sizing:border-box;}
+.knotta-tabs&gt;*{flex:1;padding:0 8px;font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;text-align:center;text-decoration:none;line-height:1.2;display:flex;align-items:center;justify-content:center;border:0;box-sizing:border-box;color:rgba(255,255,255,.55);background:transparent;}
+.knotta-tabs&gt;a{transition:color .15s,background .15s;cursor:pointer;}
+.knotta-tabs&gt;a:hover{color:#fff;background:rgba(240,90,40,.10);}
+.knotta-tabs&gt;.knotta-tab-active{color:#fff;border-bottom:3px solid #F05A28;background:rgba(240,90,40,.08);cursor:default;}
+
+/* ═══ CHAT v8 ══════════════════════════════════════════════════ */
+/* Reflective questions block — priority */
+.rq-hdr{background:#1A1714;border-radius:14px 14px 0 0;padding:10px 13px;display:flex;align-items:center;gap:9px}
+.rq-hdr-ic{font-size:16px}
+.rq-hdr-tx{flex:1}
+.rq-hdr-t{font-size:12px;font-weight:800;color:#fff}
+.rq-hdr-s{font-size:9px;color:rgba(255,255,255,.6);margin-top:1px}
+.rq-badge{background:#E53E3E;color:#fff;font-size:9px;font-weight:800;border-radius:8px;padding:3px 8px;flex-shrink:0}
+.rq-body{background:#fff;border-radius:0 0 14px 14px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.1),0 0 0 1px rgba(0,0,0,.06)}
+.rq-item{padding:11px 13px;display:flex;flex-direction:column;gap:3px}
+.rq-item+.rq-item{border-top:1px solid #F5F0E8}
+.rq-tag{display:inline-flex;align-items:center;gap:4px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#FF5500;background:#FFF0E6;border-radius:5px;padding:2px 7px;margin-bottom:2px;align-self:flex-start}
+.rq-q{font-size:12px;font-weight:700;color:#1A1714;line-height:1.4}
+.rq-from{font-size:9px;color:#aaa;margin-top:1px}
+.rq-btn{display:inline-block;background:#FF5500;color:#fff;font-size:10px;font-weight:700;border-radius:8px;padding:6px 14px;margin-top:7px;cursor:pointer;align-self:flex-start}
+.rq-done{display:inline-flex;align-items:center;gap:5px;font-size:10px;color:#7DC27D;font-weight:700;margin-top:7px}
+
+/* Peer questions */
+.peer-wrap{background:#fff;border-radius:13px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06),0 0 0 1px rgba(0,0,0,.05)}
+.peer-item{padding:10px 13px;display:flex;flex-direction:column;gap:2px;cursor:pointer}
+.peer-item+.peer-item{border-top:1px solid #F5F0E8}
+.peer-item.answered{opacity:.5}
+.peer-dir{font-size:9px;color:#FF5500;font-weight:600}
+.peer-q{font-size:11px;font-weight:600;color:#1A1714;line-height:1.4;margin-top:2px}
+.peer-meta{display:flex;align-items:center;gap:8px;margin-top:5px}
+.peer-av{width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#FF5500,#FF8040);display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;color:#fff;flex-shrink:0}
+.peer-nm{font-size:9px;color:#888;flex:1}
+.peer-ans{font-size:9px;font-weight:700;color:#FF5500}
+.peer-ans-done{font-size:9px;color:#7DC27D;font-weight:700}
+
+/* My question */
+.myq2{background:#F8F4EE;border-radius:13px;padding:11px 13px;border:1px solid #E8E2D8}
+.myq2-hdr{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#aaa;font-weight:600;margin-bottom:5px}
+.myq2-q{font-size:12px;font-weight:600;line-height:1.4;font-style:italic;color:#1A1714}
+.myq2-stats{display:flex;gap:12px;margin-top:7px;padding-top:7px;border-top:1px solid #E8E2D8}
+.myq2-st{font-size:10px;color:#FF5500;font-weight:700}
+
+/* Organizers */
+.org-btn{background:#fff;border-radius:13px;padding:11px 13px;display:flex;align-items:center;gap:10px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.06),0 0 0 1px rgba(0,0,0,.04)}
+.org-ic{width:30px;height:30px;border-radius:50%;background:#F5F0E8;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.org-t{font-size:12px;font-weight:600;flex:1}
+.org-s{font-size:9px;color:#888;margin-top:1px}
+.org-arr{font-size:15px;color:#D5CFC7}
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;div class=&quot;knotta-tabs-wrap&quot;&gt;
+  &lt;nav class=&quot;knotta-tabs&quot; aria-label=&quot;Разделы материала&quot;&gt;
+    &lt;a href=&quot;https://p.knotta.ru/6vx89t&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;Концепция&lt;/a&gt;
+    &lt;a href=&quot;https://p.knotta.ru/6x8kna&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;Алгоритм бота&lt;/a&gt;
+    &lt;a href=&quot;https://p.knotta.ru/egu8pv&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;Интерфейс бота&lt;/a&gt;
+    &lt;a href=&quot;https://p.knotta.ru/p6un5b&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;Схема управления&lt;/a&gt;
+    &lt;span class=&quot;knotta-tab-active&quot; aria-current=&quot;page&quot;&gt;Мокап бота&lt;/span&gt;
+  &lt;/nav&gt;
+&lt;/div&gt;
+
+&lt;div class=&quot;page-header&quot;&gt;
+  &lt;div class=&quot;page-title&quot;&gt;Машук 2026 · Бот навигации и рефлексии&lt;/div&gt;
+  &lt;div class=&quot;page-sub&quot;&gt;Мокап интерфейса v7 · VK Mini App&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;!-- Time switcher (home only) --&gt;
+&lt;div class=&quot;time-sw&quot; id=&quot;time-sw&quot;&gt;
+  &lt;button class=&quot;tsb on&quot; onclick=&quot;setTime(&#39;m&#39;,this)&quot;&gt;☀️ Утро&lt;/button&gt;
+  &lt;button class=&quot;tsb&quot; onclick=&quot;setTime(&#39;d&#39;,this)&quot;&gt;🌤 День&lt;/button&gt;
+  &lt;button class=&quot;tsb&quot; onclick=&quot;setTime(&#39;e&#39;,this)&quot;&gt;🌙 Вечер&lt;/button&gt;
+&lt;/div&gt;
+
+&lt;div class=&quot;phone&quot;&gt;
+  &lt;div class=&quot;notch&quot;&gt;&lt;/div&gt;
+  &lt;div class=&quot;scr&quot; id=&quot;scr&quot;&gt;
+
+    &lt;!-- ═══ HOME ═══ --&gt;
+    &lt;div id=&quot;s-home&quot;&gt;
+      &lt;div class=&quot;hdr&quot;&gt;
+        &lt;div class=&quot;hdr-row&quot;&gt;
+          &lt;div&gt;&lt;div class=&quot;hdr-n&quot;&gt;Анна Соколова&lt;/div&gt;&lt;div class=&quot;hdr-dir&quot;&gt;Направление «Учителя»&lt;/div&gt;&lt;/div&gt;
+          &lt;div style=&quot;text-align:right&quot;&gt;&lt;div class=&quot;hdr-d&quot;&gt;12 авг&lt;/div&gt;&lt;div class=&quot;hdr-dhl&quot;&gt;День 3 из 7&lt;/div&gt;&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;hdr-fl&quot;&gt;Фокус дня&lt;/div&gt;
+        &lt;div class=&quot;hdr-fv&quot;&gt;Педагог как архитектор среды&lt;/div&gt;
+        &lt;div class=&quot;dots&quot;&gt;
+          &lt;div class=&quot;d dn&quot;&gt;&lt;/div&gt;&lt;div class=&quot;d dn&quot;&gt;&lt;/div&gt;&lt;div class=&quot;d td&quot;&gt;&lt;/div&gt;
+          &lt;div class=&quot;d ft&quot;&gt;&lt;/div&gt;&lt;div class=&quot;d ft&quot;&gt;&lt;/div&gt;&lt;div class=&quot;d ft&quot;&gt;&lt;/div&gt;&lt;div class=&quot;d ft&quot;&gt;&lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      &lt;div id=&quot;hs-m&quot;&gt;
+        &lt;div class=&quot;prio&quot;&gt;
+          &lt;div class=&quot;prio-tag&quot;&gt;⚡ Нужно сейчас&lt;/div&gt;
+          &lt;div class=&quot;prio-title&quot;&gt;Как ты сегодня?&lt;/div&gt;
+          &lt;div class=&quot;prio-sub&quot;&gt;Утренний чекин · 1 минута&lt;/div&gt;
+          &lt;div class=&quot;prio-btn&quot;&gt;Ответить →&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;card&quot;&gt;
+          &lt;div class=&quot;soon-bdg&quot;&gt;СКОРО&lt;/div&gt;
+          &lt;div class=&quot;now-t&quot;&gt;Работа по направлению&lt;/div&gt;
+          &lt;div class=&quot;now-tm&quot;&gt;09:30 – 13:00 · Шатёр «Учителя»&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;tp&quot;&gt;
+          &lt;div class=&quot;tp-l&quot;&gt;Точки осмысления · 0 из 7&lt;/div&gt;
+          &lt;div class=&quot;pdots&quot;&gt;
+            &lt;div class=&quot;pd ac&quot;&gt;1&lt;/div&gt;&lt;div class=&quot;pd ft&quot;&gt;2&lt;/div&gt;&lt;div class=&quot;pd ft&quot;&gt;3&lt;/div&gt;
+            &lt;div class=&quot;pd ft&quot;&gt;4&lt;/div&gt;&lt;div class=&quot;pd ft&quot;&gt;5&lt;/div&gt;&lt;div class=&quot;pd ft&quot;&gt;6&lt;/div&gt;&lt;div class=&quot;pd ft&quot;&gt;7&lt;/div&gt;
+          &lt;/div&gt;
+          &lt;div class=&quot;tp-tx&quot;&gt;Начни с утреннего чекина&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;tmi&quot; onclick=&quot;go(&#39;tasks&#39;)&quot;&gt;
+          &lt;div class=&quot;tmi-l&quot;&gt;&lt;span style=&quot;font-size:20px&quot;&gt;⚡&lt;/span&gt;&lt;div&gt;&lt;div class=&quot;tmi-t&quot;&gt;Задания&lt;/div&gt;&lt;div class=&quot;tmi-s&quot;&gt;18 доступно сегодня&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;tmbdg new&quot;&gt;Новые&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;stats&quot;&gt;
+          &lt;div class=&quot;st&quot;&gt;&lt;div class=&quot;sv&quot;&gt;📍 120&lt;/div&gt;&lt;div class=&quot;sl&quot;&gt;Путь&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;st&quot;&gt;&lt;div class=&quot;sv&quot;&gt;⚡ 240&lt;/div&gt;&lt;div class=&quot;sl&quot;&gt;Опыт&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;st&quot;&gt;&lt;div class=&quot;sv&quot;&gt;✦ 7&lt;/div&gt;&lt;div class=&quot;sl&quot;&gt;Идей&lt;/div&gt;&lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      &lt;div id=&quot;hs-d&quot; class=&quot;hidden&quot;&gt;
+        &lt;div class=&quot;miss&quot;&gt;
+          &lt;div class=&quot;m-dot&quot;&gt;&lt;/div&gt;
+          &lt;div style=&quot;flex:1&quot;&gt;&lt;div class=&quot;m-t&quot;&gt;Пропущено: рефлексия 13:00&lt;/div&gt;&lt;div class=&quot;m-s&quot;&gt;Вопрос по направлению · ещё можно заполнить&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;m-arr&quot;&gt;→&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;card&quot;&gt;
+          &lt;div class=&quot;nbg&quot;&gt;&lt;div class=&quot;pul&quot;&gt;&lt;/div&gt;СЕЙЧАС&lt;/div&gt;
+          &lt;div class=&quot;now-t&quot;&gt;Уроки о важном&lt;/div&gt;
+          &lt;div class=&quot;now-tm&quot;&gt;14:00 – 16:00&lt;/div&gt;
+          &lt;div class=&quot;cap-row&quot;&gt;
+            &lt;div class=&quot;cap&quot;&gt;&lt;span class=&quot;ci&quot;&gt;💡&lt;/span&gt;&lt;span class=&quot;cl&quot;&gt;Идея&lt;/span&gt;&lt;/div&gt;
+            &lt;div class=&quot;cap&quot;&gt;&lt;span class=&quot;ci&quot;&gt;✍️&lt;/span&gt;&lt;span class=&quot;cl&quot;&gt;Мысль&lt;/span&gt;&lt;/div&gt;
+            &lt;div class=&quot;cap&quot;&gt;&lt;span class=&quot;ci&quot;&gt;❓&lt;/span&gt;&lt;span class=&quot;cl&quot;&gt;Вопрос&lt;/span&gt;&lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;nxt&quot;&gt;
+          &lt;div class=&quot;nxt-l&quot;&gt;ДАЛЕЕ&lt;/div&gt;&lt;div class=&quot;nxt-dv&quot;&gt;&lt;/div&gt;
+          &lt;div&gt;&lt;div class=&quot;nxt-ev&quot;&gt;Открытые уроки&lt;/div&gt;&lt;div class=&quot;nxt-t&quot;&gt;16:00 – 17:30&lt;/div&gt;&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;tp&quot;&gt;
+          &lt;div class=&quot;tp-l&quot;&gt;Точки осмысления · 3 из 7&lt;/div&gt;
+          &lt;div class=&quot;pdots&quot;&gt;
+            &lt;div class=&quot;pd ok&quot;&gt;✓&lt;/div&gt;&lt;div class=&quot;pd bd&quot;&gt;!&lt;/div&gt;&lt;div class=&quot;pd ok&quot;&gt;✓&lt;/div&gt;
+            &lt;div class=&quot;pd ac&quot;&gt;4&lt;/div&gt;&lt;div class=&quot;pd ft&quot;&gt;5&lt;/div&gt;&lt;div class=&quot;pd ft&quot;&gt;6&lt;/div&gt;&lt;div class=&quot;pd ft&quot;&gt;7&lt;/div&gt;
+          &lt;/div&gt;
+          &lt;div class=&quot;tp-tx&quot;&gt;1 пропущена — ещё можно заполнить&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;tmi&quot; onclick=&quot;go(&#39;tasks&#39;)&quot;&gt;
+          &lt;div class=&quot;tmi-l&quot;&gt;&lt;span style=&quot;font-size:20px&quot;&gt;⚡&lt;/span&gt;&lt;div&gt;&lt;div class=&quot;tmi-t&quot;&gt;Задания&lt;/div&gt;&lt;div class=&quot;tmi-s&quot;&gt;5 из 18 выполнено&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;tmbdg&quot;&gt;5 / 18&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;stats&quot;&gt;
+          &lt;div class=&quot;st&quot;&gt;&lt;div class=&quot;sv&quot;&gt;📍 180&lt;/div&gt;&lt;div class=&quot;sl&quot;&gt;Путь&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;st&quot;&gt;&lt;div class=&quot;sv&quot;&gt;⚡ 340&lt;/div&gt;&lt;div class=&quot;sl&quot;&gt;Опыт&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;st&quot;&gt;&lt;div class=&quot;sv&quot;&gt;✦ 9&lt;/div&gt;&lt;div class=&quot;sl&quot;&gt;Идей&lt;/div&gt;&lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      &lt;div id=&quot;hs-e&quot; class=&quot;hidden&quot;&gt;
+        &lt;div class=&quot;prio&quot;&gt;
+          &lt;div class=&quot;prio-tag&quot;&gt;✦ Завершение дня&lt;/div&gt;
+          &lt;div class=&quot;prio-title&quot;&gt;Итоговая рефлексия&lt;/div&gt;
+          &lt;div class=&quot;prio-sub&quot;&gt;3 вопроса · займёт 5 минут&lt;/div&gt;
+          &lt;div class=&quot;prio-btn&quot;&gt;Начать →&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;miss&quot;&gt;
+          &lt;div class=&quot;m-dot&quot;&gt;&lt;/div&gt;
+          &lt;div style=&quot;flex:1&quot;&gt;&lt;div class=&quot;m-t&quot;&gt;2 точки пропущены&lt;/div&gt;&lt;div class=&quot;m-s&quot;&gt;ОС после уроков о важном · ОС после открытых уроков&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;m-arr&quot;&gt;→&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;tp&quot;&gt;
+          &lt;div class=&quot;tp-l&quot;&gt;Точки осмысления · 4 из 7&lt;/div&gt;
+          &lt;div class=&quot;pdots&quot;&gt;
+            &lt;div class=&quot;pd ok&quot;&gt;✓&lt;/div&gt;&lt;div class=&quot;pd ok&quot;&gt;✓&lt;/div&gt;&lt;div class=&quot;pd ok&quot;&gt;✓&lt;/div&gt;
+            &lt;div class=&quot;pd bd&quot;&gt;!&lt;/div&gt;&lt;div class=&quot;pd bd&quot;&gt;!&lt;/div&gt;
+            &lt;div class=&quot;pd ac&quot;&gt;6&lt;/div&gt;&lt;div class=&quot;pd ft&quot;&gt;7&lt;/div&gt;
+          &lt;/div&gt;
+          &lt;div class=&quot;tp-tx&quot;&gt;2 пропущены · заверши чекин и рефлексию&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;stats&quot;&gt;
+          &lt;div class=&quot;st&quot;&gt;&lt;div class=&quot;sv&quot;&gt;📍 240&lt;/div&gt;&lt;div class=&quot;sl&quot;&gt;Путь&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;st&quot;&gt;&lt;div class=&quot;sv&quot;&gt;⚡ 480&lt;/div&gt;&lt;div class=&quot;sl&quot;&gt;Опыт&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;st&quot;&gt;&lt;div class=&quot;sv&quot;&gt;✦ 12&lt;/div&gt;&lt;div class=&quot;sl&quot;&gt;Идей&lt;/div&gt;&lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;&lt;!-- /s-home --&gt;
+
+    &lt;!-- ═══ PROGRAM ═══ --&gt;
+    &lt;div id=&quot;s-prog&quot; class=&quot;hidden&quot;&gt;
+
+      &lt;!-- Sub-tabs --&gt;
+      &lt;div class=&quot;prog-subtabs&quot;&gt;
+        &lt;button class=&quot;pst on&quot; id=&quot;pst-sched&quot; onclick=&quot;setPTab(&#39;sched&#39;)&quot;&gt;📋 Расписание&lt;/button&gt;
+        &lt;button class=&quot;pst&quot; id=&quot;pst-kb&quot; onclick=&quot;setPTab(&#39;kb&#39;)&quot;&gt;📚 База знаний&lt;/button&gt;
+      &lt;/div&gt;
+
+      &lt;!-- ── SCHEDULE TAB ── --&gt;
+      &lt;div id=&quot;ptab-sched&quot;&gt;
+        &lt;!-- Day switcher --&gt;
+        &lt;div class=&quot;day-sw&quot; id=&quot;day-sw-sched&quot;&gt;
+          &lt;button class=&quot;dsb done&quot; onclick=&quot;setSchedDay(1,this)&quot;&gt;День 1&lt;span class=&quot;dn&quot;&gt;✓ пн&lt;/span&gt;&lt;/button&gt;
+          &lt;button class=&quot;dsb done&quot; onclick=&quot;setSchedDay(2,this)&quot;&gt;День 2&lt;span class=&quot;dn&quot;&gt;✓ вт&lt;/span&gt;&lt;/button&gt;
+          &lt;button class=&quot;dsb on today&quot; onclick=&quot;setSchedDay(3,this)&quot;&gt;День 3&lt;span class=&quot;dn&quot;&gt;ср&lt;/span&gt;&lt;/button&gt;
+          &lt;button class=&quot;dsb&quot; onclick=&quot;setSchedDay(4,this)&quot;&gt;День 4&lt;span class=&quot;dn&quot;&gt;чт&lt;/span&gt;&lt;/button&gt;
+          &lt;button class=&quot;dsb&quot; onclick=&quot;setSchedDay(5,this)&quot;&gt;День 5&lt;span class=&quot;dn&quot;&gt;пт&lt;/span&gt;&lt;/button&gt;
+          &lt;button class=&quot;dsb&quot; onclick=&quot;setSchedDay(6,this)&quot;&gt;День 6&lt;span class=&quot;dn&quot;&gt;сб&lt;/span&gt;&lt;/button&gt;
+          &lt;button class=&quot;dsb&quot; onclick=&quot;setSchedDay(7,this)&quot;&gt;День 7&lt;span class=&quot;dn&quot;&gt;вс&lt;/span&gt;&lt;/button&gt;
+        &lt;/div&gt;
+
+        &lt;!-- Day 1 sched (past day, collapsed example) --&gt;
+        &lt;div id=&quot;sd-1&quot; class=&quot;hidden&quot;&gt;
+          &lt;div class=&quot;tl-wrap&quot;&gt;
+            &lt;div class=&quot;tl-row past&quot;&gt;&lt;div class=&quot;tl-time&quot;&gt;09:00&lt;/div&gt;&lt;div class=&quot;tl-body&quot;&gt;&lt;div class=&quot;tl-title&quot;&gt;Открытие форума&lt;/div&gt;&lt;div class=&quot;tl-sub&quot;&gt;Главная сцена&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tl-check&quot;&gt;✓&lt;/div&gt;&lt;/div&gt;
+            &lt;div class=&quot;tl-row past&quot;&gt;&lt;div class=&quot;tl-time&quot;&gt;11:00&lt;/div&gt;&lt;div class=&quot;tl-body&quot;&gt;&lt;div class=&quot;tl-title&quot;&gt;Знакомство с направлением&lt;/div&gt;&lt;div class=&quot;tl-sub&quot;&gt;Шатёр «Учителя»&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tl-check&quot;&gt;✓&lt;/div&gt;&lt;/div&gt;
+            &lt;div class=&quot;tl-row past&quot;&gt;&lt;div class=&quot;tl-time&quot;&gt;14:00&lt;/div&gt;&lt;div class=&quot;tl-body&quot;&gt;&lt;div class=&quot;tl-title&quot;&gt;Проектная работа&lt;/div&gt;&lt;div class=&quot;tl-sub&quot;&gt;Открытое пространство&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tl-check&quot;&gt;✓&lt;/div&gt;&lt;/div&gt;
+            &lt;div class=&quot;tl-row past&quot;&gt;&lt;div class=&quot;tl-time&quot;&gt;19:00&lt;/div&gt;&lt;div class=&quot;tl-body&quot;&gt;&lt;div class=&quot;tl-title&quot;&gt;Вечерний нетворкинг&lt;/div&gt;&lt;div class=&quot;tl-sub&quot;&gt;Площадка у озера&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tl-check&quot;&gt;✓&lt;/div&gt;&lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;!-- Day 2 sched --&gt;
+        &lt;div id=&quot;sd-2&quot; class=&quot;hidden&quot;&gt;
+          &lt;div class=&quot;tl-wrap&quot;&gt;
+            &lt;div class=&quot;tl-row past&quot;&gt;&lt;div class=&quot;tl-time&quot;&gt;09:00&lt;/div&gt;&lt;div class=&quot;tl-body&quot;&gt;&lt;div class=&quot;tl-title&quot;&gt;Лекция: Педагогика доверия&lt;/div&gt;&lt;div class=&quot;tl-sub&quot;&gt;Лектор: Иванова М.А.&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tl-check&quot;&gt;✓&lt;/div&gt;&lt;/div&gt;
+            &lt;div class=&quot;tl-row past&quot;&gt;&lt;div class=&quot;tl-time&quot;&gt;11:30&lt;/div&gt;&lt;div class=&quot;tl-body&quot;&gt;&lt;div class=&quot;tl-title&quot;&gt;Мастер-класс: ИИ в классе&lt;/div&gt;&lt;div class=&quot;tl-sub&quot;&gt;Лектор: Смирнов В.Д.&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tl-check&quot;&gt;✓&lt;/div&gt;&lt;/div&gt;
+            &lt;div class=&quot;tl-row past&quot;&gt;&lt;div class=&quot;tl-time&quot;&gt;14:30&lt;/div&gt;&lt;div class=&quot;tl-body&quot;&gt;&lt;div class=&quot;tl-title&quot;&gt;Круглый стол&lt;/div&gt;&lt;div class=&quot;tl-sub&quot;&gt;Форматы вовлечения&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tl-check&quot;&gt;✓&lt;/div&gt;&lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;!-- Day 3 sched (current) --&gt;
+        &lt;div id=&quot;sd-3&quot;&gt;
+          &lt;div class=&quot;rec-block&quot;&gt;
+            &lt;div class=&quot;rec-block-hdr&quot;&gt;Рекомендуем тебе&lt;/div&gt;
+            &lt;div class=&quot;rec-item&quot;&gt;&lt;div class=&quot;rec-cb ck&quot;&gt;✓&lt;/div&gt;&lt;div style=&quot;flex:1&quot;&gt;&lt;div class=&quot;rec-item-t&quot;&gt;Педагогика доверия&lt;/div&gt;&lt;div class=&quot;rec-item-s&quot;&gt;под твой запрос&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;rec-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+            &lt;div class=&quot;rec-item&quot;&gt;&lt;div class=&quot;rec-cb&quot;&gt;&lt;/div&gt;&lt;div style=&quot;flex:1&quot;&gt;&lt;div class=&quot;rec-item-t&quot;&gt;ИИ в образовании&lt;/div&gt;&lt;div class=&quot;rec-item-s&quot;&gt;по интересам&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;rec-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+          &lt;/div&gt;
+          &lt;div class=&quot;tl-wrap&quot;&gt;
+            &lt;div class=&quot;tl-row past&quot;&gt;&lt;div class=&quot;tl-time&quot;&gt;09:00&lt;/div&gt;&lt;div class=&quot;tl-body&quot;&gt;&lt;div class=&quot;tl-title&quot;&gt;Работа по направлению&lt;/div&gt;&lt;div class=&quot;tl-sub&quot;&gt;Шатёр «Учителя»&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tl-check&quot;&gt;✓&lt;/div&gt;&lt;/div&gt;
+            &lt;div class=&quot;tl-row past&quot;&gt;&lt;div class=&quot;tl-time&quot;&gt;13:00&lt;/div&gt;&lt;div class=&quot;tl-body&quot;&gt;&lt;div class=&quot;tl-title&quot;&gt;Обед + рефлексия&lt;/div&gt;&lt;div class=&quot;tl-sub&quot;&gt;Столовая&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tl-check&quot;&gt;✓&lt;/div&gt;&lt;/div&gt;
+            &lt;div class=&quot;tl-row now-row&quot;&gt;&lt;div class=&quot;tl-time&quot;&gt;14:00&lt;/div&gt;&lt;div class=&quot;tl-body&quot;&gt;&lt;div class=&quot;tl-title&quot;&gt;Уроки о важном&lt;/div&gt;&lt;div class=&quot;tl-sub&quot;&gt;14:00 – 16:00&lt;/div&gt;&lt;div class=&quot;tl-badge&quot;&gt;сейчас&lt;/div&gt;&lt;/div&gt;&lt;div style=&quot;font-size:16px;color:rgba(255,255,255,.6);margin-left:8px&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+            &lt;div class=&quot;tl-row&quot;&gt;&lt;div class=&quot;tl-time&quot;&gt;16:00&lt;/div&gt;&lt;div class=&quot;tl-body&quot;&gt;&lt;div class=&quot;tl-title&quot;&gt;Открытые уроки&lt;/div&gt;&lt;div class=&quot;tl-sub&quot;&gt;Мастер-классы · выбор&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tl-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+            &lt;div class=&quot;tl-row&quot;&gt;&lt;div class=&quot;tl-time&quot;&gt;18:00&lt;/div&gt;&lt;div class=&quot;tl-body&quot;&gt;&lt;div class=&quot;tl-title&quot;&gt;Ужин&lt;/div&gt;&lt;div class=&quot;tl-sub&quot;&gt;Столовая&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tl-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+            &lt;div class=&quot;tl-row&quot;&gt;&lt;div class=&quot;tl-time&quot;&gt;21:00&lt;/div&gt;&lt;div class=&quot;tl-body&quot;&gt;&lt;div class=&quot;tl-title&quot;&gt;Вечерняя рефлексия&lt;/div&gt;&lt;div class=&quot;tl-sub&quot;&gt;В боте · 5 минут&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tl-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;!-- Day 4–7 (future) --&gt;
+        &lt;div id=&quot;sd-4&quot; class=&quot;hidden&quot;&gt;
+          &lt;div style=&quot;background:#fff;border-radius:13px;padding:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.07)&quot;&gt;
+            &lt;div style=&quot;font-size:20px;margin-bottom:6px&quot;&gt;📋&lt;/div&gt;
+            &lt;div style=&quot;font-size:12px;font-weight:700;color:#1A1714&quot;&gt;День 4 · Четверг, 14 авг&lt;/div&gt;
+            &lt;div style=&quot;font-size:10px;color:#888;margin-top:4px&quot;&gt;Расписание появится в конце дня 3&lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div id=&quot;sd-5&quot; class=&quot;hidden&quot;&gt;&lt;div style=&quot;background:#fff;border-radius:13px;padding:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.07)&quot;&gt;&lt;div style=&quot;font-size:20px;margin-bottom:6px&quot;&gt;📋&lt;/div&gt;&lt;div style=&quot;font-size:12px;font-weight:700&quot;&gt;День 5 · Пятница&lt;/div&gt;&lt;div style=&quot;font-size:10px;color:#888;margin-top:4px&quot;&gt;Расписание появится позже&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+        &lt;div id=&quot;sd-6&quot; class=&quot;hidden&quot;&gt;&lt;div style=&quot;background:#fff;border-radius:13px;padding:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.07)&quot;&gt;&lt;div style=&quot;font-size:20px;margin-bottom:6px&quot;&gt;📋&lt;/div&gt;&lt;div style=&quot;font-size:12px;font-weight:700&quot;&gt;День 6 · Суббота&lt;/div&gt;&lt;div style=&quot;font-size:10px;color:#888;margin-top:4px&quot;&gt;Расписание появится позже&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+        &lt;div id=&quot;sd-7&quot; class=&quot;hidden&quot;&gt;&lt;div style=&quot;background:#fff;border-radius:13px;padding:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.07)&quot;&gt;&lt;div style=&quot;font-size:20px;margin-bottom:6px&quot;&gt;📋&lt;/div&gt;&lt;div style=&quot;font-size:12px;font-weight:700&quot;&gt;День 7 · Воскресенье&lt;/div&gt;&lt;div style=&quot;font-size:10px;color:#888;margin-top:4px&quot;&gt;Расписание появится позже&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+      &lt;/div&gt;&lt;!-- /ptab-sched --&gt;
+
+      &lt;!-- ── KNOWLEDGE BASE TAB ── --&gt;
+      &lt;div id=&quot;ptab-kb&quot; class=&quot;hidden&quot;&gt;
+
+        &lt;!-- Subtitle --&gt;
+        &lt;div style=&quot;padding:2px 2px 0&quot;&gt;
+          &lt;div style=&quot;font-size:10px;color:#888;line-height:1.4&quot;&gt;Материалы открываются когда пройдено &lt;span style=&quot;color:#FF5500;font-weight:700&quot;&gt;≥ 4 из 7 точек осмысления&lt;/span&gt; за день&lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;!-- Day switcher KB --&gt;
+        &lt;div class=&quot;day-sw&quot;&gt;
+          &lt;button class=&quot;dsb done on&quot; onclick=&quot;setKBDay(1,this)&quot;&gt;День 1&lt;span class=&quot;dn&quot;&gt;✓ открыт&lt;/span&gt;&lt;/button&gt;
+          &lt;button class=&quot;dsb done&quot; onclick=&quot;setKBDay(2,this)&quot;&gt;День 2&lt;span class=&quot;dn&quot;&gt;✓ открыт&lt;/span&gt;&lt;/button&gt;
+          &lt;button class=&quot;dsb today&quot; onclick=&quot;setKBDay(3,this)&quot;&gt;День 3&lt;span class=&quot;dn&quot;&gt;3/7 →&lt;/span&gt;&lt;/button&gt;
+          &lt;button class=&quot;dsb&quot; onclick=&quot;setKBDay(4,this)&quot;&gt;День 4&lt;span class=&quot;dn&quot;&gt;🔒&lt;/span&gt;&lt;/button&gt;
+          &lt;button class=&quot;dsb&quot; onclick=&quot;setKBDay(5,this)&quot;&gt;День 5&lt;span class=&quot;dn&quot;&gt;🔒&lt;/span&gt;&lt;/button&gt;
+          &lt;button class=&quot;dsb&quot; onclick=&quot;setKBDay(6,this)&quot;&gt;День 6&lt;span class=&quot;dn&quot;&gt;🔒&lt;/span&gt;&lt;/button&gt;
+          &lt;button class=&quot;dsb&quot; onclick=&quot;setKBDay(7,this)&quot;&gt;День 7&lt;span class=&quot;dn&quot;&gt;🔒&lt;/span&gt;&lt;/button&gt;
+        &lt;/div&gt;
+
+        &lt;!-- KB Day 1 — unlocked, expanded --&gt;
+        &lt;div id=&quot;kbd-1&quot;&gt;
+          &lt;div class=&quot;kb-day&quot;&gt;
+            &lt;div class=&quot;kb-day-hdr&quot; onclick=&quot;toggleKBDay(1)&quot;&gt;
+              &lt;div style=&quot;flex:1&quot;&gt;
+                &lt;div class=&quot;kb-day-lbl&quot;&gt;День 1 · Понедельник&lt;/div&gt;
+                &lt;div class=&quot;kb-day-sub&quot;&gt;Открытие форума · 4 блока&lt;/div&gt;
+              &lt;/div&gt;
+              &lt;div class=&quot;kb-xp-pill&quot;&gt;7/7 ✦&lt;/div&gt;
+              &lt;div class=&quot;kb-day-arr open&quot; id=&quot;kba-1&quot;&gt;›&lt;/div&gt;
+            &lt;/div&gt;
+            &lt;div id=&quot;kbc-1&quot;&gt;
+              &lt;!-- Speaker 1 --&gt;
+              &lt;div class=&quot;kb-speaker&quot;&gt;
+                &lt;div class=&quot;kb-sp-row&quot;&gt;
+                  &lt;div class=&quot;kb-sp-av&quot;&gt;АК&lt;/div&gt;
+                  &lt;div style=&quot;flex:1&quot;&gt;&lt;div class=&quot;kb-sp-nm&quot;&gt;Алексей Кравцов&lt;/div&gt;&lt;div class=&quot;kb-sp-ev&quot;&gt;Открытие форума&lt;/div&gt;&lt;/div&gt;
+                  &lt;div class=&quot;kb-sp-arr&quot;&gt;›&lt;/div&gt;
+                &lt;/div&gt;
+                &lt;div class=&quot;kb-mats&quot;&gt;
+                  &lt;div class=&quot;kb-mat&quot;&gt;&lt;div class=&quot;kb-mat-ic&quot;&gt;📄&lt;/div&gt;&lt;div class=&quot;kb-mat-b&quot;&gt;&lt;div class=&quot;kb-mat-t&quot;&gt;Конспект лекции&lt;/div&gt;&lt;div class=&quot;kb-mat-s&quot;&gt;Ключевые тезисы · 3 стр.&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-mat-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+                  &lt;div class=&quot;kb-mat&quot;&gt;&lt;div class=&quot;kb-mat-ic&quot;&gt;🖼&lt;/div&gt;&lt;div class=&quot;kb-mat-b&quot;&gt;&lt;div class=&quot;kb-mat-t&quot;&gt;Презентация&lt;/div&gt;&lt;div class=&quot;kb-mat-s&quot;&gt;32 слайда · PDF&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-mat-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+              &lt;!-- Speaker 2 --&gt;
+              &lt;div class=&quot;kb-speaker&quot;&gt;
+                &lt;div class=&quot;kb-sp-row&quot;&gt;
+                  &lt;div class=&quot;kb-sp-av g&quot;&gt;МП&lt;/div&gt;
+                  &lt;div style=&quot;flex:1&quot;&gt;&lt;div class=&quot;kb-sp-nm&quot;&gt;Мария Петрова&lt;/div&gt;&lt;div class=&quot;kb-sp-ev&quot;&gt;Знакомство с направлением&lt;/div&gt;&lt;/div&gt;
+                  &lt;div class=&quot;kb-sp-arr&quot;&gt;›&lt;/div&gt;
+                &lt;/div&gt;
+                &lt;div class=&quot;kb-mats&quot;&gt;
+                  &lt;div class=&quot;kb-mat&quot;&gt;&lt;div class=&quot;kb-mat-ic&quot;&gt;📄&lt;/div&gt;&lt;div class=&quot;kb-mat-b&quot;&gt;&lt;div class=&quot;kb-mat-t&quot;&gt;Конспект&lt;/div&gt;&lt;div class=&quot;kb-mat-s&quot;&gt;Методы работы с группой&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-mat-new&quot;&gt;Новый&lt;/div&gt;&lt;div class=&quot;kb-mat-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;!-- KB Day 2 — unlocked, collapsed --&gt;
+        &lt;div id=&quot;kbd-2&quot; class=&quot;hidden&quot;&gt;
+          &lt;div class=&quot;kb-day&quot;&gt;
+            &lt;div class=&quot;kb-day-hdr&quot; onclick=&quot;toggleKBDay(2)&quot;&gt;
+              &lt;div style=&quot;flex:1&quot;&gt;
+                &lt;div class=&quot;kb-day-lbl&quot;&gt;День 2 · Вторник&lt;/div&gt;
+                &lt;div class=&quot;kb-day-sub&quot;&gt;Лекции и мастер-классы · 3 блока&lt;/div&gt;
+              &lt;/div&gt;
+              &lt;div class=&quot;kb-xp-pill&quot;&gt;6/7 ✦&lt;/div&gt;
+              &lt;div class=&quot;kb-day-arr&quot; id=&quot;kba-2&quot;&gt;›&lt;/div&gt;
+            &lt;/div&gt;
+            &lt;div id=&quot;kbc-2&quot; class=&quot;hidden&quot;&gt;
+              &lt;div class=&quot;kb-speaker&quot;&gt;
+                &lt;div class=&quot;kb-sp-row&quot;&gt;&lt;div class=&quot;kb-sp-av&quot;&gt;МИ&lt;/div&gt;&lt;div style=&quot;flex:1&quot;&gt;&lt;div class=&quot;kb-sp-nm&quot;&gt;Марина Иванова&lt;/div&gt;&lt;div class=&quot;kb-sp-ev&quot;&gt;Педагогика доверия&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-sp-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+                &lt;div class=&quot;kb-mats&quot;&gt;
+                  &lt;div class=&quot;kb-mat&quot;&gt;&lt;div class=&quot;kb-mat-ic&quot;&gt;📄&lt;/div&gt;&lt;div class=&quot;kb-mat-b&quot;&gt;&lt;div class=&quot;kb-mat-t&quot;&gt;Конспект&lt;/div&gt;&lt;div class=&quot;kb-mat-s&quot;&gt;Доверие как инструмент&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-mat-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+                  &lt;div class=&quot;kb-mat&quot;&gt;&lt;div class=&quot;kb-mat-ic&quot;&gt;🖼&lt;/div&gt;&lt;div class=&quot;kb-mat-b&quot;&gt;&lt;div class=&quot;kb-mat-t&quot;&gt;Презентация&lt;/div&gt;&lt;div class=&quot;kb-mat-s&quot;&gt;24 слайда · PDF&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-mat-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+                  &lt;div class=&quot;kb-mat&quot;&gt;&lt;div class=&quot;kb-mat-ic&quot;&gt;🎥&lt;/div&gt;&lt;div class=&quot;kb-mat-b&quot;&gt;&lt;div class=&quot;kb-mat-t&quot;&gt;Запись лекции&lt;/div&gt;&lt;div class=&quot;kb-mat-s&quot;&gt;58 мин · VK Видео&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-mat-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+              &lt;div class=&quot;kb-speaker&quot;&gt;
+                &lt;div class=&quot;kb-sp-row&quot;&gt;&lt;div class=&quot;kb-sp-av b&quot;&gt;ВС&lt;/div&gt;&lt;div style=&quot;flex:1&quot;&gt;&lt;div class=&quot;kb-sp-nm&quot;&gt;Виктор Смирнов&lt;/div&gt;&lt;div class=&quot;kb-sp-ev&quot;&gt;ИИ в образовании&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-sp-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+                &lt;div class=&quot;kb-mats&quot;&gt;
+                  &lt;div class=&quot;kb-mat&quot;&gt;&lt;div class=&quot;kb-mat-ic&quot;&gt;📄&lt;/div&gt;&lt;div class=&quot;kb-mat-b&quot;&gt;&lt;div class=&quot;kb-mat-t&quot;&gt;Конспект&lt;/div&gt;&lt;div class=&quot;kb-mat-s&quot;&gt;Инструменты ИИ для учителя&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-mat-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+                  &lt;div class=&quot;kb-mat&quot;&gt;&lt;div class=&quot;kb-mat-ic&quot;&gt;🔗&lt;/div&gt;&lt;div class=&quot;kb-mat-b&quot;&gt;&lt;div class=&quot;kb-mat-t&quot;&gt;Список ресурсов&lt;/div&gt;&lt;div class=&quot;kb-mat-s&quot;&gt;12 инструментов&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-mat-arr&quot;&gt;›&lt;/div&gt;&lt;/div&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;!-- KB Day 3 — current, partially locked (28% XP) --&gt;
+        &lt;div id=&quot;kbd-3&quot; class=&quot;hidden&quot;&gt;
+          &lt;div class=&quot;kb-day locked&quot;&gt;
+            &lt;div class=&quot;kb-day-hdr&quot;&gt;
+              &lt;div style=&quot;flex:1&quot;&gt;
+                &lt;div class=&quot;kb-day-lbl&quot;&gt;День 3 · Среда · Сегодня&lt;/div&gt;
+                &lt;div class=&quot;kb-day-sub&quot;&gt;Уроки о важном · Открытые уроки&lt;/div&gt;
+              &lt;/div&gt;
+              &lt;div class=&quot;kb-xp-pill warn&quot;&gt;3/7 ✦&lt;/div&gt;
+            &lt;/div&gt;
+            &lt;div class=&quot;kb-lock-banner&quot;&gt;
+              &lt;div class=&quot;kb-lock-ic&quot;&gt;🔒&lt;/div&gt;
+              &lt;div&gt;
+                &lt;div class=&quot;kb-lock-t&quot;&gt;Нужно пройти ещё 1 точку осмысления&lt;/div&gt;
+                &lt;div class=&quot;kb-lock-s&quot;&gt;Выполни 4 из 7 точек — база знаний откроется&lt;/div&gt;
+                &lt;div class=&quot;kb-lock-bar-w&quot;&gt;&lt;div class=&quot;kb-lock-bar-f&quot; style=&quot;width:43%&quot;&gt;&lt;/div&gt;&lt;/div&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+          &lt;div style=&quot;background:#fff;border-radius:13px;padding:12px 14px;box-shadow:0 2px 8px rgba(0,0,0,.07);cursor:pointer&quot; onclick=&quot;go(&#39;home&#39;)&quot;&gt;
+            &lt;div style=&quot;display:flex;align-items:center;gap:10px&quot;&gt;
+              &lt;div style=&quot;font-size:20px&quot;&gt;📍&lt;/div&gt;
+              &lt;div style=&quot;flex:1&quot;&gt;&lt;div style=&quot;font-size:12px;font-weight:700&quot;&gt;Перейти к точкам осмысления&lt;/div&gt;&lt;div style=&quot;font-size:10px;color:#888;margin-top:2px&quot;&gt;Осталась 1 точка до открытия базы знаний дня 3&lt;/div&gt;&lt;/div&gt;
+              &lt;div style=&quot;font-size:15px;color:#FF5500;font-weight:700&quot;&gt;→&lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;!-- KB Days 4-7 locked --&gt;
+        &lt;div id=&quot;kbd-4&quot; class=&quot;hidden&quot;&gt;
+          &lt;div class=&quot;kb-day locked&quot;&gt;
+            &lt;div class=&quot;kb-day-hdr&quot;&gt;&lt;div style=&quot;flex:1&quot;&gt;&lt;div class=&quot;kb-day-lbl&quot;&gt;День 4 · Четверг&lt;/div&gt;&lt;div class=&quot;kb-day-sub&quot;&gt;Материалы недоступны&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-xp-pill warn&quot;&gt;🔒&lt;/div&gt;&lt;/div&gt;
+            &lt;div class=&quot;kb-lock-banner&quot;&gt;&lt;div class=&quot;kb-lock-ic&quot;&gt;🔒&lt;/div&gt;&lt;div&gt;&lt;div class=&quot;kb-lock-t&quot;&gt;День ещё не наступил&lt;/div&gt;&lt;div class=&quot;kb-lock-s&quot;&gt;Пройди 4 из 7 точек осмысления 14 августа&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div id=&quot;kbd-5&quot; class=&quot;hidden&quot;&gt;&lt;div class=&quot;kb-day locked&quot;&gt;&lt;div class=&quot;kb-day-hdr&quot;&gt;&lt;div style=&quot;flex:1&quot;&gt;&lt;div class=&quot;kb-day-lbl&quot;&gt;День 5 · Пятница&lt;/div&gt;&lt;div class=&quot;kb-day-sub&quot;&gt;Материалы недоступны&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-xp-pill warn&quot;&gt;🔒&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-lock-banner&quot;&gt;&lt;div class=&quot;kb-lock-ic&quot;&gt;🔒&lt;/div&gt;&lt;div&gt;&lt;div class=&quot;kb-lock-t&quot;&gt;День ещё не наступил&lt;/div&gt;&lt;div class=&quot;kb-lock-s&quot;&gt;Откроется 15 августа&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+        &lt;div id=&quot;kbd-6&quot; class=&quot;hidden&quot;&gt;&lt;div class=&quot;kb-day locked&quot;&gt;&lt;div class=&quot;kb-day-hdr&quot;&gt;&lt;div style=&quot;flex:1&quot;&gt;&lt;div class=&quot;kb-day-lbl&quot;&gt;День 6 · Суббота&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-xp-pill warn&quot;&gt;🔒&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-lock-banner&quot;&gt;&lt;div class=&quot;kb-lock-ic&quot;&gt;🔒&lt;/div&gt;&lt;div&gt;&lt;div class=&quot;kb-lock-t&quot;&gt;День ещё не наступил&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+        &lt;div id=&quot;kbd-7&quot; class=&quot;hidden&quot;&gt;&lt;div class=&quot;kb-day locked&quot;&gt;&lt;div class=&quot;kb-day-hdr&quot;&gt;&lt;div style=&quot;flex:1&quot;&gt;&lt;div class=&quot;kb-day-lbl&quot;&gt;День 7 · Воскресенье&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-xp-pill warn&quot;&gt;🔒&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;kb-lock-banner&quot;&gt;&lt;div class=&quot;kb-lock-ic&quot;&gt;🔒&lt;/div&gt;&lt;div&gt;&lt;div class=&quot;kb-lock-t&quot;&gt;День ещё не наступил&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+
+      &lt;/div&gt;&lt;!-- /ptab-kb --&gt;
+
+    &lt;/div&gt;&lt;!-- /s-prog --&gt;
+
+    &lt;!-- ═══ TASKS ═══ --&gt;
+    &lt;div id=&quot;s-tasks&quot; class=&quot;hidden&quot;&gt;
+      &lt;div class=&quot;scr-hdr&quot;&gt;
+        &lt;div&gt;&lt;div class=&quot;scr-ttl&quot;&gt;Задания&lt;/div&gt;&lt;div class=&quot;scr-sub&quot;&gt;День 3 · 5 из 18&lt;/div&gt;&lt;/div&gt;
+        &lt;div style=&quot;font-size:19px;color:#FF5500;font-weight:800&quot;&gt;+200⚡&lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;pb-w&quot;&gt;
+        &lt;div class=&quot;pb-r&quot;&gt;&lt;span class=&quot;pb-t&quot;&gt;Прогресс дня&lt;/span&gt;&lt;span class=&quot;pb-c&quot;&gt;28%&lt;/span&gt;&lt;/div&gt;
+        &lt;div class=&quot;pb-tr&quot;&gt;&lt;div class=&quot;pb-fi&quot; style=&quot;width:28%&quot;&gt;&lt;/div&gt;&lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div style=&quot;background:#FFF8F5;border:1.5px solid #FFD0B8;border-radius:11px;padding:9px 12px;display:flex;align-items:center;gap:8px&quot;&gt;
+        &lt;div style=&quot;font-size:14px&quot;&gt;📚&lt;/div&gt;
+        &lt;div style=&quot;font-size:10px;color:#FF5500;font-weight:600;line-height:1.4&quot;&gt;Выполни 50% заданий — откроется &lt;strong&gt;База знаний&lt;/strong&gt; дня 3&lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;chips&quot;&gt;
+        &lt;div class=&quot;chip on&quot;&gt;Все&lt;/div&gt;
+        &lt;div class=&quot;chip&quot;&gt;Образование&lt;/div&gt;
+        &lt;div class=&quot;chip&quot;&gt;Нетворкинг&lt;/div&gt;
+        &lt;div class=&quot;chip&quot;&gt;Медиа&lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;tk&quot; style=&quot;opacity:.65&quot;&gt;&lt;div class=&quot;tk-ch dk&quot;&gt;✓&lt;/div&gt;&lt;div class=&quot;tk-b&quot;&gt;&lt;div class=&quot;tk-t dk&quot;&gt;Познакомься с участником другого направления&lt;/div&gt;&lt;div class=&quot;tk-c&quot;&gt;Нетворкинг&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tk-x dk&quot;&gt;+20⚡&lt;/div&gt;&lt;/div&gt;
+      &lt;div class=&quot;tk&quot; style=&quot;opacity:.65&quot;&gt;&lt;div class=&quot;tk-ch dk&quot;&gt;✓&lt;/div&gt;&lt;div class=&quot;tk-b&quot;&gt;&lt;div class=&quot;tk-t dk&quot;&gt;Задай вопрос спикеру&lt;/div&gt;&lt;div class=&quot;tk-c&quot;&gt;Образование&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tk-x dk&quot;&gt;+40⚡&lt;/div&gt;&lt;/div&gt;
+      &lt;div class=&quot;tk hot&quot;&gt;&lt;div class=&quot;tk-ch av&quot;&gt;&lt;/div&gt;&lt;div class=&quot;tk-b&quot;&gt;&lt;div class=&quot;tk-t&quot;&gt;Напиши пост о форуме&lt;/div&gt;&lt;div class=&quot;tk-c&quot;&gt;Медиа&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tk-x&quot;&gt;+30⚡&lt;/div&gt;&lt;/div&gt;
+      &lt;div class=&quot;tk&quot;&gt;&lt;div class=&quot;tk-ch av&quot;&gt;&lt;/div&gt;&lt;div class=&quot;tk-b&quot;&gt;&lt;div class=&quot;tk-t&quot;&gt;Сделай фото с куратором&lt;/div&gt;&lt;div class=&quot;tk-c&quot;&gt;Нетворкинг&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tk-x&quot;&gt;+10⚡&lt;/div&gt;&lt;/div&gt;
+      &lt;div class=&quot;tk&quot;&gt;&lt;div class=&quot;tk-ch av&quot;&gt;&lt;/div&gt;&lt;div class=&quot;tk-b&quot;&gt;&lt;div class=&quot;tk-t&quot;&gt;Поучаствуй в клубной встрече&lt;/div&gt;&lt;div class=&quot;tk-c&quot;&gt;Образование&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tk-x&quot;&gt;+25⚡&lt;/div&gt;&lt;/div&gt;
+      &lt;div class=&quot;tk&quot; style=&quot;opacity:.4&quot;&gt;&lt;div class=&quot;tk-ch lk&quot;&gt;🔒&lt;/div&gt;&lt;div class=&quot;tk-b&quot;&gt;&lt;div class=&quot;tk-t lk&quot;&gt;Выступи на вечерней сессии&lt;/div&gt;&lt;div class=&quot;tk-c&quot;&gt;Доступно с 19:00&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;tk-x lk&quot;&gt;+50⚡&lt;/div&gt;&lt;/div&gt;
+    &lt;/div&gt;
+
+    &lt;!-- ═══ CHAT v8 ═══ --&gt;
+    &lt;div id=&quot;s-chat&quot; class=&quot;hidden&quot;&gt;
+
+      &lt;!-- ── БЛОК 1: Рефлексивные вопросы (приоритет) ── --&gt;
+      &lt;div&gt;
+        &lt;div class=&quot;rq-hdr&quot;&gt;
+          &lt;div class=&quot;rq-hdr-ic&quot;&gt;🌱&lt;/div&gt;
+          &lt;div class=&quot;rq-hdr-tx&quot;&gt;
+            &lt;div class=&quot;rq-hdr-t&quot;&gt;Рефлексивные вопросы&lt;/div&gt;
+            &lt;div class=&quot;rq-hdr-s&quot;&gt;прокачай свой опыт&lt;/div&gt;
+          &lt;/div&gt;
+          &lt;div class=&quot;rq-badge&quot;&gt;2 не отвечено&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;rq-body&quot;&gt;
+          &lt;!-- Unanswered --&gt;
+          &lt;div class=&quot;rq-item&quot;&gt;
+            &lt;div class=&quot;rq-tag&quot;&gt;📍 Точка 4 · После события&lt;/div&gt;
+            &lt;div class=&quot;rq-q&quot;&gt;Что из услышанного сегодня тебя удивило или зацепило?&lt;/div&gt;
+            &lt;div class=&quot;rq-from&quot;&gt;от куратора направления&lt;/div&gt;
+            &lt;div class=&quot;rq-btn&quot;&gt;Ответить →&lt;/div&gt;
+          &lt;/div&gt;
+          &lt;!-- Unanswered --&gt;
+          &lt;div class=&quot;rq-item&quot;&gt;
+            &lt;div class=&quot;rq-tag&quot;&gt;📍 Точка 5 · После события&lt;/div&gt;
+            &lt;div class=&quot;rq-q&quot;&gt;Как то, что ты узнал, связано с твоим запросом?&lt;/div&gt;
+            &lt;div class=&quot;rq-from&quot;&gt;от куратора направления&lt;/div&gt;
+            &lt;div class=&quot;rq-btn&quot;&gt;Ответить →&lt;/div&gt;
+          &lt;/div&gt;
+          &lt;!-- Answered --&gt;
+          &lt;div class=&quot;rq-item&quot; style=&quot;opacity:.55&quot;&gt;
+            &lt;div class=&quot;rq-tag&quot; style=&quot;background:#EBF5EB;color:#3A7A3A&quot;&gt;✓ Точка 3 · Дневной чекин&lt;/div&gt;
+            &lt;div class=&quot;rq-q&quot;&gt;Как твоя энергия сейчас? Что даёт силы?&lt;/div&gt;
+            &lt;div class=&quot;rq-done&quot;&gt;✓ Ответил&lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      &lt;!-- ── БЛОК 2: Вопросы участников ── --&gt;
+      &lt;div&gt;
+        &lt;div class=&quot;sec-l&quot;&gt;Вопросы участников&lt;/div&gt;
+        &lt;div class=&quot;peer-wrap&quot;&gt;
+          &lt;!-- Incoming — not answered --&gt;
+          &lt;div class=&quot;peer-item&quot;&gt;
+            &lt;div class=&quot;peer-dir&quot;&gt;Твоему направлению&lt;/div&gt;
+            &lt;div class=&quot;peer-q&quot;&gt;Как вы работаете с детьми, у которых нет мотивации учиться?&lt;/div&gt;
+            &lt;div class=&quot;peer-meta&quot;&gt;
+              &lt;div class=&quot;peer-av&quot;&gt;МК&lt;/div&gt;
+              &lt;div class=&quot;peer-nm&quot;&gt;Мария К. · Направление «Образование»&lt;/div&gt;
+              &lt;div class=&quot;peer-ans&quot;&gt;Ответить →&lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+          &lt;!-- Incoming — not answered --&gt;
+          &lt;div class=&quot;peer-item&quot;&gt;
+            &lt;div class=&quot;peer-dir&quot;&gt;Всем участникам&lt;/div&gt;
+            &lt;div class=&quot;peer-q&quot;&gt;Какой инструмент вы планируете внедрить первым после форума?&lt;/div&gt;
+            &lt;div class=&quot;peer-meta&quot;&gt;
+              &lt;div class=&quot;peer-av&quot; style=&quot;background:linear-gradient(135deg,#3A7A3A,#5DA85D)&quot;&gt;АН&lt;/div&gt;
+              &lt;div class=&quot;peer-nm&quot;&gt;Алексей Н. · Нетворкинг&lt;/div&gt;
+              &lt;div class=&quot;peer-ans&quot;&gt;Ответить →&lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+          &lt;!-- Answered — dimmed --&gt;
+          &lt;div class=&quot;peer-item answered&quot;&gt;
+            &lt;div class=&quot;peer-dir&quot;&gt;Всем участникам&lt;/div&gt;
+            &lt;div class=&quot;peer-q&quot;&gt;Что помогает удерживать внимание учеников на уроке?&lt;/div&gt;
+            &lt;div class=&quot;peer-meta&quot;&gt;
+              &lt;div class=&quot;peer-av&quot; style=&quot;background:linear-gradient(135deg,#1A1714,#4A4540)&quot;&gt;ОС&lt;/div&gt;
+              &lt;div class=&quot;peer-nm&quot;&gt;Ольга С. · Учителя&lt;/div&gt;
+              &lt;div class=&quot;peer-ans-done&quot;&gt;✓ Ответил&lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      &lt;!-- ── БЛОК 3: Мой вопрос ── --&gt;
+      &lt;div&gt;
+        &lt;div class=&quot;sec-l&quot;&gt;Мой вопрос&lt;/div&gt;
+        &lt;div class=&quot;myq2&quot;&gt;
+          &lt;div class=&quot;myq2-hdr&quot;&gt;Задан всем участникам&lt;/div&gt;
+          &lt;div class=&quot;myq2-q&quot;&gt;«Как мотивировать подростков на саморазвитие вне школы?»&lt;/div&gt;
+          &lt;div class=&quot;myq2-stats&quot;&gt;
+            &lt;div class=&quot;myq2-st&quot;&gt;5 ответов →&lt;/div&gt;
+            &lt;div style=&quot;font-size:10px;color:#aaa;flex:1;text-align:right&quot;&gt;обновлён час назад&lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div style=&quot;text-align:center;margin-top:4px&quot;&gt;
+          &lt;span style=&quot;font-size:10px;color:#aaa;border:1px solid #E0DAD0;border-radius:8px;padding:4px 12px;cursor:pointer&quot;&gt;+ Задать ещё один вопрос&lt;/span&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      &lt;!-- ── БЛОК 4: Написать организаторам ── --&gt;
+      &lt;div class=&quot;org-btn&quot;&gt;
+        &lt;div class=&quot;org-ic&quot;&gt;✉️&lt;/div&gt;
+        &lt;div style=&quot;flex:1&quot;&gt;
+          &lt;div class=&quot;org-t&quot;&gt;Написать организаторам&lt;/div&gt;
+          &lt;div class=&quot;org-s&quot;&gt;Вопрос, предложение или обратная связь&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;org-arr&quot;&gt;›&lt;/div&gt;
+      &lt;/div&gt;
+
+    &lt;/div&gt;
+
+    &lt;!-- ═══ ME ═══ --&gt;
+    &lt;div id=&quot;s-me&quot; class=&quot;hidden&quot;&gt;
+      &lt;div class=&quot;pf-hdr&quot;&gt;
+        &lt;div class=&quot;pf-av&quot;&gt;АС&lt;/div&gt;
+        &lt;div style=&quot;flex:1&quot;&gt;&lt;div class=&quot;pf-n&quot;&gt;Анна Соколова&lt;/div&gt;&lt;div class=&quot;pf-r&quot;&gt;Учитель · Смена 1&lt;/div&gt;&lt;div class=&quot;pf-sm&quot;&gt;Математика, 7–8 классы&lt;/div&gt;&lt;/div&gt;
+        &lt;div class=&quot;pf-cfg&quot;&gt;⚙&lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;ab-card&quot;&gt;
+        &lt;div class=&quot;ab-row&quot;&gt;
+          &lt;div class=&quot;ab-pt&quot;&gt;&lt;div class=&quot;ab-pt-l&quot;&gt;Точка А&lt;/div&gt;&lt;div class=&quot;ab-pt-d&quot;&gt;12 авг&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;ab-track&quot;&gt;&lt;div class=&quot;ab-fill&quot; style=&quot;width:43%&quot;&gt;&lt;/div&gt;&lt;div class=&quot;ab-dot-wrap&quot;&gt;&lt;div class=&quot;ab-dot&quot;&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;ab-pt&quot; style=&quot;text-align:right&quot;&gt;&lt;div class=&quot;ab-pt-l&quot;&gt;Точка Б&lt;/div&gt;&lt;div class=&quot;ab-pt-d&quot;&gt;18 авг&lt;/div&gt;&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class=&quot;ab-stats&quot;&gt;
+          &lt;div class=&quot;abs&quot;&gt;&lt;div class=&quot;abs-v&quot;&gt;78%&lt;/div&gt;&lt;div class=&quot;abs-l&quot;&gt;Прогресс&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;abs&quot;&gt;&lt;div class=&quot;abs-v&quot;&gt;14/20&lt;/div&gt;&lt;div class=&quot;abs-l&quot;&gt;Активностей&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;abs&quot;&gt;&lt;div class=&quot;abs-v&quot;&gt;9&lt;/div&gt;&lt;div class=&quot;abs-l&quot;&gt;Идей&lt;/div&gt;&lt;/div&gt;
+          &lt;div class=&quot;abs&quot;&gt;&lt;div class=&quot;abs-v&quot;&gt;3/7&lt;/div&gt;&lt;div class=&quot;abs-l&quot;&gt;Рефлексий&lt;/div&gt;&lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;pb&quot;&gt;&lt;div class=&quot;pb-lbl&quot;&gt;🎯 МОЙ ЗАПРОС&lt;/div&gt;&lt;div class=&quot;pb-text&quot;&gt;«Хочу выстраивать доверительные отношения с подростками и вовлекать их в обучение»&lt;/div&gt;&lt;/div&gt;
+      &lt;div class=&quot;pb&quot;&gt;&lt;div class=&quot;pb-lbl&quot;&gt;⚡ ЧТО ПОЛУЧИЛОСЬ&lt;/div&gt;&lt;div class=&quot;pb-checks&quot;&gt;&lt;div class=&quot;pbc&quot;&gt;Поняла логику педагогического доверия&lt;/div&gt;&lt;div class=&quot;pbc&quot;&gt;Освоила 3 практических инструмента&lt;/div&gt;&lt;div class=&quot;pbc&quot;&gt;Сформировала план внедрения в школе&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+      &lt;div class=&quot;pb&quot;&gt;&lt;div class=&quot;pb-lbl&quot;&gt;📁 МОЯ КОПИЛКА&lt;/div&gt;&lt;div class=&quot;pb-tags&quot;&gt;&lt;span class=&quot;ptag&quot;&gt;#применю&lt;/span&gt;&lt;span class=&quot;ptag&quot;&gt;#идея&lt;/span&gt;&lt;span class=&quot;ptag&quot;&gt;#урок&lt;/span&gt;&lt;span class=&quot;ptag&quot;&gt;#контакт&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;pb-link&quot;&gt;9 идей и инструментов →&lt;/div&gt;&lt;/div&gt;
+      &lt;div class=&quot;pb&quot;&gt;&lt;div class=&quot;pb-lbl&quot;&gt;🗺 СЛЕДУЮЩИЕ ШАГИ&lt;/div&gt;&lt;div class=&quot;pb-steps&quot;&gt;&lt;div class=&quot;ps&quot;&gt;&lt;span class=&quot;ps-n&quot;&gt;1&lt;/span&gt;Провести мини-диагностику в классе&lt;/div&gt;&lt;div class=&quot;ps&quot;&gt;&lt;span class=&quot;ps-n&quot;&gt;2&lt;/span&gt;Попробовать инструмент «Круг доверия»&lt;/div&gt;&lt;div class=&quot;ps&quot;&gt;&lt;span class=&quot;ps-n&quot;&gt;3&lt;/span&gt;Собрать обратную связь от учеников&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
+      &lt;div class=&quot;ai-rec&quot;&gt;&lt;div class=&quot;ai-lbl&quot;&gt;✦ РЕКОМЕНДАЦИЯ ИИ&lt;/div&gt;&lt;div class=&quot;ai-text&quot;&gt;Попробуйте метод «Три вопроса в конце урока» — усиливает рефлексию и вовлечённость подростков.&lt;/div&gt;&lt;div class=&quot;ai-link&quot;&gt;Смотреть инструмент →&lt;/div&gt;&lt;/div&gt;
+    &lt;/div&gt;
+
+  &lt;/div&gt;&lt;!-- /scr --&gt;
+
+  &lt;div class=&quot;nav&quot;&gt;
+    &lt;div class=&quot;ni on&quot; id=&quot;ni-home&quot; onclick=&quot;go(&#39;home&#39;)&quot;&gt;&lt;span class=&quot;nii&quot;&gt;🏠&lt;/span&gt;&lt;span class=&quot;nil&quot;&gt;Главная&lt;/span&gt;&lt;/div&gt;
+    &lt;div class=&quot;ni&quot; id=&quot;ni-prog&quot; onclick=&quot;go(&#39;prog&#39;)&quot;&gt;&lt;span class=&quot;nii&quot;&gt;📋&lt;/span&gt;&lt;span class=&quot;nil&quot;&gt;Программа&lt;/span&gt;&lt;/div&gt;
+    &lt;div class=&quot;ni&quot; id=&quot;ni-tasks&quot; onclick=&quot;go(&#39;tasks&#39;)&quot;&gt;&lt;span class=&quot;nii&quot;&gt;⚡&lt;/span&gt;&lt;span class=&quot;nil&quot;&gt;Задания&lt;/span&gt;&lt;/div&gt;
+    &lt;div class=&quot;ni&quot; id=&quot;ni-chat&quot; onclick=&quot;go(&#39;chat&#39;)&quot;&gt;&lt;span class=&quot;nii&quot;&gt;💬&lt;/span&gt;&lt;span class=&quot;nil&quot;&gt;Общение&lt;/span&gt;&lt;div class=&quot;nb&quot;&gt;1&lt;/div&gt;&lt;/div&gt;
+    &lt;div class=&quot;ni&quot; id=&quot;ni-me&quot; onclick=&quot;go(&#39;me&#39;)&quot;&gt;&lt;span class=&quot;nii&quot;&gt;👤&lt;/span&gt;&lt;span class=&quot;nil&quot;&gt;Я&lt;/span&gt;&lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+
+&lt;div class=&quot;page-footer&quot;&gt;Машук 2026 · Концепция интерфейса бота · v8&lt;/div&gt;
+
+&lt;script&gt;
+var SS=[&#39;home&#39;,&#39;prog&#39;,&#39;tasks&#39;,&#39;chat&#39;,&#39;me&#39;];
+var curSchedDay=3, curKBDay=1;
+
+function go(s){
+  SS.forEach(function(x){
+    document.getElementById(&#39;s-&#39;+x).classList.add(&#39;hidden&#39;);
+    document.getElementById(&#39;ni-&#39;+x).classList.remove(&#39;on&#39;);
+  });
+  document.getElementById(&#39;s-&#39;+s).classList.remove(&#39;hidden&#39;);
+  document.getElementById(&#39;ni-&#39;+s).classList.add(&#39;on&#39;);
+  document.getElementById(&#39;scr&#39;).scrollTop=0;
+  document.getElementById(&#39;time-sw&#39;).style.display=(s===&#39;home&#39;)?&#39;flex&#39;:&#39;none&#39;;
+}
+
+function setTime(t,btn){
+  [&#39;m&#39;,&#39;d&#39;,&#39;e&#39;].forEach(function(x){ document.getElementById(&#39;hs-&#39;+x).classList.add(&#39;hidden&#39;); });
+  document.querySelectorAll(&#39;.tsb&#39;).forEach(function(b){ b.classList.remove(&#39;on&#39;); });
+  document.getElementById(&#39;hs-&#39;+t).classList.remove(&#39;hidden&#39;);
+  btn.classList.add(&#39;on&#39;);
+}
+
+function setPTab(tab){
+  [&#39;sched&#39;,&#39;kb&#39;].forEach(function(t){
+    document.getElementById(&#39;ptab-&#39;+t).classList.add(&#39;hidden&#39;);
+    document.getElementById(&#39;pst-&#39;+t).classList.remove(&#39;on&#39;);
+  });
+  document.getElementById(&#39;ptab-&#39;+tab).classList.remove(&#39;hidden&#39;);
+  document.getElementById(&#39;pst-&#39;+tab).classList.add(&#39;on&#39;);
+  // Show correct day
+  if(tab===&#39;sched&#39;) setSchedDayShow(curSchedDay);
+  else setKBDayShow(curKBDay);
+  document.getElementById(&#39;scr&#39;).scrollTop=0;
+}
+
+function setSchedDay(d,btn){
+  curSchedDay=d;
+  document.querySelectorAll(&#39;#day-sw-sched .dsb&#39;).forEach(function(b){ b.classList.remove(&#39;on&#39;); });
+  btn.classList.add(&#39;on&#39;);
+  setSchedDayShow(d);
+}
+function setSchedDayShow(d){
+  for(var i=1;i&lt;=7;i++) document.getElementById(&#39;sd-&#39;+i).classList.add(&#39;hidden&#39;);
+  document.getElementById(&#39;sd-&#39;+d).classList.remove(&#39;hidden&#39;);
+}
+
+function setKBDay(d,btn){
+  curKBDay=d;
+  document.querySelectorAll(&#39;#ptab-kb .day-sw .dsb&#39;).forEach(function(b){ b.classList.remove(&#39;on&#39;); });
+  btn.classList.add(&#39;on&#39;);
+  setKBDayShow(d);
+}
+function setKBDayShow(d){
+  for(var i=1;i&lt;=7;i++) document.getElementById(&#39;kbd-&#39;+i).classList.add(&#39;hidden&#39;);
+  document.getElementById(&#39;kbd-&#39;+d).classList.remove(&#39;hidden&#39;);
+}
+
+function toggleKBDay(d){
+  var c=document.getElementById(&#39;kbc-&#39;+d);
+  var a=document.getElementById(&#39;kba-&#39;+d);
+  if(c.classList.contains(&#39;hidden&#39;)){ c.classList.remove(&#39;hidden&#39;); if(a) a.classList.add(&#39;open&#39;); }
+  else { c.classList.add(&#39;hidden&#39;); if(a) a.classList.remove(&#39;open&#39;); }
+}
+
+// Init
+setSchedDayShow(3);
+setKBDayShow(1);
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+"></iframe>
+<div id="k-badge">Действительна 18 дней</div>
+<script>
+(() => {
+  const iframe = document.querySelector('iframe');
+  if (!iframe) return;
+  const NS = '__knotta';
+
+  function send(payload) {
+    try { iframe.contentWindow.postMessage(payload, '*'); } catch (_) {}
+  }
+
+  function context() {
+    const theme = matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark' : 'light';
+    // location.hash includes the leading '#'; strip it and decode.
+    let initialHash = '';
+    try { initialHash = decodeURIComponent(location.hash.slice(1)); }
+    catch (_) { initialHash = location.hash.slice(1); }
+    return {
+      [NS]: 1,
+      type: 'shell-context',
+      v: 1,
+      payload: {
+        theme: theme,
+        locale: "ru",
+        slug: "yqccjc",
+        proPage: false,
+        expiresAt: "2026-07-15T19:25:48.059Z",
+        initialHash: initialHash,
+        userId: "7d9bf711-93f7-4b6c-9cd5-d750fd822be7",
+      },
+    };
+  }
+
+  iframe.addEventListener('load', () => send(context()));
+  try {
+    matchMedia('(prefers-color-scheme: dark)').addEventListener(
+      'change', () => send(context()));
+  } catch (_) {}
+  // Re-emit shell-context if the parent's hash is changed externally
+  // (back/forward, bookmarklet, paste-and-go from URL bar). The iframe
+  // can react to state restored from the URL.
+  window.addEventListener('hashchange', () => send(context()));
+
+  const HANDLERS = {
+    async share(p) {
+      if (typeof navigator.share !== 'function') {
+        if (p && typeof p.url === 'string') {
+          await navigator.clipboard.writeText(p.url);
+          return { fallback: 'clipboard' };
+        }
+        throw new Error('share not supported');
+      }
+      const data = {};
+      if (typeof p?.title === 'string') data.title = p.title.slice(0, 200);
+      if (typeof p?.text === 'string')  data.text  = p.text.slice(0, 2000);
+      if (typeof p?.url === 'string')   data.url   = p.url.slice(0, 2000);
+      await navigator.share(data);
+      return {};
+    },
+    async copy(p) {
+      if (typeof p?.text !== 'string') throw new Error('text required');
+      await navigator.clipboard.writeText(p.text.slice(0, 100000));
+      return {};
+    },
+    async ['open-external'](p) {
+      const raw = String(p?.url ?? '');
+      let parsed;
+      try { parsed = new URL(raw); } catch (_) { throw new Error('bad url'); }
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error('bad protocol');
+      }
+      window.open(parsed.href, '_blank', 'noopener,noreferrer');
+      return {};
+    },
+    async ['set-title'](p) {
+      if (typeof p?.title !== 'string') throw new Error('title required');
+      // Strip C0/C1 control characters; clip to 200 chars.
+      // eslint-disable-next-line no-control-regex
+      document.title = p.title.replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 200);
+      return {};
+    },
+    async ['set-hash'](p) {
+      // Persistent state for the page, written to the parent URL hash
+      // so it survives refresh and is shareable. Cap at 4 KiB to stay
+      // well under browser URL limits. Pass an empty string to clear.
+      if (typeof p?.hash !== 'string') throw new Error('hash required');
+      // Reject control chars (newlines, NULs etc. would break URL parsing).
+      // eslint-disable-next-line no-control-regex
+      if (/[\u0000-\u001F\u007F]/.test(p.hash)) throw new Error('control chars');
+      const hash = p.hash.slice(0, 4096);
+      const next = hash ? '#' + encodeURIComponent(hash) : location.pathname + location.search;
+      // replaceState (not pushState) — every keystroke shouldn't add a
+      // history entry. The page is responsible for its own debouncing
+      // if it sets hash on every change.
+      try { history.replaceState(null, '', next); } catch (_) {}
+      return { length: hash.length };
+    },
+
+    // ---- KV bridge: per-user persistent state via /api/state/:slug ----
+    // The shell is same-origin with the API; calls include the k_uid
+    // cookie automatically via credentials: 'same-origin'. The iframe
+    // never makes the HTTP call directly (it's null-origin and would
+    // be CORS-blocked).
+    async ['kv-get'](p) {
+      if (typeof p?.key !== 'string') throw new Error('key required');
+      const url = '/api/state/' + encodeURIComponent("yqccjc")
+        + '?key=' + encodeURIComponent(p.key);
+      const r = await fetch(url, { credentials: 'same-origin' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || ('http ' + r.status));
+      return { value: d.value, updated_at: d.updated_at };
+    },
+    async ['kv-set'](p) {
+      if (typeof p?.key !== 'string')   throw new Error('key required');
+      if (typeof p?.value !== 'string') throw new Error('value required');
+      const url = '/api/state/' + encodeURIComponent("yqccjc");
+      const r = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key: p.key, value: p.value }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || ('http ' + r.status));
+      return { bytes: d.bytes, updated_at: d.updated_at };
+    },
+    async ['kv-del'](p) {
+      if (typeof p?.key !== 'string') throw new Error('key required');
+      const url = '/api/state/' + encodeURIComponent("yqccjc")
+        + '?key=' + encodeURIComponent(p.key);
+      const r = await fetch(url, { method: 'DELETE', credentials: 'same-origin' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || ('http ' + r.status));
+      return { deleted: d.deleted };
+    },
+    async ['kv-list']() {
+      const url = '/api/state/' + encodeURIComponent("yqccjc");
+      const r = await fetch(url, { credentials: 'same-origin' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || ('http ' + r.status));
+      return { keys: d.keys };
+    },
+    async ['kv-list-all'](p) {
+      // Author aggregation. Requires the page's edit_token, which only
+      // the page author knows. The token is sent in the request header,
+      // never logged, and the shell does NOT cache it.
+      if (typeof p?.token !== 'string') throw new Error('token required');
+      const url = '/api/state/' + encodeURIComponent("yqccjc") + '/all';
+      const r = await fetch(url, {
+        credentials: 'same-origin',
+        headers: { 'x-host-html-edit-token': p.token },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || ('http ' + r.status));
+      return { rows: d.rows };
+    },
+  };
+
+  window.addEventListener('message', async (event) => {
+    if (event.source !== iframe.contentWindow) return;
+    const msg = event.data;
+    if (!msg || typeof msg !== 'object' || msg[NS] !== 1) return;
+    if (typeof msg.type !== 'string') return;
+    const fn = HANDLERS[msg.type];
+    if (!fn) return;
+
+    let reply;
+    try {
+      const data = await fn(msg.payload);
+      reply = { [NS]: 1, type: 'reply', id: msg.id ?? null, ok: true };
+      if (data && Object.keys(data).length) reply.data = data;
+    } catch (e) {
+      reply = {
+        [NS]: 1, type: 'reply', id: msg.id ?? null, ok: false,
+        error: String(e && e.message || e),
+      };
+    }
+    if (msg.id != null) send(reply);
+  });
+})();
+</script>
+</body>
+</html>

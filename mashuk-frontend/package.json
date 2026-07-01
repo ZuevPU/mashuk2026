@@ -1,0 +1,27 @@
+{
+  "name": "mashuk-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.0"
+  },
+  "dependencies": {
+    "@vkontakte/icons": "^3.60.0",
+    "@vkontakte/vk-bridge": "^2.15.12",
+    "@vkontakte/vk-mini-apps-router": "^1.8.4",
+    "@vkontakte/vkui": "^8.3.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.0"
+  }
+}

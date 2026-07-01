@@ -1,0 +1,39 @@
+name: Deploy Admin
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mashuk-admin/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install and Build
+        env:
+          VITE_ADMIN_TOKEN: ${{ secrets.ADMIN_SECRET }}
+        run: |
+          cd mashuk-admin
+          npm ci
+          npm run build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mashuk-admin-dist
+          path: mashuk-admin/dist
+
+      - name: Deploy to Timeweb Static (webhook)
+        if: ${{ secrets.TIMEWEB_ADMIN_WEBHOOK != '' }}
+        run: |
+          curl -X POST "${{ secrets.TIMEWEB_ADMIN_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{"service":"admin","sha":"${{ github.sha }}"}'

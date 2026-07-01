@@ -1,0 +1,75 @@
+body { margin: 0; font-family: -apple-system, Arial, sans-serif; background: #f5f5f5; }
+.admin-header { background: #1A1714; color: #fff; padding: 16px 24px; }
+.admin-nav { display: flex; gap: 8px; padding: 12px 24px; background: #fff; border-bottom: 1px solid #ddd; }
+.admin-nav button { padding: 8px 16px; border: 1px solid #ddd; border-radius: 8px; background: #fff; cursor: pointer; }
+.admin-nav button.on { background: #FF5500; color: #fff; border-color: #FF5500; }
+.admin-main { padding: 24px; }
+table { width: 100%; background: #fff; border-collapse: collapse; border-radius: 8px; overflow: hidden; }
+th, td { padding: 10px 12px; border-bottom: 1px solid #eee; text-align: left; font-size: 13px; }
+.card { background: #fff; padding: 16px; border-radius: 8px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.form-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.form-row input, .form-row select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+.form-row button { padding: 8px 16px; background: #FF5500; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+.btn-danger { background: #C53030; }
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #1A1714;
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.2);
+  cursor: pointer;
+  z-index: 1000;
+  max-width: 360px;
+  font-size: 13px;
+}
+
+.tab-skeleton {
+  padding: 12px 0;
+}
+
+.sk-line {
+  display: block;
+  height: 12px;
+  background: linear-gradient(90deg, #eee 25%, #f5f5f5 50%, #eee 75%);
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.2s infinite;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.sk-line.short {
+  width: 60%;
+}
+
+@keyframes sk-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.tab-loading {
+  height: 3px;
+  background: #eee;
+  margin-bottom: 12px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.tab-loading-bar {
+  display: block;
+  height: 100%;
+  width: 40%;
+  background: #FF5500;
+  animation: tab-load 1s ease-in-out infinite;
+}
+
+@keyframes tab-load {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+.tag-chip { display: inline-block; background: #eee; padding: 4px 8px; border-radius: 4px; margin: 2px; font-size: 12px; }
+.chart-card { min-height: 260px; }
+textarea { border: 1px solid #ddd; border-radius: 6px; padding: 8px; font-family: inherit; }
+h3 { margin: 16px 0 8px; font-size: 14px; }
