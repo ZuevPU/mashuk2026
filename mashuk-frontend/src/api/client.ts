@@ -6,7 +6,8 @@ function normalizeApiUrl(url: string): string {
   if (!normalized.startsWith('/') && !/^https?:\/\//i.test(normalized)) {
     normalized = `https://${normalized}`;
   }
-  if (normalized.startsWith('http://')) {
+  const isLocalhost = /localhost|127\.0\.0\.1/i.test(normalized);
+  if (normalized.startsWith('http://') && !isLocalhost) {
     normalized = normalized.replace(/^http:\/\//, 'https://');
   }
   return normalized;
@@ -15,7 +16,7 @@ function normalizeApiUrl(url: string): string {
 const API_URL = import.meta.env.PROD 
   ? (import.meta.env.VITE_API_URL && !import.meta.env.VITE_API_URL.includes('localhost') 
       ? normalizeApiUrl(import.meta.env.VITE_API_URL) 
-      : 'https://zuevpu-mashuk2026-1535.twc1.net/api')
+      : 'https://zuevpu-mashuk2026-e75d.twc1.net/api')
   : normalizeApiUrl(import.meta.env.VITE_API_URL || '/api');
 
 // Fallback handles production URL
@@ -91,7 +92,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
   const ct = res.headers.get('content-type') || '';
   if (ct.includes('text/html') || text.trimStart().startsWith('<!')) {
     throw new ApiError(
-      'API returned HTML instead of JSON. Check VITE_API_URL points to the backend (https://...1535.../api).',
+      'API returned HTML instead of JSON. Check VITE_API_URL points to the backend (https://...e75d.../api).',
       res.status,
     );
   }
