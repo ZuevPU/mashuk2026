@@ -10,6 +10,10 @@ function normalizeApiUrl(url: string): string {
 
 const API_URL = normalizeApiUrl(import.meta.env.VITE_API_URL || '/api');
 
+if (import.meta.env.PROD) {
+  console.info('[mashuk] API_URL:', API_URL);
+}
+
 let cachedLaunchParams: string | null = null;
 let authInitPromise: Promise<void> | null = null;
 

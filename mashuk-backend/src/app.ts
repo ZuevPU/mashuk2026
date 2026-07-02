@@ -7,11 +7,24 @@ import routes from './routes/index.js';
 import adminRoutes from './routes/admin.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 
+function resolveCorsOrigin(requestOrigin: string | undefined): string | undefined {
+  const configured = env.CORS_ORIGIN;
+  if (configured === '*') return requestOrigin || '*';
+  const allowed = configured.split(',').map(s => s.trim()).filter(Boolean);
+  if (requestOrigin && allowed.includes(requestOrigin)) return requestOrigin;
+  if (allowed.length === 1) return allowed[0];
+  return undefined;
+}
+
 export function createApp() {
   const app = express();
 
   app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', env.CORS_ORIGIN);
+    const origin = resolveCorsOrigin(req.headers.origin);
+    if (origin) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Vary', 'Origin');
+    }
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Test-Vk-Id, X-Admin-Token');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     if (req.method === 'OPTIONS') {
