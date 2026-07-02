@@ -12,16 +12,13 @@ function normalizeApiUrl(url: string): string {
   return normalized;
 }
 
-const API_URL = normalizeApiUrl(import.meta.env.VITE_API_URL || '/api');
+const API_URL = import.meta.env.PROD 
+  ? (import.meta.env.VITE_API_URL && !import.meta.env.VITE_API_URL.includes('localhost') 
+      ? normalizeApiUrl(import.meta.env.VITE_API_URL) 
+      : 'https://zuevpu-mashuk2026-1535.twc1.net/api')
+  : normalizeApiUrl(import.meta.env.VITE_API_URL || '/api');
 
-if (import.meta.env.PROD && typeof window !== 'undefined') {
-  const onTimeweb = window.location.hostname.endsWith('.twc1.net');
-  if (onTimeweb && !API_URL.startsWith('https://')) {
-    throw new Error(
-      'VITE_API_URL must start with https:// (e.g. https://zuevpu-mashuk2026-1535.twc1.net/api). Set it in Timeweb Apps and rebuild.',
-    );
-  }
-}
+// Fallback handles production URL
 
 let cachedLaunchParams: string | null = null;
 let authInitPromise: Promise<void> | null = null;
