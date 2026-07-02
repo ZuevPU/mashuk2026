@@ -276,7 +276,7 @@ export const App = () => {
     return `${p.firstName} ${p.lastName} ${p.direction} ${p.vkId}`.toLowerCase().includes(q);
   });
 
-  const createParticipant = async () => {
+  const createParticipant = () => act(async () => {
     await adminFetch('/participants', {
       method: 'POST',
       body: JSON.stringify({
@@ -287,75 +287,64 @@ export const App = () => {
       }),
     });
     setNewParticipant({ vkId: '', firstName: '', lastName: '', directionId: '' });
-    reload();
-  };
+  });
 
-  const createDirection = async () => {
+  const createDirection = () => act(async () => {
     if (!newDirection.trim()) return;
     await adminFetch('/directions', { method: 'POST', body: JSON.stringify({ name: newDirection }) });
     setNewDirection('');
-    reload();
-  };
+  });
 
-  const createTag = async () => {
+  const createTag = () => act(async () => {
     if (!newTag.trim()) return;
     await adminFetch('/thematic-tags', { method: 'POST', body: JSON.stringify({ name: newTag }) });
     setNewTag('');
-    reload();
-  };
+  });
 
-  const createEvent = async () => {
+  const createEvent = () => act(async () => {
     await adminFetch('/events', {
       method: 'POST',
       body: JSON.stringify({
         ...newEvent,
         dayNumber: Number(newEvent.dayNumber),
         tags: newEvent.tags.split(',').map(t => t.trim()).filter(Boolean),
-        startTime: new Date(),
         isPublished: true,
       }),
     });
-    reload();
-  };
+  });
 
-  const createTask = async () => {
+  const createTask = () => act(async () => {
     await adminFetch('/tasks', {
       method: 'POST',
       body: JSON.stringify({ ...newTask, publishTime: new Date(), dayNumber: Number(newTask.dayNumber) }),
     });
-    reload();
-  };
+  });
 
-  const createQuestion = async () => {
+  const createQuestion = () => act(async () => {
     await adminFetch('/questions', {
       method: 'POST',
-      body: JSON.stringify({ ...newQuestion, publishTime: new Date(), dayNumber: Number(newQuestion.dayNumber) }),
+      body: JSON.stringify({ ...newQuestion, dayNumber: Number(newQuestion.dayNumber) }),
     });
-    reload();
-  };
+  });
 
-  const addOption = async () => {
+  const addOption = () => act(async () => {
     if (!optionForm.questionId || !optionForm.label) return;
     await adminFetch(`/questions/${optionForm.questionId}/options`, {
       method: 'POST',
       body: JSON.stringify({ label: optionForm.label, value: optionForm.value || optionForm.label }),
     });
     setOptionForm({ questionId: '', label: '', value: '' });
-  };
+  });
 
-  const saveDayFocus = async () => {
+  const saveDayFocus = () => act(async () => {
     await adminFetch('/day-focus', { method: 'POST', body: JSON.stringify(dayFocusForm) });
-    reload();
-  };
+  });
 
-  const saveForumSettings = async (patch: Record<string, unknown>) => {
+  const saveForumSettings = (patch: Record<string, unknown>) => act(async () => {
     await adminFetch('/forum-settings', { method: 'PATCH', body: JSON.stringify(patch) });
-    reload();
-  };
+  });
 
-  const saveSections = async () => {
-    await saveForumSettings({ sectionsVisibility: sectionsVis });
-  };
+  const saveSections = () => saveForumSettings({ sectionsVisibility: sectionsVis });
 
   const loadDayFocusIntoForm = (dayNumber: number) => {
     const f = dayFocusList.find(d => d.dayNumber === dayNumber);
@@ -363,13 +352,12 @@ export const App = () => {
     else setDayFocusForm({ dayNumber, title: '', text: '', keyQuestion: '' });
   };
 
-  const createMaterial = async () => {
+  const createMaterial = () => act(async () => {
     await adminFetch('/materials', {
       method: 'POST',
       body: JSON.stringify({ ...newMaterial, dayNumber: Number(newMaterial.dayNumber) }),
     });
-    reload();
-  };
+  });
 
   const emotionChartData = charts?.emotions
     ? Object.entries(charts.emotions as Record<string, number>).map(([name, value]) => ({ name, value }))
