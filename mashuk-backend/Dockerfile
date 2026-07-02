@@ -15,6 +15,8 @@ RUN npm run build
 # Stage 2: Runner
 FROM node:22-slim AS runner
 
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY package*.json ./
@@ -27,7 +29,7 @@ RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 8080
 
-# Health check is configured in Timeweb Apps panel (path /health, port 8080).
-# Do not add HEALTHCHECK here — Timeweb ignores panel settings when Dockerfile defines one.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://127.0.0.1:${PORT:-8080}/health || exit 1
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
