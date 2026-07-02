@@ -109,10 +109,11 @@ export const App = () => {
       }
     } catch (error) {
       console.error('Init error', error);
-      // #region agent log
-      fetch('http://127.0.0.1:7851/ingest/25d05e57-8243-429d-ae45-8e0cf6e5c735',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'df9b9f'},body:JSON.stringify({sessionId:'df9b9f',location:'App.tsx:111',message:'Init error caught',data:{error: String(error), stack: error instanceof Error ? error.stack : undefined, apiUrl: import.meta.env.VITE_API_URL},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      setInitError(`Ошибка: ${error instanceof Error ? error.message : String(error)} | API: ${import.meta.env.VITE_API_URL}`);
+      const apiUrl = import.meta.env.VITE_API_URL || '/api';
+      const hint = apiUrl.startsWith('http://')
+        ? ' Укажите VITE_API_URL с https:// в Timeweb.'
+        : '';
+      setInitError(`Ошибка: ${error instanceof Error ? error.message : String(error)} | API: ${apiUrl}${hint}`);
     } finally {
       setInitComplete(true);
       setLoading(false);

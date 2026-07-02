@@ -6,8 +6,19 @@ import {
 
 const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN || 'dev-admin-secret';
 
+function normalizeApiUrl(url: string): string {
+  if (!url) return '';
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('http://')) {
+    return url.replace(/^http:\/\//, 'https://');
+  }
+  return url.replace(/\/$/, '');
+}
+
+const API_BASE = normalizeApiUrl(import.meta.env.VITE_API_URL || '');
+
 async function adminFetch(path: string, options: RequestInit = {}) {
-  const res = await fetch(`/api/admin${path}`, {
+  const base = API_BASE ? `${API_BASE}/admin` : '/api/admin';
+  const res = await fetch(`${base}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
