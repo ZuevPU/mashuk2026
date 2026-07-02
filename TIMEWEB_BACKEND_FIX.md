@@ -27,12 +27,12 @@ https://zuevpu-mashuk2026-1535.twc1.net/health
 ## 3. Переменные окружения (обязательно все)
 
 ```
-DATABASE_URL=postgresql://gen_user:PASSWORD@85.198.80.180:5432/default_db
+DATABASE_URL=postgresql://<db-user>:<db-password>@<db-host>:5432/<db-name>
 PORT=8080
 NODE_ENV=production
 SKIP_VK_SIGN=false
 VK_APP_SECRET=<ваш ключ из dev.vk.com>
-ADMIN_SECRET=MashukAdminSuperSecret2026
+ADMIN_SECRET=<сгенерируйте уникальный секрет, не коммитьте его>
 CORS_ORIGIN=https://zuevpu-mashuk2026-07d9.twc1.net,https://zuevpu-mashuk2026-feae.twc1.net
 PUBLIC_URL=https://zuevpu-mashuk2026-1535.twc1.net
 ```
@@ -49,7 +49,7 @@ AUTO_SEED=true
 
 В панели Timeweb → ваша PostgreSQL → **доступ извне / whitelist**:
 - Разрешите подключения с Timeweb Apps (или публичный доступ).
-- Если БД в другом регионе/сети — Apps может не достучаться до `85.198.80.180`.
+- Если БД в другом регионе/сети — Apps может не достучаться до её хоста.
 
 ## 5. Логи деплоя
 
@@ -73,7 +73,7 @@ VITE_API_URL=https://zuevpu-mashuk2026-1535.twc1.net/api
 **mashuk-admin** → переменные:
 ```
 VITE_API_URL=https://zuevpu-mashuk2026-1535.twc1.net/api
-VITE_ADMIN_TOKEN=MashukAdminSuperSecret2026
+VITE_ADMIN_TOKEN=<тот же ADMIN_SECRET, что и на бэкенде>
 ```
 
 Пересоберите оба приложения (Deploy).
