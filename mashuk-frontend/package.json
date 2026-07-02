@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@vkontakte/icons": "^3.60.0",
-    "@vkontakte/vk-bridge": "^2.15.12",
+    "@vkontakte/vk-bridge": "^3.0.2",
     "@vkontakte/vk-mini-apps-router": "^1.8.6",
     "@vkontakte/vkui": "^8.3.0",
     "react": "^19.2.7",
