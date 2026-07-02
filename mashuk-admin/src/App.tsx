@@ -8,16 +8,33 @@ const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN || 'dev-admin-secret';
 
 function normalizeApiUrl(url: string): string {
   if (!url) return '';
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('http://')) {
-    return url.replace(/^http:\/\//, 'https://');
+  let normalized = url.trim();
+  if (!normalized.startsWith('/') && !/^https?:\/\//i.test(normalized)) {
+    normalized = `https://${normalized}`;
   }
-  return url.replace(/\/$/, '');
+  if (normalized.startsWith('http://')) {
+    normalized = normalized.replace(/^http:\/\//, 'https://');
+  }
+  return normalized.replace(/\/$/, '');
 }
 
 const API_BASE = normalizeApiUrl(import.meta.env.VITE_API_URL || '');
 
+function getConfigError(): string | null {
+  if (!import.meta.env.PROD) return null;
+  if (typeof window === 'undefined') return null;
+  const onTimeweb = window.location.hostname.endsWith('.twc1.net');
+  if (onTimeweb && !API_BASE.startsWith('https://')) {
+    return `VITE_API_URL не задан или некорректен.\nТекущее значение: "${API_BASE || '(пусто)'}"\nУкажите https://zuevpu-mashuk2026-1535.twc1.net/api в переменных окружения сборки Timeweb Apps и пересоберите приложение.`;
+  }
+  return null;
+}
+
 async function adminFetch(path: string, options: RequestInit = {}) {
   const base = API_BASE ? `${API_BASE}/admin` : '/api/admin';
+  if (import.meta.env.PROD && !API_BASE) {
+    throw new Error('VITE_API_URL is not set. Configure it in Timeweb Apps and rebuild the admin panel.');
+  }
   const res = await fetch(`${base}${path}`, {
     ...options,
     headers: {
@@ -26,10 +43,16 @@ async function adminFetch(path: string, options: RequestInit = {}) {
       ...(options.headers || {}),
     },
   });
-  if (!res.ok) throw new Error(await res.text());
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
   const ct = res.headers.get('content-type') || '';
-  if (ct.includes('text/csv')) return res.text();
-  return res.json();
+  if (ct.includes('text/html') || text.trimStart().startsWith('<!')) {
+    throw new Error(
+      'API returned HTML instead of JSON. Set VITE_API_URL=https://zuevpu-mashuk2026-1535.twc1.net/api in Timeweb Apps and rebuild.',
+    );
+  }
+  if (ct.includes('text/csv')) return text;
+  return text ? JSON.parse(text) : null;
 }
 
 function downloadCsv(path: string, filename: string) {
@@ -309,6 +332,18 @@ export const App = () => {
       alert('Неверный код доступа');
     }
   };
+
+  const configError = getConfigError();
+  if (configError) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#fff5f5', padding: 24 }}>
+        <div style={{ maxWidth: 480, background: 'white', padding: 32, borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', color: '#C53030', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: 14 }}>
+          <strong style={{ display: 'block', marginBottom: 12 }}>⚠️ Ошибка конфигурации</strong>
+          {configError}
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return (

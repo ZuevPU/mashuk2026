@@ -9,9 +9,11 @@ import { errorHandler } from './middlewares/errorHandler.js';
 
 function resolveCorsOrigin(requestOrigin: string | undefined): string | undefined {
   const configured = env.CORS_ORIGIN;
-  if (configured === '*') return requestOrigin || '*';
+  if (!configured || configured === '*') return requestOrigin || '*';
+  // null origin = opaque origin (VK iframe / sandboxed content) — allow it
+  if (requestOrigin === 'null' || !requestOrigin) return '*';
   const allowed = configured.split(',').map(s => s.trim()).filter(Boolean);
-  if (requestOrigin && allowed.includes(requestOrigin)) return requestOrigin;
+  if (allowed.includes(requestOrigin)) return requestOrigin;
   if (allowed.length === 1) return allowed[0];
   return undefined;
 }
