@@ -15,6 +15,8 @@ RUN npm run build
 # Stage 2: Runner
 FROM node:22-slim AS runner
 
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY package*.json ./
@@ -26,5 +28,8 @@ COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
