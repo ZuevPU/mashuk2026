@@ -31,10 +31,17 @@ export const QuickCaptureModal: React.FC<QuickCaptureModalProps> = ({ tag, onClo
   return (
     <ModalCard id="quick-capture" onClose={onClose}>
       <Title level="2" style={{ marginBottom: 12 }}>{labels[tag] || tag}</Title>
-      <Textarea value={text} onChange={e => setText(e.target.value)} placeholder="Запишите мысль..." />
-      <Button size="l" stretched disabled={!text.trim() || saving} onClick={handleSave} style={{ marginTop: 12 }}>
-        Сохранить в копилку
-      </Button>
+      <Textarea 
+        value={text} 
+        onChange={e => setText(e.target.value)} 
+        placeholder="Запишите мысль..." 
+        style={{ minHeight: 80 }}
+      />
+      <div style={{ paddingBottom: 'env(safe-area-inset-bottom, 24px)', marginBottom: 24 }}>
+        <Button size="l" stretched disabled={!text.trim() || saving} onClick={handleSave} style={{ marginTop: 12 }}>
+          Сохранить в копилку
+        </Button>
+      </div>
     </ModalCard>
   );
 };
