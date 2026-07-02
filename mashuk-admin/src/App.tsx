@@ -18,15 +18,13 @@ function normalizeApiUrl(url: string): string {
   return normalized.replace(/\/$/, '');
 }
 
-const API_BASE = normalizeApiUrl(import.meta.env.VITE_API_URL || '');
+const API_BASE = import.meta.env.PROD 
+  ? (import.meta.env.VITE_API_URL && !import.meta.env.VITE_API_URL.includes('localhost') 
+      ? normalizeApiUrl(import.meta.env.VITE_API_URL) 
+      : 'https://zuevpu-mashuk2026-1535.twc1.net/api')
+  : normalizeApiUrl(import.meta.env.VITE_API_URL || '');
 
 function getConfigError(): string | null {
-  if (!import.meta.env.PROD) return null;
-  if (typeof window === 'undefined') return null;
-  const onTimeweb = window.location.hostname.endsWith('.twc1.net');
-  if (onTimeweb && !API_BASE.startsWith('https://')) {
-    return `VITE_API_URL не задан или некорректен.\nТекущее значение: "${API_BASE || '(пусто)'}"\nУкажите https://zuevpu-mashuk2026-1535.twc1.net/api в переменных окружения сборки Timeweb Apps и пересоберите приложение.`;
-  }
   return null;
 }
 
