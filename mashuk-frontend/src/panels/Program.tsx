@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Panel, PanelHeader, Group, Div, Spinner, Button, ModalRoot, ModalPage, ModalPageHeader } from '@vkontakte/vkui';
 import { ProgramTabs } from '../components/program/ProgramTabs';
+import { useAppModal } from '../App';
 import { DaySwitcher } from '../components/program/DaySwitcher';
 import { TimelineEvent } from '../components/program/TimelineEvent';
 import { KnowledgeBasePanel } from '../components/program/KnowledgeBase';
@@ -27,6 +28,7 @@ interface ProgramSlot {
 }
 
 export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
+  const { setModal } = useAppModal();
   const [activeTab, setActiveTab] = useState<'sched' | 'kb'>('sched');
   const [activeDay, setActiveDay] = useState(1);
   const [totalDays, setTotalDays] = useState(4);
@@ -84,6 +86,29 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
       // attendance may already exist
     }
   };
+
+  useEffect(() => {
+    if (selectedEvent) {
+      setModal(
+        <ModalRoot activeModal="event-detail" onClose={() => setSelectedEvent(null)}>
+          <ModalPage id="event-detail" onClose={() => setSelectedEvent(null)}>
+            <ModalPageHeader>{selectedEvent.title}</ModalPageHeader>
+            <Group>
+              <div style={{ fontSize: 12 }}>{selectedEvent.time}{selectedEvent.endTime ? ` — ${selectedEvent.endTime}` : ''}</div>
+              <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>{selectedEvent.place || selectedEvent.subtitle}</div>
+              {selectedEvent.description && <div style={{ fontSize: 12, marginTop: 8 }}>{selectedEvent.description}</div>}
+            </Group>
+          </ModalPage>
+        </ModalRoot>
+      );
+    } else {
+      setModal(null);
+    }
+  }, [selectedEvent, setModal]);
+
+  useEffect(() => {
+    return () => setModal(null);
+  }, [setModal]);
 
   return (
     <Panel id={id}>
@@ -159,21 +184,6 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
           )}
         </Div>
       </Group>
-
-      <ModalRoot activeModal={selectedEvent ? 'event-detail' : null} onClose={() => setSelectedEvent(null)}>
-        <ModalPage id="event-detail" onClose={() => setSelectedEvent(null)}>
-          <ModalPageHeader>{selectedEvent?.title}</ModalPageHeader>
-          <Group>
-            {selectedEvent && (
-              <>
-                <div style={{ fontSize: 12 }}>{selectedEvent.time}{selectedEvent.endTime ? ` — ${selectedEvent.endTime}` : ''}</div>
-                <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>{selectedEvent.place || selectedEvent.subtitle}</div>
-                {selectedEvent.description && <div style={{ fontSize: 12, marginTop: 8 }}>{selectedEvent.description}</div>}
-              </>
-            )}
-          </Group>
-        </ModalPage>
-      </ModalRoot>
     </Panel>
   );
 };

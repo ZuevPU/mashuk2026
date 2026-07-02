@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Panel, PanelHeader, Group, Spinner, ModalRoot, Snackbar } from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
+import { useAppModal } from '../App';
 import { HeaderInfo } from '../components/home/HeaderInfo';
 import { PriorityAction, NextEventCard, TouchpointsCard, MiniTasksCard, StatsRow } from '../components/home/DashboardCards';
 import { QuickCaptureModal } from '../components/QuickCaptureModal';
@@ -44,6 +45,7 @@ export const HomePanel: React.FC<{
   initComplete?: boolean;
 }> = ({ id, fetchedUser, isRegistered, initComplete = true }) => {
   const routeNavigator = useRouteNavigator();
+  const { setModal } = useAppModal();
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [captureTag, setCaptureTag] = useState<string | null>(null);
@@ -71,11 +73,27 @@ export const HomePanel: React.FC<{
       .finally(() => setLoading(false));
   }, [isRegistered, initComplete, routeNavigator]);
 
-  const handleQuickSave = async (text: string) => {
-    await apiPost('/piggybank/quick', { tag: captureTag, text, source: 'собственные размышления' });
+  const handleQuickSave = async (text: string, tag: string) => {
+    await apiPost('/piggybank/quick', { tag, text, source: 'собственные размышления' });
     setSnackbar('Сохранено в копилку');
     setCaptureTag(null);
   };
+
+  useEffect(() => {
+    if (captureTag) {
+      setModal(
+        <ModalRoot activeModal="quick-capture" onClose={() => setCaptureTag(null)}>
+          <QuickCaptureModal tag={captureTag} onClose={() => setCaptureTag(null)} onSave={(text) => handleQuickSave(text, captureTag)} />
+        </ModalRoot>
+      );
+    } else {
+      setModal(null);
+    }
+  }, [captureTag, setModal]);
+
+  useEffect(() => {
+    return () => setModal(null);
+  }, [setModal]);
 
   if (loading) {
     return (
@@ -210,12 +228,6 @@ export const HomePanel: React.FC<{
 
         <StatsRow path={d.points.path} exp={d.points.experience} ideas={d.points.ideas} />
       </Group>
-
-      {captureTag && (
-        <ModalRoot activeModal="quick-capture" onClose={() => setCaptureTag(null)}>
-          <QuickCaptureModal tag={captureTag} onClose={() => setCaptureTag(null)} onSave={handleQuickSave} />
-        </ModalRoot>
-      )}
 
       {snackbar && <Snackbar onClose={() => setSnackbar(null)} onClosed={() => setSnackbar(null)}>{snackbar}</Snackbar>}
     </Panel>

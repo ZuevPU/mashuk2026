@@ -6,6 +6,7 @@ import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 
 import { uploadTaskPhoto } from '../utils/uploadPhoto';
 
+import { useAppModal } from '../App';
 import { EmptyState } from '../components/EmptyState';
 
 
@@ -26,42 +27,83 @@ const STATUS_LABEL: Record<string, string> = {
 
 
 
-export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
-
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [filter, setFilter] = useState('all');
-
-  const [data, setData] = useState<any>(null);
-
-  const [loading, setLoading] = useState(true);
-
-  const [error, setError] = useState<string | null>(null);
-
-  const [submitTaskId, setSubmitTaskId] = useState<number | null>(null);
-
-  const [submitTaskMeta, setSubmitTaskMeta] = useState<any>(null);
-
+const TaskSubmitModal = ({ 
+  taskId, 
+  meta, 
+  onClose, 
+  onSuccess,
+  setSnackbar
+}: { 
+  taskId: number | null; 
+  meta: any; 
+  onClose: () => void; 
+  onSuccess: () => void;
+  setSnackbar: (msg: string) => void;
+}) => {
   const [answerText, setAnswerText] = useState('');
-
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
+  const needsText = meta?.answerType !== 'photo';
+  const needsPhoto = meta?.answerType === 'photo' || meta?.answerType === 'text_and_photo';
+
+  const handlePhoto = async () => {
+    try {
+      const url = await uploadTaskPhoto();
+      if (url) setPhotoUrl(url);
+    } catch {
+      setSnackbar('Не удалось загрузить фото');
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!taskId) return;
+    if (needsText && !answerText.trim()) return;
+    if (needsPhoto && meta?.answerType === 'photo' && !photoUrl) return;
+    try {
+      await apiPost(`/tasks/${taskId}/submit`, { answerText, photoUrl });
+      setSnackbar('Задание отправлено');
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setSnackbar(err instanceof ApiError ? err.message : 'Ошибка отправки');
+    }
+  };
+
+  return (
+    <ModalPage id="task-submit" onClose={onClose}>
+      <ModalPageHeader>Отправка задания</ModalPageHeader>
+      <Group>
+        {needsText && (
+          <Textarea value={answerText} onChange={e => setAnswerText(e.target.value)} placeholder="Ваш ответ..." />
+        )}
+        {needsPhoto && (
+          <Button mode="secondary" onClick={handlePhoto} style={{ marginTop: 8 }}>
+            {photoUrl ? '📷 Фото прикреплено' : '📷 Прикрепить фото'}
+          </Button>
+        )}
+        <Button size="l" stretched onClick={handleSubmit} style={{ marginTop: 12 }}>
+          Отправить на проверку
+        </Button>
+      </Group>
+    </ModalPage>
+  );
+};
+
+export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
+  const { setModal } = useAppModal();
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [submitTaskId, setSubmitTaskId] = useState<number | null>(null);
+  const [submitTaskMeta, setSubmitTaskMeta] = useState<any>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
 
-
-
   const openSubmit = useCallback((task: any) => {
-
     setSubmitTaskId(task.id);
-
     setSubmitTaskMeta(task);
-
-    setAnswerText('');
-
-    setPhotoUrl(null);
-
   }, []);
-
-
 
   const load = useCallback(() => {
 
@@ -107,57 +149,27 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
 
 
 
-  const handlePhoto = async () => {
-
-    try {
-
-      const url = await uploadTaskPhoto();
-
-      if (url) setPhotoUrl(url);
-
-    } catch {
-
-      setSnackbar('Не удалось загрузить фото');
-
+  useEffect(() => {
+    if (submitTaskId) {
+      setModal(
+        <ModalRoot activeModal="task-submit" onClose={() => setSubmitTaskId(null)}>
+          <TaskSubmitModal 
+            taskId={submitTaskId} 
+            meta={submitTaskMeta} 
+            onClose={() => setSubmitTaskId(null)} 
+            onSuccess={load}
+            setSnackbar={setSnackbar}
+          />
+        </ModalRoot>
+      );
+    } else {
+      setModal(null);
     }
+  }, [submitTaskId, submitTaskMeta, load, setModal]);
 
-  };
-
-
-
-  const needsText = submitTaskMeta?.answerType !== 'photo';
-
-  const needsPhoto = submitTaskMeta?.answerType === 'photo' || submitTaskMeta?.answerType === 'text_and_photo';
-
-
-
-  const handleSubmit = async () => {
-
-    if (!submitTaskId) return;
-
-    if (needsText && !answerText.trim()) return;
-
-    if (needsPhoto && submitTaskMeta?.answerType === 'photo' && !photoUrl) return;
-
-    try {
-
-      await apiPost(`/tasks/${submitTaskId}/submit`, { answerText, photoUrl });
-
-      setSubmitTaskId(null);
-
-      setSnackbar('Задание отправлено');
-
-      load();
-
-    } catch (err) {
-
-      setSnackbar(err instanceof ApiError ? err.message : 'Ошибка отправки');
-
-    }
-
-  };
-
-
+  useEffect(() => {
+    return () => setModal(null);
+  }, [setModal]);
 
   const categories = [...new Set((data?.tasks ?? []).map((t: { category?: string }) => t.category).filter(Boolean))] as string[];
   const filteredTasks = (data?.tasks ?? []).filter((t: { category?: string }) =>
@@ -282,46 +294,6 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
         )}
 
       </Group>
-
-
-
-      <ModalRoot activeModal={submitTaskId ? 'task-submit' : null} onClose={() => setSubmitTaskId(null)}>
-
-        <ModalPage id="task-submit" onClose={() => setSubmitTaskId(null)}>
-
-          <ModalPageHeader>Отправка задания</ModalPageHeader>
-
-          <Group>
-
-            {needsText && (
-
-              <Textarea value={answerText} onChange={e => setAnswerText(e.target.value)} placeholder="Ваш ответ..." />
-
-            )}
-
-            {needsPhoto && (
-
-              <Button mode="secondary" onClick={handlePhoto} style={{ marginTop: 8 }}>
-
-                {photoUrl ? '📷 Фото прикреплено' : '📷 Прикрепить фото'}
-
-              </Button>
-
-            )}
-
-            <Button size="l" stretched onClick={handleSubmit} style={{ marginTop: 12 }}>
-
-              Отправить на проверку
-
-            </Button>
-
-          </Group>
-
-        </ModalPage>
-
-      </ModalRoot>
-
-
 
       {snackbar && <Snackbar onClose={() => setSnackbar(null)} onClosed={() => setSnackbar(null)}>{snackbar}</Snackbar>}
 

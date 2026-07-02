@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, ReactNode, createContext, useContext } from 'react';
 import { bridge, isVkEnvironment } from './utils/vkBridgeClient';
 import { UserInfo } from '@vkontakte/vk-bridge';
 import {
@@ -14,6 +14,9 @@ import { QuestionsPanel } from './panels/Questions';
 import { ProfilePanel } from './panels/Profile';
 import { RegistrationPanel } from './panels/Registration';
 import { apiGet, getApiUrl, getHashSearchParams, initAuth } from './api/client';
+
+export const ModalContext = createContext<{ setModal: (modal: ReactNode | null) => void }>({ setModal: () => {} });
+export const useAppModal = () => useContext(ModalContext);
 
 const DEFAULT_SECTIONS = {
   home: true,
@@ -54,6 +57,7 @@ export const App = () => {
   const [sectionsVisibility, setSectionsVisibility] = useState(DEFAULT_SECTIONS);
   const [questionsBadge, setQuestionsBadge] = useState(0);
   const [apiErrorToast, setApiErrorToast] = useState<string | null>(null);
+  const [modal, setModal] = useState<ReactNode | null>(null);
 
   useEffect(() => {
     const handleApiError = (e: Event) => {
@@ -166,20 +170,22 @@ export const App = () => {
   }
 
   return (
-    <SplitLayout
-      popout={
-        apiErrorToast ? (
-          <Snackbar
-            onClose={() => setApiErrorToast(null)}
-            onClosed={() => setApiErrorToast(null)}
-            before={<Icon28ErrorCircleOutline fill="var(--vkui--color_icon_negative)" />}
-          >
-            {apiErrorToast}
-          </Snackbar>
-        ) : null
-      }
-    >
-      <SplitCol>
+    <ModalContext.Provider value={{ setModal }}>
+      <SplitLayout
+        modal={modal}
+        popout={
+          apiErrorToast ? (
+            <Snackbar
+              onClose={() => setApiErrorToast(null)}
+              onClosed={() => setApiErrorToast(null)}
+              before={<Icon28ErrorCircleOutline fill="var(--vkui--color_icon_negative)" />}
+            >
+              {apiErrorToast}
+            </Snackbar>
+          ) : null
+        }
+      >
+        <SplitCol>
         <Epic
           activeStory="main"
       tabbar={
@@ -264,6 +270,7 @@ export const App = () => {
       </View>
     </Epic>
       </SplitCol>
-    </SplitLayout>
+      </SplitLayout>
+    </ModalContext.Provider>
   );
 };

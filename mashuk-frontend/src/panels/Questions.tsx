@@ -1,10 +1,48 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Panel, PanelHeader, Group, Spinner, Textarea, Button, ModalRoot, ModalPage, ModalPageHeader, Snackbar } from '@vkontakte/vkui';
 import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
+import { useAppModal } from '../App';
 import { QuestionAnswerForm } from '../components/questions/QuestionAnswerForm';
 import { EmptyState } from '../components/EmptyState';
 
+const ExchangeReplyModal = ({ 
+  replyTo, 
+  onClose, 
+  onSuccess,
+  setSnackbar
+}: { 
+  replyTo: number | null; 
+  onClose: () => void; 
+  onSuccess: () => void;
+  setSnackbar: (msg: string) => void;
+}) => {
+  const [replyText, setReplyText] = useState('');
+
+  const submitExchangeAnswer = async () => {
+    if (!replyTo || !replyText.trim()) return;
+    try {
+      await apiPost(`/exchange/${replyTo}/answer`, { text: replyText });
+      setSnackbar('Ответ опубликован');
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setSnackbar(err instanceof ApiError ? err.message : 'Ошибка отправки');
+    }
+  };
+
+  return (
+    <ModalPage id="exchange-reply" onClose={onClose}>
+      <ModalPageHeader>Ответ на вопрос</ModalPageHeader>
+      <Group>
+        <Textarea value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Ваш ответ..." />
+        <Button size="l" stretched onClick={submitExchangeAnswer} style={{ marginTop: 12 }}>Отправить</Button>
+      </Group>
+    </ModalPage>
+  );
+};
+
 export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> = ({ id, onActivity }) => {
+  const { setModal } = useAppModal();
   const [questions, setQuestions] = useState<any[]>([]);
   const [exchange, setExchange] = useState<any[]>([]);
   const [myQuestions, setMyQuestions] = useState<any[]>([]);
@@ -16,7 +54,6 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const [activeQuestion, setActiveQuestion] = useState<any>(null);
   const [questionOptions, setQuestionOptions] = useState<any[]>([]);
   const [replyTo, setReplyTo] = useState<number | null>(null);
-  const [replyText, setReplyText] = useState('');
   const [snackbar, setSnackbar] = useState<string | null>(null);
 
   const loadAll = useCallback(() => {
@@ -90,18 +127,35 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
     }
   };
 
-  const submitExchangeAnswer = async () => {
-    if (!replyTo || !replyText.trim()) return;
-    try {
-      await apiPost(`/exchange/${replyTo}/answer`, { text: replyText });
-      setReplyTo(null);
-      setReplyText('');
-      setSnackbar('Ответ опубликован');
-      loadAll();
-    } catch (err) {
-      setSnackbar(err instanceof ApiError ? err.message : 'Ошибка отправки');
+  useEffect(() => {
+    if (activeQuestion) {
+      setModal(
+        <ModalRoot activeModal="answer" onClose={() => setActiveQuestion(null)}>
+          <ModalPage id="answer" onClose={() => setActiveQuestion(null)}>
+            <ModalPageHeader>{activeQuestion.title}</ModalPageHeader>
+            <QuestionAnswerForm question={activeQuestion} options={questionOptions} onSubmit={submitAnswer} />
+          </ModalPage>
+        </ModalRoot>
+      );
+    } else if (replyTo) {
+      setModal(
+        <ModalRoot activeModal="exchange-reply" onClose={() => setReplyTo(null)}>
+          <ExchangeReplyModal 
+            replyTo={replyTo} 
+            onClose={() => setReplyTo(null)} 
+            onSuccess={loadAll}
+            setSnackbar={setSnackbar}
+          />
+        </ModalRoot>
+      );
+    } else {
+      setModal(null);
     }
-  };
+  }, [activeQuestion, replyTo, questionOptions, setModal]);
+
+  useEffect(() => {
+    return () => setModal(null);
+  }, [setModal]);
 
   const availableCount = questions.filter(q => q.status === 'available').length;
 
@@ -156,7 +210,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                     <div style={{ fontSize: 12 }}>{a.text}</div>
                   </div>
                 ))}
-                <Button size="s" style={{ marginTop: 8 }} onClick={() => { setReplyTo(q.id); setReplyText(''); }}>Ответить</Button>
+                <Button size="s" style={{ marginTop: 8 }} onClick={() => setReplyTo(q.id)}>Ответить</Button>
               </div>
             ))}
 
@@ -188,22 +242,6 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
           </>
         )}
       </Group>
-
-      <ModalRoot activeModal={activeQuestion ? 'answer' : replyTo ? 'exchange-reply' : null} onClose={() => { setActiveQuestion(null); setReplyTo(null); }}>
-        <ModalPage id="answer" onClose={() => setActiveQuestion(null)}>
-          <ModalPageHeader>{activeQuestion?.title}</ModalPageHeader>
-          {activeQuestion && (
-            <QuestionAnswerForm question={activeQuestion} options={questionOptions} onSubmit={submitAnswer} />
-          )}
-        </ModalPage>
-        <ModalPage id="exchange-reply" onClose={() => setReplyTo(null)}>
-          <ModalPageHeader>Ответ на вопрос</ModalPageHeader>
-          <Group>
-            <Textarea value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Ваш ответ..." />
-            <Button size="l" stretched onClick={submitExchangeAnswer} style={{ marginTop: 12 }}>Отправить</Button>
-          </Group>
-        </ModalPage>
-      </ModalRoot>
 
       {snackbar && <Snackbar onClose={() => setSnackbar(null)} onClosed={() => setSnackbar(null)}>{snackbar}</Snackbar>}
     </Panel>
