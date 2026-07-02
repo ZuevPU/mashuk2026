@@ -66,15 +66,26 @@ function getAuthHeaders(): HeadersInit {
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    throw new ApiError(await res.text(), res.status);
+    const text = await res.text().catch(() => '');
+    // #region agent log
+    fetch('http://127.0.0.1:7851/ingest/25d05e57-8243-429d-ae45-8e0cf6e5c735',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'df9b9f'},body:JSON.stringify({sessionId:'df9b9f',location:'client.ts:69',message:'API Error',data:{status: res.status, url: res.url, text},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    throw new ApiError(`HTTP ${res.status}: ${text}`, res.status);
   }
   return res.json();
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
   await initAuth();
-  const res = await fetch(`${API_URL}${path}`, { headers: getAuthHeaders() });
-  return handleResponse<T>(res);
+  try {
+    const res = await fetch(`${API_URL}${path}`, { headers: getAuthHeaders() });
+    return handleResponse<T>(res);
+  } catch (err) {
+    // #region agent log
+    fetch('http://127.0.0.1:7851/ingest/25d05e57-8243-429d-ae45-8e0cf6e5c735',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'df9b9f'},body:JSON.stringify({sessionId:'df9b9f',location:'client.ts:80',message:'Fetch failed',data:{path, error: String(err)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    throw err;
+  }
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {

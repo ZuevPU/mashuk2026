@@ -109,7 +109,10 @@ export const App = () => {
       }
     } catch (error) {
       console.error('Init error', error);
-      setInitError('Не удалось подключиться к серверу. Проверьте, что backend запущен на порту 8080.');
+      // #region agent log
+      fetch('http://127.0.0.1:7851/ingest/25d05e57-8243-429d-ae45-8e0cf6e5c735',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'df9b9f'},body:JSON.stringify({sessionId:'df9b9f',location:'App.tsx:111',message:'Init error caught',data:{error: String(error), stack: error instanceof Error ? error.stack : undefined, apiUrl: import.meta.env.VITE_API_URL},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      setInitError(`Ошибка: ${error instanceof Error ? error.message : String(error)} | API: ${import.meta.env.VITE_API_URL}`);
     } finally {
       setInitComplete(true);
       setLoading(false);
@@ -145,7 +148,7 @@ export const App = () => {
   if (initError) {
     return (
       <div className="mashuk-root" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 24, textAlign: 'center' }}>
-        <div className="m-card" style={{ color: '#C53030', marginBottom: 16 }}>{initError}</div>
+        <div className="m-card" style={{ color: '#C53030', marginBottom: 16, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{initError}</div>
         <Button size="l" onClick={runInit}>Повторить</Button>
       </div>
     );
