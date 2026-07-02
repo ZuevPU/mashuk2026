@@ -9,6 +9,8 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      TIMEWEB_ADMIN_WEBHOOK: ${{ secrets.TIMEWEB_ADMIN_WEBHOOK }}
     steps:
       - uses: actions/checkout@v4
 
@@ -33,8 +35,8 @@ jobs:
           path: mashuk-admin/dist
 
       - name: Deploy to Timeweb Static (webhook)
-        if: ${{ secrets.TIMEWEB_ADMIN_WEBHOOK != '' }}
+        if: ${{ env.TIMEWEB_ADMIN_WEBHOOK != '' }}
         run: |
-          curl -X POST "${{ secrets.TIMEWEB_ADMIN_WEBHOOK }}" \
+          curl -X POST "$TIMEWEB_ADMIN_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d '{"service":"admin","sha":"${{ github.sha }}"}'

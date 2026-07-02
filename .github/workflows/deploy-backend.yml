@@ -9,6 +9,8 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      TIMEWEB_DEPLOY_WEBHOOK: ${{ secrets.TIMEWEB_DEPLOY_WEBHOOK }}
     services:
       postgres:
         image: postgres:16
@@ -51,8 +53,8 @@ jobs:
           docker build -t mashuk-backend:${{ github.sha }} .
 
       - name: Deploy to Timeweb (webhook)
-        if: ${{ secrets.TIMEWEB_DEPLOY_WEBHOOK != '' }}
+        if: ${{ env.TIMEWEB_DEPLOY_WEBHOOK != '' }}
         run: |
-          curl -X POST "${{ secrets.TIMEWEB_DEPLOY_WEBHOOK }}" \
+          curl -X POST "$TIMEWEB_DEPLOY_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d '{"service":"backend","sha":"${{ github.sha }}"}'

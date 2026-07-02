@@ -9,6 +9,8 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      TIMEWEB_STATIC_WEBHOOK: ${{ secrets.TIMEWEB_STATIC_WEBHOOK }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,8 +34,8 @@ jobs:
           path: mashuk-frontend/dist
 
       - name: Deploy to Timeweb Static (webhook)
-        if: ${{ secrets.TIMEWEB_STATIC_WEBHOOK != '' }}
+        if: ${{ env.TIMEWEB_STATIC_WEBHOOK != '' }}
         run: |
-          curl -X POST "${{ secrets.TIMEWEB_STATIC_WEBHOOK }}" \
+          curl -X POST "$TIMEWEB_STATIC_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d '{"service":"frontend","sha":"${{ github.sha }}"}'
