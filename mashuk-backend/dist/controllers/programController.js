@@ -2,6 +2,7 @@ import { eq, and, asc, lte, or, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { events, eventAttendance, materials, questions, answers } from '../db/schema.js';
 import { getForumSettings, formatTime } from '../services/helpers.js';
+import { cache } from '../services/cache.js';
 export const getProgramSettings = async (req, res) => {
     const settings = await getForumSettings();
     res.json({
@@ -23,9 +24,14 @@ async function countTouchpoints(participantId) {
 export const getProgram = async (req, res) => {
     try {
         const day = Number(req.query.day) || (await getForumSettings()).currentDay || 1;
-        const list = await db.select().from(events)
-            .where(and(eq(events.dayNumber, day), eq(events.isPublished, true)))
-            .orderBy(asc(events.startTime));
+        const cacheKey = `events_day_${day}`;
+        let list = cache.get(cacheKey);
+        if (!list) {
+            list = await db.select().from(events)
+                .where(and(eq(events.dayNumber, day), eq(events.isPublished, true)))
+                .orderBy(asc(events.startTime));
+            cache.set(cacheKey, list);
+        }
         const attendance = await db.select().from(eventAttendance)
             .where(eq(eventAttendance.participantId, req.participant.id));
         const attendedIds = new Set(attendance.map(a => a.eventId));

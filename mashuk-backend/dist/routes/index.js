@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { vkAuthMiddleware } from '../middlewares/vkAuth.js';
 import { requireParticipant } from '../middlewares/requireParticipant.js';
 import { getMe, register } from '../controllers/authController.js';
@@ -10,9 +11,14 @@ import { listForumQuestions, getQuestion, submitAnswer, listExchange, createExch
 import { getProfile, listPiggybank, createPiggybank } from '../controllers/profileController.js';
 import { uploadPhoto } from '../controllers/uploadController.js';
 const router = Router();
+const authLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 50,
+    message: { error: 'Too many auth requests, please try again later.' },
+});
 router.get('/directions', listDirections);
-router.get('/auth/me', vkAuthMiddleware, getMe);
-router.post('/auth/register', vkAuthMiddleware, register);
+router.get('/auth/me', authLimiter, vkAuthMiddleware, getMe);
+router.post('/auth/register', authLimiter, vkAuthMiddleware, register);
 router.get('/home', vkAuthMiddleware, requireParticipant, getHome);
 router.post('/piggybank/quick', vkAuthMiddleware, requireParticipant, quickPiggybank);
 router.get('/program/settings', vkAuthMiddleware, requireParticipant, getProgramSettings);

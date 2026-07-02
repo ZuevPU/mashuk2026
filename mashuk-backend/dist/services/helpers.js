@@ -1,13 +1,19 @@
 import { db } from '../db/index.js';
 import { forumSettings } from '../db/schema.js';
+import { cache } from './cache.js';
 export async function getForumSettings() {
+    const cached = cache.get('forumSettings');
+    if (cached)
+        return cached;
     const [settings] = await db.select().from(forumSettings).limit(1);
-    return settings ?? {
+    const result = settings ?? {
         currentDay: 1,
         totalDays: 4,
         recommendationThreshold: 1,
         sectionsVisibility: {},
     };
+    cache.set('forumSettings', result);
+    return result;
 }
 export function countWords(text) {
     return text.trim().split(/\s+/).filter(Boolean).length;

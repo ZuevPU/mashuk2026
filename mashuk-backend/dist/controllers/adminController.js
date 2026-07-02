@@ -1,12 +1,19 @@
-import { eq, desc, inArray } from 'drizzle-orm';
+import { eq, desc, inArray, count } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { participants, directions, thematicTags, forumSettings, dayFocus, events, tasks, questions, questionOptions, taskSubmissions, exchangeQuestions, exchangeAnswers, eventAttendance, materials, levelsConfig, piggybank, answers, dailyStats, pushLog, pointsLog, } from '../db/schema.js';
 import { notifyAllParticipants, sendPushNotification } from '../services/pushService.js';
 import { recalculateDailyStats } from '../services/analyticsService.js';
+import { clearCache } from '../services/cache.js';
 import { eventCreateSchema, eventUpdateSchema, taskCreateSchema, taskUpdateSchema, questionCreateSchema, questionUpdateSchema, parseBody, } from '../validation/adminSchemas.js';
-export const listParticipants = async (_req, res) => {
-    const list = await db.select().from(participants).orderBy(desc(participants.createdAt));
-    res.json({ participants: list });
+export const listParticipants = async (req, res) => {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+    const offset = (page - 1) * limit;
+    const [total] = await db.select({ count: count() }).from(participants);
+    const list = await db.select().from(participants)
+        .orderBy(desc(participants.createdAt))
+        .limit(limit).offset(offset);
+    res.json({ participants: list, totalCount: total.count });
 };
 export const updateParticipantDirection = async (req, res) => {
     const id = Number(req.params.id);
@@ -130,10 +137,12 @@ export const updateForumSettings = async (req, res) => {
         const [updated] = await db.update(forumSettings)
             .set({ ...req.body, updatedAt: new Date() })
             .where(eq(forumSettings.id, existing.id)).returning();
+        clearCache('forumSettings');
         res.json({ settings: updated });
     }
     else {
         const [created] = await db.insert(forumSettings).values(req.body).returning();
+        clearCache('forumSettings');
         res.json({ settings: created });
     }
 };
@@ -163,6 +172,7 @@ export const crudEvents = {
             return;
         }
         const [e] = await db.insert(events).values(parsed.data).returning();
+        clearCache('events_day_');
         res.json({ event: e });
     },
     update: async (req, res) => {
@@ -177,6 +187,7 @@ export const crudEvents = {
             res.status(404).json({ error: 'Not found' });
             return;
         }
+        clearCache('events_day_');
         res.json({ event: updated });
     },
     delete: async (req, res) => {
@@ -189,6 +200,7 @@ export const crudEvents = {
         await db.delete(eventAttendance).where(eq(eventAttendance.eventId, id));
         await db.update(materials).set({ eventId: null }).where(eq(materials.eventId, id));
         await db.delete(events).where(eq(events.id, id));
+        clearCache('events_day_');
         res.json({ ok: true });
     },
 };
@@ -357,28 +369,39 @@ export const listPendingExchange = async (_req, res) => {
 };
 export const listAllExchange = async (req, res) => {
     const status = req.query.status;
-    let query = db.select({
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+    const offset = (page - 1) * limit;
+    let baseQuery = db.select({
         q: exchangeQuestions,
         p: participants,
     }).from(exchangeQuestions)
-        .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
-        .orderBy(desc(exchangeQuestions.createdAt));
-    const rows = await query;
-    const filtered = status ? rows.filter(r => r.q.moderationStatus === status) : rows;
-    const allAnswers = await db.select({
-        a: exchangeAnswers,
-        author: participants,
-    }).from(exchangeAnswers)
-        .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id));
-    const answersByQ = new Map();
-    for (const row of allAnswers) {
-        const qid = row.a.questionId;
-        if (!answersByQ.has(qid))
-            answersByQ.set(qid, []);
-        answersByQ.get(qid).push(row);
+        .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id));
+    let countQuery = db.select({ count: count() }).from(exchangeQuestions);
+    if (status) {
+        baseQuery = baseQuery.where(eq(exchangeQuestions.moderationStatus, status));
+        countQuery = countQuery.where(eq(exchangeQuestions.moderationStatus, status));
+    }
+    const [total] = await countQuery;
+    const rows = await baseQuery.orderBy(desc(exchangeQuestions.createdAt)).limit(limit).offset(offset);
+    const qIds = rows.map(r => r.q.id);
+    let answersByQ = new Map();
+    if (qIds.length > 0) {
+        const allAnswers = await db.select({
+            a: exchangeAnswers,
+            author: participants,
+        }).from(exchangeAnswers)
+            .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
+            .where(inArray(exchangeAnswers.questionId, qIds));
+        for (const row of allAnswers) {
+            const qid = row.a.questionId;
+            if (!answersByQ.has(qid))
+                answersByQ.set(qid, []);
+            answersByQ.get(qid).push(row);
+        }
     }
     res.json({
-        questions: filtered.map(r => ({
+        questions: rows.map(r => ({
             ...r.q,
             authorName: `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
             direction: r.p?.direction,
@@ -390,6 +413,7 @@ export const listAllExchange = async (req, res) => {
                 createdAt: ar.a.createdAt,
             })),
         })),
+        totalCount: total.count,
     });
 };
 export const listExchangeAnswers = async (_req, res) => {
@@ -666,25 +690,38 @@ export const listPendingSubmissions = async (_req, res) => {
 };
 export const listAllSubmissions = async (req, res) => {
     const status = req.query.status;
-    const rows = await db.select({
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+    const offset = (page - 1) * limit;
+    let baseQuery = db.select({
         s: taskSubmissions,
         p: participants,
         t: tasks,
     }).from(taskSubmissions)
         .leftJoin(participants, eq(taskSubmissions.participantId, participants.id))
-        .leftJoin(tasks, eq(taskSubmissions.taskId, tasks.id))
-        .orderBy(desc(taskSubmissions.submittedAt));
-    const filtered = status ? rows.filter(r => r.s.status === status) : rows;
+        .leftJoin(tasks, eq(taskSubmissions.taskId, tasks.id));
+    let countQuery = db.select({ count: count() }).from(taskSubmissions);
+    if (status) {
+        baseQuery = baseQuery.where(eq(taskSubmissions.status, status));
+        countQuery = countQuery.where(eq(taskSubmissions.status, status));
+    }
+    const [total] = await countQuery;
+    const rows = await baseQuery.orderBy(desc(taskSubmissions.submittedAt)).limit(limit).offset(offset);
     res.json({
-        submissions: filtered.map(r => ({
+        submissions: rows.map(r => ({
             ...r.s,
             participantName: `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
             taskTitle: r.t?.title,
             taskDay: r.t?.dayNumber,
         })),
+        totalCount: total.count,
     });
 };
-export const listEventAttendance = async (_req, res) => {
+export const listEventAttendance = async (req, res) => {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+    const offset = (page - 1) * limit;
+    const [total] = await db.select({ count: count() }).from(eventAttendance);
     const rows = await db.select({
         a: eventAttendance,
         p: participants,
@@ -692,7 +729,8 @@ export const listEventAttendance = async (_req, res) => {
     }).from(eventAttendance)
         .leftJoin(participants, eq(eventAttendance.participantId, participants.id))
         .leftJoin(events, eq(eventAttendance.eventId, events.id))
-        .orderBy(desc(eventAttendance.createdAt));
+        .orderBy(desc(eventAttendance.createdAt))
+        .limit(limit).offset(offset);
     res.json({
         attendance: rows.map(r => ({
             ...r.a,
@@ -701,6 +739,7 @@ export const listEventAttendance = async (_req, res) => {
             eventTitle: r.e?.title,
             eventDay: r.e?.dayNumber,
         })),
+        totalCount: total.count,
     });
 };
 export const getForumSettings = async (_req, res) => {

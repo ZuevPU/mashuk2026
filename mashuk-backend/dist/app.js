@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { sql } from 'drizzle-orm';
+import rateLimit from 'express-rate-limit';
 import { env } from './config/env.js';
 import { db, pool } from './db/index.js';
 import routes from './routes/index.js';
@@ -38,6 +39,14 @@ export function createApp() {
     });
     app.use(express.json({ limit: '6mb' }));
     app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+    // Global rate limit
+    app.use(rateLimit({
+        windowMs: 1 * 60 * 1000, // 1 minute
+        max: 200, // limit each IP to 200 requests per windowMs
+        message: { error: 'Too many requests, please try again later.' },
+        standardHeaders: true,
+        legacyHeaders: false,
+    }));
     const healthHandler = (_req, res) => {
         res.status(200).json({ status: 'ok' });
     };
