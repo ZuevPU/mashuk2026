@@ -9,9 +9,10 @@ node_modules/
 !.env.example
 !.env.production.example
 
-# Build outputs (Timeweb builds from source; dist kept for backend Docker context)
+# Build outputs (Timeweb/Docker always build from source)
 mashuk-frontend/dist/
 mashuk-admin/dist/
+mashuk-backend/dist/
 
 # Logs & debug
 *.log
