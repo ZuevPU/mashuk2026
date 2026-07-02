@@ -279,6 +279,46 @@ export const App = () => {
     ? Object.entries(charts.emotions as Record<string, number>).map(([name, value]) => ({ name, value }))
     : [];
 
+  const [authKey, setAuthKey] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('mashuk_admin_auth');
+    if (saved === 'сладкаябулочкаскорицей55') {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (authKey === 'сладкаябулочкаскорицей55') {
+      localStorage.setItem('mashuk_admin_auth', authKey);
+      setIsAuthenticated(true);
+    } else {
+      alert('Неверный код доступа');
+    }
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#f5f5f5' }}>
+        <form onSubmit={handleLogin} style={{ background: 'white', padding: 32, borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <h2 style={{ margin: 0, textAlign: 'center' }}>Вход в админку</h2>
+          <input 
+            type="password" 
+            value={authKey} 
+            onChange={e => setAuthKey(e.target.value)} 
+            placeholder="Код доступа" 
+            style={{ padding: '8px 12px', fontSize: 16, borderRadius: 6, border: '1px solid #ccc' }}
+          />
+          <button type="submit" style={{ padding: '10px', fontSize: 16, background: '#FF5500', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+            Войти
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="admin">
       <header className="admin-header">
