@@ -101,15 +101,37 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return JSON.parse(text) as T;
 }
 
+async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const res = await fetch(url, options);
+      if (res.status >= 500 && i < retries) {
+        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+        continue;
+      }
+      return res;
+    } catch (e) {
+      if (i === retries) {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('api-error', { detail: 'Ошибка сети. Проверьте подключение.' }));
+        }
+        throw e;
+      }
+      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+  throw new Error('Unreachable');
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   await initAuth();
-  const res = await fetch(`${API_URL}${path}`, { headers: getAuthHeaders() });
+  const res = await fetchWithRetry(`${API_URL}${path}`, { headers: getAuthHeaders() });
   return handleResponse<T>(res);
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   await initAuth();
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetchWithRetry(`${API_URL}${path}`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: body ? JSON.stringify(body) : undefined,
@@ -119,7 +141,7 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
 
 export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   await initAuth();
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetchWithRetry(`${API_URL}${path}`, {
     method: 'PATCH',
     headers: getAuthHeaders(),
     body: body ? JSON.stringify(body) : undefined,

@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, timestamp, jsonb, integer, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, text, timestamp, jsonb, integer, boolean, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 export const directions = pgTable('directions', {
@@ -51,7 +51,9 @@ export const participants = pgTable('participants', {
   pathPoints: integer('path_points').default(0),
   experiencePoints: integer('experience_points').default(0),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('participants_direction_id_idx').on(table.directionId),
+]);
 
 export const questions = pgTable('questions', {
   id: serial('id').primaryKey(),
@@ -70,7 +72,10 @@ export const questions = pgTable('questions', {
   pushOnPublish: boolean('push_on_publish').default(false),
   parentQuestionId: integer('parent_question_id'),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('questions_day_number_idx').on(table.dayNumber),
+  index('questions_status_idx').on(table.status),
+]);
 
 export const questionOptions = pgTable('question_options', {
   id: serial('id').primaryKey(),
@@ -78,7 +83,9 @@ export const questionOptions = pgTable('question_options', {
   label: varchar('label', { length: 255 }).notNull(),
   value: varchar('value', { length: 255 }).notNull(),
   sortOrder: integer('sort_order').default(0),
-});
+}, (table) => [
+  index('question_options_question_id_idx').on(table.questionId),
+]);
 
 export const answers = pgTable('answers', {
   id: serial('id').primaryKey(),
@@ -88,7 +95,10 @@ export const answers = pgTable('answers', {
   pointsAwarded: integer('points_awarded').default(0),
   wordCount: integer('word_count').default(0),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('answers_participant_id_idx').on(table.participantId),
+  index('answers_question_id_idx').on(table.questionId),
+]);
 
 export const events = pgTable('events', {
   id: serial('id').primaryKey(),
@@ -102,7 +112,10 @@ export const events = pgTable('events', {
   timeSlot: varchar('time_slot', { length: 20 }),
   tags: jsonb('tags'),
   isPublished: boolean('is_published').default(true),
-});
+}, (table) => [
+  index('events_day_number_idx').on(table.dayNumber),
+  index('events_is_published_idx').on(table.isPublished),
+]);
 
 export const materials = pgTable('materials', {
   id: serial('id').primaryKey(),
@@ -116,14 +129,20 @@ export const materials = pgTable('materials', {
   description: text('description'),
   url: varchar('url', { length: 500 }),
   isNew: boolean('is_new').default(false),
-});
+}, (table) => [
+  index('materials_event_id_idx').on(table.eventId),
+  index('materials_day_number_idx').on(table.dayNumber),
+]);
 
 export const eventAttendance = pgTable('event_attendance', {
   id: serial('id').primaryKey(),
   participantId: integer('participant_id').references(() => participants.id).notNull(),
   eventId: integer('event_id').references(() => events.id).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('event_attendance_participant_id_idx').on(table.participantId),
+  index('event_attendance_event_id_idx').on(table.eventId),
+]);
 
 export const tasks = pgTable('tasks', {
   id: serial('id').primaryKey(),
@@ -142,7 +161,9 @@ export const tasks = pgTable('tasks', {
   allowRetry: boolean('allow_retry').default(true),
   direction: varchar('direction', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('tasks_day_number_idx').on(table.dayNumber),
+]);
 
 export const taskSubmissions = pgTable('task_submissions', {
   id: serial('id').primaryKey(),
@@ -155,7 +176,11 @@ export const taskSubmissions = pgTable('task_submissions', {
   checkedAt: timestamp('checked_at'),
   pointsAwarded: integer('points_awarded').default(0),
   moderatorComment: text('moderator_comment'),
-});
+}, (table) => [
+  index('task_submissions_participant_id_idx').on(table.participantId),
+  index('task_submissions_task_id_idx').on(table.taskId),
+  index('task_submissions_status_idx').on(table.status),
+]);
 
 export const piggybank = pgTable('piggybank', {
   id: serial('id').primaryKey(),
@@ -164,7 +189,9 @@ export const piggybank = pgTable('piggybank', {
   source: varchar('source', { length: 100 }),
   text: text('text').notNull(),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('piggybank_participant_id_idx').on(table.participantId),
+]);
 
 export const exchangeQuestions = pgTable('exchange_questions', {
   id: serial('id').primaryKey(),
@@ -173,7 +200,10 @@ export const exchangeQuestions = pgTable('exchange_questions', {
   audience: varchar('audience', { length: 100 }),
   moderationStatus: varchar('moderation_status', { length: 50 }).default('pending'),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('exchange_questions_participant_id_idx').on(table.participantId),
+  index('exchange_questions_moderation_status_idx').on(table.moderationStatus),
+]);
 
 export const exchangeAnswers = pgTable('exchange_answers', {
   id: serial('id').primaryKey(),
@@ -182,7 +212,10 @@ export const exchangeAnswers = pgTable('exchange_answers', {
   text: text('text').notNull(),
   reactions: jsonb('reactions'),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('exchange_answers_question_id_idx').on(table.questionId),
+  index('exchange_answers_participant_id_idx').on(table.participantId),
+]);
 
 export const pointsLog = pgTable('points_log', {
   id: serial('id').primaryKey(),
@@ -190,7 +223,9 @@ export const pointsLog = pgTable('points_log', {
   actionType: varchar('action_type', { length: 100 }),
   points: integer('points').notNull(),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('points_log_participant_id_idx').on(table.participantId),
+]);
 
 export const levelsConfig = pgTable('levels_config', {
   id: serial('id').primaryKey(),
@@ -207,7 +242,9 @@ export const pushLog = pgTable('push_log', {
   text: text('text').notNull(),
   sentAt: timestamp('sent_at'),
   deliveryStatus: varchar('delivery_status', { length: 50 }),
-});
+}, (table) => [
+  index('push_log_participant_id_idx').on(table.participantId),
+]);
 
 export const dailyStats = pgTable('daily_stats', {
   id: serial('id').primaryKey(),

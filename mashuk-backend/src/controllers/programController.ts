@@ -4,6 +4,7 @@ import { db } from '../db/index.js';
 import { events, eventAttendance, materials, questions, answers } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { getForumSettings, formatTime } from '../services/helpers.js';
+import { cache } from '../services/cache.js';
 
 export const getProgramSettings = async (req: ParticipantRequest, res: Response): Promise<void> => {
   const settings = await getForumSettings();
@@ -31,9 +32,16 @@ async function countTouchpoints(participantId: number): Promise<number> {
 export const getProgram = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const day = Number(req.query.day) || (await getForumSettings()).currentDay || 1;
-    const list = await db.select().from(events)
-      .where(and(eq(events.dayNumber, day), eq(events.isPublished, true)))
-      .orderBy(asc(events.startTime));
+    
+    const cacheKey = `events_day_${day}`;
+    let list = cache.get(cacheKey) as typeof events.$inferSelect[] | undefined;
+    
+    if (!list) {
+      list = await db.select().from(events)
+        .where(and(eq(events.dayNumber, day), eq(events.isPublished, true)))
+        .orderBy(asc(events.startTime));
+      cache.set(cacheKey, list);
+    }
 
     const attendance = await db.select().from(eventAttendance)
       .where(eq(eventAttendance.participantId, req.participant!.id));

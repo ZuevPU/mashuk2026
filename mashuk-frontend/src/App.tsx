@@ -3,9 +3,9 @@ import { bridge, isVkEnvironment } from './utils/vkBridgeClient';
 import { UserInfo } from '@vkontakte/vk-bridge';
 import {
   View, Spinner, Button,
-  Epic, Tabbar, TabbarItem,
+  Epic, Tabbar, TabbarItem, Snackbar, SplitLayout, SplitCol,
 } from '@vkontakte/vkui';
-import { Icon28HomeOutline, Icon28CalendarOutline, Icon28ListOutline, Icon28HelpOutline, Icon28UserCircleOutline } from '@vkontakte/icons';
+import { Icon28HomeOutline, Icon28CalendarOutline, Icon28ListOutline, Icon28HelpOutline, Icon28UserCircleOutline, Icon28ErrorCircleOutline } from '@vkontakte/icons';
 import { useActiveVkuiLocation, useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { HomePanel } from './panels/Home';
 import { ProgramPanel } from './panels/Program';
@@ -53,6 +53,16 @@ export const App = () => {
   const [isRegistered, setIsRegistered] = useState(false);
   const [sectionsVisibility, setSectionsVisibility] = useState(DEFAULT_SECTIONS);
   const [questionsBadge, setQuestionsBadge] = useState(0);
+  const [apiErrorToast, setApiErrorToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleApiError = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      setApiErrorToast(customEvent.detail);
+    };
+    window.addEventListener('api-error', handleApiError);
+    return () => window.removeEventListener('api-error', handleApiError);
+  }, []);
 
   const refreshTabCounts = useCallback(async () => {
     if (!isRegistered) return;
@@ -156,8 +166,22 @@ export const App = () => {
   }
 
   return (
-    <Epic
-      activeStory="main"
+    <SplitLayout
+      popout={
+        apiErrorToast ? (
+          <Snackbar
+            onClose={() => setApiErrorToast(null)}
+            onClosed={() => setApiErrorToast(null)}
+            before={<Icon28ErrorCircleOutline fill="var(--vkui--color_icon_negative)" />}
+          >
+            {apiErrorToast}
+          </Snackbar>
+        ) : null
+      }
+    >
+      <SplitCol>
+        <Epic
+          activeStory="main"
       tabbar={
         activePanel !== 'registration' && (
           <Tabbar className="mashuk-tabbar">
@@ -227,7 +251,10 @@ export const App = () => {
         )
       }
     >
-      <View id="main" activePanel={activePanel || 'home'}>
+      <View 
+        id="main" 
+        activePanel={activePanel || 'home'}
+      >
         <HomePanel id="home" fetchedUser={fetchedUser} isRegistered={isRegistered} initComplete={initComplete} />
         <ProgramPanel id="program" />
         <TasksPanel id="tasks" />
@@ -236,5 +263,7 @@ export const App = () => {
         <RegistrationPanel id="registration" fetchedUser={fetchedUser} isRegistered={isRegistered} onRegistered={handleRegistered} />
       </View>
     </Epic>
+      </SplitCol>
+    </SplitLayout>
   );
 };

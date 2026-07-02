@@ -23,6 +23,8 @@
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "lru-cache": "^11.5.1",
     "pg": "^8.22.0",
     "zod": "^3.24.2"
   },

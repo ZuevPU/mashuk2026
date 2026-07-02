@@ -30,12 +30,34 @@ function getConfigError(): string | null {
   return null;
 }
 
+async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const res = await fetch(url, options);
+      if (res.status >= 500 && i < retries) {
+        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+        continue;
+      }
+      return res;
+    } catch (e) {
+      if (i === retries) {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('api-error', { detail: 'Ошибка сети. Проверьте подключение.' }));
+        }
+        throw e;
+      }
+      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+  throw new Error('Unreachable');
+}
+
 async function adminFetch(path: string, options: RequestInit = {}) {
   const base = API_BASE ? `${API_BASE}/admin` : '/api/admin';
   if (import.meta.env.PROD && !API_BASE) {
     throw new Error('VITE_API_URL is not set. Configure it in Timeweb Apps and rebuild the admin panel.');
   }
-  const res = await fetch(`${base}${path}`, {
+  const res = await fetchWithRetry(`${base}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -83,6 +105,18 @@ const TAB_LABELS: Record<Tab, string> = {
 };
 
 const SECTIONS = ['home', 'program', 'tasks', 'questions', 'profile'];
+
+const Pagination = ({ page, total, limit = 50, setPage }: { page: number, total: number, limit?: number, setPage: (p: number) => void }) => {
+  const pages = Math.ceil(total / limit);
+  if (pages <= 1) return null;
+  return (
+    <div style={{ display: 'flex', gap: 8, marginTop: 16, alignItems: 'center', fontSize: 14 }}>
+      <button disabled={page <= 1} onClick={() => setPage(page - 1)}>Назад</button>
+      <span>Страница {page} из {pages} (всего: {total})</span>
+      <button disabled={page >= pages} onClick={() => setPage(page + 1)}>Вперед</button>
+    </div>
+  );
+};
 
 export const App = () => {
   const [tab, setTab] = useState<Tab>('participants');
@@ -142,13 +176,35 @@ export const App = () => {
     dayNumber: 1, speakerName: '', speakerInitials: '', eventTitle: '', type: 'pdf', title: '', description: '', url: '', isNew: false,
   });
 
+  const [participantsPage, setParticipantsPage] = useState(1);
+  const [participantsTotal, setParticipantsTotal] = useState(0);
+  const [submissionsPage, setSubmissionsPage] = useState(1);
+  const [submissionsTotal, setSubmissionsTotal] = useState(0);
+  const [attendancePage, setAttendancePage] = useState(1);
+  const [attendanceTotal, setAttendanceTotal] = useState(0);
+  const [exchangePage, setExchangePage] = useState(1);
+  const [exchangeTotal, setExchangeTotal] = useState(0);
+
   const [tabLoading, setTabLoading] = useState(false);
+
+  useEffect(() => {
+    const handleApiError = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      setToast(customEvent.detail);
+    };
+    window.addEventListener('api-error', handleApiError);
+    return () => window.removeEventListener('api-error', handleApiError);
+  }, []);
 
   useEffect(() => {
     (async () => {
       setTabLoading(true);
       try {
-        if (tab === 'participants') setParticipants((await adminFetch('/participants')).participants);
+        if (tab === 'participants') {
+          const res = await adminFetch(`/participants?page=${participantsPage}`);
+          setParticipants(res.participants);
+          setParticipantsTotal(res.totalCount || 0);
+        }
         if (tab === 'directions') setDirections((await adminFetch('/directions')).directions);
         if (tab === 'events') {
           setEvents((await adminFetch('/events')).events);
@@ -184,9 +240,17 @@ export const App = () => {
           setExchangeArchive((await adminFetch('/exchange?status=approved')).questions);
         }
         if (tab === 'data') {
-          setAllSubmissions((await adminFetch('/task-submissions')).submissions);
-          setAttendance((await adminFetch('/event-attendance')).attendance);
-          setExchangeArchive((await adminFetch('/exchange')).questions);
+          const subRes = await adminFetch(`/task-submissions?page=${submissionsPage}`);
+          setAllSubmissions(subRes.submissions);
+          setSubmissionsTotal(subRes.totalCount || 0);
+
+          const attRes = await adminFetch(`/event-attendance?page=${attendancePage}`);
+          setAttendance(attRes.attendance);
+          setAttendanceTotal(attRes.totalCount || 0);
+
+          const exRes = await adminFetch(`/exchange?page=${exchangePage}`);
+          setExchangeArchive(exRes.questions);
+          setExchangeTotal(exRes.totalCount || 0);
         }
         if (tab === 'levels') {
           setLevelsConfig((await adminFetch('/levels-config')).config);
@@ -206,7 +270,7 @@ export const App = () => {
         setTabLoading(false);
       }
     })();
-  }, [tab, reloadKey]);
+  }, [tab, reloadKey, participantsPage, submissionsPage, attendancePage, exchangePage]);
 
   const filteredParticipants = participants.filter(p => {
     const q = participantSearch.toLowerCase();
@@ -419,6 +483,7 @@ export const App = () => {
                 ))}
               </tbody>
             </table>
+            <Pagination page={participantsPage} total={participantsTotal} setPage={setParticipantsPage} />
           </>
         )}
 
@@ -782,6 +847,7 @@ export const App = () => {
                 ))}
               </tbody>
             </table>
+            <Pagination page={submissionsPage} total={submissionsTotal} setPage={setSubmissionsPage} />
             <h3>Посещаемость событий</h3>
             <table>
               <thead><tr><th>Участник</th><th>Направление</th><th>Событие</th><th>День</th><th>Дата</th></tr></thead>
@@ -797,6 +863,7 @@ export const App = () => {
                 ))}
               </tbody>
             </table>
+            <Pagination page={attendancePage} total={attendanceTotal} setPage={setAttendancePage} />
             <h3>Обмен опытом (все)</h3>
             {exchangeArchive.map(q => (
               <div key={q.id} className="card">
@@ -804,6 +871,7 @@ export const App = () => {
                 <div style={{ fontSize: 11 }}>{q.authorName} · ответов: {q.answers?.length ?? 0}</div>
               </div>
             ))}
+            <Pagination page={exchangePage} total={exchangeTotal} setPage={setExchangePage} />
           </>
         )}
 

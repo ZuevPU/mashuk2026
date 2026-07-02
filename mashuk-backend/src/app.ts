@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express';
 import path from 'path';
 import { sql } from 'drizzle-orm';
+import rateLimit from 'express-rate-limit';
 import { env } from './config/env.js';
 import { db, pool } from './db/index.js';
 import routes from './routes/index.js';
@@ -8,18 +9,16 @@ import adminRoutes from './routes/admin.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 
 function resolveCorsOrigin(requestOrigin: string | undefined): string | undefined {
-  const configured = env.CORS_ORIGIN;
-  if (!configured || configured === '*') return requestOrigin || '*';
-  // null origin = opaque origin (VK iframe / sandboxed content) — allow it
-  if (requestOrigin === 'null' || !requestOrigin) return '*';
-  const allowed = configured.split(',').map(s => s.trim()).filter(Boolean);
-  if (allowed.includes(requestOrigin)) return requestOrigin;
-  if (allowed.length === 1) return allowed[0];
-  return undefined;
+  // Since we use Bearer tokens (VK launch params) and not cookies,
+  // it is safe to allow any origin. VK Mini Apps can have various origins
+  // (https://prod-app..., capacitor://localhost, https://m.vk.com, etc).
+  return requestOrigin || '*';
 }
 
 export function createApp() {
   const app = express();
+  
+  app.set('trust proxy', 1);
 
   app.use((req, res, next) => {
     const origin = resolveCorsOrigin(req.headers.origin);
@@ -38,6 +37,15 @@ export function createApp() {
 
   app.use(express.json({ limit: '6mb' }));
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
+  // Global rate limit
+  app.use(rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 minute
+    max: 200, // limit each IP to 200 requests per windowMs
+    message: { error: 'Too many requests, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  }));
 
   const healthHandler = (_req: Request, res: Response) => {
     res.status(200).json({ status: 'ok' });

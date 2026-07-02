@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { eq, desc, and, inArray } from 'drizzle-orm';
+import { eq, desc, and, inArray, count } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   participants, directions, thematicTags, forumSettings, dayFocus,
@@ -10,6 +10,7 @@ import {
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { notifyAllParticipants, sendPushNotification } from '../services/pushService.js';
 import { recalculateDailyStats } from '../services/analyticsService.js';
+import { clearCache } from '../services/cache.js';
 import {
   eventCreateSchema, eventUpdateSchema,
   taskCreateSchema, taskUpdateSchema,
@@ -17,9 +18,17 @@ import {
   parseBody,
 } from '../validation/adminSchemas.js';
 
-export const listParticipants = async (_req: AdminRequest, res: Response): Promise<void> => {
-  const list = await db.select().from(participants).orderBy(desc(participants.createdAt));
-  res.json({ participants: list });
+export const listParticipants = async (req: AdminRequest, res: Response): Promise<void> => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+  const offset = (page - 1) * limit;
+
+  const [total] = await db.select({ count: count() }).from(participants);
+  const list = await db.select().from(participants)
+    .orderBy(desc(participants.createdAt))
+    .limit(limit).offset(offset);
+
+  res.json({ participants: list, totalCount: total.count });
 };
 
 export const updateParticipantDirection = async (req: AdminRequest, res: Response): Promise<void> => {
@@ -138,9 +147,11 @@ export const updateForumSettings = async (req: AdminRequest, res: Response): Pro
     const [updated] = await db.update(forumSettings)
       .set({ ...req.body, updatedAt: new Date() })
       .where(eq(forumSettings.id, existing.id)).returning();
+    clearCache('forumSettings');
     res.json({ settings: updated });
   } else {
     const [created] = await db.insert(forumSettings).values(req.body).returning();
+    clearCache('forumSettings');
     res.json({ settings: created });
   }
 };
@@ -169,6 +180,7 @@ export const crudEvents = {
     const parsed = parseBody(eventCreateSchema, req.body);
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
     const [e] = await db.insert(events).values(parsed.data).returning();
+    clearCache('events_day_');
     res.json({ event: e });
   },
   update: async (req: AdminRequest, res: Response) => {
@@ -177,6 +189,7 @@ export const crudEvents = {
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
     const [updated] = await db.update(events).set(parsed.data).where(eq(events.id, id)).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
+    clearCache('events_day_');
     res.json({ event: updated });
   },
   delete: async (req: AdminRequest, res: Response) => {
@@ -186,6 +199,7 @@ export const crudEvents = {
     await db.delete(eventAttendance).where(eq(eventAttendance.eventId, id));
     await db.update(materials).set({ eventId: null }).where(eq(materials.eventId, id));
     await db.delete(events).where(eq(events.id, id));
+    clearCache('events_day_');
     res.json({ ok: true });
   },
 };
@@ -344,31 +358,46 @@ export const listPendingExchange = async (_req: AdminRequest, res: Response): Pr
 
 export const listAllExchange = async (req: AdminRequest, res: Response): Promise<void> => {
   const status = req.query.status as string | undefined;
-  let query = db.select({
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+  const offset = (page - 1) * limit;
+
+  let baseQuery = db.select({
     q: exchangeQuestions,
     p: participants,
   }).from(exchangeQuestions)
-    .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
-    .orderBy(desc(exchangeQuestions.createdAt));
+    .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id));
 
-  const rows = await query;
-  const filtered = status ? rows.filter(r => r.q.moderationStatus === status) : rows;
+  let countQuery = db.select({ count: count() }).from(exchangeQuestions);
 
-  const allAnswers = await db.select({
-    a: exchangeAnswers,
-    author: participants,
-  }).from(exchangeAnswers)
-    .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id));
+  if (status) {
+    baseQuery = baseQuery.where(eq(exchangeQuestions.moderationStatus, status)) as any;
+    countQuery = countQuery.where(eq(exchangeQuestions.moderationStatus, status)) as any;
+  }
 
-  const answersByQ = new Map<number, typeof allAnswers>();
-  for (const row of allAnswers) {
-    const qid = row.a.questionId;
-    if (!answersByQ.has(qid)) answersByQ.set(qid, []);
-    answersByQ.get(qid)!.push(row);
+  const [total] = await countQuery;
+  const rows = await baseQuery.orderBy(desc(exchangeQuestions.createdAt)).limit(limit).offset(offset);
+
+  const qIds = rows.map(r => r.q.id);
+  let answersByQ = new Map<number, any[]>();
+
+  if (qIds.length > 0) {
+    const allAnswers = await db.select({
+      a: exchangeAnswers,
+      author: participants,
+    }).from(exchangeAnswers)
+      .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
+      .where(inArray(exchangeAnswers.questionId, qIds));
+
+    for (const row of allAnswers) {
+      const qid = row.a.questionId;
+      if (!answersByQ.has(qid)) answersByQ.set(qid, []);
+      answersByQ.get(qid)!.push(row);
+    }
   }
 
   res.json({
-    questions: filtered.map(r => ({
+    questions: rows.map(r => ({
       ...r.q,
       authorName: `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
       direction: r.p?.direction,
@@ -380,6 +409,7 @@ export const listAllExchange = async (req: AdminRequest, res: Response): Promise
         createdAt: ar.a.createdAt,
       })),
     })),
+    totalCount: total.count,
   });
 };
 
@@ -667,27 +697,46 @@ export const listPendingSubmissions = async (_req: AdminRequest, res: Response):
 
 export const listAllSubmissions = async (req: AdminRequest, res: Response): Promise<void> => {
   const status = req.query.status as string | undefined;
-  const rows = await db.select({
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+  const offset = (page - 1) * limit;
+
+  let baseQuery = db.select({
     s: taskSubmissions,
     p: participants,
     t: tasks,
   }).from(taskSubmissions)
     .leftJoin(participants, eq(taskSubmissions.participantId, participants.id))
-    .leftJoin(tasks, eq(taskSubmissions.taskId, tasks.id))
-    .orderBy(desc(taskSubmissions.submittedAt));
+    .leftJoin(tasks, eq(taskSubmissions.taskId, tasks.id));
 
-  const filtered = status ? rows.filter(r => r.s.status === status) : rows;
+  let countQuery = db.select({ count: count() }).from(taskSubmissions);
+
+  if (status) {
+    baseQuery = baseQuery.where(eq(taskSubmissions.status, status)) as any;
+    countQuery = countQuery.where(eq(taskSubmissions.status, status)) as any;
+  }
+
+  const [total] = await countQuery;
+  const rows = await baseQuery.orderBy(desc(taskSubmissions.submittedAt)).limit(limit).offset(offset);
+
   res.json({
-    submissions: filtered.map(r => ({
+    submissions: rows.map(r => ({
       ...r.s,
       participantName: `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
       taskTitle: r.t?.title,
       taskDay: r.t?.dayNumber,
     })),
+    totalCount: total.count,
   });
 };
 
-export const listEventAttendance = async (_req: AdminRequest, res: Response): Promise<void> => {
+export const listEventAttendance = async (req: AdminRequest, res: Response): Promise<void> => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+  const offset = (page - 1) * limit;
+
+  const [total] = await db.select({ count: count() }).from(eventAttendance);
+
   const rows = await db.select({
     a: eventAttendance,
     p: participants,
@@ -695,7 +744,8 @@ export const listEventAttendance = async (_req: AdminRequest, res: Response): Pr
   }).from(eventAttendance)
     .leftJoin(participants, eq(eventAttendance.participantId, participants.id))
     .leftJoin(events, eq(eventAttendance.eventId, events.id))
-    .orderBy(desc(eventAttendance.createdAt));
+    .orderBy(desc(eventAttendance.createdAt))
+    .limit(limit).offset(offset);
 
   res.json({
     attendance: rows.map(r => ({
@@ -705,6 +755,7 @@ export const listEventAttendance = async (_req: AdminRequest, res: Response): Pr
       eventTitle: r.e?.title,
       eventDay: r.e?.dayNumber,
     })),
+    totalCount: total.count,
   });
 };
 

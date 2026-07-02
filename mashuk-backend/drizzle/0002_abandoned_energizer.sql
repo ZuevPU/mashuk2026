@@ -1,0 +1,23 @@
+CREATE INDEX "answers_participant_id_idx" ON "answers" USING btree ("participant_id");--> statement-breakpoint
+CREATE INDEX "answers_question_id_idx" ON "answers" USING btree ("question_id");--> statement-breakpoint
+CREATE INDEX "event_attendance_participant_id_idx" ON "event_attendance" USING btree ("participant_id");--> statement-breakpoint
+CREATE INDEX "event_attendance_event_id_idx" ON "event_attendance" USING btree ("event_id");--> statement-breakpoint
+CREATE INDEX "events_day_number_idx" ON "events" USING btree ("day_number");--> statement-breakpoint
+CREATE INDEX "events_is_published_idx" ON "events" USING btree ("is_published");--> statement-breakpoint
+CREATE INDEX "exchange_answers_question_id_idx" ON "exchange_answers" USING btree ("question_id");--> statement-breakpoint
+CREATE INDEX "exchange_answers_participant_id_idx" ON "exchange_answers" USING btree ("participant_id");--> statement-breakpoint
+CREATE INDEX "exchange_questions_participant_id_idx" ON "exchange_questions" USING btree ("participant_id");--> statement-breakpoint
+CREATE INDEX "exchange_questions_moderation_status_idx" ON "exchange_questions" USING btree ("moderation_status");--> statement-breakpoint
+CREATE INDEX "materials_event_id_idx" ON "materials" USING btree ("event_id");--> statement-breakpoint
+CREATE INDEX "materials_day_number_idx" ON "materials" USING btree ("day_number");--> statement-breakpoint
+CREATE INDEX "participants_direction_id_idx" ON "participants" USING btree ("direction_id");--> statement-breakpoint
+CREATE INDEX "piggybank_participant_id_idx" ON "piggybank" USING btree ("participant_id");--> statement-breakpoint
+CREATE INDEX "points_log_participant_id_idx" ON "points_log" USING btree ("participant_id");--> statement-breakpoint
+CREATE INDEX "push_log_participant_id_idx" ON "push_log" USING btree ("participant_id");--> statement-breakpoint
+CREATE INDEX "question_options_question_id_idx" ON "question_options" USING btree ("question_id");--> statement-breakpoint
+CREATE INDEX "questions_day_number_idx" ON "questions" USING btree ("day_number");--> statement-breakpoint
+CREATE INDEX "questions_status_idx" ON "questions" USING btree ("status");--> statement-breakpoint
+CREATE INDEX "task_submissions_participant_id_idx" ON "task_submissions" USING btree ("participant_id");--> statement-breakpoint
+CREATE INDEX "task_submissions_task_id_idx" ON "task_submissions" USING btree ("task_id");--> statement-breakpoint
+CREATE INDEX "task_submissions_status_idx" ON "task_submissions" USING btree ("status");--> statement-breakpoint
+CREATE INDEX "tasks_day_number_idx" ON "tasks" USING btree ("day_number");
