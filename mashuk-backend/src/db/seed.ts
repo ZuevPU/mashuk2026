@@ -20,7 +20,7 @@ import { recalculateDailyStats } from '../services/analyticsService.js';
 
 
 
-async function seed() {
+export async function runSeed() {
 
   console.log('Seeding database...');
 
@@ -364,13 +364,16 @@ async function seed() {
 
 
   console.log('Seed complete.');
-
-  process.exit(0);
-
 }
 
-
-
-seed().catch(e => { console.error(e); process.exit(1); });
+const isDirectRun = process.argv[1]?.endsWith('seed.js') || process.argv[1]?.endsWith('seed.ts');
+if (isDirectRun) {
+  runSeed()
+    .then(() => process.exit(0))
+    .catch(e => {
+      console.error(e);
+      process.exit(1);
+    });
+}
 
 

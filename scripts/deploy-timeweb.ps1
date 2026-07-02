@@ -37,6 +37,6 @@ Write-Host "1. Copy .env.production.example -> .env.production on server"
 Write-Host "2. Fill: DATABASE_URL, ADMIN_SECRET, CORS_ORIGIN, PUBLIC_URL, VK_APP_SECRET, VK_SERVICE_TOKEN"
 Write-Host "3. docker compose -f docker-compose.prod.yml up -d --build"
 Write-Host "4. Upload mashuk-frontend/dist and mashuk-admin/dist to static hosting"
-Write-Host "5. Verify: curl https://api.your-domain.ru/health"
-Write-Host "6. Verify: curl https://api.your-domain.ru/health/ready"
+Write-Host "5. Verify production: .\scripts\verify-timeweb.ps1"
+Write-Host "6. VK app URL: https://zuevpu-mashuk2026-07d9.twc1.net"
 Write-Host "`nArtifacts ready for Timeweb upload." -ForegroundColor Green

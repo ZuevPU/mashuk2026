@@ -18,24 +18,34 @@ https://zuevpu-mashuk2026-1535.twc1.net/health
 | Путь до директории | `mashuk-backend` |
 | Порт | `8080` |
 | **Порт** | `8080` |
-| **Путь проверки состояния** | `/health` |
+| **Путь проверки состояния** | `/health` или `/` |
 
-Если в логах несколько раз подряд `Running database migrations...` / `Server running on port 8080` — контейнер перезапускается. Обычно помогает: порт `8080`, health path `/health`, пересборка после фикса `0.0.0.0`.
+**Старт сервера:** HTTP слушает порт **до** миграций БД — healthcheck Timeweb проходит сразу, миграции идут в фоне после `listen()`.
+
+**Важно:** не добавляйте `HEALTHCHECK` в Dockerfile — Timeweb игнорирует настройку из панели, если HEALTHCHECK прописан в Dockerfile. В репозитории HEALTHCHECK убран специально.
+
+Если DNS резолвится (например `5.129.194.57`), но TCP на `:443` **таймаут** — это проблема маршрутизации Timeweb Apps, не кода. Пересоберите приложение или обратитесь в поддержку: «Docker App Running, порт 8080, `/health` внутри OK, снаружи connection timeout на 443».
 
 ## 3. Переменные окружения (обязательно все)
 
 ```
-DATABASE_URL=postgresql://gen_user:2h%2Ce%7D%3ClZMB5kC2@85.198.80.180:5432/default_db
+DATABASE_URL=postgresql://gen_user:PASSWORD@85.198.80.180:5432/default_db
 PORT=8080
 NODE_ENV=production
 SKIP_VK_SIGN=false
 VK_APP_SECRET=<ваш ключ из dev.vk.com>
 ADMIN_SECRET=MashukAdminSuperSecret2026
-CORS_ORIGIN=https://zuevpu-mashuk2026-07d9.twc1.net
+CORS_ORIGIN=https://zuevpu-mashuk2026-07d9.twc1.net,https://zuevpu-mashuk2026-feae.twc1.net
 PUBLIC_URL=https://zuevpu-mashuk2026-1535.twc1.net
 ```
 
-Для админки добавьте в CORS_ORIGIN через запятую URL админки, когда она будет готова.
+Optional for empty database after first successful deploy:
+```
+AUTO_SEED=true
+```
+(Set once, redeploy, then remove or set `false`.)
+
+Для админки добавьте URL админки в CORS_ORIGIN через запятую (см. пример ниже).
 
 ## 4. База данных — доступ из Apps
 

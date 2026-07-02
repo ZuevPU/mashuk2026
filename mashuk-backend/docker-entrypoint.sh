@@ -1,6 +1,4 @@
 #!/bin/sh
 set -e
-echo "Running database migrations..."
-node dist/db/migrate.js
-echo "Starting server..."
+echo "Starting server (migrations run after HTTP listen)..."
 exec node dist/index.js

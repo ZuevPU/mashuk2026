@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import path from 'path';
 import { sql } from 'drizzle-orm';
 import { env } from './config/env.js';
@@ -39,9 +39,14 @@ export function createApp() {
   app.use(express.json({ limit: '6mb' }));
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-  app.get('/health', (_req, res) => {
+  const healthHandler = (_req: Request, res: Response) => {
     res.status(200).json({ status: 'ok' });
-  });
+  };
+
+  app.get('/', healthHandler);
+  app.get('/health', healthHandler);
+  app.head('/', (_req, res) => res.status(200).end());
+  app.head('/health', (_req, res) => res.status(200).end());
 
   app.get('/health/ready', async (_req, res) => {
     try {

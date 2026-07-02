@@ -2,16 +2,25 @@ import { bridge, isVkEnvironment } from '../utils/vkBridgeClient';
 
 function normalizeApiUrl(url: string): string {
   if (!url) return '/api';
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('http://')) {
-    return url.replace(/^http:\/\//, 'https://');
+  let normalized = url.trim();
+  if (!normalized.startsWith('/') && !/^https?:\/\//i.test(normalized)) {
+    normalized = `https://${normalized}`;
   }
-  return url;
+  if (normalized.startsWith('http://')) {
+    normalized = normalized.replace(/^http:\/\//, 'https://');
+  }
+  return normalized;
 }
 
 const API_URL = normalizeApiUrl(import.meta.env.VITE_API_URL || '/api');
 
-if (import.meta.env.PROD) {
-  console.info('[mashuk] API_URL:', API_URL);
+if (import.meta.env.PROD && typeof window !== 'undefined') {
+  const onTimeweb = window.location.hostname.endsWith('.twc1.net');
+  if (onTimeweb && !API_URL.startsWith('https://')) {
+    throw new Error(
+      'VITE_API_URL must start with https:// (e.g. https://zuevpu-mashuk2026-1535.twc1.net/api). Set it in Timeweb Apps and rebuild.',
+    );
+  }
 }
 
 let cachedLaunchParams: string | null = null;
@@ -77,11 +86,19 @@ function getAuthHeaders(): HeadersInit {
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
+  const text = await res.text().catch(() => '');
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
     throw new ApiError(`HTTP ${res.status}: ${text}`, res.status);
   }
-  return res.json();
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('text/html') || text.trimStart().startsWith('<!')) {
+    throw new ApiError(
+      'API returned HTML instead of JSON. Check VITE_API_URL points to the backend (https://...1535.../api).',
+      res.status,
+    );
+  }
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
@@ -114,4 +131,8 @@ export function getHashSearchParams(): URLSearchParams {
   const hash = window.location.hash;
   const query = hash.includes('?') ? hash.split('?')[1] : '';
   return new URLSearchParams(query || window.location.search.slice(1));
+}
+
+export function getApiUrl(): string {
+  return API_URL;
 }

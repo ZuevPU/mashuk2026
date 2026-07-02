@@ -13,7 +13,7 @@ import { TasksPanel } from './panels/Tasks';
 import { QuestionsPanel } from './panels/Questions';
 import { ProfilePanel } from './panels/Profile';
 import { RegistrationPanel } from './panels/Registration';
-import { apiGet, getHashSearchParams, initAuth } from './api/client';
+import { apiGet, getApiUrl, getHashSearchParams, initAuth } from './api/client';
 
 const DEFAULT_SECTIONS = {
   home: true,
@@ -109,8 +109,8 @@ export const App = () => {
       }
     } catch (error) {
       console.error('Init error', error);
-      const apiUrl = import.meta.env.VITE_API_URL || '/api';
-      const hint = apiUrl.startsWith('http://')
+      const apiUrl = getApiUrl();
+      const hint = !apiUrl.startsWith('https://')
         ? ' Укажите VITE_API_URL с https:// в Timeweb.'
         : '';
       setInitError(`Ошибка: ${error instanceof Error ? error.message : String(error)} | API: ${apiUrl}${hint}`);

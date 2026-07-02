@@ -27,7 +27,7 @@ RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+# Health check is configured in Timeweb Apps panel (path /health, port 8080).
+# Do not add HEALTHCHECK here — Timeweb ignores panel settings when Dockerfile defines one.
 
 ENTRYPOINT ["./docker-entrypoint.sh"]

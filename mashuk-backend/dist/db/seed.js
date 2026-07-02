@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { directions, thematicTags, forumSettings, dayFocus, events, tasks, questions, levelsConfig, materials, participants, adminUsers, answers, taskSubmissions, exchangeQuestions, exchangeAnswers, eventAttendance, } from './schema.js';
 import { recalculateDailyStats } from '../services/analyticsService.js';
-async function seed() {
+export async function runSeed() {
     console.log('Seeding database...');
     const existingSettings = await db.select().from(forumSettings).limit(1);
     if (existingSettings.length === 0) {
@@ -161,6 +161,13 @@ async function seed() {
     await recalculateDailyStats();
     console.log('Analytics recalculated.');
     console.log('Seed complete.');
-    process.exit(0);
 }
-seed().catch(e => { console.error(e); process.exit(1); });
+const isDirectRun = process.argv[1]?.endsWith('seed.js') || process.argv[1]?.endsWith('seed.ts');
+if (isDirectRun) {
+    runSeed()
+        .then(() => process.exit(0))
+        .catch(e => {
+        console.error(e);
+        process.exit(1);
+    });
+}
