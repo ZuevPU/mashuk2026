@@ -1,4 +1,4 @@
-import { bridge, isVkEnvironment } from '../utils/vkBridgeClient';
+import { bridge, isVkEnvironment, initVkBridge, withTimeout } from '../utils/vkBridgeClient';
 
 function normalizeApiUrl(url: string): string {
   if (!url) return '/api';
@@ -43,7 +43,8 @@ export async function initAuth(): Promise<void> {
 
     if (isVkEnvironment()) {
       try {
-        const raw = await bridge.send('VKWebAppGetLaunchParams') as unknown;
+        await initVkBridge();
+        const raw = await withTimeout(bridge.send('VKWebAppGetLaunchParams'), 5000) as unknown;
         let launchStr = '';
         if (typeof raw === 'string') {
           launchStr = raw;

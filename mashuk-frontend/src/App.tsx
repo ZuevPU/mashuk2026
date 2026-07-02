@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, ReactNode, createContext, useContext } from 'react';
-import { bridge, isVkEnvironment } from './utils/vkBridgeClient';
+import { bridge, isVkEnvironment, withTimeout } from './utils/vkBridgeClient';
 import { UserInfo } from '@vkontakte/vk-bridge';
 import {
   View, Spinner, Button,
@@ -86,7 +86,7 @@ export const App = () => {
 
       if (isVkEnvironment()) {
         try {
-          const user = await bridge.send('VKWebAppGetUserInfo');
+          const user = await withTimeout(bridge.send('VKWebAppGetUserInfo'), 5000);
           setUser(user);
         } catch (e) {
           console.warn('VK Bridge GetUserInfo failed', e);
