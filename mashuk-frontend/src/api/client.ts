@@ -16,13 +16,10 @@ function normalizeApiUrl(url: string): string {
 const API_URL = import.meta.env.PROD 
   ? (import.meta.env.VITE_API_URL && !import.meta.env.VITE_API_URL.includes('localhost') 
       ? normalizeApiUrl(import.meta.env.VITE_API_URL) 
-      : 'https://zuevpu-mashuk2026-e75d.twc1.net/api')
+      : 'https://zuevpu-mashuk2026-ae82.twc1.net/api')
   : normalizeApiUrl(import.meta.env.VITE_API_URL || '/api');
 
 // Fallback handles production URL
-
-let cachedLaunchParams: string | null = null;
-let authInitPromise: Promise<void> | null = null;
 
 export class ApiError extends Error {
   constructor(
@@ -34,39 +31,57 @@ export class ApiError extends Error {
   }
 }
 
+let cachedLaunchParams: string | null = null;
+let authInitPromise: Promise<void> | null = null;
+
+function extractLaunchParamsFromUrl(): string | null {
+  const candidates = [
+    window.location.search.slice(1),
+    window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '',
+  ];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    const params = new URLSearchParams(raw);
+    if (params.get('sign') || params.get('vk_user_id')) {
+      return raw;
+    }
+  }
+  return null;
+}
+
+function serializeLaunchParams(raw: unknown): string {
+  if (typeof raw === 'string') return raw;
+  if (raw && typeof raw === 'object') {
+    return Object.entries(raw as Record<string, string>)
+      .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+      .join('&');
+  }
+  return '';
+}
+
 export async function initAuth(): Promise<void> {
   if (authInitPromise) return authInitPromise;
   authInitPromise = (async () => {
     if (cachedLaunchParams) return;
 
+    const fromUrl = extractLaunchParamsFromUrl();
+    if (fromUrl) {
+      cachedLaunchParams = fromUrl;
+      return;
+    }
+
     if (isVkEnvironment()) {
       try {
         await initVkBridge();
         const raw = await withTimeout(bridge.send('VKWebAppGetLaunchParams'), 5000) as unknown;
-        let launchStr = '';
-        if (typeof raw === 'string') {
-          launchStr = raw;
-        } else if (raw && typeof raw === 'object') {
-          launchStr = Object.entries(raw as Record<string, string>)
-            .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
-            .join('&');
-        }
-        if (launchStr.includes('vk_')) {
+        const launchStr = serializeLaunchParams(raw);
+        if (launchStr.includes('sign=') || launchStr.includes('vk_user_id=')) {
           cachedLaunchParams = launchStr;
           return;
         }
       } catch (e) {
         console.warn('VKWebAppGetLaunchParams failed', e);
       }
-    }
-
-    const hashQuery = window.location.hash.includes('?')
-      ? window.location.hash.split('?')[1]
-      : '';
-    const search = window.location.search.slice(1);
-    const launch = hashQuery || search;
-    if (launch && launch.includes('vk_')) {
-      cachedLaunchParams = launch;
     }
   })();
   return authInitPromise;
@@ -78,10 +93,19 @@ function getAuthHeaders(): HeadersInit {
   };
   if (cachedLaunchParams) {
     headers['Authorization'] = `Bearer ${cachedLaunchParams}`;
-  } else {
+  } else if (!import.meta.env.PROD) {
     headers['X-Test-Vk-Id'] = '1';
   }
   return headers;
+}
+
+function ensureAuthReady(): void {
+  if (import.meta.env.PROD && !cachedLaunchParams) {
+    throw new ApiError(
+      'Откройте приложение через VK Mini App. В обычном браузере авторизация недоступна.',
+      401,
+    );
+  }
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
@@ -92,7 +116,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
   const ct = res.headers.get('content-type') || '';
   if (ct.includes('text/html') || text.trimStart().startsWith('<!')) {
     throw new ApiError(
-      'API returned HTML instead of JSON. Check VITE_API_URL points to the backend (https://...e75d.../api).',
+      'API returned HTML instead of JSON. Check VITE_API_URL points to the backend (https://...ae82.../api).',
       res.status,
     );
   }
@@ -124,12 +148,14 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = 2): P
 
 export async function apiGet<T>(path: string): Promise<T> {
   await initAuth();
+  ensureAuthReady();
   const res = await fetchWithRetry(`${API_URL}${path}`, { headers: getAuthHeaders() });
   return handleResponse<T>(res);
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   await initAuth();
+  ensureAuthReady();
   const res = await fetchWithRetry(`${API_URL}${path}`, {
     method: 'POST',
     headers: getAuthHeaders(),
@@ -140,6 +166,7 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
 
 export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   await initAuth();
+  ensureAuthReady();
   const res = await fetchWithRetry(`${API_URL}${path}`, {
     method: 'PATCH',
     headers: getAuthHeaders(),

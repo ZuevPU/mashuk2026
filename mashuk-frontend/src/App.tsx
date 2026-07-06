@@ -124,10 +124,11 @@ export const App = () => {
     } catch (error) {
       console.error('Init error', error);
       const apiUrl = getApiUrl();
-      const hint = !apiUrl.startsWith('https://')
-        ? ' Укажите VITE_API_URL с https:// в Timeweb.'
-        : '';
-      setInitError(`Ошибка: ${error instanceof Error ? error.message : String(error)} | API: ${apiUrl}${hint}`);
+      let message = error instanceof Error ? error.message : String(error);
+      if (message.includes('No Bearer token') || message.includes('Unauthorized')) {
+        message = 'Откройте приложение через VK Mini App (не в обычном браузере). Backend требует VK-авторизацию.';
+      }
+      setInitError(`Ошибка: ${message} | API: ${apiUrl}`);
     } finally {
       setInitComplete(true);
       setLoading(false);
