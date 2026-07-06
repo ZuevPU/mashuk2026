@@ -2,8 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import { createApp } from '../app.js';
-
-const ADMIN_TOKEN = process.env.ADMIN_SECRET || 'dev-admin-secret';
+import { getAdminBearerToken } from './adminTestHelper.js';
 
 describe('smoke', () => {
   const app = createApp();
@@ -56,34 +55,47 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     assert.ok([200, 404].includes(res.status));
   });
 
+  it('POST /api/admin/login with valid credentials', async () => {
+    const res = await request(app)
+      .post('/api/admin/login')
+      .send({ login: 'zuev', password: 'ZuevPu26' });
+    assert.equal(res.status, 200);
+    assert.ok(res.body.token);
+    assert.equal(res.body.admin.login, 'zuev');
+  });
+
   it('GET /api/admin/participants with token', async () => {
+    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .get('/api/admin/participants')
-      .set('X-Admin-Token', ADMIN_TOKEN);
+      .set('Authorization', `Bearer ${token}`);
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body.participants));
   });
 
   it('GET /api/admin/tasks with token', async () => {
+    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .get('/api/admin/tasks')
-      .set('X-Admin-Token', ADMIN_TOKEN);
+      .set('Authorization', `Bearer ${token}`);
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body.tasks));
   });
 
   it('PATCH /api/admin/events/999999 returns 404', async () => {
+    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .patch('/api/admin/events/999999')
-      .set('X-Admin-Token', ADMIN_TOKEN)
+      .set('Authorization', `Bearer ${token}`)
       .send({ title: 'x' });
     assert.equal(res.status, 404);
   });
 
   it('POST /api/admin/tasks without title returns 400', async () => {
+    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .post('/api/admin/tasks')
-      .set('X-Admin-Token', ADMIN_TOKEN)
+      .set('Authorization', `Bearer ${token}`)
       .send({ points: 10 });
     assert.equal(res.status, 400);
   });

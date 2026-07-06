@@ -142,9 +142,12 @@ npm run dev
 
 ```powershell
 
-curl -H "X-Admin-Token: dev-admin-secret" http://localhost:8080/api/admin/task-submissions
+# Получить токен (после npm run db:seed)
+$token = (Invoke-RestMethod -Uri http://localhost:8080/api/admin/login -Method Post -Body '{"login":"zuev","password":"ZuevPu26"}' -ContentType application/json).token
 
-curl -H "X-Admin-Token: dev-admin-secret" http://localhost:8080/api/admin/event-attendance
+curl -H "Authorization: Bearer $token" http://localhost:8080/api/admin/task-submissions
+
+curl -H "Authorization: Bearer $token" http://localhost:8080/api/admin/event-attendance
 
 ```
 

@@ -66,14 +66,15 @@ Timeweb Apps → mashuk-backend → **Логи** / Deploy logs.
 
 **mashuk-frontend** → переменная:
 ```
-VITE_API_URL=https://zuevpu-mashuk2026-1535.twc1.net/api
+VITE_API_URL=https://zuevpu-mashuk2026-ae82.twc1.net/api
 ```
 (обязательно `https://` и `/api` в конце)
 
-**mashuk-admin** → переменные:
+**mashuk-admin** → переменная:
 ```
-VITE_API_URL=https://zuevpu-mashuk2026-1535.twc1.net/api
-VITE_ADMIN_TOKEN=<тот же ADMIN_SECRET, что и на бэкенде>
+VITE_API_URL=https://zuevpu-mashuk2026-ae82.twc1.net/api
 ```
+
+Вход — логин/пароль админа из БД. На backend при первом деплое: `AUTO_SEED=true`, затем уберите.
 
 Пересоберите оба приложения (Deploy).

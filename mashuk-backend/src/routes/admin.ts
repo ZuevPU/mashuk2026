@@ -2,8 +2,11 @@ import { Router, RequestHandler } from 'express';
 import { adminAuthMiddleware } from '../middlewares/adminAuth.js';
 import { asyncHandler } from '../middlewares/errorHandler.js';
 import * as admin from '../controllers/adminController.js';
+import { adminLogin } from '../controllers/adminAuthController.js';
 
 const router = Router();
+
+router.post('/login', asyncHandler(adminLogin));
 router.use(adminAuthMiddleware);
 
 const wrap = (fn: Parameters<typeof asyncHandler>[0]): RequestHandler => asyncHandler(fn);

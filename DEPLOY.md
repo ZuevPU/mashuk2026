@@ -24,7 +24,9 @@ Frontend build env:
 
 Admin build env:
 
-- `VITE_ADMIN_TOKEN=<тот же ADMIN_SECRET>`
+- `VITE_API_URL=https://api.your-domain.ru/api`
+
+Вход в админку — логин и пароль из таблицы `admin_users` (см. `mashuk-backend/ADMIN_USERS.md`). На backend нужен `ADMIN_SECRET` для подписи JWT-токенов.
 
 ## 2. Backend (Docker)
 

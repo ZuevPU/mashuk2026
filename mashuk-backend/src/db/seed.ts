@@ -10,7 +10,7 @@ import {
 
   events, tasks, questions, levelsConfig, materials,
 
-  participants, adminUsers, answers, taskSubmissions,
+  participants, answers, taskSubmissions,
 
   exchangeQuestions, exchangeAnswers, eventAttendance,
 
@@ -335,25 +335,8 @@ export async function runSeed() {
 
 
 
-  const [testAdmin] = await db.select().from(adminUsers).where(eq(adminUsers.login, 'admin')).limit(1);
-
-  if (!testAdmin) {
-
-    await db.insert(adminUsers).values({
-
-      login: 'admin',
-
-      passwordHash: 'mashuk-admin-2026',
-
-      role: 'superadmin',
-
-      vkId: 1,
-
-    });
-
-    console.log('Admin user created (login: admin).');
-
-  }
+  const { seedAdminUsers } = await import('./seedAdmins.js');
+  await seedAdminUsers();
 
 
 

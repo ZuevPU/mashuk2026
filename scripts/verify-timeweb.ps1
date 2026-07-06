@@ -3,11 +3,12 @@
 
 $ErrorActionPreference = "Continue"
 
-$BackendUrl = "https://zuevpu-mashuk2026-1535.twc1.net"
-$FrontendUrl = "https://zuevpu-mashuk2026-07d9.twc1.net"
-$AdminUrl = "https://zuevpu-mashuk2026-feae.twc1.net"
+$BackendUrl = "https://zuevpu-mashuk2026-ae82.twc1.net"
+$FrontendUrl = "https://zuevpu-mashuk2026-dc9b.twc1.net"
+$AdminUrl = "https://zuevpu-mashuk2026-9a9a.twc1.net"
 $ExpectedApi = "$BackendUrl/api"
-$AdminToken = "MashukAdminSuperSecret2026"
+$AdminLogin = "zuev"
+$AdminPassword = "ZuevPu26"
 
 function Test-Http {
   param(
@@ -49,8 +50,8 @@ try {
   if ($html -match 'assets/(index-[^"]+\.js)') {
     $jsUrl = "$FrontendUrl/assets/$($Matches[1])"
     $js = (Invoke-WebRequest -Uri $jsUrl -UseBasicParsing -TimeoutSec 15).Content
-    if ($js -match 'https://zuevpu-mashuk2026-1535\.twc1\.net/api') {
-      Write-Host "  OK baked API URL is https://...1535.../api" -ForegroundColor Green
+    if ($js -match 'https://zuevpu-mashuk2026-ae82\.twc1\.net/api') {
+      Write-Host "  OK baked API URL is https://...ae82.../api" -ForegroundColor Green
       $results["frontend-api-url"] = $true
     } else {
       Write-Host "  FAIL expected API URL not found in bundle" -ForegroundColor Red
@@ -68,8 +69,8 @@ try {
   if ($html -match 'assets/(index-[^"]+\.js)') {
     $jsUrl = "$AdminUrl/assets/$($Matches[1])"
     $js = (Invoke-WebRequest -Uri $jsUrl -UseBasicParsing -TimeoutSec 15).Content
-    if ($js -match 'https://zuevpu-mashuk2026-1535\.twc1\.net/api') {
-      Write-Host "  OK baked API URL is https://...1535.../api" -ForegroundColor Green
+    if ($js -match 'https://zuevpu-mashuk2026-ae82\.twc1\.net/api') {
+      Write-Host "  OK baked API URL is https://...ae82.../api" -ForegroundColor Green
       $results["admin-api-url"] = $true
     } else {
       Write-Host "  FAIL expected API URL not found in bundle" -ForegroundColor Red
@@ -82,8 +83,25 @@ try {
 }
 
 if ($results["backend-health"]) {
-  $results["admin-api-json"] = Test-Http "Admin API /participants" "$ExpectedApi/admin/participants" -Headers @{
-    "X-Admin-Token" = $AdminToken
+  $adminBearer = $null
+  Write-Host "`n[Admin login] POST /api/admin/login" -ForegroundColor Yellow
+  try {
+    $loginBody = @{ login = $AdminLogin; password = $AdminPassword } | ConvertTo-Json
+    $loginRes = Invoke-RestMethod -Uri "$ExpectedApi/admin/login" -Method Post -Body $loginBody -ContentType "application/json" -TimeoutSec 15
+    $adminBearer = $loginRes.token
+    Write-Host "  OK token received" -ForegroundColor Green
+    $results["admin-login"] = $true
+  } catch {
+    Write-Host "  FAIL $($_.Exception.Message)" -ForegroundColor Red
+    $results["admin-login"] = $false
+  }
+
+  if ($adminBearer) {
+    $results["admin-api-json"] = Test-Http "Admin API /participants" "$ExpectedApi/admin/participants" -Headers @{
+      "Authorization" = "Bearer $adminBearer"
+    }
+  } else {
+    $results["admin-api-json"] = $false
   }
   $results["auth-me"] = Test-Http "Auth /me (test header)" "$ExpectedApi/auth/me" -Headers @{
     "X-Test-Vk-Id" = "1"

@@ -26,7 +26,7 @@ Nginx слушает порт **8080** и отдаёт SPA с fallback на `ind
 Переменные окружения (нужны **на этапе сборки**):
 
 ```
-VITE_API_URL=https://zuevpu-mashuk2026-e75d.twc1.net/api
+VITE_API_URL=https://zuevpu-mashuk2026-ae82.twc1.net/api
 ```
 
 ### mashuk-admin
@@ -43,9 +43,10 @@ VITE_API_URL=https://zuevpu-mashuk2026-e75d.twc1.net/api
 Переменные окружения:
 
 ```
-VITE_API_URL=https://zuevpu-mashuk2026-e75d.twc1.net/api
-VITE_ADMIN_TOKEN=<тот же ADMIN_SECRET, что на backend>
+VITE_API_URL=https://zuevpu-mashuk2026-ae82.twc1.net/api
 ```
+
+Вход — логин/пароль из БД (`admin_users`), см. `mashuk-backend/ADMIN_USERS.md`.
 
 ## Проверка после деплоя
 

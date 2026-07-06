@@ -1,23 +1,29 @@
-import { describe, it } from 'node:test';
+import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import { createApp } from '../app.js';
+import { getAdminBearerToken } from './adminTestHelper.js';
 
-const ADMIN_TOKEN = process.env.ADMIN_SECRET || 'dev-admin-secret';
 const E2E_VK_ID = 999001;
 
 describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, () => {
   const app = createApp();
+  let adminAuth: Record<string, string>;
+
+  before(async () => {
+    const token = await getAdminBearerToken(app);
+    adminAuth = { Authorization: `Bearer ${token}` };
+  });
 
   it('cleanup and register E2E participant', async () => {
     const list = await request(app)
       .get('/api/admin/participants')
-      .set('X-Admin-Token', ADMIN_TOKEN);
+      .set(adminAuth);
     const existing = list.body.participants?.find((p: { vkId: number }) => p.vkId === E2E_VK_ID);
     if (existing) {
       await request(app)
         .delete(`/api/admin/participants/${existing.id}/registration`)
-        .set('X-Admin-Token', ADMIN_TOKEN);
+        .set(adminAuth);
     }
 
     const dirs = await request(app).get('/api/directions');
@@ -75,15 +81,13 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
   });
 
   it('admin sees data, exports CSV, recalculates analytics', async () => {
-    const admin = { 'X-Admin-Token': ADMIN_TOKEN };
-
-    const participants = await request(app).get('/api/admin/participants').set(admin);
+    const participants = await request(app).get('/api/admin/participants').set(adminAuth);
     assert.ok(participants.body.participants.some((p: { vkId: number }) => p.vkId === E2E_VK_ID));
 
-    const subs = await request(app).get('/api/admin/task-submissions').set(admin);
+    const subs = await request(app).get('/api/admin/task-submissions').set(adminAuth);
     assert.equal(subs.status, 200);
 
-    const exchange = await request(app).get('/api/admin/exchange').set(admin);
+    const exchange = await request(app).get('/api/admin/exchange').set(adminAuth);
     assert.equal(exchange.status, 200);
     assert.ok(exchange.body.questions?.some((q: { text: string }) => q.text?.includes('E2E exchange')));
 
@@ -96,30 +100,29 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
       '/exports/attendance',
       '/exports/points-log',
     ]) {
-      const csv = await request(app).get(`/api/admin${path}`).set(admin);
+      const csv = await request(app).get(`/api/admin${path}`).set(adminAuth);
       assert.equal(csv.status, 200);
     }
 
-    const recalc = await request(app).post('/api/admin/analytics/recalculate').set(admin);
+    const recalc = await request(app).post('/api/admin/analytics/recalculate').set(adminAuth);
     assert.equal(recalc.status, 200);
 
-    const charts = await request(app).get('/api/admin/analytics/charts').set(admin);
+    const charts = await request(app).get('/api/admin/analytics/charts').set(adminAuth);
     assert.equal(charts.status, 200);
   });
 
   it('admin push send writes to push_log', async () => {
-    const admin = { 'X-Admin-Token': ADMIN_TOKEN };
-    const list = await request(app).get('/api/admin/participants').set(admin);
+    const list = await request(app).get('/api/admin/participants').set(adminAuth);
     const p = list.body.participants.find((x: { vkId: number }) => x.vkId === E2E_VK_ID);
     assert.ok(p);
 
     const push = await request(app)
       .post('/api/admin/push/send')
-      .set(admin)
+      .set(adminAuth)
       .send({ text: 'E2E push test', participantId: p.id });
     assert.equal(push.status, 200);
 
-    const log = await request(app).get('/api/admin/push/log').set(admin);
+    const log = await request(app).get('/api/admin/push/log').set(adminAuth);
     assert.equal(log.status, 200);
     assert.ok(log.body.log?.some((l: { text: string }) => l.text === 'E2E push test'));
   });

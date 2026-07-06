@@ -23,7 +23,6 @@ jobs:
       - name: Install and Build
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
-          VITE_ADMIN_TOKEN: ${{ secrets.ADMIN_SECRET }}
         run: |
           cd mashuk-admin
           npm ci

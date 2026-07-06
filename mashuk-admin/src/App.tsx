@@ -4,7 +4,16 @@ import {
   LineChart, Line, CartesianGrid,
 } from 'recharts';
 
-const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN || 'dev-admin-secret';
+const ADMIN_TOKEN_KEY = 'mashuk_admin_token';
+
+function getAdminToken(): string | null {
+  return sessionStorage.getItem(ADMIN_TOKEN_KEY);
+}
+
+function setAdminToken(token: string | null): void {
+  if (token) sessionStorage.setItem(ADMIN_TOKEN_KEY, token);
+  else sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+}
 
 function normalizeApiUrl(url: string): string {
   if (!url) return '';
@@ -22,7 +31,7 @@ function normalizeApiUrl(url: string): string {
 const API_BASE = import.meta.env.PROD 
   ? (import.meta.env.VITE_API_URL && !import.meta.env.VITE_API_URL.includes('localhost') 
       ? normalizeApiUrl(import.meta.env.VITE_API_URL) 
-      : 'https://zuevpu-mashuk2026-e75d.twc1.net/api')
+      : 'https://zuevpu-mashuk2026-ae82.twc1.net/api')
   : normalizeApiUrl(import.meta.env.VITE_API_URL || '');
 
 function getConfigError(): string | null {
@@ -51,25 +60,46 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = 2): P
   throw new Error('Unreachable');
 }
 
+async function adminLogin(login: string, password: string) {
+  const base = API_BASE ? `${API_BASE}/admin` : '/api/admin';
+  const res = await fetch(`${base}/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login, password }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+  const data = text ? JSON.parse(text) : null;
+  if (!data?.token) throw new Error('No token in response');
+  setAdminToken(data.token);
+  return data;
+}
+
 async function adminFetch(path: string, options: RequestInit = {}) {
   const base = API_BASE ? `${API_BASE}/admin` : '/api/admin';
   if (import.meta.env.PROD && !API_BASE) {
     throw new Error('VITE_API_URL is not set. Configure it in Timeweb Apps and rebuild the admin panel.');
   }
+  const token = getAdminToken();
+  if (!token) throw new Error('Not authenticated');
   const res = await fetchWithRetry(`${base}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'X-Admin-Token': ADMIN_TOKEN,
+      Authorization: `Bearer ${token}`,
       ...(options.headers || {}),
     },
   });
+  if (res.status === 401) {
+    setAdminToken(null);
+    throw new Error('Session expired. Please log in again.');
+  }
   const text = await res.text();
   if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
   const ct = res.headers.get('content-type') || '';
   if (ct.includes('text/html') || text.trimStart().startsWith('<!')) {
     throw new Error(
-      'API returned HTML instead of JSON. Set VITE_API_URL=https://zuevpu-mashuk2026-e75d.twc1.net/api in Timeweb Apps and rebuild.',
+      'API returned HTML instead of JSON. Set VITE_API_URL=https://zuevpu-mashuk2026-ae82.twc1.net/api in Timeweb Apps and rebuild.',
     );
   }
   if (ct.includes('text/csv')) return text;
@@ -364,24 +394,33 @@ export const App = () => {
     ? Object.entries(charts.emotions as Record<string, number>).map(([name, value]) => ({ name, value }))
     : [];
 
-  const [authKey, setAuthKey] = useState('');
+  const [loginName, setLoginName] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem('mashuk_admin_auth');
-    if (saved === 'сладкаябулочкаскорицей55') {
+    if (getAdminToken()) {
       setIsAuthenticated(true);
     }
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (authKey === 'сладкаябулочкаскорицей55') {
-      localStorage.setItem('mashuk_admin_auth', authKey);
+    setLoginError(null);
+    try {
+      await adminLogin(loginName.trim(), loginPassword);
       setIsAuthenticated(true);
-    } else {
-      alert('Неверный код доступа');
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : 'Ошибка входа');
     }
+  };
+
+  const handleLogout = () => {
+    setAdminToken(null);
+    setIsAuthenticated(false);
+    setLoginName('');
+    setLoginPassword('');
   };
 
   const configError = getConfigError();
@@ -399,15 +438,27 @@ export const App = () => {
   if (!isAuthenticated) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#f5f5f5' }}>
-        <form onSubmit={handleLogin} style={{ background: 'white', padding: 32, borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <form onSubmit={handleLogin} style={{ background: 'white', padding: 32, borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', gap: 16, minWidth: 320 }}>
           <h2 style={{ margin: 0, textAlign: 'center' }}>Вход в админку</h2>
-          <input 
-            type="password" 
-            value={authKey} 
-            onChange={e => setAuthKey(e.target.value)} 
-            placeholder="Код доступа" 
+          <input
+            type="text"
+            value={loginName}
+            onChange={e => setLoginName(e.target.value)}
+            placeholder="Логин"
+            autoComplete="username"
             style={{ padding: '8px 12px', fontSize: 16, borderRadius: 6, border: '1px solid #ccc' }}
           />
+          <input
+            type="password"
+            value={loginPassword}
+            onChange={e => setLoginPassword(e.target.value)}
+            placeholder="Пароль"
+            autoComplete="current-password"
+            style={{ padding: '8px 12px', fontSize: 16, borderRadius: 6, border: '1px solid #ccc' }}
+          />
+          {loginError && (
+            <div style={{ color: '#C53030', fontSize: 14 }}>{loginError}</div>
+          )}
           <button type="submit" style={{ padding: '10px', fontSize: 16, background: '#FF5500', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
             Войти
           </button>
@@ -420,6 +471,9 @@ export const App = () => {
     <div className="admin">
       <header className="admin-header">
         <h1>Машук 2026 · Админ-панель</h1>
+        <button type="button" onClick={handleLogout} style={{ marginLeft: 'auto', padding: '6px 12px' }}>
+          Выйти
+        </button>
       </header>
       <nav className="admin-nav">
         {(Object.keys(TAB_LABELS) as Tab[]).map(t => (
