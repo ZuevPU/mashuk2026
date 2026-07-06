@@ -3,6 +3,31 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid,
 } from 'recharts';
+import { label } from './labels/ru';
+
+function translateApiError(message: string): string {
+  if (message.includes('No token in response')) return 'Сервер не вернул токен';
+  if (message.includes('Not authenticated')) return 'Не авторизован';
+  if (message.includes('Session expired')) return 'Сессия истекла. Войдите снова.';
+  if (message.includes('VITE_API_URL is not set')) {
+    return 'Не задан VITE_API_URL. Укажите его в Timeweb Apps и пересоберите админку.';
+  }
+  if (message.includes('API returned HTML instead of JSON')) {
+    return 'API вернул HTML вместо JSON. Проверьте VITE_API_URL в Timeweb Apps и пересоберите админку.';
+  }
+  if (message.startsWith('HTTP ')) return `Ошибка сервера: ${message}`;
+  return message;
+}
+
+function EnumOptions({ values }: { values: string[] }) {
+  return (
+    <>
+      {values.map(v => (
+        <option key={v} value={v}>{label(v)}</option>
+      ))}
+    </>
+  );
+}
 
 const ADMIN_TOKEN_KEY = 'mashuk_admin_token';
 
@@ -70,7 +95,7 @@ async function adminLogin(login: string, password: string) {
   const text = await res.text();
   if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
   const data = text ? JSON.parse(text) : null;
-  if (!data?.token) throw new Error('No token in response');
+  if (!data?.token) throw new Error('Сервер не вернул токен');
   setAdminToken(data.token);
   return data;
 }
@@ -78,10 +103,10 @@ async function adminLogin(login: string, password: string) {
 async function adminFetch(path: string, options: RequestInit = {}) {
   const base = API_BASE ? `${API_BASE}/admin` : '/api/admin';
   if (import.meta.env.PROD && !API_BASE) {
-    throw new Error('VITE_API_URL is not set. Configure it in Timeweb Apps and rebuild the admin panel.');
+    throw new Error('Не задан VITE_API_URL. Укажите его в Timeweb Apps и пересоберите админку.');
   }
   const token = getAdminToken();
-  if (!token) throw new Error('Not authenticated');
+  if (!token) throw new Error('Не авторизован');
   const res = await fetchWithRetry(`${base}${path}`, {
     ...options,
     headers: {
@@ -92,14 +117,14 @@ async function adminFetch(path: string, options: RequestInit = {}) {
   });
   if (res.status === 401) {
     setAdminToken(null);
-    throw new Error('Session expired. Please log in again.');
+    throw new Error('Сессия истекла. Войдите снова.');
   }
   const text = await res.text();
   if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
   const ct = res.headers.get('content-type') || '';
   if (ct.includes('text/html') || text.trimStart().startsWith('<!')) {
     throw new Error(
-      'API returned HTML instead of JSON. Set VITE_API_URL=https://zuevpu-mashuk2026-ae82.twc1.net/api in Timeweb Apps and rebuild.',
+      'API вернул HTML вместо JSON. Проверьте VITE_API_URL в Timeweb Apps и пересоберите админку.',
     );
   }
   if (ct.includes('text/csv')) return text;
@@ -130,7 +155,7 @@ const TAB_LABELS: Record<Tab, string> = {
   levels: 'Баллы',
   analytics: 'Аналитика',
   exports: 'Выгрузки',
-  push: 'Push',
+  push: 'Уведомления',
 };
 
 const SECTIONS = ['home', 'program', 'tasks', 'questions', 'profile'];
@@ -153,7 +178,7 @@ export const App = () => {
   const [toast, setToast] = useState<string | null>(null);
   const reload = () => setReloadKey(k => k + 1);
   const act = (fn: () => Promise<unknown>, msg = 'Сохранено') =>
-    fn().then(() => { setToast(msg); reload(); }).catch(e => setToast(String(e)));
+    fn().then(() => { setToast(msg); reload(); }).catch(e => setToast(translateApiError(String(e))));
 
   const [participants, setParticipants] = useState<any[]>([]);
   const [participantSearch, setParticipantSearch] = useState('');
@@ -294,7 +319,7 @@ export const App = () => {
           setDirections((await adminFetch('/directions')).directions);
         }
       } catch (e) {
-        setToast(String(e instanceof Error ? e.message : e));
+        setToast(translateApiError(String(e instanceof Error ? e.message : e)));
       } finally {
         setTabLoading(false);
       }
@@ -391,7 +416,7 @@ export const App = () => {
   });
 
   const emotionChartData = charts?.emotions
-    ? Object.entries(charts.emotions as Record<string, number>).map(([name, value]) => ({ name, value }))
+    ? Object.entries(charts.emotions as Record<string, number>).map(([name, value]) => ({ name: label(name), value }))
     : [];
 
   const [loginName, setLoginName] = useState('');
@@ -412,7 +437,7 @@ export const App = () => {
       await adminLogin(loginName.trim(), loginPassword);
       setIsAuthenticated(true);
     } catch (err) {
-      setLoginError(err instanceof Error ? err.message : 'Ошибка входа');
+      setLoginError(translateApiError(err instanceof Error ? err.message : 'Ошибка входа'));
     }
   };
 
@@ -486,7 +511,7 @@ export const App = () => {
           <>
             <div className="form-row">
               <input value={participantSearch} onChange={e => setParticipantSearch(e.target.value)} placeholder="Поиск..." />
-              <input value={newParticipant.vkId} onChange={e => setNewParticipant({ ...newParticipant, vkId: e.target.value })} placeholder="VK ID" />
+              <input value={newParticipant.vkId} onChange={e => setNewParticipant({ ...newParticipant, vkId: e.target.value })} placeholder="ID ВКонтакте" />
               <input value={newParticipant.firstName} onChange={e => setNewParticipant({ ...newParticipant, firstName: e.target.value })} placeholder="Имя" />
               <input value={newParticipant.lastName} onChange={e => setNewParticipant({ ...newParticipant, lastName: e.target.value })} placeholder="Фамилия" />
               <select value={newParticipant.directionId} onChange={e => setNewParticipant({ ...newParticipant, directionId: e.target.value })}>
@@ -496,7 +521,7 @@ export const App = () => {
               <button onClick={createParticipant}>Добавить</button>
             </div>
             <table>
-              <thead><tr><th>ID</th><th>VK</th><th>Имя</th><th>Направление</th><th>Путь</th><th>Опыт</th><th>Действия</th></tr></thead>
+              <thead><tr><th>№</th><th>VK</th><th>Имя</th><th>Направление</th><th>Путь</th><th>Опыт</th><th>Действия</th></tr></thead>
               <tbody>
                 {filteredParticipants.map(p => (
                   <tr key={p.id}>
@@ -617,13 +642,13 @@ export const App = () => {
                 <input type="number" value={newMaterial.dayNumber} onChange={e => setNewMaterial({ ...newMaterial, dayNumber: Number(e.target.value) })} placeholder="День" />
                 <input value={newMaterial.speakerName} onChange={e => setNewMaterial({ ...newMaterial, speakerName: e.target.value })} placeholder="Спикер" />
                 <input value={newMaterial.title} onChange={e => setNewMaterial({ ...newMaterial, title: e.target.value })} placeholder="Название" />
-                <input value={newMaterial.url} onChange={e => setNewMaterial({ ...newMaterial, url: e.target.value })} placeholder="URL" />
+                <input value={newMaterial.url} onChange={e => setNewMaterial({ ...newMaterial, url: e.target.value })} placeholder="Ссылка" />
                 <button onClick={createMaterial}>Добавить</button>
               </div>
               {materials.map(m => (
                 <div key={m.id} className="card" style={{ fontSize: 12 }}>
                   <input defaultValue={m.title} id={`mat-title-${m.id}`} />
-                  <input defaultValue={m.url || ''} id={`mat-url-${m.id}`} placeholder="URL" style={{ marginLeft: 8, flex: 1 }} />
+                  <input defaultValue={m.url || ''} id={`mat-url-${m.id}`} placeholder="Ссылка" style={{ marginLeft: 8, flex: 1 }} />
                   <button onClick={() => act(() => adminFetch(`/materials/${m.id}`, {
                     method: 'PATCH',
                     body: JSON.stringify({
@@ -649,16 +674,14 @@ export const App = () => {
                 <input value={newTask.category} onChange={e => setNewTask({ ...newTask, category: e.target.value })} placeholder="Категория" />
                 <input type="number" value={newTask.points} onChange={e => setNewTask({ ...newTask, points: Number(e.target.value) })} placeholder="Баллы" />
                 <select value={newTask.answerType} onChange={e => setNewTask({ ...newTask, answerType: e.target.value })}>
-                  <option value="text">text</option>
-                  <option value="photo">photo</option>
-                  <option value="text_and_photo">text_and_photo</option>
+                  <EnumOptions values={['text', 'photo', 'text_and_photo']} />
                 </select>
               </div>
               <div className="form-row">
                 <input value={newTask.description} onChange={e => setNewTask({ ...newTask, description: e.target.value })} placeholder="Описание" style={{ flex: 2 }} />
                 <label><input type="checkbox" checked={newTask.allowRetry} onChange={e => setNewTask({ ...newTask, allowRetry: e.target.checked })} /> Повтор</label>
                 <label><input type="checkbox" checked={newTask.autoConfirm} onChange={e => setNewTask({ ...newTask, autoConfirm: e.target.checked })} /> Авто</label>
-                <label><input type="checkbox" checked={newTask.pushOnPublish} onChange={e => setNewTask({ ...newTask, pushOnPublish: e.target.checked })} /> Push</label>
+                <label><input type="checkbox" checked={newTask.pushOnPublish} onChange={e => setNewTask({ ...newTask, pushOnPublish: e.target.checked })} /> Уведомление при публикации</label>
                 <button onClick={createTask}>Создать</button>
               </div>
             </div>
@@ -672,7 +695,7 @@ export const App = () => {
                 </div>
                 <textarea defaultValue={t.description || ''} id={`task-desc-${t.id}`} placeholder="Описание" rows={2} style={{ width: '100%', marginTop: 8 }} />
                 <div className="form-row" style={{ marginTop: 8, fontSize: 12 }}>
-                  <label><input type="checkbox" defaultChecked={t.pushOnPublish} id={`task-push-${t.id}`} /> Push</label>
+                  <label><input type="checkbox" defaultChecked={t.pushOnPublish} id={`task-push-${t.id}`} /> Уведомление при публикации</label>
                   <label><input type="checkbox" defaultChecked={t.allowRetry} id={`task-retry-${t.id}`} /> Повтор</label>
                   <label><input type="checkbox" defaultChecked={t.autoConfirm} id={`task-auto-${t.id}`} /> Авто</label>
                 </div>
@@ -706,7 +729,7 @@ export const App = () => {
               <div className="form-row">
                 <input value={newQuestion.title} onChange={e => setNewQuestion({ ...newQuestion, title: e.target.value })} placeholder="Заголовок" />
                 <select value={newQuestion.type} onChange={e => setNewQuestion({ ...newQuestion, type: e.target.value })}>
-                  {['open', 'checkin', 'choice', 'multi', 'dependent'].map(t => <option key={t} value={t}>{t}</option>)}
+                  <EnumOptions values={['open', 'checkin', 'choice', 'multi', 'dependent']} />
                 </select>
                 <input value={newQuestion.block} onChange={e => setNewQuestion({ ...newQuestion, block: e.target.value })} placeholder="Блок" />
                 <select value={newQuestion.timePoint} onChange={e => setNewQuestion({ ...newQuestion, timePoint: e.target.value })}>
@@ -726,8 +749,8 @@ export const App = () => {
                   <option value="">Вопрос</option>
                   {questions.map(q => <option key={q.id} value={q.id}>{q.id}: {q.title}</option>)}
                 </select>
-                <input value={optionForm.label} onChange={e => setOptionForm({ ...optionForm, label: e.target.value })} placeholder="Label" />
-                <input value={optionForm.value} onChange={e => setOptionForm({ ...optionForm, value: e.target.value })} placeholder="Value" />
+                <input value={optionForm.label} onChange={e => setOptionForm({ ...optionForm, label: e.target.value })} placeholder="Подпись варианта" />
+                <input value={optionForm.value} onChange={e => setOptionForm({ ...optionForm, value: e.target.value })} placeholder="Значение варианта" />
                 <button onClick={addOption}>Добавить</button>
               </div>
             </div>
@@ -737,15 +760,14 @@ export const App = () => {
                   <strong>{q.id}.</strong>
                   <input defaultValue={q.title} id={`q-title-${q.id}`} style={{ flex: 1 }} />
                   <select defaultValue={q.status} id={`q-status-${q.id}`}>
-                    <option value="draft">draft</option>
-                    <option value="published">published</option>
+                    <EnumOptions values={['draft', 'published']} />
                   </select>
                 </div>
                 <textarea defaultValue={q.text || ''} id={`q-text-${q.id}`} placeholder="Текст" rows={2} style={{ width: '100%', marginTop: 8 }} />
                 <div className="form-row" style={{ marginTop: 8, fontSize: 12 }}>
                   <input defaultValue={q.block || ''} id={`q-block-${q.id}`} placeholder="Блок" />
                   <input type="number" defaultValue={q.points ?? 10} id={`q-points-${q.id}`} style={{ width: 60 }} placeholder="Баллы" />
-                  <label><input type="checkbox" defaultChecked={q.pushOnPublish} id={`q-push-${q.id}`} /> Push</label>
+                  <label><input type="checkbox" defaultChecked={q.pushOnPublish} id={`q-push-${q.id}`} /> Уведомление при публикации</label>
                 </div>
                 {(questionOptionsMap[q.id] || []).length > 0 && (
                   <div style={{ fontSize: 11, marginTop: 8 }}>
@@ -821,7 +843,7 @@ export const App = () => {
               {SECTIONS.map(s => (
                 <label key={s} style={{ display: 'block', marginBottom: 4 }}>
                   <input type="checkbox" checked={sectionsVis[s] !== false} onChange={e => setSectionsVis({ ...sectionsVis, [s]: e.target.checked })} />
-                  {' '}{s}
+                  {' '}{label(s)}
                 </label>
               ))}
               <button onClick={saveSections}>Сохранить</button>
@@ -859,7 +881,7 @@ export const App = () => {
             {exchangeArchive.map(q => (
               <div key={q.id} className="card">
                 <p>{q.text}</p>
-                <p style={{ fontSize: 11, color: '#888' }}>{q.authorName} · {q.moderationStatus}</p>
+                <p style={{ fontSize: 11, color: '#888' }}>{q.authorName} · {label(q.moderationStatus)}</p>
                 {q.answers?.map((a: any) => (
                   <div key={a.id} style={{ marginTop: 6, padding: 6, background: '#f5f5f5', borderRadius: 6, fontSize: 12 }}>
                     {a.authorName}: {a.text}
@@ -881,7 +903,7 @@ export const App = () => {
                   <tr key={s.id}>
                     <td>{s.participantName}</td>
                     <td>{s.taskTitle}</td>
-                    <td>{s.status}</td>
+                    <td>{label(s.status)}</td>
                     <td>{s.answerText?.slice(0, 40)}</td>
                     <td>{s.submittedAt ? new Date(s.submittedAt).toLocaleString('ru-RU') : ''}</td>
                   </tr>
@@ -908,7 +930,7 @@ export const App = () => {
             <h3>Обмен опытом (все)</h3>
             {exchangeArchive.map(q => (
               <div key={q.id} className="card">
-                <strong>{q.moderationStatus}</strong> · {q.text}
+                <strong>{label(q.moderationStatus)}</strong> · {q.text}
                 <div style={{ fontSize: 11 }}>{q.authorName} · ответов: {q.answers?.length ?? 0}</div>
               </div>
             ))}
@@ -921,7 +943,7 @@ export const App = () => {
             <div className="card">
               <h3>Настройка баллов</h3>
               <div className="form-row">
-                <input value={newLevel.actionType} onChange={e => setNewLevel({ ...newLevel, actionType: e.target.value })} placeholder="actionType" />
+                <input value={newLevel.actionType} onChange={e => setNewLevel({ ...newLevel, actionType: e.target.value })} placeholder="Тип действия" />
                 <input type="number" value={newLevel.pointsPerUnit} onChange={e => setNewLevel({ ...newLevel, pointsPerUnit: Number(e.target.value) })} placeholder="Баллы" />
                 <input value={newLevel.levelThresholds} onChange={e => setNewLevel({ ...newLevel, levelThresholds: e.target.value })} placeholder="Пороги уровней" />
                 <button onClick={() => adminFetch('/levels-config', {
@@ -938,7 +960,7 @@ export const App = () => {
             </div>
             {levelsConfig.map(c => (
               <div key={c.id} className="card">
-                {c.actionType} ·
+                {label(c.actionType)} ·
                 <input type="number" defaultValue={c.pointsPerUnit} id={`lvl-pts-${c.id}`} style={{ width: 60, marginLeft: 8 }} />
                 <button onClick={() => act(() => adminFetch('/levels-config', {
                   method: 'POST',
@@ -956,7 +978,7 @@ export const App = () => {
               <thead><tr><th>Участник</th><th>Действие</th><th>Баллы</th><th>Дата</th></tr></thead>
               <tbody>
                 {pointsLog.map(l => (
-                  <tr key={l.id}><td>{l.participantName}</td><td>{l.actionType}</td><td>{l.points}</td><td>{l.createdAt ? new Date(l.createdAt).toLocaleString('ru-RU') : ''}</td></tr>
+                  <tr key={l.id}><td>{l.participantName}</td><td>{label(l.actionType)}</td><td>{l.points}</td><td>{l.createdAt ? new Date(l.createdAt).toLocaleString('ru-RU') : ''}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -968,7 +990,7 @@ export const App = () => {
             <div className="card">
               <p>Участников: {analytics.participantCount} · Ответов: {analytics.answerCount} · Заполненность: {analytics.completionPercent}%</p>
               <p>Средняя энергия: {analytics.avgEnergy} · Медиана слов: {charts?.medianWordCount ?? '—'}</p>
-              {analytics.redFlag && <p style={{ color: '#C53030', fontWeight: 700 }}>⚠ Red flag: низкая энергия участников</p>}
+              {analytics.redFlag && <p style={{ color: '#C53030', fontWeight: 700 }}>⚠ Тревога: низкая энергия участников</p>}
               {analytics.completionPercent === 0 && (
                 <p style={{ color: '#888', fontSize: 12 }}>Нажмите «Пересчитать», если графики пустые</p>
               )}
@@ -976,7 +998,7 @@ export const App = () => {
             </div>
             {emotionChartData.length > 0 && (
               <div className="card chart-card">
-                <h3>Эмоции (check-in)</h3>
+                <h3>Эмоции участников</h3>
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={emotionChartData}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -1050,13 +1072,13 @@ export const App = () => {
         {tab === 'push' && (
           <>
             <div className="card">
-              <textarea value={pushText} onChange={e => setPushText(e.target.value)} placeholder="Текст push-уведомления" rows={3} style={{ width: '100%' }} />
+              <textarea value={pushText} onChange={e => setPushText(e.target.value)} placeholder="Текст уведомления" rows={3} style={{ width: '100%' }} />
               <div className="form-row" style={{ marginTop: 8 }}>
                 <input
                   type="number"
                   value={pushParticipantId}
                   onChange={e => setPushParticipantId(e.target.value)}
-                  placeholder="participantId (пусто = всем)"
+                  placeholder="ID участника (пусто = всем)"
                   style={{ flex: 1 }}
                 />
                 <button onClick={() => act(() => adminFetch('/push/send', {
@@ -1065,7 +1087,7 @@ export const App = () => {
                     text: pushText,
                     ...(pushParticipantId ? { participantId: Number(pushParticipantId) } : {}),
                   }),
-                }), 'Push отправлен').then(() => { setPushText(''); setPushParticipantId(''); })}>
+                }), 'Уведомление отправлено').then(() => { setPushText(''); setPushParticipantId(''); })}>
                   Отправить
                 </button>
               </div>
@@ -1074,7 +1096,7 @@ export const App = () => {
               <thead><tr><th>Текст</th><th>Триггер</th><th>Статус</th><th>Дата</th></tr></thead>
               <tbody>
                 {pushLog.map(l => (
-                  <tr key={l.id}><td>{l.text}</td><td>{l.triggerType}</td><td>{l.deliveryStatus}</td><td>{l.sentAt ? new Date(l.sentAt).toLocaleString('ru-RU') : ''}</td></tr>
+                  <tr key={l.id}><td>{l.text}</td><td>{label(l.triggerType)}</td><td>{label(l.deliveryStatus)}</td><td>{l.sentAt ? new Date(l.sentAt).toLocaleString('ru-RU') : ''}</td></tr>
                 ))}
               </tbody>
             </table>
