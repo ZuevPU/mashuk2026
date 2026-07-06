@@ -20,7 +20,13 @@ export const vkAuthMiddleware = (req: VkAuthRequest, res: Response, next: NextFu
     return;
   }
 
-  const vkLaunchParams = authHeader.split(' ')[1];
+  const vkLaunchParams = authHeader.startsWith('Bearer ')
+    ? authHeader.slice('Bearer '.length).trim()
+    : '';
+  if (!vkLaunchParams) {
+    res.status(401).json({ error: 'Unauthorized: No Bearer token provided' });
+    return;
+  }
 
   const verified = verifyVkLaunchParams(vkLaunchParams, env.VK_APP_SECRET);
   if (!verified.ok) {

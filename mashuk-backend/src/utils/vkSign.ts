@@ -16,7 +16,9 @@ export function buildSignedLaunchParams(
   const sortedKeys = Object.keys(params)
     .filter(k => k.startsWith('vk_'))
     .sort();
-  const signPayload = sortedKeys.map(k => `${k}=${params[k]}`).join('&');
+  const signPayload = sortedKeys
+    .map(k => `${k}=${encodeURIComponent(params[k] ?? '')}`)
+    .join('&');
   const sign = crypto
     .createHmac('sha256', appSecret)
     .update(signPayload)
@@ -52,7 +54,9 @@ export function verifyVkLaunchParams(
     }
 
     const sortedKeys = Object.keys(queryParams).sort();
-    const signPayload = sortedKeys.map(key => `${key}=${queryParams[key]}`).join('&');
+    const signPayload = sortedKeys
+      .map(key => `${key}=${encodeURIComponent(queryParams[key] ?? '')}`)
+      .join('&');
     const hash = crypto
       .createHmac('sha256', appSecret)
       .update(signPayload)

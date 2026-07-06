@@ -1,4 +1,14 @@
 import { bridge, isVkEnvironment, initVkBridge, withTimeout } from '../utils/vkBridgeClient';
+import {
+  captureLaunchParamsEarly,
+  isValidLaunchParamsString,
+  persistLaunchParams,
+  readLaunchParamsFromLocation,
+  serializeLaunchParamsFromBridge,
+} from '../utils/launchParams';
+
+// Capture before React/router can rewrite location.hash (VK hash router drops #?vk_* on navigate).
+const earlyLaunchParams = typeof window !== 'undefined' ? captureLaunchParamsEarly() : null;
 
 function normalizeApiUrl(url: string): string {
   if (!url) return '/api';
@@ -35,28 +45,11 @@ let cachedLaunchParams: string | null = null;
 let authInitPromise: Promise<void> | null = null;
 
 function extractLaunchParamsFromUrl(): string | null {
-  const candidates = [
-    window.location.search.slice(1),
-    window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '',
-  ];
-  for (const raw of candidates) {
-    if (!raw) continue;
-    const params = new URLSearchParams(raw);
-    if (params.get('sign') || params.get('vk_user_id')) {
-      return raw;
-    }
-  }
-  return null;
+  return readLaunchParamsFromLocation();
 }
 
 function serializeLaunchParams(raw: unknown): string {
-  if (typeof raw === 'string') return raw;
-  if (raw && typeof raw === 'object') {
-    return Object.entries(raw as Record<string, string>)
-      .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
-      .join('&');
-  }
-  return '';
+  return serializeLaunchParamsFromBridge(raw);
 }
 
 export async function initAuth(): Promise<void> {
@@ -64,24 +57,40 @@ export async function initAuth(): Promise<void> {
   authInitPromise = (async () => {
     if (cachedLaunchParams) return;
 
+    if (isValidLaunchParamsString(earlyLaunchParams)) {
+      cachedLaunchParams = earlyLaunchParams;
+      return;
+    }
+
     const fromUrl = extractLaunchParamsFromUrl();
     if (fromUrl) {
       cachedLaunchParams = fromUrl;
+      persistLaunchParams(fromUrl);
       return;
     }
 
     if (isVkEnvironment()) {
       try {
         await initVkBridge();
-        const raw = await withTimeout(bridge.send('VKWebAppGetLaunchParams'), 5000) as unknown;
+        const raw = await withTimeout(bridge.send('VKWebAppGetLaunchParams'), 8000) as unknown;
         const launchStr = serializeLaunchParams(raw);
-        if (launchStr.includes('sign=') || launchStr.includes('vk_user_id=')) {
+        if (isValidLaunchParamsString(launchStr)) {
           cachedLaunchParams = launchStr;
+          persistLaunchParams(launchStr);
           return;
         }
       } catch (e) {
         console.warn('VKWebAppGetLaunchParams failed', e);
       }
+    }
+
+    try {
+      const stored = sessionStorage.getItem('mashuk_vk_launch_params');
+      if (isValidLaunchParamsString(stored)) {
+        cachedLaunchParams = stored;
+      }
+    } catch {
+      // ignore
     }
   })();
   return authInitPromise;

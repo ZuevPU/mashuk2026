@@ -125,7 +125,9 @@ export const App = () => {
       console.error('Init error', error);
       const apiUrl = getApiUrl();
       let message = error instanceof Error ? error.message : String(error);
-      if (message.includes('No Bearer token') || message.includes('Unauthorized')) {
+      if (message.includes('Invalid sign')) {
+        message = 'Ошибка VK-авторизации (неверная подпись). Проверьте на backend переменную VK_APP_SECRET — это «Защищённый ключ» из dev.vk.com → ваше приложение → Настройки → Ключи.';
+      } else if (message.includes('No Bearer token') || message.includes('Unauthorized')) {
         message = 'Откройте приложение через VK Mini App (не в обычном браузере). Backend требует VK-авторизацию.';
       }
       setInitError(`Ошибка: ${message} | API: ${apiUrl}`);

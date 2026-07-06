@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { initVkBridge } from './utils/vkBridgeClient';
+import { captureLaunchParamsEarly } from './utils/launchParams';
 import { ConfigProvider, AdaptivityProvider, AppRoot } from '@vkontakte/vkui';
 import { RouterProvider } from '@vkontakte/vk-mini-apps-router';
 import '@vkontakte/vkui/dist/vkui.css';
@@ -9,6 +10,9 @@ import { App } from './App';
 import { router } from './router';
 
 const isIos = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+// Save VK launch params before hash router rewrites the URL.
+captureLaunchParamsEarly();
 
 const container = document.getElementById('root');
 const root = createRoot(container!);
