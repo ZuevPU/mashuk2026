@@ -91,11 +91,6 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
       return;
     }
     const now = new Date();
-    if (question.publishTime && question.publishTime > now) {
-      res.status(400).json({ error: 'Question not yet published' });
-      return;
-    }
-
     const settings = await getForumSettings();
     const currentDay = resolveEffectiveCurrentDay(settings, now);
     const access = getTouchpointAccess(question.dayNumber, currentDay, question.closeTime, now, question.publishTime);
@@ -109,6 +104,10 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
       return;
     }
     // overdue — ещё можно заполнить в текущем дне форума
+    if (question.publishTime && question.publishTime > now) {
+      res.status(400).json({ error: 'Question not yet published', access: 'soon' });
+      return;
+    }
 
     const [existingAnswer] = await db.select().from(answers)
       .where(and(

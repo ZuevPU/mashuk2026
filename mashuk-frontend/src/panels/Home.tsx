@@ -54,7 +54,15 @@ interface HomeData {
   };
   missedQuestions: { id: number; title: string; closeTime: string; expired?: boolean; overdue?: boolean }[];
   counts: { availableQuestions: number; availableTasks: number; hasNewTasks: boolean };
-  points: { path: number; experience: number; ideas: number };
+  points: {
+    path: number;
+    experience: number;
+    ideas: number;
+    pathLevel?: number;
+    experienceLevel?: number;
+    pathProgress?: number;
+    experienceProgress?: number;
+  };
   touchpoints: { completed: number; total: number; message: string; missed?: number };
   schedule?: ScheduleItem[];
   ui?: {

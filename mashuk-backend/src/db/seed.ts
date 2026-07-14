@@ -75,9 +75,10 @@ export async function runSeed() {
     ]);
 
     await db.insert(tasks).values([
-      { title: 'Познакомься с участником другого направления', category: 'Нетворкинг', points: 20, dayNumber: 1, publishTime: now, autoConfirm: true },
-      { title: 'Напиши пост о форуме', category: 'Медиа', points: 30, dayNumber: 1, publishTime: now, autoConfirm: false, answerType: 'text_and_photo' },
-      { title: 'Зафиксируй идею эксперимента', category: 'Образование', points: 25, dayNumber: 3, publishTime: now, autoConfirm: true },
+      { title: 'Познакомься с участником другого направления', category: 'Нетворкинг', points: 20, dayNumber: 1, publishTime: now, autoConfirm: true, confirmationType: 'auto' },
+      { title: 'Напиши пост о форуме', category: 'Медиа', points: 30, dayNumber: 1, publishTime: now, autoConfirm: false, answerType: 'text_and_photo', confirmationType: 'post_url' },
+      { title: 'Зафиксируй идею эксперимента', category: 'Образование', points: 25, dayNumber: 3, publishTime: now, autoConfirm: true, confirmationType: 'text_photo' },
+      { title: 'Скан QR на площадке', category: 'Организация', points: 15, dayNumber: 2, publishTime: now, autoConfirm: true, confirmationType: 'qr' },
     ]);
 
     // 7 точек × дни 1–7 с окнами МСК по startDate
@@ -378,6 +379,20 @@ export async function runSeed() {
   const [eveningRate] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, 'evening_complete')).limit(1);
   if (!eveningRate) {
     await db.insert(levelsConfig).values({ actionType: 'evening_complete', pointsPerUnit: 15, maxAccruals: 8 });
+  }
+
+  const [qrTask] = await db.select().from(tasks).where(eq(tasks.confirmationType, 'qr')).limit(1);
+  if (!qrTask) {
+    await db.insert(tasks).values({
+      title: 'Скан QR на площадке',
+      category: 'Организация',
+      points: 15,
+      dayNumber: 2,
+      publishTime: new Date(),
+      autoConfirm: true,
+      confirmationType: 'qr',
+    });
+    console.log('QR confirmation task seeded.');
   }
 
   await recalculateDailyStats();

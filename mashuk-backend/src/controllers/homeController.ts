@@ -184,6 +184,9 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       return { id: q.id, title: q.title, state, block: q.block };
     });
 
+    const pathProg = await getLevelProgress(participant.pathPoints ?? 0, 'path');
+    const expProg = await getLevelProgress(participant.experiencePoints ?? 0, 'experience');
+
     res.json({
       user: {
         firstName: participant.firstName,
