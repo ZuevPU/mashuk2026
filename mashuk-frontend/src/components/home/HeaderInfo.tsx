@@ -5,6 +5,7 @@ interface HeaderInfoProps {
   firstName: string;
   lastName: string;
   direction: string;
+  groupName?: string | null;
   dayCount: number;
   totalDays: number;
   currentDateStr: string;
@@ -15,7 +16,7 @@ interface HeaderInfoProps {
 }
 
 export const HeaderInfo: React.FC<HeaderInfoProps> = ({
-  firstName, lastName, direction, dayCount, totalDays, currentDateStr,
+  firstName, lastName, direction, groupName, dayCount, totalDays, currentDateStr,
   focusTitle, focusSubtitle, focusKeyQuestion, progressPercent,
 }) => {
   return (
@@ -24,6 +25,11 @@ export const HeaderInfo: React.FC<HeaderInfoProps> = ({
         <div>
           <div className="m-hdr-n">{`${firstName} ${lastName}`}</div>
           <div className="m-hdr-dir">Направление «{direction}»</div>
+          {groupName && (
+            <div style={{ fontSize: 11, color: '#B8621A', marginTop: 2, fontWeight: 600 }}>
+              Группа «{groupName}»
+            </div>
+          )}
         </div>
         <div style={{ textAlign: 'right' }}>
           <div className="m-hdr-d">{currentDateStr}</div>

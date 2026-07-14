@@ -31,3 +31,19 @@ export function initVkBridge(): Promise<void> {
     .catch(() => undefined);
   return vkInitPromise;
 }
+
+/** Native QR / barcode scanner. Returns raw code string or null if unavailable/cancelled. */
+export async function openCodeReader(): Promise<string | null> {
+  await initVkBridge();
+  if (!isVkEnvironment() || typeof bridge.send !== 'function') return null;
+  try {
+    const result = await withTimeout(
+      bridge.send('VKWebAppOpenCodeReader') as Promise<{ code_data?: string; qr_code?: string }>,
+      60_000,
+    );
+    const code = result?.code_data || result?.qr_code || null;
+    return typeof code === 'string' && code.trim() ? code.trim() : null;
+  } catch {
+    return null;
+  }
+}

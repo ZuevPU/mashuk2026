@@ -11,6 +11,7 @@ export const eventCreateSchema = z.object({
   timeSlot: optionalString,
   tags: z.union([z.array(z.string()), z.string()]).optional(),
   isPublished: optionalBool,
+  pushReminder: optionalBool,
 }).strict();
 
 export const eventUpdateSchema = eventCreateSchema.partial();
@@ -22,6 +23,7 @@ export const taskCreateSchema = z.object({
   points: z.coerce.number().int().min(0).optional(),
   dayNumber: z.coerce.number().int().positive().optional(),
   answerType: z.enum(['text', 'photo', 'text_and_photo']).optional(),
+  confirmationType: z.enum(['photo', 'post_url', 'qr', 'auto', 'team', 'text_photo']).optional(),
   allowRetry: optionalBool,
   autoConfirm: optionalBool,
   pushOnPublish: optionalBool,
@@ -43,9 +45,22 @@ export const questionCreateSchema = z.object({
   points: z.coerce.number().int().min(0).optional(),
   allowRetry: optionalBool,
   pushOnPublish: optionalBool,
+  publishTime: z.coerce.date().optional().nullable(),
+  closeTime: z.coerce.date().optional().nullable(),
 }).strict();
 
 export const questionUpdateSchema = questionCreateSchema.partial();
+
+export const copyQuestionsDaySchema = z.object({
+  fromDay: z.coerce.number().int().min(1).max(8),
+  toDay: z.coerce.number().int().min(1).max(8),
+  overwrite: z.boolean().optional().default(false),
+}).strict();
+
+export const seedTouchpointsSchema = z.object({
+  days: z.array(z.coerce.number().int().min(1).max(7)).optional(),
+  overwrite: z.boolean().optional().default(false),
+}).strict();
 
 export function parseBody<T>(schema: z.ZodType<T>, body: unknown): { ok: true; data: T } | { ok: false; error: string } {
   const result = schema.safeParse(body);

@@ -1,11 +1,12 @@
 import { Response } from 'express';
-import { eq, desc, and, inArray, count } from 'drizzle-orm';
+import { eq, desc, and, inArray, count, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   participants, directions, thematicTags, forumSettings, dayFocus,
   events, tasks, questions, questionOptions, taskSubmissions, exchangeQuestions,
   exchangeAnswers, eventAttendance, materials,
   levelsConfig, piggybank, answers, dailyStats, pushLog, pointsLog,
+  participantDayState, pedagogicalRoles, dayExperiments,
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { notifyAllParticipants, sendPushNotification } from '../services/pushService.js';
@@ -15,8 +16,12 @@ import {
   eventCreateSchema, eventUpdateSchema,
   taskCreateSchema, taskUpdateSchema,
   questionCreateSchema, questionUpdateSchema,
+  copyQuestionsDaySchema, seedTouchpointsSchema,
   parseBody,
 } from '../validation/adminSchemas.js';
+import { ROLE_KEYS } from '../services/roleService.js';
+import { inferReflectionDepth } from '../services/reflectionDepth.js';
+import { TOUCHPOINT_SLOTS, windowsForDay } from '../services/touchpointTemplates.js';
 
 export const listParticipants = async (req: AdminRequest, res: Response): Promise<void> => {
   const page = Math.max(1, Number(req.query.page) || 1);
@@ -41,6 +46,101 @@ export const updateParticipantDirection = async (req: AdminRequest, res: Respons
     .where(eq(participants.id, id)).returning();
   if (!updated) { res.status(404).json({ error: 'Participant not found' }); return; }
   res.json({ participant: updated });
+};
+
+export const updateParticipantRole = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const { pedagogicalRole, strongRole, growthRole, outcomesEdited, nextStepsEdited } = req.body;
+  const patch: Partial<typeof participants.$inferInsert> = {};
+  if (pedagogicalRole !== undefined) {
+    if (pedagogicalRole && !(ROLE_KEYS as readonly string[]).includes(pedagogicalRole)) {
+      res.status(400).json({ error: 'Invalid pedagogicalRole' });
+      return;
+    }
+    patch.pedagogicalRole = pedagogicalRole || null;
+  }
+  if (strongRole !== undefined) patch.strongRole = strongRole || null;
+  if (growthRole !== undefined) patch.growthRole = growthRole || null;
+  if (outcomesEdited !== undefined) patch.outcomesEdited = outcomesEdited;
+  if (nextStepsEdited !== undefined) patch.nextStepsEdited = nextStepsEdited;
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: 'No fields to update' });
+    return;
+  }
+  const [updated] = await db.update(participants)
+    .set(patch)
+    .where(eq(participants.id, id)).returning();
+  if (!updated) { res.status(404).json({ error: 'Participant not found' }); return; }
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req, actionType: 'role_change', section: 'participants', objectId: id,
+    newValue: patch, isCritical: true,
+  });
+  res.json({ participant: updated });
+};
+
+export const crudRoles = {
+  list: async (_req: AdminRequest, res: Response) => {
+    const roles = await db.select().from(pedagogicalRoles).orderBy(asc(pedagogicalRoles.sortOrder));
+    res.json({ roles });
+  },
+  update: async (req: AdminRequest, res: Response) => {
+    const id = Number(req.params.id);
+    const [updated] = await db.update(pedagogicalRoles)
+      .set({
+        name: req.body.name,
+        quadrant: req.body.quadrant,
+        essence: req.body.essence,
+        inClass: req.body.inClass,
+        keywords: req.body.keywords,
+        sortOrder: req.body.sortOrder,
+      })
+      .where(eq(pedagogicalRoles.id, id)).returning();
+    if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
+    res.json({ role: updated });
+  },
+};
+
+export const crudDayExperiments = {
+  list: async (req: AdminRequest, res: Response) => {
+    const day = req.query.day ? Number(req.query.day) : null;
+    const roleKey = req.query.roleKey as string | undefined;
+    let list = await db.select().from(dayExperiments);
+    if (day) list = list.filter(e => e.dayNumber === day);
+    if (roleKey) list = list.filter(e => e.roleKey === roleKey);
+    res.json({ experiments: list });
+  },
+  upsert: async (req: AdminRequest, res: Response) => {
+    const { dayNumber, roleKey, title, body, hint } = req.body;
+    if (!dayNumber || !roleKey || !title) {
+      res.status(400).json({ error: 'dayNumber, roleKey, title required' });
+      return;
+    }
+    if (!(ROLE_KEYS as readonly string[]).includes(roleKey)) {
+      res.status(400).json({ error: 'Invalid roleKey' });
+      return;
+    }
+    const [existing] = await db.select().from(dayExperiments)
+      .where(and(eq(dayExperiments.dayNumber, dayNumber), eq(dayExperiments.roleKey, roleKey)))
+      .limit(1);
+    if (existing) {
+      const [updated] = await db.update(dayExperiments)
+        .set({ title, body, hint })
+        .where(eq(dayExperiments.id, existing.id)).returning();
+      res.json({ experiment: updated });
+      return;
+    }
+    const [created] = await db.insert(dayExperiments).values({
+      dayNumber, roleKey, title, body, hint,
+    }).returning();
+    res.json({ experiment: created });
+  },
+  delete: async (req: AdminRequest, res: Response) => {
+    const id = Number(req.params.id);
+    const [deleted] = await db.delete(dayExperiments).where(eq(dayExperiments.id, id)).returning();
+    if (!deleted) { res.status(404).json({ error: 'Not found' }); return; }
+    res.json({ ok: true });
+  },
 };
 
 export const resetRegistration = async (req: AdminRequest, res: Response): Promise<void> => {
@@ -72,6 +172,7 @@ export const resetRegistration = async (req: AdminRequest, res: Response): Promi
     await tx.delete(eventAttendance).where(eq(eventAttendance.participantId, id));
     await tx.delete(piggybank).where(eq(piggybank.participantId, id));
     await tx.delete(pointsLog).where(eq(pointsLog.participantId, id));
+    await tx.delete(participantDayState).where(eq(participantDayState.participantId, id));
     await tx.delete(participants).where(eq(participants.id, id));
   });
 
@@ -95,6 +196,9 @@ export const createParticipant = async (req: AdminRequest, res: Response): Promi
     lastName: lastName || '',
     directionId: directionId || null,
     direction: directionName,
+    consentPd: true,
+    consentAnalytics: true,
+    onboardingCompletedAt: new Date(),
   }).returning();
   res.json({ participant: created });
 };
@@ -138,6 +242,47 @@ export const crudThematicTags = {
     const [deleted] = await db.delete(thematicTags).where(eq(thematicTags.id, id)).returning();
     if (!deleted) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ ok: true });
+  },
+  /** Объединить fromId → toId: перепривязать события/материалы/интересы, удалить from */
+  merge: async (req: AdminRequest, res: Response) => {
+    const fromId = Number(req.body.fromId);
+    const toId = Number(req.body.toId);
+    if (!fromId || !toId || fromId === toId) {
+      res.status(400).json({ error: 'fromId and toId required and must differ' });
+      return;
+    }
+    const [from] = await db.select().from(thematicTags).where(eq(thematicTags.id, fromId)).limit(1);
+    const [to] = await db.select().from(thematicTags).where(eq(thematicTags.id, toId)).limit(1);
+    if (!from || !to) { res.status(404).json({ error: 'Tag not found' }); return; }
+
+    const allEvents = await db.select().from(events);
+    let eventsUpdated = 0;
+    for (const ev of allEvents) {
+      const tags = Array.isArray(ev.tags) ? (ev.tags as string[]) : [];
+      if (!tags.includes(from.name)) continue;
+      const next = [...new Set(tags.map(t => (t === from.name ? to.name : t)))];
+      await db.update(events).set({ tags: next }).where(eq(events.id, ev.id));
+      eventsUpdated++;
+    }
+
+    const allMats = await db.select().from(materials);
+    let matsUpdated = 0;
+    for (const m of allMats) {
+      const tags = Array.isArray(m.tags) ? (m.tags as string[]) : [];
+      if (!tags.includes(from.name)) continue;
+      const next = [...new Set(tags.map(t => (t === from.name ? to.name : t)))];
+      await db.update(materials).set({ tags: next }).where(eq(materials.id, m.id));
+      matsUpdated++;
+    }
+
+    await db.delete(thematicTags).where(eq(thematicTags.id, fromId));
+    res.json({
+      ok: true,
+      kept: to,
+      removed: from.name,
+      eventsUpdated,
+      materialsUpdated: matsUpdated,
+    });
   },
 };
 
@@ -261,13 +406,47 @@ export const crudQuestions = {
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
     const [before] = await db.select().from(questions).where(eq(questions.id, id)).limit(1);
     if (!before) { res.status(404).json({ error: 'Not found' }); return; }
+
+    const [{ count: answerCount }] = await db.select({ count: count() }).from(answers).where(eq(answers.questionId, id));
+    const textChanging = (parsed.data.text && parsed.data.text !== before.text)
+      || (parsed.data.title && parsed.data.title !== before.title);
+
+    // Если уже есть ответы и меняется формулировка — архивируем старый, создаём новую версию
+    if (answerCount > 0 && textChanging) {
+      await db.update(questions).set({ status: 'archived' }).where(eq(questions.id, id));
+      const [created] = await db.insert(questions).values({
+        title: parsed.data.title ?? before.title,
+        text: parsed.data.text ?? before.text,
+        type: parsed.data.type ?? before.type,
+        block: parsed.data.block ?? before.block,
+        status: parsed.data.status ?? 'published',
+        publishTime: before.publishTime,
+        closeTime: before.closeTime,
+        points: parsed.data.points ?? before.points,
+        timePoint: parsed.data.timePoint ?? before.timePoint,
+        dayNumber: parsed.data.dayNumber ?? before.dayNumber,
+        direction: before.direction,
+        allowRetry: parsed.data.allowRetry ?? before.allowRetry,
+        pushOnPublish: parsed.data.pushOnPublish ?? before.pushOnPublish,
+        parentQuestionId: id,
+      }).returning();
+      const { logAdminAction } = await import('../services/adminActionsLog.js');
+      await logAdminAction({
+        req, actionType: 'question_update', section: 'questions', objectId: created.id,
+        oldValue: { id, title: before.title }, newValue: { id: created.id, parentQuestionId: id, answerCount },
+        comment: `Новая версия: уже было ${answerCount} ответов`, isCritical: true,
+      });
+      res.json({ question: created, versioned: true, archivedId: id, previousAnswerCount: answerCount });
+      return;
+    }
+
     const [updated] = await db.update(questions).set(parsed.data).where(eq(questions.id, id)).returning();
     const wasPublished = before?.status === 'published';
     const isPublished = updated?.status === 'published';
     if (updated?.pushOnPublish && isPublished && !wasPublished) {
       await notifyAllParticipants(`Новый вопрос: ${updated.title}`, 'question_publish');
     }
-    res.json({ question: updated });
+    res.json({ question: updated, versioned: false });
   },
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
@@ -297,6 +476,114 @@ export const crudQuestions = {
     await db.delete(questionOptions).where(eq(questionOptions.id, optionId));
     res.json({ ok: true });
   },
+};
+
+/** Скопировать вопросы с дня fromDay на toDay */
+export const copyQuestionsDay = async (req: AdminRequest, res: Response): Promise<void> => {
+  const parsed = parseBody(copyQuestionsDaySchema, req.body);
+  if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
+  const { fromDay, toDay, overwrite } = parsed.data;
+  if (fromDay === toDay) { res.status(400).json({ error: 'fromDay and toDay must differ' }); return; }
+
+  const source = await db.select().from(questions).where(eq(questions.dayNumber, fromDay));
+  if (source.length === 0) { res.status(404).json({ error: 'No questions on fromDay' }); return; }
+
+  if (overwrite) {
+    const targets = await db.select().from(questions).where(eq(questions.dayNumber, toDay));
+    for (const t of targets) {
+      await db.delete(answers).where(eq(answers.questionId, t.id));
+      await db.delete(questionOptions).where(eq(questionOptions.questionId, t.id));
+      await db.delete(questions).where(eq(questions.id, t.id));
+    }
+  }
+
+  const [settings] = await db.select().from(forumSettings).limit(1);
+  const startDate = settings?.startDate || new Date();
+  const created = [];
+  for (const q of source) {
+    const slot = TOUCHPOINT_SLOTS.find(s => s.title === q.title);
+    let publishTime = q.publishTime;
+    let closeTime = q.closeTime;
+    if (slot) {
+      const w = windowsForDay(startDate, toDay, slot);
+      publishTime = w.publishTime;
+      closeTime = w.closeTime;
+    } else if (q.publishTime && q.closeTime) {
+      const delta = (toDay - fromDay) * 86_400_000;
+      publishTime = new Date(q.publishTime.getTime() + delta);
+      closeTime = new Date(q.closeTime.getTime() + delta);
+    }
+    const [row] = await db.insert(questions).values({
+      title: q.title,
+      text: q.text,
+      type: q.type,
+      block: q.block,
+      status: q.status,
+      publishTime,
+      closeTime,
+      points: q.points,
+      timePoint: q.timePoint,
+      dayNumber: toDay,
+      direction: q.direction,
+      allowRetry: q.allowRetry,
+      pushOnPublish: false,
+      parentQuestionId: q.id,
+    }).returning();
+    created.push(row);
+    const opts = await db.select().from(questionOptions).where(eq(questionOptions.questionId, q.id));
+    for (const o of opts) {
+      await db.insert(questionOptions).values({
+        questionId: row.id,
+        label: o.label,
+        value: o.value,
+        sortOrder: o.sortOrder,
+      });
+    }
+  }
+  res.json({ ok: true, created: created.length, questions: created });
+};
+
+/** Развернуть шаблон 7 точек на выбранные дни */
+export const seedTouchpointsTemplate = async (req: AdminRequest, res: Response): Promise<void> => {
+  const parsed = parseBody(seedTouchpointsSchema, req.body ?? {});
+  if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
+  const days = parsed.data.days ?? [1, 2, 3, 4, 5, 6, 7];
+  const overwrite = parsed.data.overwrite;
+
+  const [settings] = await db.select().from(forumSettings).limit(1);
+  const startDate = settings?.startDate || new Date('2026-08-12T00:00:00');
+  let created = 0;
+
+  for (const day of days) {
+    if (overwrite) {
+      const existing = await db.select().from(questions).where(eq(questions.dayNumber, day));
+      for (const q of existing) {
+        if (!TOUCHPOINT_SLOTS.some(s => s.title === q.title)) continue;
+        await db.delete(answers).where(eq(answers.questionId, q.id));
+        await db.delete(questionOptions).where(eq(questionOptions.questionId, q.id));
+        await db.delete(questions).where(eq(questions.id, q.id));
+      }
+    }
+    const existing = await db.select().from(questions).where(eq(questions.dayNumber, day));
+    for (const slot of TOUCHPOINT_SLOTS) {
+      if (existing.some(q => q.title === slot.title) && !overwrite) continue;
+      const { publishTime, closeTime } = windowsForDay(startDate, day, slot);
+      await db.insert(questions).values({
+        title: slot.title,
+        text: slot.text,
+        type: slot.type,
+        block: slot.block,
+        status: 'published',
+        publishTime,
+        closeTime,
+        points: slot.points,
+        dayNumber: day,
+        timePoint: slot.timePoint,
+      });
+      created++;
+    }
+  }
+  res.json({ ok: true, created, days });
 };
 
 export const moderateTask = async (req: AdminRequest, res: Response): Promise<void> => {
@@ -476,26 +763,81 @@ export const exportParticipants = async (_req: AdminRequest, res: Response): Pro
   const list = await db.select().from(participants);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename=participants.csv');
-  const header = 'id,vk_id,first_name,last_name,direction,interests,path_points,experience_points,created_at\n';
+  const header = 'id,vk_id,first_name,last_name,age,workplace,position,direction,pedagogical_role,interests,path_points,experience_points,onboarding_completed_at,created_at\n';
   const rows = list.map(p =>
-    [p.id, p.vkId, p.firstName, p.lastName, p.direction, JSON.stringify(p.interests || []), p.pathPoints, p.experiencePoints, p.createdAt].join(',')
+    [
+      p.id, p.vkId, p.firstName, p.lastName, p.age, JSON.stringify(p.workplace || ''),
+      JSON.stringify(p.position || ''), p.direction, p.pedagogicalRole,
+      JSON.stringify(p.interests || []), p.pathPoints, p.experiencePoints,
+      p.onboardingCompletedAt, p.createdAt,
+    ].join(',')
   ).join('\n');
   res.send('\uFEFF' + header + rows);
 };
 
-export const exportAnswers = async (_req: AdminRequest, res: Response): Promise<void> => {
-  const rows = await db.select({ a: answers, p: participants, q: questions })
+export const exportAnswers = async (req: AdminRequest, res: Response): Promise<void> => {
+  const day = req.query.day ? Number(req.query.day) : null;
+  const type = (req.query.type as string | undefined)?.toLowerCase() || null;
+  // type: checkin | direction | lessons | evening | point_a | point_b | all
+
+  let rows = await db.select({ a: answers, p: participants, q: questions })
     .from(answers)
     .leftJoin(participants, eq(answers.participantId, participants.id))
     .leftJoin(questions, eq(answers.questionId, questions.id));
+
+  if (day) {
+    rows = rows.filter(r => r.q?.dayNumber === day);
+  }
+  if (type && type !== 'all') {
+    rows = rows.filter(r => {
+      const block = (r.q?.block || '').toLowerCase();
+      const t = (r.q?.type || '').toLowerCase();
+      if (type === 'checkin' || type === 'проверка') {
+        return block.includes('проверка') || t === 'checkin';
+      }
+      if (type === 'direction' || type === 'направление') {
+        return block.includes('направлен') || block.includes('осмыслен');
+      }
+      if (type === 'lessons' || type === 'уроки') {
+        return block.includes('урок');
+      }
+      if (type === 'evening' || type === 'итоги') {
+        return block.includes('итог') || block.includes('вечер');
+      }
+      if (type === 'point_a' || type === 'точка_а') {
+        return block.includes('целеполагание') || block.includes('точка а');
+      }
+      if (type === 'point_b' || type === 'точка_б') {
+        return block.includes('точка б');
+      }
+      return true;
+    });
+  }
+
+  const includeDepth = req.query.depth === '1' || req.query.depth === 'true';
+
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename=answers.csv');
-  const header = 'participant_id,name,direction,block,question_title,question_type,time_point,word_count,points,created_at\n';
-  const csv = rows.map(r => [
-    r.p?.id, `${r.p?.firstName} ${r.p?.lastName}`, r.p?.direction,
-    r.q?.block, r.q?.title, r.q?.type, r.q?.timePoint || '',
-    r.a.wordCount, r.a.pointsAwarded, r.a.createdAt,
-  ].join(',')).join('\n');
+  const filename = day ? `answers_day${day}.csv` : 'answers.csv';
+  res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+  const header = includeDepth
+    ? 'participant_id,name,direction,day,block,question_title,question_type,time_point,answer,word_count,depth_orientir,points,created_at\n'
+    : 'participant_id,name,direction,day,block,question_title,question_type,time_point,answer,word_count,points,created_at\n';
+  const csv = rows.map(r => {
+    const answerText = typeof r.a.answerData === 'string'
+      ? r.a.answerData
+      : JSON.stringify(r.a.answerData ?? '');
+    const cells: Array<string | number | null | undefined> = [
+      r.p?.id, `${r.p?.firstName} ${r.p?.lastName}`, r.p?.direction,
+      r.q?.dayNumber ?? '', r.q?.block, r.q?.title, r.q?.type, r.q?.timePoint || '',
+      `"${answerText.replace(/"/g, '""')}"`,
+      r.a.wordCount,
+    ];
+    if (includeDepth) {
+      cells.push(inferReflectionDepth(answerText) || '');
+    }
+    cells.push(r.a.pointsAwarded, r.a.createdAt ? new Date(r.a.createdAt).toISOString() : '');
+    return cells.join(',');
+  }).join('\n');
   res.send('\uFEFF' + header + csv);
 };
 
@@ -648,6 +990,12 @@ export const sendManualPush = async (req: AdminRequest, res: Response): Promise<
   } else {
     await notifyAllParticipants(text, 'manual');
   }
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req, actionType: 'push_send', section: 'push',
+    newValue: { participantId: participantId || 'all', text: String(text).slice(0, 200) },
+    isCritical: true,
+  });
   res.json({ ok: true });
 };
 

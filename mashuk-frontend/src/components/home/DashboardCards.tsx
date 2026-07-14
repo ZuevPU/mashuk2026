@@ -69,21 +69,108 @@ export const MiniTasksCard: React.FC<{totalCount: number, hasNew?: boolean}> = (
   );
 };
 
-export const StatsRow: React.FC<{path: number, exp: number, ideas: number}> = ({ path, exp, ideas }) => {
+export const StatsRow: React.FC<{
+  path: number;
+  exp: number;
+  ideas: number;
+  pathLevel?: number;
+  experienceLevel?: number;
+  pathProgress?: number;
+  experienceProgress?: number;
+}> = ({
+  path, exp, ideas,
+  pathLevel, experienceLevel, pathProgress = 0, experienceProgress = 0,
+}) => {
   return (
     <div className="m-stats">
       <div className="m-st">
         <div className="m-sv">📍 {path}</div>
-        <div className="m-sl">Путь</div>
+        <div className="m-sl">Путь{pathLevel ? ` · ур. ${pathLevel}` : ''}</div>
+        <div style={{ height: 4, background: '#E8E0D4', borderRadius: 4, marginTop: 6, overflow: 'hidden' }}>
+          <div style={{ width: `${Math.round(pathProgress * 100)}%`, height: '100%', background: '#2D6A4F', borderRadius: 4 }} />
+        </div>
       </div>
       <div className="m-st">
         <div className="m-sv">⚡ {exp}</div>
-        <div className="m-sl">Опыт</div>
+        <div className="m-sl">Опыт{experienceLevel ? ` · ур. ${experienceLevel}` : ''}</div>
+        <div style={{ height: 4, background: '#E8E0D4', borderRadius: 4, marginTop: 6, overflow: 'hidden' }}>
+          <div style={{ width: `${Math.round(experienceProgress * 100)}%`, height: '100%', background: '#B8621A', borderRadius: 4 }} />
+        </div>
       </div>
       <div className="m-st">
         <div className="m-sv">✦ {ideas}</div>
         <div className="m-sl">Идей</div>
       </div>
+    </div>
+  );
+};
+
+export const RoleOfDayCard: React.FC<{
+  name: string;
+  quadrant?: string | null;
+  essence?: string | null;
+}> = ({ name, quadrant, essence }) => (
+  <div className="m-card" style={{ background: 'linear-gradient(135deg,#FFF3E0 0%,#FFECB3 100%)' }}>
+    <div style={{ fontSize: 11, color: '#888', fontWeight: 600 }}>Роль дня</div>
+    <div style={{ fontSize: 16, fontWeight: 800, marginTop: 4 }}>◆ {name}</div>
+    {quadrant && <div style={{ fontSize: 11, color: '#B8621A', marginTop: 2 }}>{quadrant}</div>}
+    {essence && <div style={{ fontSize: 12, marginTop: 8, lineHeight: 1.4, color: '#5D4B37' }}>{essence}</div>}
+  </div>
+);
+
+export const ExperimentCard: React.FC<{
+  title: string;
+  body?: string | null;
+  hint?: string | null;
+  roleName?: string | null;
+  status: string;
+  onStatusChange: (status: 'in_progress' | 'done') => void;
+}> = ({ title, body, hint, roleName, status, onStatusChange }) => {
+  const [open, setOpen] = React.useState(true);
+  return (
+    <div className="m-card">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={e => { if (e.key === 'Enter') setOpen(o => !o); }}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+      >
+        <div>
+          <div style={{ fontSize: 11, color: '#888', fontWeight: 600 }}>Эксперимент дня</div>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>{title}</div>
+        </div>
+        <span style={{ fontSize: 12, color: '#888' }}>{open ? '▾' : '▸'}</span>
+      </div>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          {roleName && (
+            <div style={{ fontSize: 11, marginBottom: 8 }}>
+              Развиваю сегодня · <strong style={{ color: '#B8621A' }}>◆ {roleName}</strong>
+            </div>
+          )}
+          {body && <p style={{ fontSize: 13, lineHeight: 1.45, margin: '0 0 8px' }}>{body}</p>}
+          {hint && <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>{hint}</div>}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="m-prio-btn"
+              style={{ opacity: status === 'in_progress' ? 1 : 0.7 }}
+              onClick={() => onStatusChange('in_progress')}
+            >
+              В процессе
+            </button>
+            <button
+              type="button"
+              className="m-prio-btn"
+              style={{ opacity: status === 'done' ? 1 : 0.7 }}
+              onClick={() => onStatusChange('done')}
+            >
+              Сделано
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

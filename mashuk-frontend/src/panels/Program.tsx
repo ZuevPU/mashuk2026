@@ -31,7 +31,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   const { setModal } = useAppModal();
   const [activeTab, setActiveTab] = useState<'sched' | 'kb'>('sched');
   const [activeDay, setActiveDay] = useState(1);
-  const [totalDays, setTotalDays] = useState(4);
+  const [totalDays, setTotalDays] = useState(8);
   const [currentDay, setCurrentDay] = useState(1);
   const [slots, setSlots] = useState<ProgramSlot[]>([]);
   const [recommendations, setRecommendations] = useState<any[]>([]);
@@ -76,7 +76,13 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
     let status: DayStatus = 'future';
     if (dayNum < currentDay) status = 'done';
     else if (dayNum === currentDay) status = 'today';
-    return { id: dayNum, title: `День ${dayNum}`, subtitle: '', status };
+    const weekday = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс', 'пн · отъезд'][i] || '';
+    return {
+      id: dayNum,
+      title: `День ${dayNum}`,
+      subtitle: dayNum < currentDay ? `✓ ${weekday}` : weekday,
+      status,
+    };
   });
 
   const handleRecClick = async (eventId: number) => {
@@ -124,6 +130,16 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
               <Button style={{ marginTop: 8 }} onClick={loadProgram}>Повторить</Button>
             </>
           ) : activeTab === 'sched' ? (            <div style={{ marginTop: 12 }}>
+              {activeDay === 8 ? (
+                <div className="m-card" style={{ background: 'linear-gradient(135deg,#FFF3E0,#FFECB3)', border: '1px solid #FFE082', textAlign: 'center' }}>
+                  <div style={{ fontSize: 20, marginBottom: 6 }}>🎯</div>
+                  <div style={{ fontSize: 13, fontWeight: 800 }}>День 8 · Отъезд</div>
+                  <div style={{ fontSize: 11, color: '#5D4B37', marginTop: 6, lineHeight: 1.4 }}>
+                    Утро — Точка Б (финальная рефлексия). Дневная программа не запускается. Эксперимент дня не показывается.
+                  </div>
+                </div>
+              ) : (
+              <>
               {recommendations.length > 0 && (
                 <div className="m-rec-block">
                   <div className="m-rec-block-hdr">Рекомендуем тебе</div>
@@ -176,6 +192,8 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
                   <EmptyState icon="📅" title="Расписание пусто" subtitle={`События для дня ${activeDay} появятся позже`} />
                 )}
               </div>
+              </>
+              )}
             </div>
           ) : (
             <div style={{ marginTop: 12 }}>

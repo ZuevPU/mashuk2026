@@ -1,150 +1,182 @@
-# QA Checklist — соответствие мокапу page.html
+# QA Checklist — Машук 2026 · ТЗ v11
 
-## Регистрация
-- [x] ФИО автозаполняется из VK (readonly)
-- [x] Выбор направления из API
-- [x] Экран подтверждения перед сохранением
-- [x] Повторный вход без регистрации
 
-## Главная (s-home)
-- [x] 4 дня форума (не 7)
-- [x] Фокус дня, дата, прогресс
-- [x] Карточка «Сейчас важно»
-- [x] Уведомление о пропущенных вопросах (красная карточка)
-- [x] Блоки «Вопросы» и «Задания»
-- [x] Быстрая фиксация: Идея / Мысль / Вопрос
-- [x] Статистика Путь / Опыт / Идеи
-- [x] Переключатель Утро / День / Вечер
-- [x] Карточки расписания СКОРО / СЕЙЧАС / ДАЛЕЕ
-- [x] Touchpoints с красной точкой «пропущено»
 
-## Программа (s-prog)
-- [x] Переключатель 4 дней
-- [x] Timeline событий + клик → деталь
-- [x] Рекомендации по интересам
-- [x] База знаний: lock banner, спикеры, материалы, badge «Новый»
-- [x] VKWebAppOpenURL для внешних ссылок материалов
+База: дизайн v9 + онбординг + дельта v11.
 
-## Задания (s-tasks)
-- [x] Header «День N · X из Y» + баллы за день
-- [x] Category chips
-- [x] Banner KB locked
-- [x] Прогресс дня
-- [x] Фильтры: Все / Актуальные / Выполненные / На проверке
-- [x] Статусы: Скоро / Доступно / На проверке / Выполнено / Не принято
-- [x] Отправка с текстом и фото
+См. [GAP_V11.md](GAP_V11.md), [ROADMAP_V11.md](ROADMAP_V11.md).
 
-## Вопросы / Общение (s-chat)
-- [x] Единая страница «Общение» (4 блока)
-- [x] Рефлексивные вопросы + dimmed answered
-- [x] Обмен опытом
-- [x] «Мой вопрос»
-- [x] «Написать организаторам» (копилка)
-- [x] Типы: open, choice, multi, checkin
 
-## Профиль (s-me)
-- [x] Аватар (VK photo), имя, направление
-- [x] Статистика активностей
-- [x] Путь и Опыт с уровнями
-- [x] Траектория A→B, запрос, чеклист итогов
-- [x] Превью копилки
 
-## Мобильная вёрстка
-- [x] Full width на `<520px`, без горизонтального скролла
-- [x] Tabbar fixed + safe-area
-- [x] Flex-wrap карточек на `<360px`
+## Покрытие разделов v11
 
-## Админка CRUD
-- [x] События / теги — edit + delete
-- [x] Задания / вопросы — edit + delete
-- [x] Материалы — edit + delete
-- [x] Баллы — edit pointsPerUnit
-- [x] Push — всем или по participantId
 
-## E2E сценарий (участник)
-1. Регистрация → Главная
-2. Целеполагание (interests)
-3. Checkin эмоций
-4. Задание с отправкой
-5. Быстрая запись в копилку
-6. Профиль — проверка баллов
 
-- [x] API-сценарий участника (`npm run test:e2e` — регистрация, вопросы, задания, копилка, exchange)
-- [ ] UI-прогон в mini app (ручная отметка перед форумом)
+| Раздел | Статус |
 
-## E2E «данные в админку»
-1. Участник (vk_id=1) → регистрация → ответ на вопрос → задание → копилка → exchange → attendance
-2. Админ → **Модерация** / **Данные** → все записи видны
-3. **Выгрузки** → 7 CSV согласованы с БД
-4. **Аналитика** → «Пересчитать» → графики не пустые
+|--------|--------|
 
-### Автоматизировано (API)
+| Регистрация / онбординг | есть (+ сводка, 6 карточек ролей, веса) |
+
+| 6 ролей + диагностика | есть (+ веса в админке) |
+
+| Главная / фазы / точки | есть (+ бейдж группы) |
+
+| Точки 4–5 выбор урока | есть |
+
+| Точка Б (5 ответов + strong/growth) | есть |
+
+| Программа + БЗ ≥4/7 | есть |
+
+| Задания + QR / волонтёр | есть (deep-link Мой QR) |
+
+| Вопросы 3 таба + реакции | есть |
+
+| Профиль / итоговая карточка / push | есть |
+
+| Выгрузки / PDF / роли по дням | есть |
+
+| Аналитика + смысловые слои | есть |
+
+| Админка: матрица прав / карточка участника | есть |
+
+
+
+## Онбординг
+
+- [x] Шаг 1–4 + сохранение + без повторного показа
+
+- [x] Выбор группы при `group_assign_mode=list` (код)
+
+- [x] Тексты согласий с версиями из `/consents/active` (код)
+
+- [x] Reject при устаревшей версии согласия (API E2E)
+
+- [x] Экран подтверждения данных перед save
+
+- [x] 6 полных карточек ролей на результате диагностики
+
+- [x] Веса диагностики в админке (`role_diagnostics_config`)
+
+
+
+## Главная / Точка Б
+
+- [x] 8 дней, фокус, роль дня, эксперимент, вечерняя анкета (код)
+
+- [x] Бейдж группы в HeaderInfo
+
+- [x] Фазы дня по МСК из API
+
+- [x] Вечерняя анкета: 9 шкал + условные + открытые + роль на завтра
+
+- [x] Точки 7×7: seed-touchpoints / copy-day в админке
+
+- [x] Точки 4–5: выбор урока из events дня
+
+- [x] Точка Б UI: 5 ответов + сильная / роль роста
+
+- [x] Locked после смены календарного дня / `currentDay` (unit + API E2E)
+
+
+
+## Задания / волонтёр / QR
+
+- [x] confirmationType photo / post_url / qr / auto / team (код)
+
+- [x] Admin QR → download image URL
+
+- [x] Мой QR = deep-link `#/volunteer?qr=…`
+
+- [x] Volunteer: paste ссылки/токена + confirm
+
+- [x] QR → `/volunteer/confirm` (API E2E; native camera — P2)
+
+
+
+## Вопросы
+
+- [x] 3 таба: рефлексия / обмен / организаторам
+
+- [x] Реакции 👍 / «Хочу обсудить» в UI
+
+- [x] Level-2 комментарии
+
+
+
+## Профиль / настройки
+
+- [x] Push opt-out по типам + скрытие из рейтинга
+
+- [x] Медали из `/profile/medals`
+
+- [x] «Собрать Что получилось»
+
+- [x] «В копилку» на материале БЗ
+
+
+
+## Админка
+
+- [x] Publish дня + история версий
+
+- [x] Materials: eventId / direction / tags / isGeneral / includeInAnalytics
+
+- [x] Merge тегов
+
+- [x] Medals: awardType + conditionRule
+
+- [x] Org threads / push templates / analytics semantic
+
+- [x] Экспорт `/exports/day?type=` + листы ролей + PDF
+
+- [x] Versioning toast при правке вопроса с ответами
+
+- [x] Матрица прав (read-only) + карточка участника с табами
+
+
+
+## E2E / сборка / прод
 
 ```powershell
+
 cd mashuk-backend
-npm run test:e2e
+
+npx tsx src/db/apply-0006.ts
+
+npx tsx src/db/apply-0007.ts
+
+npx tsx src/db/apply-0008.ts
+
+npm run db:seed
+
+npm run db:ops
+
+# или: npm run db:prod-ready
+
+npm test
+
+npm run build
+
+
+
+cd ..\mashuk-frontend; npm run build
+
+cd ..\mashuk-admin; npm run build
+
 ```
 
-Покрывает: регистрацию E2E-участника (vk_id=999001), ответы/задания/копилку/exchange, admin CSV×7, analytics recalc, push_log.
+- [x] Unit + E2E backend (47 tests)
 
-- [x] E2E API flow (`npm run test:e2e`)
+- [x] Ops bootstrap + apply-0008 diagnostics config
 
-## Polish UX (спринт pre-production)
-- [x] Tabbar: подписи «Главная / Программа / Задания / Общение / Профиль»
-- [x] Badge на tab «Общение» (availableQuestions из `/home`)
-- [x] Empty states: Program, Tasks, Questions, Profile (копилка)
-- [x] Admin: расширенный edit tasks/questions/events + delete options
-- [x] Admin: loading bar при смене вкладки
-- [x] Zod validation admin create/update (events, tasks, questions)
-- [x] [DEPLOY.md](./DEPLOY.md) — чеклист Timeweb + VK manual
+- [ ] Финальный визуальный smoke в VK mini app на устройстве перед форумом (не блокер кода)
 
-## Стабильность (автоматически покрыто)
-- [x] Регистрация → главная без bounce (initComplete + onRegistered)
-- [x] Init не перезапускается на каждый tab
-- [x] Global error при недоступном backend
-- [x] Program panel: error + retry
-- [x] Admin tab: loading + toast при ошибке загрузки
-- [x] moderateTask: баллы не дублируются
-- [x] Exchange: баллы только после approve модерации
-- [x] resetRegistration: cascade delete связанных данных
-- [x] Admin CRUD: 404 на missing id
-- [x] `/health/ready` проверяет БД
-- [x] Docker: migrate перед стартом
-- [x] vk_ts expiration в vkAuth
 
-## Сборка перед деплоем
-```powershell
-cd mashuk-backend; npm test; npm run build
-cd mashuk-frontend; npm run build
-cd mashuk-admin; npm run build
-```
 
-## VK тест (ручной прогон перед форумом)
+## Терминология
 
-Полный чеклист деплоя: [DEPLOY.md](./DEPLOY.md)
+- [x] «проверка состояния» (не «чек-ин»)
 
-Скрипт: `.\scripts\vk-tunnel.ps1`
+- [x] «полезные знакомства» (не «нетворкинг»)
 
-### Автоматизировано
-
-- [x] VK sign HMAC + vk_ts expiration (`npm test` — vkSign utility)
-- [x] `/auth/me` с signed Bearer при `SKIP_VK_SIGN=false` (`.\scripts\verify-vk-auth.ps1`)
-- [x] Push API → запись в push_log (`npm run test:e2e`)
-
-### Ручной прогон в реальном VK
-
-1. **Tunnel:** `npx @vkontakte/vk-tunnel --http-protocol=http --host=localhost --port=5173`
-2. **Backend .env:** `SKIP_VK_SIGN=false`, `VK_APP_SECRET=<из VK Mini App>`
-3. **Открыть mini app через VK** — регистрация/главная без `X-Test-Vk-Id`
-4. **Push:** задать `VK_SERVICE_TOKEN`, проверить доставку в VK
-
-- [ ] Запуск через tunnel в реальном VK (ручная отметка после прогона)
-- [ ] VK Sign в реальном клиенте — нет 401 на `/auth/me`
-- [ ] Push доставляется в VK (не только push_log)
-
-## Timeweb deploy
-
-- [x] `docker-compose.prod.yml` + `.env.production.example` (backend, frontend, admin)
-- [x] `scripts/pre-deploy.ps1` — tests + builds + docker build
-- [x] `scripts/deploy-timeweb.ps1` — проверка dist + чеклист выкладки
-- [ ] Фактический деплой на Timeweb (ручная отметка после выкладки)

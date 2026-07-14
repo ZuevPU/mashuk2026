@@ -13,7 +13,9 @@
     "db:push": "drizzle-kit push",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
-    "db:setup": "npm run db:push && npm run db:seed"
+    "db:setup": "npm run db:push && npm run db:seed",
+    "db:ops": "tsx src/db/ops-bootstrap.ts",
+    "db:prod-ready": "tsx src/db/apply-0006.ts && tsx src/db/apply-0007.ts && tsx src/db/apply-0008.ts && npm run db:seed && npm run db:ops"
   },
   "keywords": [],
   "author": "",
@@ -23,9 +25,11 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
     "lru-cache": "^11.5.1",
+    "pdfkit": "^0.17.2",
     "pg": "^8.22.0",
     "zod": "^3.24.2"
   },
@@ -33,6 +37,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.0.1",
+    "@types/pdfkit": "^0.13.9",
     "@types/pg": "^8.20.0",
     "@types/supertest": "^6.0.3",
     "drizzle-kit": "^0.31.10",

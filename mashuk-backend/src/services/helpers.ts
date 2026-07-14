@@ -10,9 +10,13 @@ export async function getForumSettings() {
   const [settings] = await db.select().from(forumSettings).limit(1);
   const result = settings ?? {
     currentDay: 1,
-    totalDays: 4,
+    totalDays: 8,
     recommendationThreshold: 1,
     sectionsVisibility: {},
+    startDate: null,
+    groupAssignMode: 'list',
+    kbUnlockThreshold: 4,
+    kbUnlockDisabled: false,
   };
   
   cache.set('forumSettings', result);
@@ -33,3 +37,13 @@ export function isPublished(publishTime: Date | null, closeTime: Date | null, no
   if (closeTime && closeTime < now) return false;
   return true;
 }
+
+export {
+  getMoscowPhase,
+  getMoscowParts,
+  isEveningWrapWindow,
+  getTouchpointAccess,
+  resolveEffectiveCurrentDay,
+  toTouchpointUiStatus,
+  getCalendarForumDay,
+} from './timePhase.js';

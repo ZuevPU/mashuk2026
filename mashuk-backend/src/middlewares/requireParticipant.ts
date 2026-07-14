@@ -20,7 +20,7 @@ export const requireParticipant = async (
   }
 
   const [user] = await db.select().from(participants).where(eq(participants.vkId, vkUserId)).limit(1);
-  if (!user) {
+  if (!user || !user.onboardingCompletedAt) {
     res.status(403).json({ error: 'Registration required', status: 'needs_registration' });
     return;
   }

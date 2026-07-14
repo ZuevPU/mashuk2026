@@ -5,6 +5,7 @@ import { createApp } from './app.js';
 import { runMigrations } from './db/migrate.js';
 import { runSeed } from './db/seed.js';
 import { startAnalyticsScheduler } from './services/analyticsService.js';
+import { startPushScheduler } from './services/pushScheduler.js';
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ app.listen(port, host, () => {
         }
       }
       startAnalyticsScheduler();
+      startPushScheduler();
     } catch (err) {
       console.error('Migrations failed — server stays up for healthchecks, but DB routes will fail until this is fixed and the app is restarted:', err);
     }

@@ -4,7 +4,13 @@ import { pointsLog, levelsConfig, participants } from '../db/schema.js';
 
 type PointTrack = 'path' | 'experience';
 
-const PATH_ACTIONS = new Set(['question_answer', 'piggybank_idea', 'piggybank_thought', 'piggybank_question']);
+const PATH_ACTIONS = new Set([
+  'question_answer',
+  'evening_complete',
+  'piggybank_idea',
+  'piggybank_thought',
+  'piggybank_question',
+]);
 const EXP_ACTIONS = new Set(['task_complete', 'exchange_question', 'exchange_answer', 'piggybank_entry']);
 
 const DEFAULT_THRESHOLDS = [0, 100, 250, 500, 1000];
@@ -57,6 +63,28 @@ export async function getLevel(points: number, track: PointTrack = 'path'): Prom
     if (points >= thresholds[i]) level = i + 1;
   }
   return level;
+}
+
+/** Progress 0..1 within current level toward next threshold */
+export async function getLevelProgress(points: number, track: PointTrack = 'path'): Promise<{
+  level: number;
+  progress: number;
+  currentFloor: number;
+  nextThreshold: number | null;
+}> {
+  const thresholds = await getLevelThresholds(track);
+  let level = 1;
+  for (let i = 0; i < thresholds.length; i++) {
+    if (points >= thresholds[i]) level = i + 1;
+  }
+  const floorIdx = Math.max(0, level - 1);
+  const currentFloor = thresholds[floorIdx] ?? 0;
+  const nextThreshold = level < thresholds.length ? thresholds[level] : null;
+  if (nextThreshold == null || nextThreshold <= currentFloor) {
+    return { level, progress: 1, currentFloor, nextThreshold: null };
+  }
+  const progress = Math.min(1, Math.max(0, (points - currentFloor) / (nextThreshold - currentFloor)));
+  return { level, progress, currentFloor, nextThreshold };
 }
 
 export function getLevelSync(points: number, thresholds: number[] = DEFAULT_THRESHOLDS): number {

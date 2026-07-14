@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { eq, and, asc, lte, or, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { events, eventAttendance, materials, questions, answers } from '../db/schema.js';
+import { events, eventAttendance, materials, questions, answers, scheduleDays } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { getForumSettings, formatTime } from '../services/helpers.js';
 import { cache } from '../services/cache.js';
@@ -10,36 +10,59 @@ export const getProgramSettings = async (req: ParticipantRequest, res: Response)
   const settings = await getForumSettings();
   res.json({
     currentDay: settings.currentDay ?? 1,
-    totalDays: settings.totalDays ?? 4,
+    totalDays: settings.totalDays ?? 8,
     recommendationThreshold: settings.recommendationThreshold ?? 1,
     sectionsVisibility: settings.sectionsVisibility ?? {},
+    startDate: settings.startDate ?? null,
   });
 };
 
-async function countTouchpoints(participantId: number): Promise<number> {
+/** Count answered published questions for a specific day (touchpoints). */
+export async function countTouchpointsForDay(participantId: number, dayNumber: number): Promise<{
+  completed: number;
+  total: number;
+}> {
   const now = new Date();
-  const publishedQuestions = await db.select().from(questions)
+  const dayQuestions = await db.select().from(questions)
     .where(and(
       eq(questions.status, 'published'),
+      eq(questions.dayNumber, dayNumber),
       or(isNull(questions.publishTime), lte(questions.publishTime, now)),
     ));
+  if (dayQuestions.length === 0) {
+    return { completed: 0, total: 7 };
+  }
   const participantAnswers = await db.select().from(answers)
     .where(eq(answers.participantId, participantId));
   const answeredIds = new Set(participantAnswers.map(a => a.questionId));
-  return participantAnswers.filter(a => publishedQuestions.some(q => q.id === a.questionId)).length;
+  const completed = dayQuestions.filter(q => answeredIds.has(q.id)).length;
+  return { completed, total: dayQuestions.length };
 }
 
 export const getProgram = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const day = Number(req.query.day) || (await getForumSettings()).currentDay || 1;
-    
-    const cacheKey = `events_day_${day}`;
+
+    const [dayMeta] = await db.select().from(scheduleDays).where(eq(scheduleDays.dayNumber, day)).limit(1);
+
+    const cacheKey = `events_day_${day}_pub`;
     let list = cache.get(cacheKey) as typeof events.$inferSelect[] | undefined;
-    
+
     if (!list) {
+      // Participant sees events only after schedule day publish (day_published) + isPublished
       list = await db.select().from(events)
-        .where(and(eq(events.dayNumber, day), eq(events.isPublished, true)))
+        .where(and(
+          eq(events.dayNumber, day),
+          eq(events.isPublished, true),
+          eq(events.dayPublished, true),
+        ))
         .orderBy(asc(events.startTime));
+      // Fallback: if schedule_days row missing (pre-publish workflow), show classic isPublished events
+      if (list.length === 0 && !dayMeta) {
+        list = await db.select().from(events)
+          .where(and(eq(events.dayNumber, day), eq(events.isPublished, true)))
+          .orderBy(asc(events.startTime));
+      }
       cache.set(cacheKey, list);
     }
 
@@ -82,7 +105,12 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
       parallel: slotEvents.length > 1,
     }));
 
-    res.json({ day, events: mapped, slots });
+    res.json({
+      day,
+      dayPublished: dayMeta?.isPublished === true || (!dayMeta && list.length > 0),
+      events: mapped,
+      slots,
+    });
   } catch (error) {
     console.error('getProgram:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -148,16 +176,83 @@ export const markAttendance = async (req: ParticipantRequest, res: Response): Pr
 
 export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
-    const day = Number(req.query.day) || 1;
-    const mats = await db.select().from(materials).where(eq(materials.dayNumber, day));
+    const settings = await getForumSettings();
+    const day = Number(req.query.day) || settings.currentDay || 1;
+    const mats = await db.select().from(materials).where(
+      or(eq(materials.dayNumber, day), eq(materials.isGeneral, true)),
+    );
+    const currentDay = settings.currentDay ?? 1;
 
-    const touchpointsCompleted = await countTouchpoints(req.participant!.id);
-    const requiredTouchpoints = 4;
-    const unlocked = touchpointsCompleted >= requiredTouchpoints;
+    const { completed: touchpointsCompleted, total: touchpointsTotal } =
+      await countTouchpointsForDay(req.participant!.id, day);
+    const requiredTouchpoints = settings.kbUnlockThreshold ?? 4;
+    const unlockDisabled = settings.kbUnlockDisabled === true;
+    const dayReached = day <= currentDay;
+    const unlocked = unlockDisabled || (dayReached && touchpointsCompleted >= requiredTouchpoints);
 
-    res.json({ day, unlocked, materials: mats, touchpointsCompleted, requiredTouchpoints });
+    let lockReason: string | null = null;
+    if (day === 8 && !unlockDisabled) {
+      lockReason = 'point_b';
+    } else if (!dayReached && !unlockDisabled) {
+      lockReason = 'future_day';
+    } else if (!unlocked) {
+      lockReason = 'touchpoints';
+    }
+
+    // Filter by participant direction when material has direction set
+    const filtered = mats.filter(m => {
+      if (m.isGeneral) return true;
+      if (!m.direction) return true;
+      return m.direction === req.participant!.direction;
+    });
+
+    res.json({
+      day,
+      unlocked,
+      materials: unlocked ? filtered : [],
+      allMaterials: filtered,
+      touchpointsCompleted,
+      touchpointsTotal,
+      requiredTouchpoints,
+      remaining: Math.max(0, requiredTouchpoints - touchpointsCompleted),
+      lockReason: unlocked ? null : lockReason,
+      unlockDisabled,
+      ruleLabel: unlockDisabled
+        ? 'Разблокировка отключена администратором'
+        : `≥ ${requiredTouchpoints} из ${touchpointsTotal || 7} точек осмысления за день`,
+    });
   } catch (error) {
     console.error('getKnowledgeBase:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const saveMaterialToPiggybank = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    const [mat] = await db.select().from(materials).where(eq(materials.id, id)).limit(1);
+    if (!mat) {
+      res.status(404).json({ error: 'Material not found' });
+      return;
+    }
+    const { piggybank } = await import('../db/schema.js');
+    const { awardPoints } = await import('../services/pointsService.js');
+
+    const [entry] = await db.insert(piggybank).values({
+      participantId: req.participant!.id,
+      tag: 'мысль',
+      source: 'Своя мысль',
+      text: [
+        `Материал: ${mat.title}`,
+        mat.description ? `— ${mat.description}` : '',
+        mat.url ? `Ссылка: ${mat.url}` : '',
+      ].filter(Boolean).join('\n'),
+    }).returning();
+
+    await awardPoints(req.participant!.id, 'piggybank_thought');
+    res.json({ entry });
+  } catch (error) {
+    console.error('saveMaterialToPiggybank:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

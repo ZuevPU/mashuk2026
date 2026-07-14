@@ -1,26 +1,27 @@
-# Учётные записи админки
+# Admin users
 
-После `npm run db:seed` или `AUTO_SEED=true` на сервере создаются три администратора:
+## Roles (v1 matrix)
 
-| Логин | Пароль (8 символов) | Роль |
-|-------|---------------------|------|
-| zuev | `ZuevPu26` | superadmin |
-| serveeva | `Servee26` | admin |
-| avakan | `Avakan26` | admin |
+| Role | read | moderate | export | settings | users | delete |
+|------|------|----------|--------|----------|-------|--------|
+| admin | yes | yes | yes | yes | yes | yes |
+| moderator | yes | yes | no | no | no | no |
+| analyst | yes | no | yes | no | no | no |
+| director | yes | no | yes | no | no | no |
 
-Пароли хранятся в БД в виде scrypt-хеша. Сменить пароль можно напрямую в таблице `admin_users` (через seed или SQL после генерации нового хеша).
+JWT includes `role`. Dangerous routes use `requireAdminRole(...)`.
 
-## Вход в админку
+## Seed
 
-1. Откройте админ-панель в браузере
-2. Введите **логин** и **пароль** из таблицы выше
-3. Backend выдаёт JWT-токен (7 дней), дальше запросы идут с `Authorization: Bearer ...`
-
-## Добавить нового админа вручную
-
-```sql
--- Пароль нужно захешировать через npm run db:seed или API; проще добавить в seedAdmins.ts и перезапустить seed
-INSERT INTO admin_users (login, password_hash, role) VALUES ('newlogin', '<scrypt-hash>', 'admin');
+```powershell
+cd mashuk-backend
+npx tsx src/db/seedAdmins.ts
 ```
 
-Или добавьте запись в `src/db/seedAdmins.ts` → `DEFAULT_ADMINS` и выполните `npm run db:seed`.
+## CRUD
+
+- `GET /api/admin/admin-users`
+- `POST /api/admin/admin-users` `{ login, password, role }`
+- `PATCH /api/admin/admin-users/:id` `{ role?, password?, isActive? }`
+
+UI: вкладка «Админы» в mashuk-admin.

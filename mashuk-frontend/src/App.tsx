@@ -13,6 +13,7 @@ import { TasksPanel } from './panels/Tasks';
 import { QuestionsPanel } from './panels/Questions';
 import { ProfilePanel } from './panels/Profile';
 import { RegistrationPanel } from './panels/Registration';
+import { VolunteerPanel } from './panels/Volunteer';
 import { apiGet, getApiUrl, getHashSearchParams, initAuth } from './api/client';
 
 export const ModalContext = createContext<{ setModal: (modal: ReactNode | null) => void }>({ setModal: () => {} });
@@ -270,6 +271,7 @@ export const App = () => {
         <QuestionsPanel id="questions" onActivity={refreshTabCounts} />
         <ProfilePanel id="profile" fetchedUser={fetchedUser} />
         <RegistrationPanel id="registration" fetchedUser={fetchedUser} isRegistered={isRegistered} onRegistered={handleRegistered} />
+        <VolunteerPanel id="volunteer" />
       </View>
     </Epic>
       </SplitCol>
