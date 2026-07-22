@@ -17,6 +17,7 @@ mashuk-backend/dist/
 # Logs & debug
 *.log
 .cursor/
+.claude/
 debug-*.log
 
 # OS / IDE
