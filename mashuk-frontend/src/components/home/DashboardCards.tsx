@@ -31,15 +31,60 @@ export const NextEventCard: React.FC<{title: string, time: string, isSoon?: bool
   );
 };
 
-export const TouchpointsCard: React.FC<{completed: number, total: number, message: string, missed?: number}> = ({ completed, total, message, missed = 0 }) => {
+export type TouchpointItem = {
+  id: number;
+  title?: string;
+  state: 'done' | 'active' | 'overdue' | 'locked' | 'pending';
+  block?: string | null;
+};
+
+export const TouchpointsCard: React.FC<{
+  completed: number;
+  total: number;
+  message: string;
+  missed?: number;
+  items?: TouchpointItem[];
+  onItemClick?: (item: TouchpointItem) => void;
+}> = ({ completed, total, message, missed = 0, items, onItemClick }) => {
   const points = [];
-  for (let i = 1; i <= total; i++) {
-    let cls = 'ft';
-    let text = String(i);
-    if (i <= completed) { cls = 'ok'; text = '✓'; }
-    else if (missed > 0 && i <= completed + missed) { cls = 'miss'; text = '!'; }
-    else if (i === completed + missed + 1) { cls = 'ac'; }
-    points.push(<div key={i} className={`m-pd ${cls}`}>{text}</div>);
+  if (items && items.length > 0) {
+    for (const item of items) {
+      let cls = 'ft';
+      let text: string = String(points.length + 1);
+      if (item.state === 'done') { cls = 'ok'; text = '✓'; }
+      else if (item.state === 'overdue') { cls = 'miss'; text = '!'; }
+      else if (item.state === 'active') { cls = 'ac'; }
+      else if (item.state === 'locked') { cls = 'ft'; text = '🔒'; }
+      const clickable = item.state === 'active' || item.state === 'overdue' || item.state === 'done';
+      points.push(
+        <div
+          key={item.id}
+          className={`m-pd ${cls}`}
+          role={clickable ? 'button' : undefined}
+          tabIndex={clickable ? 0 : undefined}
+          title={item.title || undefined}
+          style={clickable ? { cursor: 'pointer' } : undefined}
+          onClick={() => { if (clickable && onItemClick) onItemClick(item); }}
+          onKeyDown={(e) => {
+            if (clickable && onItemClick && (e.key === 'Enter' || e.key === ' ')) {
+              e.preventDefault();
+              onItemClick(item);
+            }
+          }}
+        >
+          {text}
+        </div>,
+      );
+    }
+  } else {
+    for (let i = 1; i <= total; i++) {
+      let cls = 'ft';
+      let text = String(i);
+      if (i <= completed) { cls = 'ok'; text = '✓'; }
+      else if (missed > 0 && i <= completed + missed) { cls = 'miss'; text = '!'; }
+      else if (i === completed + missed + 1) { cls = 'ac'; }
+      points.push(<div key={i} className={`m-pd ${cls}`}>{text}</div>);
+    }
   }
 
   return (

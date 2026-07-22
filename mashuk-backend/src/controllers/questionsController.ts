@@ -201,6 +201,7 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
 
 export const listExchange = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
+    const me = req.participant!;
     const list = await db.select({
       q: exchangeQuestions,
       author: participants,
@@ -208,8 +209,17 @@ export const listExchange = async (req: ParticipantRequest, res: Response): Prom
       .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
       .where(or(
         eq(exchangeQuestions.moderationStatus, 'approved'),
-        eq(exchangeQuestions.participantId, req.participant!.id),
+        eq(exchangeQuestions.participantId, me.id),
       ));
+
+    const visible = list.filter(row => {
+      if (row.q.participantId === me.id) return true;
+      const aud = (row.q.audience || 'all').toLowerCase();
+      if (aud === 'direction' || aud === 'my_direction' || aud === 'своему направлению') {
+        return !!me.direction && row.author?.direction === me.direction;
+      }
+      return true;
+    });
 
     const allAnswers = await db.select({
       a: exchangeAnswers,
@@ -225,11 +235,11 @@ export const listExchange = async (req: ParticipantRequest, res: Response): Prom
     }
 
     res.json({
-      questions: list.map(row => ({
+      questions: visible.map(row => ({
         ...row.q,
         authorName: `${row.author?.firstName ?? ''} ${row.author?.lastName ?? ''}`.trim(),
         direction: row.author?.direction,
-        isMine: row.q.participantId === req.participant!.id,
+        isMine: row.q.participantId === me.id,
         answers: (answersByQuestion.get(row.q.id) || []).map(ar => ({
           id: ar.a.id,
           text: ar.a.text,
@@ -254,10 +264,11 @@ export const createExchangeQuestion = async (req: ParticipantRequest, res: Respo
       return;
     }
 
+    const aud = audience === 'direction' || audience === 'my_direction' ? 'direction' : 'all';
     const [q] = await db.insert(exchangeQuestions).values({
       participantId: req.participant!.id,
       text,
-      audience: audience || 'all',
+      audience: aud,
       moderationStatus: 'pending',
     }).returning();
 

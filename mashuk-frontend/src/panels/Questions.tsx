@@ -58,6 +58,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newQuestion, setNewQuestion] = useState('');
+  const [exchangeAudience, setExchangeAudience] = useState<'all' | 'direction'>('all');
   const [orgMessage, setOrgMessage] = useState('');
   const [activeQuestion, setActiveQuestion] = useState<any>(null);
   const [questionOptions, setQuestionOptions] = useState<any[]>([]);
@@ -123,8 +124,9 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const submitExchange = async () => {
     if (!newQuestion.trim()) return;
     try {
-      await apiPost('/exchange', { text: newQuestion, audience: 'all' });
+      await apiPost('/exchange', { text: newQuestion, audience: exchangeAudience });
       setNewQuestion('');
+      setExchangeAudience('all');
       setSnackbar('Вопрос отправлен на модерацию');
       loadAll();
     } catch (err) {
@@ -267,6 +269,22 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
             </div>
             <div className="ask-btn m-card">
               <Textarea value={newQuestion} onChange={e => setNewQuestion(e.target.value)} placeholder="Задайте вопрос участникам..." />
+              <div className="time-sw" style={{ marginTop: 8, marginBottom: 0 }}>
+                <button
+                  type="button"
+                  className={`time-btn ${exchangeAudience === 'all' ? 'on' : ''}`}
+                  onClick={() => setExchangeAudience('all')}
+                >
+                  Всем участникам
+                </button>
+                <button
+                  type="button"
+                  className={`time-btn ${exchangeAudience === 'direction' ? 'on' : ''}`}
+                  onClick={() => setExchangeAudience('direction')}
+                >
+                  Своему направлению
+                </button>
+              </div>
               <Button style={{ marginTop: 8 }} onClick={submitExchange}>+ Задать новый вопрос</Button>
             </div>
             {peerApproved.map(q => (
@@ -274,7 +292,11 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                 <div className="peer-wrap">
                   <div className="peer-av">{(q.authorName || '?').slice(0, 2).toUpperCase()}</div>
                   <div style={{ flex: 1 }}>
-                    <div className="peer-dir">{q.audience === 'all' ? 'Всем участникам' : 'Моему направлению'}</div>
+                    <div className="peer-dir">
+                      {q.audience === 'direction' || q.audience === 'my_direction'
+                        ? 'Своему направлению'
+                        : 'Всем участникам'}
+                    </div>
                     <div className="peer-q">{q.text}</div>
                     <div className="peer-meta">{q.authorName} · {q.answers?.length ?? 0} ответ(ов)</div>
                   </div>

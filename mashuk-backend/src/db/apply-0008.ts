@@ -3,21 +3,20 @@
  * npx tsx src/db/apply-0008.ts
  */
 import 'dotenv/config';
-import pg from 'pg';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { createPool } from './pool.js';
 
-const sql = `
-ALTER TABLE forum_settings
-  ADD COLUMN IF NOT EXISTS role_diagnostics_config jsonb;
-`;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function main() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL required');
-  const client = new pg.Client({ connectionString: url });
-  await client.connect();
-  await client.query(sql);
-  console.log('apply-0008: role_diagnostics_config ok');
-  await client.end();
+  const pool = createPool(process.env.DATABASE_URL!);
+  const sqlPath = path.join(__dirname, '../../drizzle/0008_role_diagnostics_config.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  await pool.query(sql);
+  console.log('Applied 0008_role_diagnostics_config.sql');
+  await pool.end();
 }
 
 main().catch((e) => {

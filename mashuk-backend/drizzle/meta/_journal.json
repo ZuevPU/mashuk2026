@@ -57,6 +57,13 @@
       "when": 1787000000000,
       "tag": "0007_p0_p2",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788000000000,
+      "tag": "0008_role_diagnostics_config",
+      "breakpoints": true
     }
   ]
 }

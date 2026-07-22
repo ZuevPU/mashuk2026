@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { asc, count, desc, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  answers, clubMatches, consentTexts, events, materials,
+  answers, clubMatches, consentTexts, eventAttendance, events, materials,
   participantDayState, participantGroups, participants, piggybank, pointsLog, pushQueue, pushTemplates,
   questions, scheduleDayVersions, scheduleDays, taskSubmissions, tasks,
   userMedals, medals,
@@ -15,6 +15,7 @@ import { clubMatchNightly, isGigachatConfigured, synthesizeOutcomes } from '../s
 import { generateQrToken, buildTaskQrUrl, buildEventQrUrl, buildParticipantQrUrl } from '../services/qrService.js';
 import { env } from '../config/env.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
+import { EVENING_SCALE_KEYS } from '../services/touchpointTemplates.js';
 
 // ─── Consents CRUD ───────────────────────────────────────────
 
@@ -630,6 +631,88 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
   const programEvents = await db.select().from(events);
   const allMats = await db.select().from(materials);
   const matsInAnalytics = allMats.filter(m => m.includeInAnalytics !== false);
+  const attendance = await db.select().from(eventAttendance);
+  const dayStates = await db.select().from(participantDayState);
+
+  const SCALE_LABELS: Record<string, string> = {
+    direction: 'Направление',
+    lessonsImportant: 'Уроки о важном',
+    openLessons: 'Открытые уроки',
+    morningHealth: 'Утренняя программа',
+    workshops: 'Мастер-классы',
+    eveningAtmosphere: 'Вечерняя программа',
+    food: 'Питание',
+    housing: 'Проживание',
+    curator: 'Куратор',
+  };
+
+  const scaleSums: Record<string, { sum: number; n: number }> = {};
+  for (const key of EVENING_SCALE_KEYS) scaleSums[key] = { sum: 0, n: 0 };
+  for (const st of dayStates) {
+    const ratings = st.eveningRatings as Record<string, unknown> | null;
+    if (!ratings || typeof ratings !== 'object') continue;
+    for (const key of EVENING_SCALE_KEYS) {
+      const v = ratings[key];
+      if (typeof v === 'number' && v >= 1 && v <= 5) {
+        scaleSums[key].sum += v;
+        scaleSums[key].n += 1;
+      }
+    }
+  }
+  const scaleAverages = EVENING_SCALE_KEYS.map(key => ({
+    key,
+    label: SCALE_LABELS[key] || key,
+    avg: scaleSums[key].n ? Math.round((scaleSums[key].sum / scaleSums[key].n) * 10) / 10 : 0,
+    responses: scaleSums[key].n,
+  }));
+
+  const attendanceByEvent = new Map<number, number>();
+  for (const a of attendance) {
+    attendanceByEvent.set(a.eventId, (attendanceByEvent.get(a.eventId) || 0) + 1);
+  }
+
+  const eventsByAttendance = programEvents
+    .map(e => {
+      const tags = Array.isArray(e.tags) ? (e.tags as string[]) : [];
+      return {
+        id: e.id,
+        title: e.title,
+        dayNumber: e.dayNumber,
+        timeSlot: e.timeSlot,
+        tags,
+        attendance: attendanceByEvent.get(e.id) || 0,
+      };
+    })
+    .sort((a, b) => b.attendance - a.attendance);
+
+  const byTag: Record<string, { events: number; attendance: number }> = {};
+  for (const e of eventsByAttendance) {
+    const tagList = e.tags.length > 0 ? e.tags : ['без тега'];
+    for (const tag of tagList) {
+      if (!byTag[tag]) byTag[tag] = { events: 0, attendance: 0 };
+      byTag[tag].events += 1;
+      byTag[tag].attendance += e.attendance;
+    }
+  }
+  const tagSeries = Object.entries(byTag)
+    .map(([tag, v]) => ({ tag, events: v.events, attendance: v.attendance }))
+    .sort((a, b) => b.attendance - a.attendance)
+    .slice(0, 12);
+
+  const byDaySlot: { day: number; slot: string; events: number; attendance: number }[] = [];
+  for (let d = 1; d <= 8; d++) {
+    const dayEv = eventsByAttendance.filter(e => e.dayNumber === d);
+    const slots = [...new Set(dayEv.map(e => e.timeSlot || 'другое'))];
+    for (const slot of slots) {
+      const slotted = dayEv.filter(e => (e.timeSlot || 'другое') === slot);
+      byDaySlot.push({
+        day: d,
+        slot,
+        events: slotted.length,
+        attendance: slotted.reduce((s, e) => s + e.attendance, 0),
+      });
+    }
+  }
 
   const sampleTexts = ans
     .map(a => (typeof a.answerData === 'string' ? a.answerData : (a.answerData as { text?: string })?.text || ''))
@@ -661,6 +744,18 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
       publishedDays: (await db.select().from(scheduleDays).where(eq(scheduleDays.isPublished, true))).length,
       materialsCount: matsInAnalytics.length,
       materialsExcludedFromAnalytics: allMats.length - matsInAnalytics.length,
+      totalAttendance: attendance.length,
+      scaleAverages,
+      topEvents: eventsByAttendance.slice(0, 10),
+      tagSeries,
+      byDaySlot,
+    },
+    education: {
+      scaleAverages,
+      topEvents: eventsByAttendance.slice(0, 10),
+      tagSeries,
+      byDaySlot,
+      totalAttendance: attendance.length,
     },
     activity: {
       pathLeaders: allP

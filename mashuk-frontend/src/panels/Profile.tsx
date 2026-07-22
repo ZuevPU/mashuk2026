@@ -21,7 +21,7 @@ export const ProfilePanel: React.FC<{ id: string; fetchedUser?: UserInfo | null 
   const [piggybank, setPiggybank] = useState<any[]>([]);
   const [previewPiggy, setPreviewPiggy] = useState<any[]>([]);
   const [medals, setMedals] = useState<any[]>([]);
-  const [section, setSection] = useState<'overview' | 'piggybank' | 'final' | 'settings'>('overview');
+  const [section, setSection] = useState<'overview' | 'piggybank' | 'final' | 'settings' | 'rating'>('overview');
   const [tagFilter, setTagFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
   const [loading, setLoading] = useState(true);
@@ -31,6 +31,12 @@ export const ProfilePanel: React.FC<{ id: string; fetchedUser?: UserInfo | null 
   const [hideLb, setHideLb] = useState(false);
   const [pushOptOut, setPushOptOut] = useState<Record<string, boolean>>({});
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [lbTrack, setLbTrack] = useState<'total' | 'path' | 'experience'>('total');
+  const [lbDirection, setLbDirection] = useState('');
+  const [lbDirections, setLbDirections] = useState<string[]>([]);
+  const [leaders, setLeaders] = useState<any[]>([]);
+  const [myRank, setMyRank] = useState<number | null>(null);
+  const [lbLoading, setLbLoading] = useState(false);
 
   const loadProfile = () => {
     setLoading(true);
@@ -68,6 +74,21 @@ export const ProfilePanel: React.FC<{ id: string; fetchedUser?: UserInfo | null 
   useEffect(() => {
     if (section === 'piggybank') loadPiggybank();
   }, [section, tagFilter, sourceFilter]);
+
+  useEffect(() => {
+    if (section !== 'rating') return;
+    setLbLoading(true);
+    const params = new URLSearchParams({ track: lbTrack });
+    if (lbDirection) params.set('direction', lbDirection);
+    apiGet<any>(`/leaderboard?${params}`)
+      .then((res) => {
+        setLeaders(res.leaders || []);
+        setMyRank(res.myRank ?? null);
+        setLbDirections(res.directions || []);
+      })
+      .catch((err) => setSnackbar(err instanceof ApiError ? err.message : 'Не удалось загрузить рейтинг'))
+      .finally(() => setLbLoading(false));
+  }, [section, lbTrack, lbDirection]);
 
   if (loading) {
     return (
@@ -122,6 +143,7 @@ export const ProfilePanel: React.FC<{ id: string; fetchedUser?: UserInfo | null 
 
   const sectionOptions = [
     { label: 'Обзор', value: 'overview' },
+    { label: 'Рейтинг', value: 'rating' },
     { label: `Копилка (${p.piggybankCount ?? 0})`, value: 'piggybank' },
     ...(showFinal ? [{ label: 'Итог смены', value: 'final' }] : []),
     { label: '⚙', value: 'settings' },
@@ -133,7 +155,7 @@ export const ProfilePanel: React.FC<{ id: string; fetchedUser?: UserInfo | null 
       <Group>
         <SegmentedControl
           value={section}
-          onChange={(v) => setSection(v as 'overview' | 'piggybank' | 'final' | 'settings')}
+          onChange={(v) => setSection(v as 'overview' | 'piggybank' | 'final' | 'settings' | 'rating')}
           options={sectionOptions}
         />
 
@@ -338,6 +360,77 @@ export const ProfilePanel: React.FC<{ id: string; fetchedUser?: UserInfo | null 
                   Скопировать ссылку
                 </Button>
               </div>
+            )}
+          </>
+        ) : section === 'rating' ? (
+          <>
+            <div className="m-card">
+              <div className="pb-lbl">Рейтинг участников</div>
+              {myRank != null && (
+                <div style={{ fontSize: 13, marginTop: 6, fontWeight: 700, color: '#B8621A' }}>
+                  Ваше место: #{myRank}
+                </div>
+              )}
+              <div className="time-sw" style={{ marginTop: 10 }}>
+                {([
+                  { key: 'total', label: 'Общий' },
+                  { key: 'path', label: 'Путь' },
+                  { key: 'experience', label: 'Опыт' },
+                ] as const).map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    className={`time-btn ${lbTrack === t.key ? 'on' : ''}`}
+                    onClick={() => setLbTrack(t.key)}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <Select
+                style={{ marginTop: 10 }}
+                value={lbDirection}
+                onChange={(e) => setLbDirection(e.target.value)}
+                options={[
+                  { label: 'Все направления', value: '' },
+                  ...lbDirections.map((d) => ({ label: d, value: d })),
+                ]}
+              />
+            </div>
+            {lbLoading ? (
+              <Spinner />
+            ) : leaders.length === 0 ? (
+              <EmptyState icon="🏆" title="Рейтинг пуст" subtitle="Баллы появятся после активности на форуме" />
+            ) : (
+              leaders.map((row) => (
+                <div
+                  key={row.id}
+                  className="m-card"
+                  style={{
+                    display: 'flex',
+                    gap: 12,
+                    alignItems: 'center',
+                    marginBottom: 8,
+                    background: row.isMe ? '#FFF8E7' : undefined,
+                    border: row.isMe ? '1.5px solid #FFE082' : undefined,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, width: 28, color: row.rank <= 3 ? '#B8621A' : '#888' }}>
+                    {row.rank}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: row.isMe ? 800 : 600 }}>
+                      {row.name}{row.isMe ? ' · вы' : ''}
+                    </div>
+                    {row.direction && (
+                      <div style={{ fontSize: 11, color: '#888' }}>{row.direction}</div>
+                    )}
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>
+                    {lbTrack === 'path' ? '📍' : lbTrack === 'experience' ? '⚡' : '✦'} {row.score}
+                  </div>
+                </div>
+              ))
             )}
           </>
         ) : section === 'final' && finalCard ? (

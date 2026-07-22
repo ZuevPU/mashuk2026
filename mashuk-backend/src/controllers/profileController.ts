@@ -351,6 +351,7 @@ export const updateProfileSettings = async (req: ParticipantRequest, res: Respon
 export const getPublicLeaderboard = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const track = (req.query.track as string) || 'total';
+    const directionFilter = (req.query.direction as string) || '';
     const list = await db.select({
       id: participants.id,
       firstName: participants.firstName,
@@ -362,8 +363,10 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
     }).from(participants);
 
     const me = req.participant!.id;
+    const directions = [...new Set(list.map(p => p.direction).filter(Boolean))] as string[];
     const rows = list
       .filter(p => !p.hideFromLeaderboard || p.id === me)
+      .filter(p => !directionFilter || p.direction === directionFilter)
       .map(p => ({
         id: p.id,
         name: `${p.firstName} ${p.lastName}`.trim(),
@@ -376,7 +379,8 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       .sort((a, b) => b.score - a.score)
       .map((p, i) => ({ rank: i + 1, ...p }));
 
-    res.json({ track, leaders: rows.slice(0, 50) });
+    const myRank = rows.find(r => r.isMe)?.rank ?? null;
+    res.json({ track, direction: directionFilter || null, directions, myRank, leaders: rows.slice(0, 50) });
   } catch (error) {
     console.error('getPublicLeaderboard:', error);
     res.status(500).json({ error: 'Internal server error' });

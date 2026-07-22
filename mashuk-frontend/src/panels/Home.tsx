@@ -63,7 +63,13 @@ interface HomeData {
     pathProgress?: number;
     experienceProgress?: number;
   };
-  touchpoints: { completed: number; total: number; message: string; missed?: number };
+  touchpoints: {
+    completed: number;
+    total: number;
+    message: string;
+    missed?: number;
+    items?: { id: number; title?: string; state: 'done' | 'active' | 'overdue' | 'locked' | 'pending'; block?: string | null }[];
+  };
   schedule?: ScheduleItem[];
   ui?: {
     showTasksBanner?: boolean;
@@ -514,6 +520,11 @@ export const HomePanel: React.FC<{
           total={d.touchpoints.total}
           message={d.touchpoints.message}
           missed={d.touchpoints.missed}
+          items={d.touchpoints.items}
+          onItemClick={(item) => {
+            if (item.state === 'locked') return;
+            routeNavigator.push(`/questions?q=${item.id}`);
+          }}
         />
 
         {showQuick && (
