@@ -11,7 +11,9 @@ import { createPool } from './pool.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function main() {
-  const pool = createPool(process.env.DATABASE_URL!);
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error('DATABASE_URL required');
+  const pool = createPool(url);
   const sqlPath = path.join(__dirname, '../../drizzle/0008_role_diagnostics_config.sql');
   const sql = fs.readFileSync(sqlPath, 'utf8');
   await pool.query(sql);
