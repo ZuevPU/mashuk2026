@@ -28,3 +28,12 @@ export const QUICK_CAPTURE_ITEMS = [
   { icon: '📌', label: 'На будущее', tag: 'на будущее' },
   { icon: '✅', label: 'В работу', tag: 'в работу' },
 ] as const;
+
+export function inferSourceFromEventTitle(title: string | null | undefined): string {
+  if (!title) return 'Направление';
+  const t = title.toLowerCase();
+  if (t.includes('урок') && t.includes('важн')) return 'Урок о важном';
+  if (t.includes('открыт')) return 'Открытый урок';
+  if (t.includes('клуб')) return 'Клуб';
+  return 'Направление';
+}

@@ -1,14 +1,14 @@
 import { Response } from 'express';
-import { asc, count, desc, eq } from 'drizzle-orm';
+import { asc, count, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  answers, clubMatches, consentTexts, eventAttendance, events, materials,
+  answers, clubMatches, consentTexts, dailyStats, eventAttendance, events, materials,
   participantDayState, participantGroups, participants, piggybank, pointsLog, pushQueue, pushTemplates,
-  questions, scheduleDayVersions, scheduleDays, taskSubmissions, tasks,
+  questions, scheduleDayVersions, scheduleDays, taskSubmissions, tasks, taskTeamConfirmations,
   userMedals, medals,
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
-import { logAdminAction } from '../services/adminActionsLog.js';
+import { getForumSettings } from '../services/helpers.js';
 import { deactivateOtherConsents } from './consentsController.js';
 import { evaluateAllMedals } from '../services/medalEvaluator.js';
 import { clubMatchNightly, isGigachatConfigured, synthesizeOutcomes } from '../services/gigachatService.js';
@@ -16,6 +16,7 @@ import { generateQrToken, buildTaskQrUrl, buildEventQrUrl, buildParticipantQrUrl
 import { env } from '../config/env.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { EVENING_SCALE_KEYS } from '../services/touchpointTemplates.js';
+import { emptyZoneDistribution } from '../services/emotionZones.js';
 
 // ─── Consents CRUD ───────────────────────────────────────────
 
@@ -139,7 +140,7 @@ export const listScheduleVersions = async (req: AdminRequest, res: Response): Pr
   let rows = await db.select().from(scheduleDayVersions).orderBy(desc(scheduleDayVersions.publishedAt));
   if (day) rows = rows.filter(r => r.dayNumber === day);
   const days = await db.select().from(scheduleDays);
-  res.json({ versions: rows, days });
+  res.json({ versions: rows.slice(0, 20), days });
 };
 
 // ─── Push templates + queue ───────────────────────────────────
@@ -329,6 +330,32 @@ export const exportDayWorkbook = async (req: AdminRequest, res: Response): Promi
         r.s.experimentStatus,
       ]);
     }
+    const sheetEvening = wb.addWorksheet('Итоговая анкета');
+    const eveningKeys = [
+      'participant_id', 'name', 'direction', 'group', 'day', 'submitted_at', 'tomorrow_role',
+      ...EVENING_SCALE_KEYS,
+      'tripYes', 'tripScore', 'practiceYes', 'practiceName', 'recommendYes', 'recommendScore',
+      'mainThesis', 'understandingChange', 'likedMost', 'improveTomorrow', 'freeNote', 'experimentResult',
+    ];
+    sheetEvening.addRow(eveningKeys);
+    for (const r of dayRoles) {
+      const ratings = r.s.eveningRatings as Record<string, unknown> | null;
+      if (!ratings) continue;
+      sheetEvening.addRow([
+        r.p?.id,
+        `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
+        r.p?.direction,
+        r.p?.groupName,
+        r.s.dayNumber,
+        r.s.updatedAt?.toISOString?.() ?? '',
+        r.s.tomorrowRoleKey,
+        ...EVENING_SCALE_KEYS.map(k => ratings[k] ?? ''),
+        ratings.tripYes, ratings.tripScore, ratings.practiceYes, ratings.practiceName,
+        ratings.recommendYes, ratings.recommendScore,
+        ratings.mainThesis, ratings.understandingChange, ratings.likedMost,
+        ratings.improveTomorrow, ratings.freeNote, ratings.experimentResult,
+      ]);
+    }
     // Also trajectory sheet: one row per participant with days 1-7
     const byParticipant = new Map<number, typeof roleRows>();
     for (const r of roleRows) {
@@ -421,7 +448,7 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
     res.status(404).json({ error: 'Not found' });
     return;
   }
-  const [userAnswers, userSubs, userPoints, userMedalsRows, dayStates] = await Promise.all([
+  const [userAnswers, userSubs, userPoints, userMedalsRows, dayStates, userPiggy] = await Promise.all([
     db.select({ a: answers, q: questions })
       .from(answers)
       .leftJoin(questions, eq(answers.questionId, questions.id))
@@ -436,7 +463,18 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
       .leftJoin(medals, eq(userMedals.medalId, medals.id))
       .where(eq(userMedals.participantId, id)),
     db.select().from(participantDayState).where(eq(participantDayState.participantId, id)),
+    db.select().from(piggybank).where(eq(piggybank.participantId, id)).orderBy(desc(piggybank.createdAt)).limit(30),
   ]);
+
+  const subIds = userSubs.map(r => r.s.id);
+  const confRows = subIds.length > 0
+    ? await db.select().from(taskTeamConfirmations).where(inArray(taskTeamConfirmations.submissionId, subIds))
+    : [];
+  const confBySub = new Map<number, typeof confRows>();
+  for (const c of confRows) {
+    if (!confBySub.has(c.submissionId)) confBySub.set(c.submissionId, []);
+    confBySub.get(c.submissionId)!.push(c);
+  }
 
   res.json({
     participant: p,
@@ -453,9 +491,22 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
       taskTitle: r.t?.title,
       status: r.s.status,
       pointsAwarded: r.s.pointsAwarded,
+      photoUrl: r.s.photoUrl,
+      postUrl: r.s.postUrl,
+      teamMemberIds: r.s.teamMemberIds,
+      moderatorComment: r.s.moderatorComment,
+      teamConfirmations: (confBySub.get(r.s.id) || []).map(c => ({
+        participantId: c.participantId,
+        status: c.status,
+        respondedAt: c.respondedAt,
+      })),
       createdAt: r.s.submittedAt,
     })),
-    points: userPoints,
+    points: userPoints.map(pl => ({
+      ...pl,
+      canRevoke: !pl.revokedAt && pl.points > 0 && !(pl.actionType || '').endsWith('_revoke'),
+    })),
+    piggybank: userPiggy,
     medals: userMedalsRows.map(r => ({
       id: r.um.id,
       name: r.m?.name,
@@ -476,79 +527,70 @@ export const buildParticipantPdf = async (req: AdminRequest, res: Response): Pro
     res.status(403).json({ error: 'Participant not on PDF whitelist' });
     return;
   }
-  const [p] = await db.select().from(participants).where(eq(participants.id, id)).limit(1);
-  if (!p) { res.status(404).json({ error: 'Not found' }); return; }
-  const ans = await db.select().from(answers).where(eq(answers.participantId, id));
-  const um = await db.select().from(userMedals).where(eq(userMedals.participantId, id));
-  const pig = await db.select().from(piggybank).where(eq(piggybank.participantId, id));
-
-  let outcomesText = '';
-  if (p.outcomesEdited) {
-    outcomesText = typeof p.outcomesEdited === 'string' ? p.outcomesEdited : JSON.stringify(p.outcomesEdited);
-  } else if (isGigachatConfigured()) {
-    const texts = ans.map(a => typeof a.answerData === 'string' ? a.answerData : JSON.stringify(a.answerData)).filter(Boolean) as string[];
-    outcomesText = (await synthesizeOutcomes(texts)) || '';
-  }
-
-  const lines = [
-    `Итоговый профиль: ${p.firstName} ${p.lastName}`,
-    `Направление: ${p.direction || '—'}`,
-    `Группа: ${p.groupName || '—'}`,
-    `Роль: ${p.pedagogicalRole || '—'}`,
-    `Путь: ${p.pathPoints} · Опыт: ${p.experiencePoints}`,
-    `Точка А: ${JSON.stringify(p.goalAnswers || [])}`,
-    `Точка Б: ${JSON.stringify(p.pointBAnswers || [])}`,
-    `Что получилось: ${outcomesText || '—'}`,
-    `Медалей: ${um.length}`,
-    `Записей в копилке: ${pig.length}`,
-  ];
-
-  try {
-    const PDFDocument = (await import('pdfkit')).default;
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=profile_${id}.pdf`);
-    const doc = new PDFDocument({ margin: 50 });
-    doc.pipe(res);
-    doc.fontSize(16).text('Машук 2026 — итоговый профиль', { underline: true });
-    doc.moveDown();
-    doc.fontSize(11);
-    for (const line of lines) {
-      doc.text(line, { paragraphGap: 6 });
-    }
-    if (Array.isArray(p.goalAnswers) && Array.isArray(p.pointBAnswers)) {
-      doc.moveDown().fontSize(13).text('Сравнение А → Б', { underline: true });
-      doc.fontSize(10);
-      const a = p.goalAnswers as string[];
-      const b = p.pointBAnswers as string[];
-      for (let i = 0; i < Math.max(a.length, b.length); i++) {
-        doc.text(`Вопрос ${i + 1}`);
-        doc.text(`Было: ${a[i] || '—'}`);
-        doc.text(`Стало: ${b[i] || '—'}`);
-        doc.moveDown(0.5);
-      }
-    }
-    if (p.strongRole || p.growthRole) {
-      doc.moveDown().fontSize(13).text('Роли', { underline: true });
-      doc.fontSize(10).text(`Сильная: ${p.strongRole || '—'} · Рост: ${p.growthRole || '—'}`);
-      if (p.nextExperiment) doc.text(`Следующий эксперимент: ${p.nextExperiment}`);
-    }
-    if (pig.length > 0) {
-      doc.moveDown().fontSize(13).text('Копилка (фрагмент)', { underline: true });
-      doc.fontSize(9);
-      for (const e of pig.slice(0, 15)) {
-        doc.text(`#${e.tag} · ${e.source}: ${(e.text || '').slice(0, 120)}`);
-      }
-    }
-    doc.end();
+  const { gatherProfileBundle, streamProfilePdf } = await import('../services/profilePdfBuilder.js');
+  const bundle = await gatherProfileBundle(id);
+  if (!bundle) {
+    res.status(404).json({ error: 'Not found' });
     return;
+  }
+  const blocks = (bundle.pdf.draftBlocks ?? {}) as Record<string, unknown>;
+  try {
+    await streamProfilePdf(bundle, res, blocks);
   } catch {
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename=profile_${id}.txt`);
-    res.send('\uFEFF' + lines.join('\n'));
+    res.status(500).json({ error: 'PDF generation failed' });
   }
 };
 
 // ─── QR download helper ──────────────────────────────────────
+
+export const revokeParticipantPoints = async (req: AdminRequest, res: Response): Promise<void> => {
+  const participantId = Number(req.params.id);
+  const logId = Number(req.params.logId);
+  const reason = String(req.body?.reason || 'Аннулировано модератором').slice(0, 500);
+  const { revokePointsLogEntry } = await import('../services/pointsService.js');
+  const { sendPushNotification } = await import('../services/pushService.js');
+  const result = await revokePointsLogEntry(logId, participantId, reason);
+  if (!result.ok) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  await sendPushNotification(
+    [participantId],
+    `Баллы пересмотрены: ${reason}`,
+    `points_revoke_${logId}`,
+  );
+  res.json({ ok: true, reversalId: result.reversalId });
+};
+
+export const getQrPack = async (req: AdminRequest, res: Response): Promise<void> => {
+  const day = Number(req.query.day) || 1;
+  const base = env.PUBLIC_URL || 'https://example.com';
+  const dayTasks = await db.select().from(tasks).where(eq(tasks.dayNumber, day));
+  const items: { title: string; url: string; qrImageUrl: string }[] = [];
+  for (const t of dayTasks) {
+    let token = t.qrToken;
+    if (!token) {
+      token = generateQrToken();
+      await db.update(tasks).set({ qrToken: token }).where(eq(tasks.id, t.id));
+    }
+    const url = buildTaskQrUrl(base, t.id, token);
+    items.push({
+      title: t.title,
+      url,
+      qrImageUrl: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`,
+    });
+  }
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>QR День ${day}</title>
+<style>body{font-family:-apple-system,sans-serif;padding:24px;background:#E8E2D8;}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:20px;}
+.cell{background:#fff;border-radius:16px;padding:16px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.08);}
+.cell img{width:160px;height:160px;} h1{font-size:18px;color:#1A1714;}</style></head>
+<body><h1>QR задания · День ${day}</h1><div class="grid">${items.map(i =>
+    `<div class="cell"><img src="${i.qrImageUrl}" alt=""/><div>${i.title.replace(/</g, '')}</div></div>`,
+  ).join('')}</div><script>window.onload=()=>window.print()</script></body></html>`;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
+};
 
 export const generateAndDownloadQr = async (req: AdminRequest, res: Response): Promise<void> => {
   const { type, id } = req.body as { type: 'task' | 'event' | 'participant'; id: number };
@@ -628,6 +670,9 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
   }
 
   const approvedTasks = await db.select().from(taskSubmissions).where(eq(taskSubmissions.status, 'approved'));
+  const pendingModeration = await db.select().from(taskSubmissions).where(eq(taskSubmissions.status, 'pending'));
+  const pendingTeam = await db.select().from(taskSubmissions).where(eq(taskSubmissions.status, 'pending_team'));
+  const revokedPointsRows = await db.select().from(pointsLog).where(isNotNull(pointsLog.revokedAt));
   const programEvents = await db.select().from(events);
   const allMats = await db.select().from(materials);
   const matsInAnalytics = allMats.filter(m => m.includeInAnalytics !== false);
@@ -722,6 +767,30 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
   const { synthesizeSemanticLayers } = await import('../services/gigachatService.js');
   const semantic = await synthesizeSemanticLayers({ depths, sampleTexts, day });
 
+  const forumSettingsResolved = await getForumSettings();
+  const kbThreshold = forumSettingsResolved.kbUnlockThreshold ?? 4;
+  const kbDisabled = forumSettingsResolved.kbUnlockDisabled === true;
+  const schedulePublishCount = (await db.select().from(scheduleDayVersions)).length;
+  let kbUnlockedParticipants = 0;
+  if (!kbDisabled) {
+    const onboarded = allP.filter(p => p.onboardingCompletedAt);
+    const { evaluateKbDayAccess } = await import('./programController.js');
+    for (const p of onboarded) {
+      const d = day ?? forumSettingsResolved.currentDay ?? 1;
+      const access = await evaluateKbDayAccess(p.id, d, forumSettingsResolved);
+      if (access.unlocked) kbUnlockedParticipants += 1;
+    }
+  } else {
+    kbUnlockedParticipants = allP.filter(p => p.onboardingCompletedAt).length;
+  }
+
+  const eveningDrafts = dayStates.filter(s => s.eveningDraft && !s.eveningRatings).length;
+  const eveningCompletedForDay = dayStates.filter(s => s.eveningRatings && s.dayNumber === day).length;
+  const allDaily = await db.select().from(dailyStats);
+  const emotionZonesRow = allDaily.find(s => s.direction === 'all')?.emotionZonesDistribution;
+  const emotionZones = (emotionZonesRow as Record<string, number> | null | undefined)
+    ?? emptyZoneDistribution();
+
   res.json({
     mode,
     day,
@@ -742,6 +811,11 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
     program: {
       eventsCount: programEvents.length,
       publishedDays: (await db.select().from(scheduleDays).where(eq(scheduleDays.isPublished, true))).length,
+      schedulePublishEvents: schedulePublishCount,
+      kbUnlockThreshold: kbThreshold,
+      kbUnlockDisabled: kbDisabled,
+      kbUnlockedParticipants,
+      kbEligibleParticipants: allP.filter(p => p.onboardingCompletedAt).length,
       materialsCount: matsInAnalytics.length,
       materialsExcludedFromAnalytics: allMats.length - matsInAnalytics.length,
       totalAttendance: attendance.length,
@@ -763,6 +837,12 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
         .sort((a, b) => (b.path ?? 0) - (a.path ?? 0))
         .slice(0, 10),
       tasksApproved: approvedTasks.length,
+      tasksPendingModeration: pendingModeration.length,
+      teamPendingConfirm: pendingTeam.length,
+      pointsRevokedTotal: revokedPointsRows.length,
+      eveningDrafts,
+      eveningCompletedForDay,
+      emotionZones,
       reflectionDepth: depths,
     },
     piggybank: {
@@ -780,6 +860,29 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
 };
 
 // ─── Club matching + medals eval ─────────────────────────────
+
+export const getDeparturePortrait = async (_req: AdminRequest, res: Response): Promise<void> => {
+  const allP = await db.select().from(participants).where(isNotNull(participants.onboardingCompletedAt));
+  const rows = allP.map(p => {
+    const goal = p.goalAnswers;
+    const pointB = p.pointBAnswers;
+    const hasA = !!(goal && (Array.isArray(goal) ? goal.length : Object.keys(goal as object).length));
+    const hasB = !!(pointB && (Array.isArray(pointB) ? pointB.length : Object.keys(pointB as object).length));
+    return {
+      id: p.id,
+      name: `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim(),
+      direction: p.direction,
+      groupName: p.groupName,
+      pointA: goal,
+      pointB: pointB,
+      strongRole: p.strongRole,
+      growthRole: p.growthRole,
+      hasPointA: hasA,
+      hasPointB: hasB,
+    };
+  });
+  res.json({ participants: rows, completedBoth: rows.filter(r => r.hasPointA && r.hasPointB).length });
+};
 
 export const runClubMatching = async (req: AdminRequest, res: Response): Promise<void> => {
   const result = await clubMatchNightly();

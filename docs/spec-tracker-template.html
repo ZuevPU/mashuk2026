@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Трекер соответствия ТЗ — Форум Машук</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --surface: #fff;
+      --text: #1a1d21;
+      --muted: #5c6370;
+      --border: #e2e5eb;
+      --yes: #0d7a4a;
+      --yes-bg: #e6f4ed;
+      --no: #b42318;
+      --no-bg: #fdecea;
+      --partial: #b54708;
+      --partial-bg: #fff4e5;
+      --discuss: #5925dc;
+      --discuss-bg: #f0ebff;
+      --later: #175cd3;
+      --later-bg: #eff8ff;
+      --llm: #667085;
+      --llm-bg: #f2f4f7;
+      --audit: #344054;
+      --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.25rem 1rem 3rem;
+    }
+    header h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+    header p {
+      margin: 0 0 1rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-bottom: 1rem;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge--yes { background: var(--yes-bg); color: var(--yes); }
+    .badge--no { background: var(--no-bg); color: var(--no); }
+    .badge--partial { background: var(--partial-bg); color: var(--partial); }
+    .badge--discuss { background: var(--discuss-bg); color: var(--discuss); }
+    .badge--later { background: var(--later-bg); color: var(--later); }
+    .badge--llm { background: var(--llm-bg); color: var(--llm); border: 1px dashed #98a2b3; }
+    .badge--dash { background: #f9fafb; color: var(--muted); }
+    .badge--v2 { background: var(--llm-bg); color: #475467; }
+    .controls {
+      display: grid;
+      gap: 0.75rem;
+      grid-template-columns: 1fr;
+      margin-bottom: 1rem;
+      padding: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+    }
+    @media (min-width: 640px) {
+      .controls { grid-template-columns: 1fr 12rem; align-items: end; }
+    }
+    .audit-filter-block { grid-column: 1 / -1; }
+    .audit-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.75rem;
+      margin-top: 0.25rem;
+    }
+    .audit-filters label.audit-chk {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text);
+      margin: 0;
+      cursor: pointer;
+    }
+    .audit-quick {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-top: 0.5rem;
+    }
+    .audit-quick button {
+      padding: 0.25rem 0.55rem;
+      font: inherit;
+      font-size: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      cursor: pointer;
+      color: var(--muted);
+    }
+    .audit-quick button:hover { border-color: #98a2b3; color: var(--text); }
+    label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 0.25rem; }
+    .filter-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 0.15rem; }
+    input[type="search"], select {
+      width: 100%;
+      padding: 0.5rem 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font: inherit;
+    }
+    .chk { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; padding-bottom: 0.35rem; }
+    .summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.25rem;
+      margin-bottom: 1.25rem;
+      font-size: 0.9rem;
+    }
+    .summary strong { font-variant-numeric: tabular-nums; }
+    details.section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 0.75rem;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    details.section[open] { border-color: #c7d2fe; }
+    details.section > summary {
+      cursor: pointer;
+      padding: 0.85rem 1rem;
+      font-weight: 600;
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.35rem 0.75rem;
+    }
+    details.section > summary::-webkit-details-marker { display: none; }
+    .section-meta { font-size: 0.8rem; font-weight: 500; color: var(--muted); }
+    .table-scroll { overflow: auto; max-height: 70vh; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f9fafb;
+      text-align: left;
+      padding: 0.55rem 0.65rem;
+      border-bottom: 2px solid var(--border);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      color: var(--muted);
+    }
+    tbody td {
+      padding: 0.5rem 0.65rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tbody tr:nth-child(even) { background: #fafbfc; }
+    tbody tr.hidden { display: none; }
+    td.sub { width: 11rem; font-weight: 500; color: var(--audit); }
+    td.task { min-width: 14rem; }
+    td.note { color: var(--muted); font-size: 0.8rem; max-width: 18rem; }
+    .empty { padding: 2rem; text-align: center; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Трекер соответствия ТЗ</h1>
+      <p>Статус по коду (аудит). Пересборка: <code>node scripts/generate-spec-tracker.mjs</code>.</p>
+    </header>
+
+    <div class="legend" aria-label="Легенда статусов">
+      <span class="badge badge--yes">Да</span>
+      <span class="badge badge--no">Нет</span>
+      <span class="badge badge--partial">Частично</span>
+      <span class="badge badge--discuss">Надо обсудить</span>
+      <span class="badge badge--later">Проверить позже</span>
+      <span class="badge badge--v2">Потом (v2)</span>
+      <span class="badge badge--llm">Потом · LLM, не горит</span>
+      <span class="badge badge--dash">—</span>
+    </div>
+
+    <div class="controls">
+      <div>
+        <label for="q">Поиск</label>
+        <input type="search" id="q" placeholder="Задача, подраздел, примечание…" autocomplete="off" />
+      </div>
+      <div>
+        <label for="section-filter">Раздел</label>
+        <select id="section-filter">
+          <option value="">Все разделы</option>
+        </select>
+      </div>
+      <div class="audit-filter-block">
+        <span class="filter-label">По коду (аудит) — показывать</span>
+        <div id="audit-filters" class="audit-filters" role="group" aria-label="Фильтр статуса аудита"></div>
+        <div class="audit-quick">
+          <button type="button" data-audit-preset="all">Все</button>
+          <button type="button" data-audit-preset="yes">Только «Да»</button>
+          <button type="button" data-audit-preset="no">Только «Нет»</button>
+          <button type="button" data-audit-preset="partial">Только «Частично»</button>
+          <button type="button" data-audit-preset="gaps">«Нет» + «Частично»</button>
+          <button type="button" data-audit-preset="other">Остальные статусы</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="summary" id="summary" aria-live="polite"></div>
+    <div id="sections"></div>
+    <p class="empty hidden" id="no-results">Ничего не найдено по фильтрам.</p>
+  </div>
+
+  <script type="application/json" id="spec-data">__SPEC_DATA__</script>
+  <script>
+    const ROWS = JSON.parse(document.getElementById('spec-data').textContent);
+
+    function badgeClass(status) {
+      switch (status) {
+        case 'Да': return 'badge--yes';
+        case 'Нет': return 'badge--no';
+        case 'Частично': return 'badge--partial';
+        case 'Надо обсудить': return 'badge--discuss';
+        case 'Проверить позже': return 'badge--later';
+        case 'Потом (v2)': return 'badge--v2';
+        case '—': return 'badge--dash';
+        default: return 'badge--dash';
+      }
+    }
+
+    function renderBadge(status) {
+      const cls = badgeClass(status);
+      return `<span class="badge ${cls}">${escapeHtml(status || '—')}</span>`;
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function normalizeAuditStatus(s) {
+      const t = (s ?? '').trim();
+      return t || '—';
+    }
+
+    const AUDIT_ORDER = [
+      'Да',
+      'Нет',
+      'Частично',
+      'Надо обсудить',
+      'Проверить позже',
+      'Потом (v2)',
+      '—',
+    ];
+
+    function collectAuditStatuses() {
+      const set = new Set();
+      for (const row of ROWS) {
+        if (!row.sectionId) continue;
+        set.add(normalizeAuditStatus(row.statusAudit));
+      }
+      const ordered = AUDIT_ORDER.filter((s) => set.has(s));
+      for (const s of set) {
+        if (!ordered.includes(s)) ordered.push(s);
+      }
+      return ordered;
+    }
+
+    const allowedAudit = new Set(collectAuditStatuses());
+    const auditFiltersEl = document.getElementById('audit-filters');
+
+    function syncAuditCheckboxesFromSet() {
+      auditFiltersEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+        cb.checked = allowedAudit.has(cb.value);
+      });
+    }
+
+    for (const status of collectAuditStatuses()) {
+      const lbl = document.createElement('label');
+      lbl.className = 'audit-chk';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = status;
+      cb.checked = true;
+      cb.addEventListener('change', () => {
+        if (cb.checked) allowedAudit.add(status);
+        else allowedAudit.delete(status);
+        updateUI();
+      });
+      lbl.appendChild(cb);
+      lbl.appendChild(document.createTextNode(status));
+      auditFiltersEl.appendChild(lbl);
+    }
+
+    document.querySelectorAll('[data-audit-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const preset = btn.getAttribute('data-audit-preset');
+        const all = collectAuditStatuses();
+        allowedAudit.clear();
+        if (preset === 'all') {
+          all.forEach((s) => allowedAudit.add(s));
+        } else if (preset === 'yes') {
+          allowedAudit.add('Да');
+        } else if (preset === 'no') {
+          allowedAudit.add('Нет');
+        } else if (preset === 'partial') {
+          allowedAudit.add('Частично');
+        } else if (preset === 'gaps') {
+          allowedAudit.add('Нет');
+          allowedAudit.add('Частично');
+        } else if (preset === 'other') {
+          all.forEach((s) => {
+            if (!['Да', 'Нет', 'Частично'].includes(s)) allowedAudit.add(s);
+          });
+        }
+        syncAuditCheckboxesFromSet();
+        updateUI();
+      });
+    });
+
+    function rowMatchesFilters(row, q, sectionId) {
+      if (sectionId && String(row.sectionId) !== sectionId) return false;
+      if (!allowedAudit.has(normalizeAuditStatus(row.statusAudit))) return false;
+      if (!q) return true;
+      const hay = `${row.subsection} ${row.task} ${row.note} ${row.auditNote}`.toLowerCase();
+      return hay.includes(q);
+    }
+
+    const sectionsMap = new Map();
+    for (const row of ROWS) {
+      if (!row.sectionId) continue;
+      if (!sectionsMap.has(row.sectionId)) {
+        sectionsMap.set(row.sectionId, {
+          id: row.sectionId,
+          title: row.sectionTitle,
+          pointCount: row.pointCount,
+          rows: [],
+        });
+      }
+      sectionsMap.get(row.sectionId).rows.push(row);
+    }
+
+    const sectionFilter = document.getElementById('section-filter');
+    [...sectionsMap.values()]
+      .sort((a, b) => a.id - b.id)
+      .forEach((sec) => {
+        const opt = document.createElement('option');
+        opt.value = String(sec.id);
+        opt.textContent = `${sec.id}. ${sec.title}`;
+        sectionFilter.appendChild(opt);
+      });
+
+    const sectionsEl = document.getElementById('sections');
+    for (const sec of [...sectionsMap.values()].sort((a, b) => a.id - b.id)) {
+      const det = document.createElement('details');
+      det.className = 'section';
+      det.dataset.sectionId = String(sec.id);
+      if (sec.id === 2) det.open = true;
+
+      const summary = document.createElement('summary');
+      summary.innerHTML = `<span>${sec.id}. ${escapeHtml(sec.title)}</span>
+        <span class="section-meta">${sec.rows.length} пунктов · аудит «Да»: <span class="audit-yes-count">0</span></span>`;
+      det.appendChild(summary);
+
+      const scroll = document.createElement('div');
+      scroll.className = 'table-scroll';
+      const table = document.createElement('table');
+      table.innerHTML = `<thead><tr>
+        <th>Подраздел</th>
+        <th>Задача / функция</th>
+        <th>По коду (аудит)</th>
+        <th>Примечание</th>
+      </tr></thead><tbody></tbody>`;
+      const tbody = table.querySelector('tbody');
+
+      for (const row of sec.rows) {
+        const tr = document.createElement('tr');
+        tr.dataset.rowId = `${row.sectionId}-${tbody.children.length}`;
+        const llm = row.llmDeferred
+          ? ' <span class="badge badge--llm">Потом · LLM, не горит</span>'
+          : '';
+        const noteText = [row.note, row.auditNote].filter(Boolean).join(' · ');
+        tr.innerHTML = `
+          <td class="sub">${escapeHtml(row.subsection)}</td>
+          <td class="task">${escapeHtml(row.task)}${llm}</td>
+          <td>${renderBadge(row.statusAudit)}</td>
+          <td class="note">${escapeHtml(noteText)}</td>`;
+        tbody.appendChild(tr);
+      }
+
+      scroll.appendChild(table);
+      det.appendChild(scroll);
+      sectionsEl.appendChild(det);
+    }
+
+    function updateUI() {
+      const q = document.getElementById('q').value.trim().toLowerCase();
+      const sectionId = sectionFilter.value;
+
+      let visible = 0;
+      let auditYes = 0;
+      let auditNo = 0;
+      let auditPartial = 0;
+
+      for (const row of ROWS) {
+        if (!row.sectionId) continue;
+        if (row.statusAudit === 'Да') auditYes++;
+        if (row.statusAudit === 'Нет') auditNo++;
+        if (row.statusAudit === 'Частично') auditPartial++;
+      }
+
+      let anyVisible = false;
+      document.querySelectorAll('details.section').forEach((det) => {
+        const sid = det.dataset.sectionId;
+        if (sectionId && sid !== sectionId) {
+          det.classList.add('hidden');
+          det.style.display = 'none';
+          return;
+        }
+        det.classList.remove('hidden');
+        det.style.display = '';
+
+        let secVisible = 0;
+        let secAuditYes = 0;
+        det.querySelectorAll('tbody tr').forEach((tr, idx) => {
+          const row = sectionsMap.get(Number(sid)).rows[idx];
+          const show = rowMatchesFilters(row, q, sectionId);
+          tr.classList.toggle('hidden', !show);
+          if (show) {
+            secVisible++;
+            if (row.statusAudit === 'Да') secAuditYes++;
+          }
+        });
+        const countEl = det.querySelector('.audit-yes-count');
+        if (countEl) countEl.textContent = String(secAuditYes);
+        if (secVisible === 0) {
+          det.style.display = 'none';
+        } else {
+          anyVisible = true;
+          visible += secVisible;
+        }
+      });
+
+      const total = ROWS.filter((r) => r.sectionId).length;
+      document.getElementById('summary').innerHTML = `
+        <span>Всего пунктов: <strong>${total}</strong></span>
+        <span>Показано: <strong>${visible}</strong></span>
+        <span>Фильтр аудита: <strong>${allowedAudit.size}</strong> из ${collectAuditStatuses().length} типов</span>
+        <span>Аудит «Да»: <strong>${auditYes}</strong></span>
+        <span>Аудит «Нет»: <strong>${auditNo}</strong></span>
+        <span>Аудит «Частично»: <strong>${auditPartial}</strong></span>`;
+      document.getElementById('no-results').classList.toggle('hidden', anyVisible);
+    }
+
+    document.getElementById('q').addEventListener('input', updateUI);
+    sectionFilter.addEventListener('change', updateUI);
+    updateUI();
+  </script>
+</body>
+</html>

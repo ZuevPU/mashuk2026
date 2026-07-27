@@ -1,0 +1,73 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { computeAbProgressPercent, resolveProfileProgressWeights } from '../services/profileProgress.js';
+import { pickProfileRecommendation } from '../services/profileRecommendations.js';
+import { buildOutcomesHeuristic, parseOutcomesForDisplay } from '../services/profileOutcomes.js';
+
+describe('profileProgress §7', () => {
+  it('computes weighted A→B percent', () => {
+    const pct = computeAbProgressPercent({
+      touchpointRatio: 1,
+      eveningDone: 7,
+      eveningTotal: 7,
+      tasksApproved: 5,
+      tasksTotal: 5,
+      piggyInWorkCount: 3,
+    });
+    assert.equal(pct, 100);
+  });
+
+  it('falls back to default weights for bad JSON', () => {
+    const w = resolveProfileProgressWeights(null);
+    assert.equal(w.touchpoints, 40);
+    assert.equal(w.piggybankInWork, 10);
+  });
+});
+
+describe('profileRecommendations §7', () => {
+  it('picks low_answers template on day 2', () => {
+    const rec = pickProfileRecommendation({
+      participantId: 1,
+      currentDay: 2,
+      answersCount: 0,
+      piggyCount: 5,
+      missedTouchpoints: 0,
+      recommendationThreshold: 2,
+    });
+    assert.match(rec.text, /рефлексивный|ответ/i);
+    assert.equal(rec.kind, 'daily');
+  });
+
+  it('stable finale kind on day 7', () => {
+    const rec = pickProfileRecommendation({
+      participantId: 42,
+      currentDay: 7,
+      answersCount: 10,
+      piggyCount: 10,
+      missedTouchpoints: 0,
+      recommendationThreshold: 2,
+      growthRoleName: 'Исследователь',
+    });
+    assert.equal(rec.kind, 'finale');
+    assert.match(rec.text, /Исследователь/);
+  });
+});
+
+describe('profileOutcomes §7', () => {
+  it('builds heuristic bullets from activity', () => {
+    const bullets = buildOutcomesHeuristic({
+      answersCount: 5,
+      tasksApproved: 2,
+      piggyTotal: 4,
+      piggyInWork: 1,
+      eveningNotes: ['Получилось держать фокус на группе'],
+    });
+    assert.ok(bullets.length >= 2);
+    assert.ok(bullets.some(b => b.includes('задан')));
+  });
+
+  it('prefers edited bullets over heuristic', () => {
+    const display = parseOutcomesForDisplay({ bullets: ['Админ правка'] }, ['heuristic']);
+    assert.deepEqual(display, ['Админ правка']);
+  });
+});

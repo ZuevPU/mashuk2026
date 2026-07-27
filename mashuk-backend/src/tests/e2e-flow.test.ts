@@ -132,8 +132,15 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
     const piggy = await request(app)
       .post('/api/piggybank/quick')
       .set(headers)
-      .send({ tag: 'идея', text: 'E2E piggybank', source: 'Своя мысль' });
+      .send({ tags: ['идея', 'в работу'], text: 'E2E piggybank', source: 'Своя мысль' });
     assert.equal(piggy.status, 200, JSON.stringify(piggy.body));
+
+    const piggyList = await request(app).get('/api/piggybank?tag=в работу').set(headers);
+    assert.equal(piggyList.status, 200);
+    assert.ok(piggyList.body.entries?.some((e: { text?: string }) => e.text === 'E2E piggybank'));
+
+    const piggyExport = await request(app).get('/api/piggybank/export').set(headers);
+    assert.equal(piggyExport.status, 200);
 
     const piggyBad = await request(app)
       .post('/api/piggybank/quick')
@@ -401,6 +408,8 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
       const profile = await request(app).get('/api/profile').set(headers);
       assert.equal(profile.status, 200);
       assert.ok('finalCard' in profile.body);
+      assert.equal(typeof profile.body.metrics?.abProgress, 'number');
+      assert.ok(profile.body.dailyTracker);
 
       const list = await request(app).get('/api/admin/participants').set(adminAuth);
       const p = list.body.participants.find((x: { vkId: number }) => x.vkId === E2E_VK_ID);
@@ -417,6 +426,12 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
         .set(adminAuth);
       assert.equal(pdf.status, 200);
       assert.match(String(pdf.headers['content-type'] || ''), /pdf/i);
+
+      const preview = await request(app)
+        .get(`/api/admin/participants/${p.id}/pdf-preview`)
+        .set(adminAuth);
+      assert.equal(preview.status, 200);
+      assert.match(String(preview.headers['content-type'] || ''), /pdf/i);
     } finally {
       await request(app)
         .patch('/api/admin/forum-settings')

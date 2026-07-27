@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Panel, PanelHeader, Group, Spinner, ModalRoot, Snackbar, Button, FormItem, CustomSelect, Div } from '@vkontakte/vkui';
+import { Panel, PanelHeader, Group, Spinner, ModalRoot, Snackbar, Button, Div } from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { useAppModal } from '../App';
 import { HeaderInfo } from '../components/home/HeaderInfo';
-import { QuickCaptureModal } from '../components/QuickCaptureModal';
+import { openQuickCapture } from '../components/QuickCaptureFlow';
 import { QUICK_CAPTURE_ITEMS } from '../data/piggybank';
 import {
   PriorityAction, NextEventCard, TouchpointsCard, StatsRow,
-  RoleOfDayCard, ExperimentCard,
+  RoleOfDayCard, ExperimentCard, MissedTouchpointsCard,
 } from '../components/home/DashboardCards';
+import { EveningQuestionnaire } from '../components/home/EveningQuestionnaire';
 import { apiGet, apiPost, ApiError } from '../api/client';
 
 interface ScheduleItem {
@@ -34,6 +35,15 @@ interface HomeData {
   currentDate: string;
   dayFocus: { title: string; text?: string; keyQuestion?: string } | null;
   priorityAction: { type: string; title: string; subtitle: string; route: string } | null;
+  activeCard?: {
+    kind: string;
+    phase: string;
+    tag: string;
+    title: string;
+    subtitle: string;
+    route: string;
+    cta: string;
+  } | null;
   eveningCard?: { title: string; subtitle: string } | null;
   roleOfDay: { roleKey: string; name: string; quadrant?: string; essence?: string } | null;
   experiment: {
@@ -45,11 +55,16 @@ interface HomeData {
   } | null;
   eveningQuestionnaire: {
     available: boolean;
+    opensAt?: string | null;
     completed: boolean;
     askTomorrowRole?: boolean;
+    config?: { steps: { id: string; title: string; fields: unknown[] }[] };
     scales?: { key: string; label: string }[];
     roles: RoleMeta[];
     saved?: Record<string, unknown> | null;
+    savedDraft?: { step?: number; form?: Record<string, unknown>; tomorrowRoleKey?: string } | null;
+    pointBQuestionId?: number | null;
+    hasPointB?: boolean;
   };
   missedQuestions: { id: number; title: string; closeTime: string; expired?: boolean; overdue?: boolean }[];
   counts: { availableQuestions: number; availableTasks: number; hasNewTasks: boolean };
@@ -67,12 +82,16 @@ interface HomeData {
     total: number;
     message: string;
     missed?: number;
+    missedToday?: { id: number; title: string; state: 'overdue' | 'locked' }[];
+    missedTodayCount?: number;
+    ctaQuestionId?: number | null;
     items?: { id: number; title?: string; state: 'done' | 'active' | 'overdue' | 'locked' | 'pending'; block?: string | null }[];
   };
   schedule?: ScheduleItem[];
   ui?: {
     showTasksBanner?: boolean;
     showQuickCapture?: boolean;
+    showPiggybankFab?: boolean;
     showEveningCard?: boolean;
   };
 }
@@ -93,17 +112,9 @@ export const HomePanel: React.FC<{
   const { setModal } = useAppModal();
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [captureTag, setCaptureTag] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showEvening, setShowEvening] = useState(false);
-  const [tomorrowRole, setTomorrowRole] = useState<string>('');
-  const [eveningStep, setEveningStep] = useState(0);
-  const [eveningForm, setEveningForm] = useState<Record<string, unknown>>({
-    tripYes: false,
-    practiceYes: false,
-    recommendYes: false,
-  });
 
   const reload = () => {
     setLoading(true);
@@ -111,9 +122,6 @@ export const HomePanel: React.FC<{
     return apiGet<HomeData>('/home')
       .then(d => {
         setData(d);
-        if (d.eveningQuestionnaire?.roles?.[0] && !tomorrowRole) {
-          setTomorrowRole(d.eveningQuestionnaire.roles[0].roleKey);
-        }
       })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 403) {
@@ -139,30 +147,6 @@ export const HomePanel: React.FC<{
     if (params.get('evening') === '1') setShowEvening(true);
   }, []);
 
-  const handleQuickSave = async (text: string, source: string) => {
-    if (!captureTag) return;
-    await apiPost('/piggybank/quick', { tag: captureTag, text, source });
-    setSnackbar('Сохранено в копилку');
-    setCaptureTag(null);
-    reload();
-  };
-
-  useEffect(() => {
-    if (captureTag) {
-      setModal(
-        <ModalRoot activeModal="quick-capture" onClose={() => setCaptureTag(null)}>
-          <QuickCaptureModal
-            tag={captureTag}
-            onClose={() => setCaptureTag(null)}
-            onSave={(text, source) => handleQuickSave(text, source)}
-          />
-        </ModalRoot>,
-      );
-    } else {
-      setModal(null);
-    }
-  }, [captureTag, setModal]);
-
   useEffect(() => {
     return () => setModal(null);
   }, [setModal]);
@@ -171,29 +155,6 @@ export const HomePanel: React.FC<{
     await apiPost('/day-state/experiment', { status });
     setSnackbar(status === 'done' ? 'Эксперимент отмечен' : 'Эксперимент в процессе');
     reload();
-  };
-
-  const handleEveningSubmit = async () => {
-    const askRole = data?.eveningQuestionnaire?.askTomorrowRole !== false && (data?.currentDay ?? 0) <= 6;
-    if (askRole && !tomorrowRole) return;
-    const ratings: Record<string, unknown> = { ...eveningForm };
-    await apiPost('/day-state/evening', {
-      tomorrowRoleKey: askRole ? tomorrowRole : undefined,
-      ratings,
-      experimentStatus: data?.experiment?.status === 'done' ? 'done' : undefined,
-    });
-    setShowEvening(false);
-    setEveningStep(0);
-    setSnackbar('Итоговая анкета сохранена · +15 Путь');
-    reload();
-  };
-
-  const setScale = (key: string, value: number) => {
-    setEveningForm(prev => ({ ...prev, [key]: value }));
-  };
-
-  const setField = (key: string, value: unknown) => {
-    setEveningForm(prev => ({ ...prev, [key]: value }));
   };
 
   if (loading) {
@@ -220,188 +181,40 @@ export const HomePanel: React.FC<{
   const d = data;
   const name = d.user?.firstName || fetchedUser?.first_name || '';
   const lastName = d.user?.lastName || fetchedUser?.last_name || '';
-  const activeMissed = d.missedQuestions?.filter(q => !q.expired) ?? [];
-  const expiredMissed = d.missedQuestions?.filter(q => q.expired) ?? [];
   const schedule = d.schedule ?? [];
-  const askTomorrowRole = d.eveningQuestionnaire?.askTomorrowRole !== false && d.currentDay <= 6;
-  const showEveningCard = !!d.eveningCard;
+  const showEveningCard = !!d.eveningCard && (d.timeSlot === 'evening' || d.eveningWrap);
   const showQuick = !!d.ui?.showQuickCapture;
+  const card = d.activeCard;
+  const hidePriorityDup = card && d.priorityAction && card.route === d.priorityAction.route;
+  const hideEveningDup = card?.kind === 'evening_survey';
+  const hideNowSchedule = card?.kind === 'program_now' || card?.kind === 'program_soon';
 
-  const eveningQuestionnaireBlock = showEvening && d.eveningQuestionnaire?.available ? (
-    <div className="m-card">
-      <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>Итоговая анкета</div>
-      <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
-        Шаг {eveningStep + 1} из 4 · можно закрыть и вернуться
+  const eveningQuestionnaireBlock = showEvening ? (
+    d.eveningQuestionnaire?.available ? (
+      <EveningQuestionnaire
+        currentDay={d.currentDay}
+        questionnaire={d.eveningQuestionnaire}
+        experiment={d.experiment}
+        onClose={() => setShowEvening(false)}
+        onSubmitted={() => {
+          setShowEvening(false);
+          setSnackbar('Итоговая анкета сохранена · +15 Путь');
+          reload();
+        }}
+      />
+    ) : (
+      <div className="m-card" style={{ fontSize: 13 }}>
+        Итоговая анкета откроется в {d.eveningQuestionnaire?.opensAt || '22:00'} МСК.
+        {d.eveningQuestionnaire?.completed && ' Вы уже заполнили анкету за сегодня.'}
       </div>
-      <div style={{ height: 4, background: '#eee', borderRadius: 4, marginBottom: 12 }}>
-        <div style={{ width: `${((eveningStep + 1) / 4) * 100}%`, height: 4, background: '#2D6A4F', borderRadius: 4 }} />
-      </div>
-
-      {eveningStep === 0 && (
-        <>
-          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>9 шкал оценки дня (1–5)</div>
-          {(d.eveningQuestionnaire.scales || [
-            { key: 'direction', label: 'Направление' },
-            { key: 'lessonsImportant', label: 'Уроки о важном' },
-            { key: 'openLessons', label: 'Открытые уроки' },
-            { key: 'morningHealth', label: 'Утренняя программа здоровья' },
-            { key: 'workshops', label: 'Мастер-классы' },
-            { key: 'eveningAtmosphere', label: 'Вечерняя программа' },
-            { key: 'food', label: 'Питание' },
-            { key: 'housing', label: 'Проживание' },
-            { key: 'curator', label: 'Куратор группы' },
-          ]).map(s => (
-            <FormItem key={s.key} top={s.label}>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {[1, 2, 3, 4, 5].map(n => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setScale(s.key, n)}
-                    style={{
-                      width: 36, height: 36, borderRadius: 8,
-                      border: eveningForm[s.key] === n ? '2px solid #2D6A4F' : '1px solid #ddd',
-                      background: eveningForm[s.key] === n ? '#D8F3DC' : '#fff',
-                      fontWeight: 700, cursor: 'pointer',
-                    }}
-                  >{n}</button>
-                ))}
-              </div>
-            </FormItem>
-          ))}
-        </>
-      )}
-
-      {eveningStep === 1 && (
-        <>
-          <FormItem top="Выезжал ли ты на полезную программу?">
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Button mode={eveningForm.tripYes ? 'primary' : 'secondary'} onClick={() => setField('tripYes', true)}>Да</Button>
-              <Button mode={!eveningForm.tripYes ? 'primary' : 'secondary'} onClick={() => setField('tripYes', false)}>Нет</Button>
-            </div>
-          </FormItem>
-          {eveningForm.tripYes && (
-            <FormItem top="Оценка выездной программы (1–5)">
-              <div style={{ display: 'flex', gap: 6 }}>
-                {[1, 2, 3, 4, 5].map(n => (
-                  <button key={n} type="button" onClick={() => setScale('tripScore', n)}
-                    style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid #ddd', fontWeight: 700 }}>{n}</button>
-                ))}
-              </div>
-            </FormItem>
-          )}
-          <FormItem top="Был ли ты на презентации педагогической практики?">
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Button mode={eveningForm.practiceYes ? 'primary' : 'secondary'} onClick={() => setField('practiceYes', true)}>Да</Button>
-              <Button mode={!eveningForm.practiceYes ? 'primary' : 'secondary'} onClick={() => setField('practiceYes', false)}>Нет</Button>
-            </div>
-          </FormItem>
-          {eveningForm.practiceYes && (
-            <>
-              <FormItem top="На какой практике?">
-                <textarea
-                  value={String(eveningForm.practiceName || '')}
-                  onChange={e => setField('practiceName', e.target.value)}
-                  style={{ width: '100%', minHeight: 48, borderRadius: 10, border: '1px solid #ddd', padding: 10 }}
-                />
-              </FormItem>
-              <FormItem top="Готов рекомендовать коллегам?">
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <Button mode={eveningForm.recommendYes ? 'primary' : 'secondary'} onClick={() => setField('recommendYes', true)}>Да</Button>
-                  <Button mode={!eveningForm.recommendYes ? 'primary' : 'secondary'} onClick={() => setField('recommendYes', false)}>Нет</Button>
-                </div>
-              </FormItem>
-              {eveningForm.recommendYes && (
-                <FormItem top="Оценка рекомендации (1–10)">
-                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                      <button key={n} type="button" onClick={() => setScale('recommendScore', n)}
-                        style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #ddd', fontSize: 11 }}>{n}</button>
-                    ))}
-                  </div>
-                </FormItem>
-              )}
-            </>
-          )}
-        </>
-      )}
-
-      {eveningStep === 2 && (
-        <>
-          <FormItem top="Главный тезис дня">
-            <textarea value={String(eveningForm.mainThesis || '')} onChange={e => setField('mainThesis', e.target.value)}
-              style={{ width: '100%', minHeight: 56, borderRadius: 10, border: '1px solid #ddd', padding: 10 }} />
-          </FormItem>
-          <FormItem top="Как изменилось понимание темы / деятельности?">
-            <textarea value={String(eveningForm.understandingChange || '')} onChange={e => setField('understandingChange', e.target.value)}
-              style={{ width: '100%', minHeight: 56, borderRadius: 10, border: '1px solid #ddd', padding: 10 }} />
-          </FormItem>
-          <FormItem top="Что понравилось больше всего?">
-            <textarea value={String(eveningForm.likedMost || '')} onChange={e => setField('likedMost', e.target.value)}
-              style={{ width: '100%', minHeight: 48, borderRadius: 10, border: '1px solid #ddd', padding: 10 }} />
-          </FormItem>
-          <FormItem top="Что сделать, чтобы завтра оценки стали выше?">
-            <textarea value={String(eveningForm.improveTomorrow || '')} onChange={e => setField('improveTomorrow', e.target.value)}
-              style={{ width: '100%', minHeight: 48, borderRadius: 10, border: '1px solid #ddd', padding: 10 }} />
-          </FormItem>
-          <FormItem top="Свободное поле">
-            <textarea value={String(eveningForm.freeNote || '')} onChange={e => setField('freeNote', e.target.value)}
-              style={{ width: '100%', minHeight: 48, borderRadius: 10, border: '1px solid #ddd', padding: 10 }}
-              placeholder="Всё, что не сказано выше" />
-          </FormItem>
-          {d.experiment && (
-            <FormItem top="Эксперимент с ролью: что получилось / не получилось / что фиксируешь?">
-              <textarea value={String(eveningForm.experimentResult || '')} onChange={e => setField('experimentResult', e.target.value)}
-                style={{ width: '100%', minHeight: 64, borderRadius: 10, border: '1px solid #ddd', padding: 10 }} />
-            </FormItem>
-          )}
-        </>
-      )}
-
-      {eveningStep === 3 && (
-        <>
-          {askTomorrowRole && (
-            <FormItem top="Завтра сфокусироваться на развитии какой роли?">
-              <CustomSelect
-                options={(d.eveningQuestionnaire.roles || []).map(r => ({
-                  label: r.name,
-                  value: r.roleKey,
-                }))}
-                value={tomorrowRole || undefined}
-                onChange={e => setTomorrowRole(String(e.target.value))}
-              />
-            </FormItem>
-          )}
-          {d.currentDay === 7 && (
-            <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-              День 7 — роль на день отъезда не выбираем. Заполните Точку Б в разделе «Вопросы».
-            </div>
-          )}
-        </>
-      )}
-
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        {eveningStep > 0 && (
-          <Button size="l" mode="secondary" onClick={() => setEveningStep(s => s - 1)}>Назад</Button>
-        )}
-        {eveningStep < 3 ? (
-          <Button size="l" stretched onClick={() => setEveningStep(s => s + 1)}>Далее</Button>
-        ) : (
-          <Button size="l" stretched onClick={handleEveningSubmit} disabled={askTomorrowRole && !tomorrowRole}>
-            Сохранить
-          </Button>
-        )}
-      </div>
-      <Button size="l" stretched mode="tertiary" style={{ marginTop: 8 }} onClick={() => { setShowEvening(false); setEveningStep(0); }}>
-        Отложить
-      </Button>
-    </div>
+    )
   ) : null;
 
   return (
     <Panel id={id}>
       <PanelHeader>Главная</PanelHeader>
       <Group>
+        <div className="home-feed">
         <HeaderInfo
           firstName={name}
           lastName={lastName}
@@ -416,7 +229,20 @@ export const HomePanel: React.FC<{
           progressPercent={(d.currentDay / d.totalDays) * 100}
         />
 
-        {d.priorityAction && (
+        {card && (
+          <PriorityAction
+            tag={card.tag}
+            title={card.title}
+            subtitle={card.subtitle}
+            buttonText={card.cta}
+            onClick={() => {
+              if (card.route.includes('evening=1')) setShowEvening(true);
+              else routeNavigator.push(card.route);
+            }}
+          />
+        )}
+
+        {d.priorityAction && !hidePriorityDup && !card && (
           <PriorityAction
             tag={d.priorityAction.type === 'question' ? '⚡ Нужно сейчас' : '⚡ Нужно сейчас'}
             title={d.priorityAction.title}
@@ -442,14 +268,19 @@ export const HomePanel: React.FC<{
             roleName={d.experiment.roleName}
             status={d.experiment.status}
             onStatusChange={handleExperimentStatus}
+            onSaveFixation={() => openQuickCapture(setModal, {
+              initialTags: ['мысль'],
+              prefillText: [d.experiment!.title, d.experiment!.body].filter(Boolean).join('\n\n'),
+              onSaved: () => setSnackbar('Фиксация сохранена в копилку'),
+            })}
           />
         )}
 
-        {schedule.length > 0 && d.currentDay !== 8 && (
+        {schedule.length > 0 && d.currentDay !== 8 && !hideNowSchedule && (
           <div className="m-nxt">
             <div className="m-nxt-lbl">Расписание</div>
             {schedule.map((ev, i) => (
-              <div key={i} className={ev.kind === 'now' ? 'm-now-pulse' : ''} style={{ marginBottom: 6 }}>
+              <div key={i} className={ev.kind === 'now' ? 'm-now-pulse m-nxt-item' : 'm-nxt-item'}>
                 <NextEventCard
                   title={ev.title}
                   time={`${scheduleKindLabel(ev.kind)}${ev.time}${ev.place ? ` · ${ev.place}` : ''}`}
@@ -466,7 +297,10 @@ export const HomePanel: React.FC<{
             <div className="m-now-t">Быстрая фиксация</div>
             <div className="cap-row">
               {QUICK_CAPTURE_ITEMS.map(item => (
-                <div key={item.tag} className="cap" onClick={() => setCaptureTag(item.tag)}>
+                <div key={item.tag} className="cap" onClick={() => openQuickCapture(setModal, {
+                  initialTag: item.tag,
+                  onSaved: () => { setSnackbar('Сохранено в копилку'); reload(); },
+                })}>
                   <span className="ci">{item.icon}</span>
                   <span className="cl">{item.label}</span>
                 </div>
@@ -484,20 +318,10 @@ export const HomePanel: React.FC<{
           </div>
         )}
 
-        {activeMissed.length > 0 && (
-          <div className="m-card miss" style={{ background: '#FFF0F0', border: '1.5px solid rgba(229,62,62,.25)' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#C53030' }}>
-              {activeMissed.length === 1 ? `Пропущено: ${activeMissed[0].title}` : `Пропущено вопросов: ${activeMissed.length}`}
-            </div>
-            <ButtonLike onClick={() => routeNavigator.push('/questions')}>Перейти →</ButtonLike>
-          </div>
-        )}
-
-        {expiredMissed.map(q => (
-          <div key={q.id} className="m-card" style={{ background: '#F7F7F7', opacity: 0.85 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#888' }}>🔒 Заморожено: {q.title}</div>
-          </div>
-        ))}
+        <MissedTouchpointsCard
+          items={d.touchpoints.missedToday ?? []}
+          ctaQuestionId={d.touchpoints.ctaQuestionId}
+        />
 
         <div className="m-card" onClick={() => routeNavigator.push('/questions')} style={{ cursor: 'pointer' }}>
           <div className="m-tmi-t">Вопросы</div>
@@ -516,7 +340,7 @@ export const HomePanel: React.FC<{
           }}
         />
 
-        {showEveningCard && !showEvening && (
+        {showEveningCard && !showEvening && !hideEveningDup && (
           <PriorityAction
             tag="✦ Завершение дня"
             title="Итоговая анкета"
@@ -531,6 +355,7 @@ export const HomePanel: React.FC<{
         <StatsRow
           path={d.points.path}
           exp={d.points.experience}
+          total={d.points.total}
           ideas={d.points.ideas}
           pathLevel={d.points.pathLevel}
           experienceLevel={d.points.experienceLevel}
@@ -538,6 +363,7 @@ export const HomePanel: React.FC<{
           experienceProgress={d.points.experienceProgress}
           onIdeasClick={() => routeNavigator.push('/profile?section=piggybank')}
         />
+        </div>
         <Div />
       </Group>
 

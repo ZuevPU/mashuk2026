@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, timestamp, jsonb, integer, boolean, index } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, text, timestamp, jsonb, integer, boolean, index, smallint } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 export const directions = pgTable('directions', {
@@ -24,6 +24,17 @@ export const forumSettings = pgTable('forum_settings', {
   groupAssignMode: varchar('group_assign_mode', { length: 20 }).default('list'),
   kbUnlockThreshold: integer('kb_unlock_threshold').default(4),
   kbUnlockDisabled: boolean('kb_unlock_disabled').default(false),
+  kbPastDaysPolicy: varchar('kb_past_days_policy', { length: 20 }).default('locked'),
+  pushBlockTypes: jsonb('push_block_types').default({}),
+  pushNightSlotEnabled: boolean('push_night_slot_enabled').default(false),
+  teamConfirmHoursDefault: integer('team_confirm_hours_default').default(24),
+  eveningQuestionnaireConfig: jsonb('evening_questionnaire_config'),
+  eveningQuestionnaireByDay: jsonb('evening_questionnaire_by_day'),
+  answerConfirmation: jsonb('answer_confirmation'),
+  profileProgressWeights: jsonb('profile_progress_weights'),
+  shiftLabel: varchar('shift_label', { length: 100 }),
+  pdfTemplate: jsonb('pdf_template'),
+  recommendationTemplates: jsonb('recommendation_templates'),
   /** Онбординг: goalQuestions, interestGroups, questions, optionToRole */
   roleDiagnosticsConfig: jsonb('role_diagnostics_config'),
   updatedAt: timestamp('updated_at').defaultNow(),
@@ -78,6 +89,16 @@ export const scheduleDays = pgTable('schedule_days', {
   isPublished: boolean('is_published').default(false),
   publishedAt: timestamp('published_at'),
 });
+
+export const kbDayUnlocks = pgTable('kb_day_unlocks', {
+  id: serial('id').primaryKey(),
+  participantId: integer('participant_id').notNull(),
+  dayNumber: integer('day_number').notNull(),
+  unlockedByAdminId: integer('unlocked_by_admin_id'),
+  unlockedAt: timestamp('unlocked_at').defaultNow(),
+}, (table) => [
+  index('kb_day_unlocks_participant_idx').on(table.participantId),
+]);
 
 export const scheduleDayVersions = pgTable('schedule_day_versions', {
   id: serial('id').primaryKey(),
@@ -159,6 +180,7 @@ export const participants = pgTable('participants', {
   onboardingCompletedAt: timestamp('onboarding_completed_at'),
   pathPoints: integer('path_points').default(0),
   experiencePoints: integer('experience_points').default(0),
+  bonusPoints: integer('bonus_points').default(0),
   hideFromLeaderboard: boolean('hide_from_leaderboard').default(false),
   qrToken: varchar('qr_token', { length: 64 }),
   groupId: integer('group_id'),
@@ -203,6 +225,7 @@ export const participantDayState = pgTable('participant_day_state', {
   tomorrowRoleKey: varchar('tomorrow_role_key', { length: 100 }),
   experimentStatus: varchar('experiment_status', { length: 50 }).default('none'),
   eveningRatings: jsonb('evening_ratings'),
+  eveningDraft: jsonb('evening_draft'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
@@ -216,6 +239,7 @@ export const questions = pgTable('questions', {
   text: text('text').notNull(),
   type: varchar('type', { length: 50 }).notNull(),
   block: varchar('block', { length: 100 }),
+  reflectionKind: varchar('reflection_kind', { length: 50 }),
   status: varchar('status', { length: 50 }).default('draft'),
   publishTime: timestamp('publish_time'),
   closeTime: timestamp('close_time'),
@@ -270,6 +294,8 @@ export const events = pgTable('events', {
   isPublished: boolean('is_published').default(true),
   dayPublished: boolean('day_published').default(false),
   pushReminder: boolean('push_reminder').default(true),
+  blockType: varchar('block_type', { length: 50 }).default('session'),
+  isKeyBlock: boolean('is_key_block').default(false),
   qrToken: varchar('qr_token', { length: 64 }),
 }, (table) => [
   index('events_day_number_idx').on(table.dayNumber),
@@ -288,6 +314,7 @@ export const materials = pgTable('materials', {
   description: text('description'),
   url: varchar('url', { length: 500 }),
   isNew: boolean('is_new').default(false),
+  createdAt: timestamp('created_at').defaultNow(),
   direction: varchar('direction', { length: 255 }),
   tags: jsonb('tags'),
   isGeneral: boolean('is_general').default(false),
@@ -312,6 +339,7 @@ export const tasks = pgTable('tasks', {
   title: varchar('title', { length: 255 }).notNull(),
   description: text('description'),
   points: integer('points').default(0),
+  medalTask: boolean('medal_task').default(false),
   deadline: timestamp('deadline'),
   publishTime: timestamp('publish_time'),
   dayNumber: integer('day_number'),
@@ -325,6 +353,10 @@ export const tasks = pgTable('tasks', {
   direction: varchar('direction', { length: 255 }),
   qrToken: varchar('qr_token', { length: 64 }),
   confirmationType: varchar('confirmation_type', { length: 50 }).default('text_photo'),
+  dailyRepeatLimit: integer('daily_repeat_limit').default(1),
+  qrValidFrom: timestamp('qr_valid_from'),
+  qrValidTo: timestamp('qr_valid_to'),
+  teamConfirmHours: integer('team_confirm_hours').default(24),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('tasks_day_number_idx').on(table.dayNumber),
@@ -337,6 +369,7 @@ export const taskSubmissions = pgTable('task_submissions', {
   answerText: text('answer_text'),
   photoUrl: varchar('photo_url', { length: 500 }),
   postUrl: varchar('post_url', { length: 500 }),
+  postUrlNormalized: varchar('post_url_normalized', { length: 500 }),
   teamMemberIds: jsonb('team_member_ids'),
   status: varchar('status', { length: 50 }).default('pending'),
   submittedAt: timestamp('submitted_at').defaultNow(),
@@ -349,12 +382,25 @@ export const taskSubmissions = pgTable('task_submissions', {
   index('task_submissions_status_idx').on(table.status),
 ]);
 
+export const taskTeamConfirmations = pgTable('task_team_confirmations', {
+  id: serial('id').primaryKey(),
+  submissionId: integer('submission_id').references(() => taskSubmissions.id, { onDelete: 'cascade' }).notNull(),
+  participantId: integer('participant_id').references(() => participants.id).notNull(),
+  status: varchar('status', { length: 20 }).default('pending'),
+  respondedAt: timestamp('responded_at'),
+}, (table) => [
+  index('task_team_confirm_sub_idx').on(table.submissionId),
+  index('task_team_confirm_part_idx').on(table.participantId),
+]);
+
 export const piggybank = pgTable('piggybank', {
   id: serial('id').primaryKey(),
   participantId: integer('participant_id').references(() => participants.id).notNull(),
   tag: varchar('tag', { length: 100 }),
+  tags: jsonb('tags').notNull().default([]),
   source: varchar('source', { length: 100 }),
   text: text('text').notNull(),
+  forumDay: smallint('forum_day'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('piggybank_participant_id_idx').on(table.participantId),
@@ -390,6 +436,10 @@ export const pointsLog = pgTable('points_log', {
   participantId: integer('participant_id').references(() => participants.id).notNull(),
   actionType: varchar('action_type', { length: 100 }),
   points: integer('points').notNull(),
+  forumDay: smallint('forum_day'),
+  revokedAt: timestamp('revoked_at'),
+  revokeReason: text('revoke_reason'),
+  relatedLogId: integer('related_log_id'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('points_log_participant_id_idx').on(table.participantId),
@@ -421,6 +471,7 @@ export const dailyStats = pgTable('daily_stats', {
   timePoint: varchar('time_point', { length: 50 }),
   avgEnergy: integer('avg_energy'),
   emotionsDistribution: jsonb('emotions_distribution'),
+  emotionZonesDistribution: jsonb('emotion_zones_distribution'),
   completionPercent: integer('completion_percent'),
   medianWordCount: integer('median_word_count'),
   redFlag: boolean('red_flag').default(false),
@@ -476,6 +527,17 @@ export const pdfWhitelist = pgTable('pdf_whitelist', {
   notes: text('notes'),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
+
+export const participantPdfDrafts = pgTable('participant_pdf_drafts', {
+  id: serial('id').primaryKey(),
+  participantId: integer('participant_id').notNull().unique(),
+  blocks: jsonb('blocks').default({}),
+  status: varchar('status', { length: 50 }).default('draft'),
+  publishedAt: timestamp('published_at'),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index('participant_pdf_drafts_participant_idx').on(table.participantId),
+]);
 
 export const clubMatches = pgTable('club_matches', {
   id: serial('id').primaryKey(),

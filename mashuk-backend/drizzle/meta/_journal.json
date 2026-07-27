@@ -71,6 +71,41 @@
       "when": 1789000000000,
       "tag": "0009_participant_self_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0010_home_program_kb",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792000000000,
+      "tag": "0012_touchpoints_s5",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793000000000,
+      "tag": "0013_questions_s6",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1796000000000,
+      "tag": "0016_rating_s9",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1797000000000,
+      "tag": "0017_push_s10",
+      "breakpoints": true
     }
   ]
 }

@@ -38,7 +38,9 @@ const TaskSubmitModal = ({
   const [answerText, setAnswerText] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [postUrl, setPostUrl] = useState('');
-  const [teamMemberIds, setTeamMemberIds] = useState('');
+  const [teamSearch, setTeamSearch] = useState('');
+  const [teamResults, setTeamResults] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
+  const [selectedTeam, setSelectedTeam] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
   const confirmationType = meta?.confirmationType || 'text_photo';
   const qrFromHash = getHashSearchParams().get('qr');
 
@@ -49,6 +51,26 @@ const TaskSubmitModal = ({
   const needsTeam = confirmationType === 'team';
   const isQr = confirmationType === 'qr';
   const isAuto = confirmationType === 'auto';
+
+  useEffect(() => {
+    if (!needsTeam || teamSearch.trim().length < 2) {
+      setTeamResults([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      apiGet<{ participants: { id: number; firstName: string; lastName: string }[] }>(
+        `/participants/teammates-search?q=${encodeURIComponent(teamSearch.trim())}`,
+      ).then(r => setTeamResults(r.participants || [])).catch(() => setTeamResults([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [teamSearch, needsTeam]);
+
+  const addTeammate = (p: { id: number; firstName: string; lastName: string }) => {
+    if (selectedTeam.some(x => x.id === p.id)) return;
+    setSelectedTeam(prev => [...prev, p]);
+    setTeamSearch('');
+    setTeamResults([]);
+  };
 
   const handlePhoto = async () => {
     try {
@@ -70,15 +92,12 @@ const TaskSubmitModal = ({
       setSnackbar('Укажите ссылку на пост');
       return;
     }
-    if (needsTeam && !teamMemberIds.trim()) {
-      setSnackbar('Укажите ID участников команды');
+    if (needsTeam && selectedTeam.length < 1) {
+      setSnackbar('Добавьте участников команды');
       return;
     }
     try {
-      const teamIds = teamMemberIds
-        .split(/[,;\s]+/)
-        .map(Number)
-        .filter(Boolean);
+      const teamIds = selectedTeam.map(p => p.id);
       const res = await apiPost<{ xpAwarded?: number }>(`/tasks/${taskId}/submit`, {
         answerText: answerText || (isAuto || isQr ? 'Готово' : undefined),
         photoUrl,
@@ -129,12 +148,36 @@ const TaskSubmitModal = ({
           />
         )}
         {needsTeam && (
-          <Input
-            value={teamMemberIds}
-            onChange={e => setTeamMemberIds(e.target.value)}
-            placeholder="ID участников через запятую"
-            style={{ marginTop: 8 }}
-          />
+          <div style={{ marginTop: 8 }}>
+            <Input
+              value={teamSearch}
+              onChange={e => setTeamSearch(e.target.value)}
+              placeholder="Поиск по ФИО..."
+            />
+            {teamResults.length > 0 && (
+              <div style={{ marginTop: 6, background: '#fff', borderRadius: 10, border: '1px solid #E0DAD0' }}>
+                {teamResults.map(p => (
+                  <div
+                    key={p.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => addTeammate(p)}
+                    style={{ padding: '8px 12px', fontSize: 12, borderBottom: '1px solid #F5F0E8', cursor: 'pointer' }}
+                  >
+                    {p.firstName} {p.lastName} · #{p.id}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+              {selectedTeam.map(p => (
+                <span key={p.id} style={{ fontSize: 11, background: '#FFF0E6', padding: '4px 8px', borderRadius: 8 }}>
+                  {p.firstName} {p.lastName}
+                  <button type="button" style={{ marginLeft: 6, border: 'none', background: 'none', cursor: 'pointer' }} onClick={() => setSelectedTeam(prev => prev.filter(x => x.id !== p.id))}>×</button>
+                </span>
+              ))}
+            </div>
+          </div>
         )}
         <Button
           size="l"
@@ -176,6 +219,14 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
       })
       .finally(() => setLoading(false));
   }, [filter]);
+
+  useEffect(() => {
+    const teamConfirm = getHashSearchParams().get('teamConfirm');
+    if (!teamConfirm) return;
+    apiPost(`/tasks/submissions/${teamConfirm}/team-confirm`, { accept: true })
+      .then(() => { setSnackbar('Участие в команде подтверждено'); load(); })
+      .catch(err => setSnackbar(err instanceof ApiError ? err.message : 'Не удалось подтвердить'));
+  }, [load]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -229,10 +280,36 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
           </>
         ) : (
           <>
+            <div className="tasks-xp-banner">
+              <div className="tasks-xp-col">
+                <div className="tasks-xp-val">⚡ {data?.progress?.experienceTotal ?? 0}</div>
+                <div className="tasks-xp-lbl">всего опыт</div>
+              </div>
+              <div className="tasks-xp-div" />
+              <div className="tasks-xp-col">
+                <div className="tasks-xp-val">+{data?.progress?.pointsToday ?? 0}</div>
+                <div className="tasks-xp-lbl">сегодня</div>
+              </div>
+            </div>
             <div className="tasks-hdr">
               <span className="tasks-hdr-t">{doneCount} из {totalCount} выполнено · День {data?.dayNumber ?? 1}</span>
-              <span className="tasks-hdr-b">+{data?.progress?.pointsToday ?? 0}⚡ сегодня</span>
             </div>
+            {(data?.pendingTeamInvites?.length ?? 0) > 0 && (
+              <div className="m-card" style={{ marginBottom: 10, background: '#FFF8F0' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Подтвердите команду</div>
+                {data.pendingTeamInvites.map((inv: { submissionId: number; taskTitle: string }) => (
+                  <Button
+                    key={inv.submissionId}
+                    size="s"
+                    mode="secondary"
+                    style={{ marginRight: 8, marginBottom: 6 }}
+                    onClick={() => apiPost(`/tasks/submissions/${inv.submissionId}/team-confirm`, { accept: true }).then(() => { setSnackbar('Подтверждено'); load(); })}
+                  >
+                    {inv.taskTitle} → Да
+                  </Button>
+                ))}
+              </div>
+            )}
             <div style={{ marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#888', marginBottom: 4 }}>
                 <span>Прогресс дня · {progressPercent}%</span>

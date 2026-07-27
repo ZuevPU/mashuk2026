@@ -13,16 +13,41 @@ export const listMyOrgThreads = async (req: ParticipantRequest, res: Response): 
       .where(eq(orgThreads.participantId, req.participant!.id))
       .orderBy(desc(orgThreads.updatedAt));
 
-    const withMessages = await Promise.all(threads.map(async (t) => {
+    const withPreview = await Promise.all(threads.map(async (t) => {
       const messages = await db.select().from(orgMessages)
         .where(eq(orgMessages.threadId, t.id))
-        .orderBy(asc(orgMessages.createdAt));
-      return { ...t, messages };
+        .orderBy(desc(orgMessages.createdAt))
+        .limit(1);
+      const last = messages[0];
+      return {
+        ...t,
+        lastMessagePreview: last?.text?.slice(0, 120) ?? '',
+        lastMessageAt: last?.createdAt ?? t.updatedAt,
+        messageCount: undefined as number | undefined,
+      };
     }));
 
-    res.json({ threads: withMessages });
+    res.json({ threads: withPreview });
   } catch (error) {
     console.error('listMyOrgThreads:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const getMyOrgThread = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const threadId = Number(req.params.id);
+    const [thread] = await db.select().from(orgThreads).where(eq(orgThreads.id, threadId)).limit(1);
+    if (!thread || thread.participantId !== req.participant!.id) {
+      res.status(404).json({ error: 'Thread not found' });
+      return;
+    }
+    const messages = await db.select().from(orgMessages)
+      .where(eq(orgMessages.threadId, threadId))
+      .orderBy(asc(orgMessages.createdAt));
+    res.json({ thread, messages });
+  } catch (error) {
+    console.error('getMyOrgThread:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

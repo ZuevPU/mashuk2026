@@ -4,10 +4,11 @@ import { z } from 'zod';
 import { db } from '../db/index.js';
 import { participantDayState, dayExperiments, pedagogicalRoles, questions, answers } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
-import { getForumSettings, resolveEffectiveCurrentDay } from '../services/helpers.js';
+import { getForumSettings, resolveEffectiveCurrentDay, getMoscowParts } from '../services/helpers.js';
 import { ROLE_KEYS, getRoleMeta } from '../services/roleService.js';
 import { EVENING_SCALE_KEYS } from '../services/touchpointTemplates.js';
 import { awardPoints } from '../services/pointsService.js';
+import { resolveEveningConfigForDay, type EveningQuestionnaireConfig } from '../services/eveningQuestionnaireConfig.js';
 
 const scaleField = z.coerce.number().int().min(1).max(5).optional();
 
@@ -46,6 +47,41 @@ const eveningSchema = z.object({
   tomorrowRoleKey: z.enum(ROLE_KEYS as unknown as [string, ...string[]]).optional(),
   experimentStatus: z.enum(['none', 'in_progress', 'done']).optional(),
 });
+
+const eveningDraftSchema = z.object({
+  dayNumber: z.coerce.number().int().min(1).max(7).optional(),
+  step: z.coerce.number().int().min(0).max(20),
+  form: z.record(z.unknown()).default({}),
+  tomorrowRoleKey: z.string().optional(),
+});
+
+function isEveningQuestionnaireOpen(now = new Date()): boolean {
+  const { totalMinutes } = getMoscowParts(now);
+  return totalMinutes >= 22 * 60 || totalMinutes < 60;
+}
+
+export const patchEveningDraft = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const parsed = eveningDraftSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+      return;
+    }
+    const settings = await getForumSettings();
+    const dayNumber = parsed.data.dayNumber ?? resolveEffectiveCurrentDay(settings);
+    const draft = {
+      step: parsed.data.step,
+      form: parsed.data.form,
+      tomorrowRoleKey: parsed.data.tomorrowRoleKey,
+      updatedAt: new Date().toISOString(),
+    };
+    const state = await upsertDayState(req.participant!.id, dayNumber, { eveningDraft: draft });
+    res.json({ ok: true, draft: state?.eveningDraft });
+  } catch (error) {
+    console.error('patchEveningDraft:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 const experimentSchema = z.object({
   status: z.enum(['none', 'in_progress', 'done']),
@@ -120,8 +156,8 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
       return;
     }
 
-    if (dayNumber <= 6 && !parsed.data.tomorrowRoleKey) {
-      res.status(400).json({ error: 'tomorrowRoleKey required on days 1–6' });
+    if (!isEveningQuestionnaireOpen() && process.env.NODE_ENV !== 'test') {
+      res.status(400).json({ error: 'Итоговая анкета доступна с 22:00 до 01:00 МСК' });
       return;
     }
 
@@ -129,6 +165,7 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
     const patch: Partial<typeof participantDayState.$inferInsert> = {
       eveningRatings: ratings,
       tomorrowRoleKey: parsed.data.tomorrowRoleKey ?? null,
+      eveningDraft: null,
     };
     if (parsed.data.experimentStatus) {
       patch.experimentStatus = parsed.data.experimentStatus;
@@ -167,7 +204,7 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
           wordCount: String(ratings.mainThesis || ratings.freeNote || '').split(/\s+/).filter(Boolean).length,
         });
         // Single Path award: evening questionnaire covers touchpoint 7 (avoid question_answer + evening_complete).
-        await awardPoints(req.participant!.id, 'evening_complete', eveningPoints);
+        await awardPoints(req.participant!.id, 'evening_complete', eveningPoints, dayNumber);
       }
     }
 
@@ -185,7 +222,14 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
   }
 };
 
-export async function loadDayContext(participantId: number, dayNumber: number, pedagogicalRole: string | null) {
+export async function loadDayContext(
+  participantId: number,
+  dayNumber: number,
+  pedagogicalRole: string | null,
+  opts?: { now?: Date; settings?: Awaited<ReturnType<typeof getForumSettings>>; hasPointB?: boolean; pointBQuestionId?: number | null },
+) {
+  const now = opts?.now ?? new Date();
+  const settings = opts?.settings ?? await getForumSettings();
   const [state] = await db.select().from(participantDayState)
     .where(and(
       eq(participantDayState.participantId, participantId),
@@ -236,6 +280,13 @@ export async function loadDayContext(participantId: number, dayNumber: number, p
   const showRoleOfDay = dayNumber >= 1 && dayNumber <= 7 && !!roleMeta;
   const eveningDone = !!state?.eveningRatings;
   const askTomorrowRole = dayNumber >= 1 && dayNumber <= 6;
+  const eveningOpen = isEveningQuestionnaireOpen(now);
+  const config: EveningQuestionnaireConfig = resolveEveningConfigForDay(settings, dayNumber);
+  const draft = state?.eveningDraft as {
+    step?: number;
+    form?: Record<string, unknown>;
+    tomorrowRoleKey?: string;
+  } | null;
 
   return {
     roleOfDay: showRoleOfDay ? {
@@ -246,9 +297,11 @@ export async function loadDayContext(participantId: number, dayNumber: number, p
     } : null,
     experiment,
     eveningQuestionnaire: {
-      available: dayNumber >= 1 && dayNumber <= 7,
+      available: dayNumber >= 1 && dayNumber <= 7 && eveningOpen && !eveningDone,
+      opensAt: eveningOpen ? null : '22:00',
       completed: eveningDone,
       askTomorrowRole,
+      config,
       scales: EVENING_SCALE_KEYS.map(key => ({
         key,
         label: ({
@@ -265,6 +318,9 @@ export async function loadDayContext(participantId: number, dayNumber: number, p
       })),
       roles: askTomorrowRole ? ROLE_KEYS.map(k => getRoleMeta(k)).filter(Boolean) : [],
       saved: state?.eveningRatings || null,
+      savedDraft: draft,
+      pointBQuestionId: opts?.pointBQuestionId ?? null,
+      hasPointB: opts?.hasPointB ?? false,
     },
     dayState: state || null,
   };

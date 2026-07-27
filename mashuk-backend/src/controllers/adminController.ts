@@ -3,8 +3,8 @@ import { eq, desc, and, inArray, count, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   participants, directions, thematicTags, forumSettings, dayFocus,
-  events, tasks, questions, questionOptions, taskSubmissions, exchangeQuestions,
-  exchangeAnswers, eventAttendance, materials,
+  events, tasks, questions, questionOptions, taskSubmissions, taskTeamConfirmations, exchangeQuestions,
+  exchangeAnswers, eventAttendance, materials, kbDayUnlocks,
   levelsConfig, piggybank, answers, dailyStats, pushLog, pointsLog,
   participantDayState, pedagogicalRoles, dayExperiments,
 } from '../db/schema.js';
@@ -13,6 +13,7 @@ import { notifyAllParticipants, sendPushNotification } from '../services/pushSer
 import { recalculateDailyStats } from '../services/analyticsService.js';
 import { clearCache } from '../services/cache.js';
 import { normalizeOnboardingConfig } from '../services/roleService.js';
+import { entryTags, formatTagsForExport } from '../services/piggybankDict.js';
 import {
   eventCreateSchema, eventUpdateSchema,
   taskCreateSchema, taskUpdateSchema,
@@ -22,6 +23,11 @@ import {
 } from '../validation/adminSchemas.js';
 import { ROLE_KEYS } from '../services/roleService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
+import {
+  DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
+  resolveEveningConfigForDay,
+  type EveningQuestionnaireConfig,
+} from '../services/eveningQuestionnaireConfig.js';
 import { TOUCHPOINT_SLOTS, windowsForDay } from '../services/touchpointTemplates.js';
 import { getForumSettings as loadForumSettings } from '../services/helpers.js';
 import { enrichEventTimestamps } from '../services/eventSchedule.js';
@@ -346,6 +352,77 @@ export const updateForumSettings = async (req: AdminRequest, res: Response): Pro
   }
 };
 
+export const getAdminEveningQuestionnaire = async (req: AdminRequest, res: Response): Promise<void> => {
+  const day = Math.max(1, Math.min(7, Number(req.query.day) || 1));
+  const [settings] = await db.select().from(forumSettings).limit(1);
+  res.json({
+    day,
+    config: resolveEveningConfigForDay(settings ?? null, day),
+    defaultConfig: DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
+  });
+};
+
+export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Response): Promise<void> => {
+  const day = Math.max(1, Math.min(7, Number(req.query.day) || 1));
+  const config = req.body.config as EveningQuestionnaireConfig;
+  if (!config?.steps?.length) {
+    res.status(400).json({ error: 'config.steps required' });
+    return;
+  }
+  const [settings] = await db.select().from(forumSettings).limit(1);
+  if (!settings) {
+    res.status(404).json({ error: 'forum_settings missing' });
+    return;
+  }
+  const byDay = (settings.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {};
+  byDay[String(day)] = config;
+  const [updated] = await db.update(forumSettings)
+    .set({ eveningQuestionnaireByDay: byDay, updatedAt: new Date() })
+    .where(eq(forumSettings.id, settings.id))
+    .returning();
+  clearCache('forumSettings');
+  res.json({ settings: updated, config: resolveEveningConfigForDay(updated, day) });
+};
+
+export const copyAdminEveningQuestionnaire = async (req: AdminRequest, res: Response): Promise<void> => {
+  const fromDay = Math.max(1, Math.min(7, Number(req.body.fromDay) || 1));
+  const toDay = Math.max(1, Math.min(7, Number(req.body.toDay) || 1));
+  const [settings] = await db.select().from(forumSettings).limit(1);
+  if (!settings) {
+    res.status(404).json({ error: 'forum_settings missing' });
+    return;
+  }
+  const src = resolveEveningConfigForDay(settings, fromDay);
+  const byDay = (settings.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {};
+  byDay[String(toDay)] = src;
+  const [updated] = await db.update(forumSettings)
+    .set({ eveningQuestionnaireByDay: byDay, updatedAt: new Date() })
+    .where(eq(forumSettings.id, settings.id))
+    .returning();
+  clearCache('forumSettings');
+  res.json({ ok: true, toDay, config: resolveEveningConfigForDay(updated, toDay) });
+};
+
+export const resetAdminEveningQuestionnaire = async (req: AdminRequest, res: Response): Promise<void> => {
+  const day = Math.max(1, Math.min(7, Number(req.query.day) || 1));
+  const [settings] = await db.select().from(forumSettings).limit(1);
+  if (!settings) {
+    res.status(404).json({ error: 'forum_settings missing' });
+    return;
+  }
+  const byDay = { ...(settings.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) };
+  delete byDay[String(day)];
+  const [updated] = await db.update(forumSettings)
+    .set({
+      eveningQuestionnaireByDay: Object.keys(byDay).length ? byDay : null,
+      updatedAt: new Date(),
+    })
+    .where(eq(forumSettings.id, settings.id))
+    .returning();
+  clearCache('forumSettings');
+  res.json({ config: resolveEveningConfigForDay(updated, day) });
+};
+
 export const upsertDayFocus = async (req: AdminRequest, res: Response): Promise<void> => {
   const { dayNumber, title, text, keyQuestion } = req.body;
   const [existing] = await db.select().from(dayFocus).where(eq(dayFocus.dayNumber, dayNumber)).limit(1);
@@ -470,6 +547,7 @@ export const crudQuestions = {
         text: parsed.data.text ?? before.text,
         type: parsed.data.type ?? before.type,
         block: parsed.data.block ?? before.block,
+        reflectionKind: parsed.data.reflectionKind ?? before.reflectionKind,
         status: parsed.data.status ?? 'published',
         publishTime: before.publishTime,
         closeTime: before.closeTime,
@@ -647,20 +725,50 @@ export const moderateTask = async (req: AdminRequest, res: Response): Promise<vo
     return;
   }
 
+  const [task] = await db.select().from(tasks).where(eq(tasks.id, existing.taskId)).limit(1);
+
+  if (status === 'approved' && task?.confirmationType === 'team') {
+    const confRows = await db.select().from(taskTeamConfirmations)
+      .where(eq(taskTeamConfirmations.submissionId, id));
+    if (confRows.length > 0 && !confRows.every(r => r.status === 'confirmed')) {
+      res.status(400).json({ error: 'Командное задание: не все участники подтвердили участие' });
+      return;
+    }
+  }
+
   const [updated] = await db.update(taskSubmissions)
     .set({ status, moderatorComment, checkedAt: new Date() })
     .where(eq(taskSubmissions.id, id)).returning();
 
-  if (status === 'approved' && updated && !(existing.pointsAwarded ?? 0)) {
-    const [task] = await db.select().from(tasks).where(eq(tasks.id, updated.taskId)).limit(1);
-    if (task?.points) {
-      const { awardPoints } = await import('../services/pointsService.js');
-      await awardPoints(updated.participantId, 'task_complete', task.points);
-      await db.update(taskSubmissions)
-        .set({ pointsAwarded: task.points })
-        .where(eq(taskSubmissions.id, id));
-      updated.pointsAwarded = task.points;
+  if (status === 'approved' && updated && !(existing.pointsAwarded ?? 0) && task) {
+    const { awardTeamOnModeratorApprove } = await import('../services/teamTaskService.js');
+    const { effectiveTaskPoints } = await import('../services/taskPoints.js');
+    const pts = effectiveTaskPoints(task);
+    await awardTeamOnModeratorApprove(updated, task);
+    await db.update(taskSubmissions)
+      .set({ pointsAwarded: pts })
+      .where(eq(taskSubmissions.id, id));
+    updated.pointsAwarded = pts;
+  }
+
+  try {
+    const { sendPushNotification } = await import('../services/pushService.js');
+    const title = task?.title || 'Задание';
+    if (status === 'approved') {
+      await sendPushNotification(
+        [existing.participantId],
+        `Задание «${title}» принято${task?.points ? ` · +${task.points} ⚡` : ''}`,
+        'transactional_task_approved',
+      );
+    } else if (status === 'rejected') {
+      await sendPushNotification(
+        [existing.participantId],
+        `Задание «${title}» не принято${moderatorComment ? `: ${moderatorComment}` : ''}`,
+        'transactional_task_rejected',
+      );
     }
+  } catch {
+    // push optional
   }
 
   res.json({ submission: updated });
@@ -793,7 +901,10 @@ export const crudMaterials = {
     res.json({ materials: await db.select().from(materials) });
   },
   create: async (req: AdminRequest, res: Response) => {
-    const [m] = await db.insert(materials).values(req.body).returning();
+    const [m] = await db.insert(materials).values({
+      ...req.body,
+      isNew: req.body.isNew !== false,
+    }).returning();
     res.json({ material: m });
   },
   update: async (req: AdminRequest, res: Response) => {
@@ -871,14 +982,14 @@ export const exportAnswers = async (req: AdminRequest, res: Response): Promise<v
   const filename = day ? `answers_day${day}.csv` : 'answers.csv';
   res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
   const header = includeDepth
-    ? 'participant_id,name,direction,day,block,question_title,question_type,time_point,answer,word_count,depth_orientir,points,created_at\n'
-    : 'participant_id,name,direction,day,block,question_title,question_type,time_point,answer,word_count,points,created_at\n';
+    ? 'participant_id,name,direction,group_name,day,block,question_title,question_type,time_point,answer,word_count,depth_orientir,points,created_at\n'
+    : 'participant_id,name,direction,group_name,day,block,question_title,question_type,time_point,answer,word_count,points,created_at\n';
   const csv = rows.map(r => {
     const answerText = typeof r.a.answerData === 'string'
       ? r.a.answerData
       : JSON.stringify(r.a.answerData ?? '');
     const cells: Array<string | number | null | undefined> = [
-      r.p?.id, `${r.p?.firstName} ${r.p?.lastName}`, r.p?.direction,
+      r.p?.id, `${r.p?.firstName} ${r.p?.lastName}`, r.p?.direction, r.p?.groupName ?? '',
       r.q?.dayNumber ?? '', r.q?.block, r.q?.title, r.q?.type, r.q?.timePoint || '',
       `"${answerText.replace(/"/g, '""')}"`,
       r.a.wordCount,
@@ -901,7 +1012,7 @@ export const exportPiggybank = async (_req: AdminRequest, res: Response): Promis
   const header = 'participant_id,name,direction,tag,source,text,created_at\n';
   const csv = rows.map(r => [
     r.p?.id, `${r.p?.firstName} ${r.p?.lastName}`, r.p?.direction,
-    r.e.tag, r.e.source, `"${(r.e.text || '').replace(/"/g, '""')}"`, r.e.createdAt,
+    r.e.id, r.p?.firstName, r.p?.lastName, formatTagsForExport(r.e), r.e.source, `"${(r.e.text || '').replace(/"/g, '""')}"`, r.e.forumDay ?? '', r.e.createdAt,
   ].join(',')).join('\n');
   res.send('\uFEFF' + header + csv);
 };
@@ -981,8 +1092,9 @@ export const getAnalyticsSummary = async (_req: AdminRequest, res: Response): Pr
   const stats = await db.select().from(dailyStats).limit(1);
   const tagStats: Record<string, number> = {};
   for (const e of await db.select().from(piggybank)) {
-    const tag = e.tag || 'без тега';
-    tagStats[tag] = (tagStats[tag] || 0) + 1;
+    for (const tag of entryTags(e)) {
+      tagStats[tag] = (tagStats[tag] || 0) + 1;
+    }
   }
   res.json({
     participantCount,
@@ -990,6 +1102,7 @@ export const getAnalyticsSummary = async (_req: AdminRequest, res: Response): Pr
     completionPercent: stats[0]?.completionPercent ?? 0,
     avgEnergy: stats[0]?.avgEnergy ?? 0,
     emotionsDistribution: stats[0]?.emotionsDistribution ?? {},
+    emotionZonesDistribution: stats[0]?.emotionZonesDistribution ?? {},
     redFlag: stats[0]?.redFlag ?? false,
     piggybankTags: tagStats,
   });
@@ -1015,7 +1128,9 @@ export const getAnalyticsCharts = async (_req: AdminRequest, res: Response): Pro
   }));
   const tagStats: Record<string, number> = {};
   for (const e of await db.select().from(piggybank)) {
-    if (e.tag) tagStats[e.tag] = (tagStats[e.tag] || 0) + 1;
+    for (const tag of entryTags(e)) {
+      tagStats[tag] = (tagStats[tag] || 0) + 1;
+    }
   }
   const completionByDirection = stats
     .filter(s => s.direction !== 'all')
@@ -1085,11 +1200,34 @@ export const listPendingSubmissions = async (_req: AdminRequest, res: Response):
     .leftJoin(participants, eq(taskSubmissions.participantId, participants.id))
     .leftJoin(tasks, eq(taskSubmissions.taskId, tasks.id))
     .where(eq(taskSubmissions.status, 'pending'));
+
+  const subIds = rows.map(r => r.s.id);
+  const confRows = subIds.length
+    ? await db.select({
+      c: taskTeamConfirmations,
+      p: participants,
+    }).from(taskTeamConfirmations)
+      .leftJoin(participants, eq(taskTeamConfirmations.participantId, participants.id))
+      .where(inArray(taskTeamConfirmations.submissionId, subIds))
+    : [];
+  const confBySub = new Map<number, { participantId: number; name: string; status: string }[]>();
+  for (const { c, p } of confRows) {
+    const list = confBySub.get(c.submissionId) || [];
+    list.push({
+      participantId: c.participantId,
+      name: `${p?.firstName ?? ''} ${p?.lastName ?? ''}`.trim() || `#${c.participantId}`,
+      status: c.status,
+    });
+    confBySub.set(c.submissionId, list);
+  }
+
   res.json({
     submissions: rows.map(r => ({
       ...r.s,
       participantName: `${r.p?.firstName} ${r.p?.lastName}`,
       taskTitle: r.t?.title,
+      confirmationType: r.t?.confirmationType,
+      teamConfirmations: confBySub.get(r.s.id) || [],
     })),
   });
 };
@@ -1161,4 +1299,36 @@ export const listEventAttendance = async (req: AdminRequest, res: Response): Pro
 export const getForumSettings = async (_req: AdminRequest, res: Response): Promise<void> => {
   const [settings] = await db.select().from(forumSettings).limit(1);
   res.json({ settings: settings ?? null });
+};
+
+export const listKbDayUnlocks = async (_req: AdminRequest, res: Response): Promise<void> => {
+  const rows = await db.select().from(kbDayUnlocks).orderBy(desc(kbDayUnlocks.unlockedAt));
+  res.json({ unlocks: rows });
+};
+
+export const createKbDayUnlock = async (req: AdminRequest, res: Response): Promise<void> => {
+  const participantId = Number(req.body.participantId);
+  const dayNumber = Number(req.body.dayNumber);
+  if (!participantId || !dayNumber) {
+    res.status(400).json({ error: 'participantId and dayNumber required' });
+    return;
+  }
+  const [row] = await db.insert(kbDayUnlocks).values({
+    participantId,
+    dayNumber,
+    unlockedByAdminId: req.adminId ?? null,
+  }).onConflictDoUpdate({
+    target: [kbDayUnlocks.participantId, kbDayUnlocks.dayNumber],
+    set: { unlockedAt: new Date(), unlockedByAdminId: req.adminId ?? null },
+  }).returning();
+  res.json({ unlock: row });
+};
+
+export const deleteKbDayUnlock = async (req: AdminRequest, res: Response): Promise<void> => {
+  const participantId = Number(req.params.participantId);
+  const dayNumber = Number(req.params.dayNumber);
+  await db.delete(kbDayUnlocks).where(
+    and(eq(kbDayUnlocks.participantId, participantId), eq(kbDayUnlocks.dayNumber, dayNumber)),
+  );
+  res.json({ ok: true });
 };

@@ -11,7 +11,10 @@ export const eventCreateSchema = z.object({
   timeSlot: optionalString,
   tags: z.union([z.array(z.string()), z.string()]).optional(),
   isPublished: optionalBool,
+  dayPublished: optionalBool,
   pushReminder: optionalBool,
+  blockType: optionalString,
+  isKeyBlock: optionalBool,
 }).strict();
 
 export const eventUpdateSchema = eventCreateSchema.partial();
@@ -30,6 +33,11 @@ export const taskCreateSchema = z.object({
   hideUntilPublish: optionalBool,
   publishTime: z.coerce.date().optional().nullable(),
   deadline: z.coerce.date().optional().nullable(),
+  executionType: z.enum(['once', 'daily', 'repeatable', 'multiple']).optional(),
+  dailyRepeatLimit: z.coerce.number().int().min(1).optional(),
+  qrValidFrom: z.coerce.date().optional().nullable(),
+  qrValidTo: z.coerce.date().optional().nullable(),
+  teamConfirmHours: z.coerce.number().int().min(1).optional(),
 }).strict();
 
 export const taskUpdateSchema = taskCreateSchema.partial();
@@ -39,6 +47,7 @@ export const questionCreateSchema = z.object({
   text: z.string().min(1, 'text required'),
   type: z.enum(['open', 'checkin', 'choice', 'multi', 'dependent']).optional(),
   block: optionalString,
+  reflectionKind: z.enum(['state_check', 'after_event', 'evening_summary', 'point_a', 'point_b']).optional().nullable(),
   status: z.enum(['draft', 'published']).optional(),
   timePoint: optionalString,
   dayNumber: z.coerce.number().int().positive().optional(),

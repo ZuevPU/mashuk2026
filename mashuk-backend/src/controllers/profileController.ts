@@ -1,163 +1,35 @@
 import { Response } from 'express';
-import { eq, desc, and, or, isNull, lte, asc } from 'drizzle-orm';
+import { eq, desc, and, or, isNull, lte } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  piggybank, answers, taskSubmissions, tasks, questions, participantDayState, participants,
+  piggybank, answers, taskSubmissions, tasks, questions, participants,
 } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
-import { getLevel, awardPoints } from '../services/pointsService.js';
-import { getForumSettings, resolveEffectiveCurrentDay } from '../services/helpers.js';
-import { getRoleMeta, ROLE_KEYS } from '../services/roleService.js';
+import { getRoleMeta } from '../services/roleService.js';
+import { inferReflectionDepth } from '../services/reflectionDepth.js';
+import { gatherProfileBundle, streamProfilePdf } from '../services/profilePdfBuilder.js';
+import { getLevel } from '../services/pointsService.js';
+import { buildOutcomesHeuristic } from '../services/profileOutcomes.js';
 import {
-  normalizePiggybankTag,
-  normalizePiggybankSource,
-  isAllowedPiggybankTag,
-  isAllowedPiggybankSource,
-  pointsActionForTag,
-  ORG_TAG,
   PIGGYBANK_TAGS,
   PIGGYBANK_SOURCES,
+  entryHasTag,
+  formatTagsForExport,
 } from '../services/piggybankDict.js';
-import { inferReflectionDepth } from '../services/reflectionDepth.js';
-
-function buildRoleRoute(startKey: string | null, dayRoles: string[], growthKey: string | null): string {
-  const start = startKey ? getRoleMeta(startKey)?.name : null;
-  const counts = new Map<string, number>();
-  for (const k of dayRoles) {
-    if (!k) continue;
-    counts.set(k, (counts.get(k) || 0) + 1);
-  }
-  let topKey: string | null = null;
-  let topN = 0;
-  for (const [k, n] of counts) {
-    if (n > topN) { topKey = k; topN = n; }
-  }
-  const explored = topKey ? getRoleMeta(topKey)?.name : null;
-  const growth = growthKey ? getRoleMeta(growthKey)?.name : null;
-  const parts: string[] = [];
-  if (start) parts.push(`от ${start}`);
-  if (explored && explored !== start) parts.push(`через ${explored}`);
-  if (growth) parts.push(`рост · ${growth}`);
-  return parts.join(' → ') || 'Маршрут ролей появится по ходу смены';
-}
+import { createPiggybankEntry, filterPiggybankEntries } from '../services/piggybankService.js';
 
 export const getProfile = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
-    const p = req.participant!;
-    const settings = await getForumSettings();
-    const userAnswers = await db.select().from(answers).where(eq(answers.participantId, p.id));
-    const userTasks = await db.select().from(taskSubmissions).where(eq(taskSubmissions.participantId, p.id));
-    const allPiggy = await db.select().from(piggybank).where(eq(piggybank.participantId, p.id));
-    const ideas = allPiggy.filter(e => e.tag === 'идея');
-
+    const bundle = await gatherProfileBundle(req.participant!.id);
+    if (!bundle) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    const p = bundle.participant;
+    const role = p.pedagogicalRole ? getRoleMeta(p.pedagogicalRole) : null;
     const pathLevel = await getLevel(p.pathPoints ?? 0, 'path');
     const experienceLevel = await getLevel(p.experiencePoints ?? 0, 'experience');
-    const role = p.pedagogicalRole ? getRoleMeta(p.pedagogicalRole) : null;
-    const goals = Array.isArray(p.goalAnswers) ? (p.goalAnswers as string[]) : [];
-
-    const startDate = settings.startDate ? new Date(settings.startDate) : new Date('2026-08-12');
-    const endDate = new Date(startDate);
-    endDate.setDate(startDate.getDate() + ((settings.totalDays ?? 8) - 1));
-
-    const tagCounts: Record<string, number> = {};
-    for (const e of allPiggy) {
-      if (!e.tag) continue;
-      tagCounts[e.tag] = (tagCounts[e.tag] || 0) + 1;
-    }
-
-    const openTasks = await db.select().from(tasks)
-      .where(or(isNull(tasks.dayNumber), eq(tasks.dayNumber, settings.currentDay ?? 1)));
-    const submittedIds = new Set(userTasks.map(t => t.taskId));
-    const nextSteps = openTasks
-      .filter(t => !submittedIds.has(t.id))
-      .slice(0, 3)
-      .map(t => t.title);
-
-    const unanswered = await db.select().from(questions)
-      .where(and(
-        eq(questions.status, 'published'),
-        or(isNull(questions.publishTime), lte(questions.publishTime, new Date())),
-      ));
-    const answeredIds = new Set(userAnswers.map(a => a.questionId));
-    for (const q of unanswered) {
-      if (!answeredIds.has(q.id) && nextSteps.length < 5) {
-        nextSteps.push(`Ответить: ${q.title}`);
-      }
-    }
-
-    const dayStates = await db.select().from(participantDayState)
-      .where(eq(participantDayState.participantId, p.id))
-      .orderBy(asc(participantDayState.dayNumber));
-
-    const roleByDay = dayStates.map(s => ({
-      dayNumber: s.dayNumber,
-      activeRoleKey: s.activeRoleKey,
-      activeRoleName: s.activeRoleKey ? getRoleMeta(s.activeRoleKey)?.name ?? s.activeRoleKey : null,
-      tomorrowRoleKey: s.tomorrowRoleKey,
-      experimentStatus: s.experimentStatus,
-      eveningNote: (s.eveningRatings as { note?: string } | null)?.note ?? null,
-    }));
-
-    const roleCounts: Record<string, number> = {};
-    for (const k of ROLE_KEYS) roleCounts[k] = 0;
-    for (const s of dayStates) {
-      if (s.activeRoleKey && roleCounts[s.activeRoleKey] !== undefined) {
-        roleCounts[s.activeRoleKey] += 1;
-      }
-    }
-
-    // Точка Б: из профиля или из answers блока «Точка Б»
-    let pointBAnswers = p.pointBAnswers ?? null;
-    if (!pointBAnswers) {
-      const pointBQs = await db.select().from(questions).where(eq(questions.block, 'Точка Б'));
-      const pbIds = new Set(pointBQs.map(q => q.id));
-      const pbAnswers = userAnswers.filter(a => pbIds.has(a.questionId));
-      if (pbAnswers.length > 0) {
-        pointBAnswers = pbAnswers.map(a => a.answerData);
-      }
-    }
-
-    const hasPointB = !!(pointBAnswers && (
-      Array.isArray(pointBAnswers) ? pointBAnswers.length > 0 : Object.keys(pointBAnswers as object).length > 0
-    ));
-
-    const pointAList = goals;
-    const pointBList = Array.isArray(pointBAnswers)
-      ? pointBAnswers.map((x) => (typeof x === 'string' ? x : JSON.stringify(x)))
-      : [];
-
-    const comparison = pointAList.map((a, i) => ({
-      index: i + 1,
-      pointA: a,
-      pointB: pointBList[i] ?? null,
-    }));
-
-    const keyFindings = allPiggy
-      .filter(e => e.tag === 'идея' || e.tag === 'мысль')
-      .slice(0, 5)
-      .map(e => ({ id: e.id, tag: e.tag, text: e.text, source: e.source, createdAt: e.createdAt }));
-
-    const plans = allPiggy
-      .filter(e => e.tag === 'в работу')
-      .map(e => ({ id: e.id, text: e.text, source: e.source, createdAt: e.createdAt }));
-
-    const strongMeta = p.strongRole ? getRoleMeta(p.strongRole) : null;
-    const growthMeta = p.growthRole ? getRoleMeta(p.growthRole) : null;
-    const roleRoute = buildRoleRoute(
-      p.pedagogicalRole,
-      dayStates.map(s => s.activeRoleKey).filter(Boolean) as string[],
-      p.growthRole,
-    );
-
-    const outcomesSummary = p.outcomesEdited
-      ?? (userAnswers.length >= 3
-        ? `Вы ответили на ${userAnswers.length} вопросов и выполнили ${userTasks.filter(t => t.status === 'approved').length} заданий`
-        : null);
-
-    const editedNextSteps = Array.isArray(p.nextStepsEdited) ? p.nextStepsEdited as string[] : null;
-    const currentDay = resolveEffectiveCurrentDay(settings);
-    const showNextSteps = !!editedNextSteps || (currentDay >= 6 && currentDay <= 7);
-    const visibleNextSteps = showNextSteps ? (editedNextSteps ?? nextSteps) : [];
+    const ideas = bundle.allPiggy.filter(e => entryHasTag(e, 'идея'));
 
     res.json({
       user: {
@@ -170,80 +42,74 @@ export const getProfile = async (req: ParticipantRequest, res: Response): Promis
         position: p.position,
         groupId: p.groupId,
         groupName: p.groupName,
+        shiftLabel: bundle.shiftLabel,
         pedagogicalRole: p.pedagogicalRole,
         pedagogicalRoleName: role?.name ?? null,
         pedagogicalRoleQuadrant: role?.quadrant ?? null,
-        /** Стартовая (ведущая) роль по итогам онбординга — alias для UI */
         leadingRoleStart: p.pedagogicalRole,
         leadingRoleStartName: role?.name ?? null,
         strongRole: p.strongRole,
-        strongRoleName: strongMeta?.name ?? null,
+        strongRoleName: bundle.actionStyle.strongRole?.name ?? null,
         growthRole: p.growthRole,
-        growthRoleName: growthMeta?.name ?? null,
+        growthRoleName: bundle.actionStyle.growthRole?.name ?? null,
         nextExperiment: p.nextExperiment,
         qrToken: p.qrToken || null,
         hideFromLeaderboard: !!p.hideFromLeaderboard,
         pushOptOut: (p.pushOptOut as Record<string, boolean>) || {},
       },
       stats: {
-        activities: userAnswers.length + userTasks.length,
-        tasksDone: userTasks.filter(t => t.status === 'approved').length,
+        activities: bundle.userAnswers.length + bundle.userTasks.length,
+        tasksDone: bundle.userTasks.filter(t => t.status === 'approved').length,
         ideas: ideas.length,
-        answers: userAnswers.length,
+        answers: bundle.userAnswers.length,
       },
+      metrics: bundle.metrics,
       points: {
         path: p.pathPoints ?? 0,
         experience: p.experiencePoints ?? 0,
+        bonus: p.bonusPoints ?? 0,
+        total: (p.pathPoints ?? 0) + (p.experiencePoints ?? 0) + (p.bonusPoints ?? 0),
         pathLevel,
         experienceLevel,
       },
-      trajectory: {
-        from: 'Точка А',
-        to: 'Точка Б',
-        fromDate: startDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }),
-        toDate: endDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }),
-        progressPercent: Math.min(100, Math.round(((settings.currentDay ?? 1) - 1) / Math.max(1, (settings.totalDays ?? 8) - 1) * 100)),
-      },
-      myRequest: goals[2] || null,
-      goalAnswers: goals,
+      trajectory: bundle.trajectory,
+      myRequest: bundle.goals[2] || null,
+      goalAnswers: bundle.goals,
       goalSetting: p.interests ? { interests: p.interests } : null,
-      outcomes: {
-        summary: typeof outcomesSummary === 'string'
-          ? outcomesSummary
-          : (outcomesSummary as { summary?: string } | null)?.summary ?? null,
-      },
-      piggybankCount: allPiggy.length,
-      piggybankTags: tagCounts,
-      nextSteps: visibleNextSteps,
-      showNextSteps,
-      dict: { tags: PIGGYBANK_TAGS, sources: PIGGYBANK_SOURCES },
-      roleTrajectory: {
-        byDay: roleByDay,
-        counts: roleCounts,
-        route: roleRoute,
-      },
-      finalCard: {
-        available: hasPointB,
-        pointA: pointAList,
-        pointB: pointBList,
-        comparison,
-        keyFindings,
-        plans,
-        roles: {
-          start: role ? { key: role.roleKey, name: role.name } : null,
-          strong: strongMeta ? { key: strongMeta.roleKey, name: strongMeta.name } : null,
-          growth: growthMeta ? { key: growthMeta.roleKey, name: growthMeta.name } : null,
-          byDay: roleByDay,
-          route: roleRoute,
-        },
-        points: {
-          path: p.pathPoints ?? 0,
-          experience: p.experiencePoints ?? 0,
-        },
-      },
+      actionStyle: bundle.actionStyle,
+      outcomes: bundle.outcomes,
+      piggybankCount: bundle.piggybankCount,
+      piggybankTags: bundle.piggybankTags,
+      nextSteps: bundle.nextSteps,
+      showNextSteps: bundle.showNextSteps,
+      recommendation: bundle.recommendation,
+      dailyTracker: bundle.dailyTracker,
+      dict: bundle.dict,
+      roleTrajectory: bundle.roleTrajectory,
+      finalCard: bundle.finalCard,
+      pdf: bundle.pdf,
+      currentDay: bundle.currentDay,
     });
   } catch (error) {
     console.error('getProfile:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const downloadMyProfilePdf = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const bundle = await gatherProfileBundle(req.participant!.id);
+    if (!bundle) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    if (!bundle.pdf.available) {
+      res.status(403).json({ error: 'PDF not available yet' });
+      return;
+    }
+    await streamProfilePdf(bundle, res);
+  } catch (error) {
+    console.error('downloadMyProfilePdf:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -252,16 +118,19 @@ export const listPiggybank = async (req: ParticipantRequest, res: Response): Pro
   try {
     const tag = req.query.tag as string | undefined;
     const source = req.query.source as string | undefined;
+    const day = req.query.day as string | undefined;
+    const q = req.query.q as string | undefined;
 
     const entries = await db.select().from(piggybank)
       .where(eq(piggybank.participantId, req.participant!.id))
       .orderBy(desc(piggybank.createdAt));
 
-    const filtered = entries.filter(e => {
-      if (tag && e.tag !== tag) return false;
-      if (source && e.source !== source) return false;
-      return true;
-    });
+    const filtered = filterPiggybankEntries(entries, {
+      tag,
+      source,
+      day: day != null && day !== '' ? Number(day) : undefined,
+      q,
+    }, (e, t) => entryHasTag(e, t));
 
     res.json({ entries: filtered, dict: { tags: PIGGYBANK_TAGS, sources: PIGGYBANK_SOURCES } });
   } catch (error) {
@@ -272,37 +141,27 @@ export const listPiggybank = async (req: ParticipantRequest, res: Response): Pro
 
 export const createPiggybank = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
-    const tag = normalizePiggybankTag(String(req.body.tag || ''));
+    const tagsInput = req.body.tags ?? req.body.tag;
     const text = req.body.text;
-    let source = normalizePiggybankSource(req.body.source);
+    const source = req.body.source;
 
-    if (!tag || !text) {
-      res.status(400).json({ error: 'tag and text required' });
+    if (!text) {
+      res.status(400).json({ error: 'text required' });
       return;
     }
-    if (!isAllowedPiggybankTag(tag)) {
-      res.status(400).json({ error: 'Invalid tag' });
-      return;
+
+    try {
+      const entry = await createPiggybankEntry({
+        participantId: req.participant!.id,
+        text,
+        tags: tagsInput,
+        source,
+      });
+      res.json({ entry });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Invalid payload';
+      res.status(400).json({ error: msg });
     }
-    if (tag !== ORG_TAG) {
-      if (!source || !isAllowedPiggybankSource(source)) {
-        res.status(400).json({ error: 'source required' });
-        return;
-      }
-    } else {
-      source = source || 'Своя мысль';
-    }
-
-    const [entry] = await db.insert(piggybank).values({
-      participantId: req.participant!.id,
-      tag,
-      text,
-      source,
-    }).returning();
-
-    await awardPoints(req.participant!.id, pointsActionForTag(tag));
-
-    res.json({ entry });
   } catch (error) {
     console.error('createPiggybank:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -369,6 +228,11 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
   try {
     const track = (req.query.track as string) || 'total';
     const directionFilter = (req.query.direction as string) || '';
+    const scopeRaw = (req.query.scope as string) || 'total';
+    const scope = (scopeRaw === 'day' || scopeRaw === 'shift') ? scopeRaw : 'total';
+    const dayNum = req.query.day != null ? Number(req.query.day) : undefined;
+    const medalId = req.query.medalId != null ? Number(req.query.medalId) : undefined;
+
     const list = await db.select({
       id: participants.id,
       firstName: participants.firstName,
@@ -376,30 +240,57 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       direction: participants.direction,
       pathPoints: participants.pathPoints,
       experiencePoints: participants.experiencePoints,
+      bonusPoints: participants.bonusPoints,
       hideFromLeaderboard: participants.hideFromLeaderboard,
       selfDeletedAt: participants.selfDeletedAt,
     }).from(participants);
 
     const me = req.participant!.id;
     const directions = [...new Set(list.map(p => p.direction).filter(Boolean))] as string[];
-    const rows = list
+    let medalSet: Set<number> | null = null;
+    if (medalId && !Number.isNaN(medalId)) {
+      const { participantIdsWithMedal } = await import('../services/leaderboardService.js');
+      medalSet = await participantIdsWithMedal(medalId);
+    }
+
+    const eligible = list
       .filter(p => !p.selfDeletedAt)
       .filter(p => !p.hideFromLeaderboard || p.id === me)
       .filter(p => !directionFilter || p.direction === directionFilter)
+      .filter(p => !medalSet || medalSet.has(p.id));
+
+    const { computeLeaderboardScores } = await import('../services/leaderboardService.js');
+    const scoreMap = await computeLeaderboardScores(
+      eligible.map(p => p.id),
+      {
+        scope,
+        day: scope === 'day' ? dayNum : undefined,
+        track,
+      },
+    );
+
+    const rows = eligible
       .map(p => ({
         id: p.id,
         name: `${p.firstName} ${p.lastName}`.trim(),
         direction: p.direction,
-        score: track === 'path' ? (p.pathPoints ?? 0)
-          : track === 'experience' ? (p.experiencePoints ?? 0)
-            : (p.pathPoints ?? 0) + (p.experiencePoints ?? 0),
+        score: scoreMap.get(p.id) ?? 0,
         isMe: p.id === me,
       }))
       .sort((a, b) => b.score - a.score)
       .map((p, i) => ({ rank: i + 1, ...p }));
 
     const myRank = rows.find(r => r.isMe)?.rank ?? null;
-    res.json({ track, direction: directionFilter || null, directions, myRank, leaders: rows.slice(0, 50) });
+    res.json({
+      track,
+      scope,
+      day: scope === 'day' ? (dayNum ?? null) : null,
+      direction: directionFilter || null,
+      medalId: medalId && !Number.isNaN(medalId) ? medalId : null,
+      directions,
+      myRank,
+      leaders: rows.slice(0, 50),
+    });
   } catch (error) {
     console.error('getPublicLeaderboard:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -408,12 +299,26 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
 
 export const exportPiggybankText = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
+    const tag = req.query.tag as string | undefined;
+    const source = req.query.source as string | undefined;
+    const day = req.query.day as string | undefined;
+    const q = req.query.q as string | undefined;
+
     const entries = await db.select().from(piggybank)
       .where(eq(piggybank.participantId, req.participant!.id))
       .orderBy(desc(piggybank.createdAt));
-    const body = entries.map(e =>
-      `[${e.createdAt?.toISOString() || ''}] #${e.tag} · ${e.source}\n${e.text}`
-    ).join('\n\n');
+
+    const filtered = filterPiggybankEntries(entries, {
+      tag,
+      source,
+      day: day != null && day !== '' ? Number(day) : undefined,
+      q,
+    }, (e, t) => entryHasTag(e, t));
+
+    const body = filtered.map(e => {
+      const dayLabel = e.forumDay ? ` · Д${e.forumDay}` : '';
+      return `[${e.createdAt?.toISOString() || ''}] #${formatTagsForExport(e)} · ${e.source}${dayLabel}\n${e.text}`;
+    }).join('\n\n');
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=piggybank.txt');
     res.send('\uFEFF' + (body || 'Копилка пуста'));
@@ -451,30 +356,51 @@ export const listMyMedals = async (req: ParticipantRequest, res: Response): Prom
   }
 };
 
+export const listMedalsCatalog = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const { medals, userMedals } = await import('../db/schema.js');
+    const catalog = await db.select().from(medals).where(eq(medals.isActive, true));
+    const owned = await db.select().from(userMedals)
+      .where(eq(userMedals.participantId, req.participant!.id));
+    const ownedMedalIds = new Set(owned.map(o => o.medalId));
+
+    res.json({
+      medals: catalog.map(m => ({
+        id: m.id,
+        name: m.name,
+        description: m.description,
+        level: m.level,
+        category: m.category,
+        iconUrl: m.iconUrl,
+        awardType: m.awardType,
+        earned: ownedMedalIds.has(m.id),
+        awardedAt: owned.find(o => o.medalId === m.id)?.awardedAt ?? null,
+      })),
+    });
+  } catch (error) {
+    console.error('listMedalsCatalog:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const synthesizeMyOutcomes = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
-    const { synthesizeOutcomes, isGigachatConfigured } = await import('../services/gigachatService.js');
-    const p = req.participant!;
-    const userAnswers = await db.select().from(answers).where(eq(answers.participantId, p.id));
-    const texts = userAnswers
-      .map(a => (typeof a.answerData === 'string' ? a.answerData : JSON.stringify(a.answerData)))
-      .filter(Boolean) as string[];
-
-    if (!isGigachatConfigured()) {
-      const fallback = texts.length >= 3
-        ? `Вы ответили на ${texts.length} вопросов. Ключевые темы ещё обрабатываются без ИИ.`
-        : 'Недостаточно ответов для синтеза.';
-      res.json({ summary: fallback, source: 'heuristic', configured: false });
+    const bundle = await gatherProfileBundle(req.participant!.id);
+    if (!bundle) {
+      res.status(404).json({ error: 'Not found' });
       return;
     }
-
-    const summary = await synthesizeOutcomes(texts);
-    if (summary) {
-      await db.update(participants)
-        .set({ outcomesEdited: { summary, generatedAt: new Date().toISOString() } })
-        .where(eq(participants.id, p.id));
-    }
-    res.json({ summary, source: 'gigachat', configured: true });
+    const bullets = buildOutcomesHeuristic({
+      answersCount: bundle.userAnswers.length,
+      tasksApproved: bundle.userTasks.filter(t => t.status === 'approved').length,
+      piggyTotal: bundle.allPiggy.length,
+      piggyInWork: bundle.allPiggy.filter(e => entryHasTag(e, 'в работу')).length,
+      eveningNotes: bundle.actionStyle.selfInsights,
+    });
+    await db.update(participants)
+      .set({ outcomesEdited: { bullets, generatedAt: new Date().toISOString(), source: 'heuristic' } })
+      .where(eq(participants.id, req.participant!.id));
+    res.json({ bullets, source: 'heuristic', configured: false });
   } catch (error) {
     console.error('synthesizeMyOutcomes:', error);
     res.status(500).json({ error: 'Internal server error' });

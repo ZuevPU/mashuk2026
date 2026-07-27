@@ -48,4 +48,5 @@ export {
   getCalendarForumDay,
   getPreferredStateCheckPhase,
   stateCheckTimePointOrder,
+  isSameMoscowCalendarDay,
 } from './timePhase.js';

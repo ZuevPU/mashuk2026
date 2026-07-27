@@ -207,6 +207,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         interests,
         roleAnswers,
       });
+      void import('../utils/pushNotifications.js').then(m => m.requestVkPushPermission());
       onRegistered?.();
       routeNavigator.replace('/');
     } catch (e) {

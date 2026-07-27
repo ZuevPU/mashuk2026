@@ -1,6 +1,7 @@
 import { db } from '../db/index.js';
 import { dailyStats, participants, answers, questions } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
+import { emotionIdToZone, emptyZoneDistribution, incrementZone } from './emotionZones.js';
 
 export async function recalculateDailyStats(_direction = 'all'): Promise<void> {
   const allParticipants = await db.select().from(participants);
@@ -30,9 +31,14 @@ export async function recalculateDailyStats(_direction = 'all'): Promise<void> {
       ? Math.round(dirCheckins.reduce((sum, a) => sum + ((a.answerData as { energy: number }).energy || 0), 0) / dirCheckins.length)
       : 0;
     const dirEmotions: Record<string, number> = {};
+    const dirZones = emptyZoneDistribution();
     for (const a of dirCheckins) {
-      const emo = (a.answerData as { emotion?: string }).emotion;
+      const data = a.answerData as { emotion?: string; emotionZone?: string } | null;
+      const emo = data?.emotion;
       if (emo) dirEmotions[emo] = (dirEmotions[emo] || 0) + 1;
+      const zone = (data?.emotionZone as import('./emotionZones.js').EmotionZoneKey)
+        || emotionIdToZone(emo);
+      incrementZone(dirZones, zone);
     }
     const dirCompletion = dirParticipants.length
       ? Math.min(100, Math.round((dirAnswers.length / (dirParticipants.length * questionsPerParticipant)) * 100))
@@ -48,6 +54,7 @@ export async function recalculateDailyStats(_direction = 'all'): Promise<void> {
       timePoint: 'день',
       avgEnergy: dirAvgEnergy,
       emotionsDistribution: dirEmotions,
+      emotionZonesDistribution: dirZones,
       completionPercent: dirCompletion,
       medianWordCount,
       redFlag: dirAvgEnergy < 3 && dirCheckins.length > 0,

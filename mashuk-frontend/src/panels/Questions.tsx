@@ -1,39 +1,54 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Panel, PanelHeader, Group, Spinner, Textarea, Button, ModalRoot, ModalPage, ModalPageHeader, Snackbar } from '@vkontakte/vkui';
+import { Panel, PanelHeader, Group, Spinner, Textarea, Button, ModalRoot, ModalPage, ModalPageHeader } from '@vkontakte/vkui';
 import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { useAppModal } from '../App';
 import { QuestionAnswerForm } from '../components/questions/QuestionAnswerForm';
 import { EmptyState } from '../components/EmptyState';
+import { AnswerSuccessOverlay, type SubmitSuccessPayload, type AnswerConfirmationConfig } from '../components/questions/AnswerSuccessOverlay';
 
 type ChatTab = 'reflect' | 'peer' | 'org';
+
+const DEFAULT_CONFIRM: AnswerConfirmationConfig = {
+  enabled: true,
+  showPoints: true,
+  titleTemplate: 'Ответ отправлен',
+};
 
 const ExchangeReplyModal = ({
   replyTo,
   parentAnswerId,
   onClose,
   onSuccess,
-  setSnackbar,
+  onSubmitSuccess,
 }: {
   replyTo: number | null;
   parentAnswerId: number | null;
   onClose: () => void;
   onSuccess: () => void;
-  setSnackbar: (msg: string) => void;
+  onSubmitSuccess: (p: SubmitSuccessPayload) => void;
 }) => {
   const [replyText, setReplyText] = useState('');
 
   const submitExchangeAnswer = async () => {
     if (!replyTo || !replyText.trim()) return;
     try {
-      const res = await apiPost<{ xpAwarded?: number }>(`/exchange/${replyTo}/answer`, {
+      const res = await apiPost<SubmitSuccessPayload>(`/exchange/${replyTo}/answer`, {
         text: replyText,
         parentAnswerId: parentAnswerId || undefined,
       });
-      setSnackbar(res.xpAwarded ? `Ответ опубликован · +${res.xpAwarded} Опыт` : 'Ответ опубликован');
+      onSubmitSuccess({
+        xpAwarded: res.xpAwarded,
+        track: res.track,
+        newMedals: res.newMedals,
+        confirm: res.confirm ?? DEFAULT_CONFIRM,
+      });
       onSuccess();
       onClose();
     } catch (err) {
-      setSnackbar(err instanceof ApiError ? err.message : 'Ошибка отправки');
+      onSubmitSuccess({
+        xpAwarded: 0,
+        confirm: { ...DEFAULT_CONFIRM, titleTemplate: err instanceof ApiError ? err.message : 'Ошибка отправки' },
+      });
     }
   };
 
@@ -48,6 +63,109 @@ const ExchangeReplyModal = ({
   );
 };
 
+const OrgThreadMessenger = ({
+  threadId,
+  onClose,
+  onRefreshList,
+}: {
+  threadId: number;
+  onClose: () => void;
+  onRefreshList: () => void;
+}) => {
+  const [messages, setMessages] = useState<any[]>([]);
+  const [subject, setSubject] = useState('');
+  const [text, setText] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    apiGet<any>(`/org/threads/${threadId}`)
+      .then(res => {
+        setMessages(res.messages || []);
+        setSubject(res.thread?.subject || 'Обращение');
+      })
+      .finally(() => setLoading(false));
+  }, [threadId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const send = async () => {
+    if (!text.trim()) return;
+    try {
+      await apiPost(`/org/threads/${threadId}/reply`, { text });
+      setText('');
+      load();
+      onRefreshList();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <ModalPage id="org-thread" onClose={onClose}>
+      <ModalPageHeader>{subject}</ModalPageHeader>
+      <Group>
+        {loading ? <Spinner /> : messages.map(m => (
+          <div
+            key={m.id}
+            style={{
+              marginBottom: 8,
+              padding: 10,
+              borderRadius: 10,
+              background: m.senderType === 'admin' ? '#F0FFF4' : '#F3F4F6',
+              alignSelf: m.senderType === 'admin' ? 'flex-start' : 'flex-end',
+            }}
+          >
+            <div style={{ fontSize: 10, color: '#888' }}>
+              {m.senderType === 'admin' ? 'Дирекция' : 'Вы'}
+              {m.createdAt ? ` · ${new Date(m.createdAt).toLocaleString('ru-RU')}` : ''}
+            </div>
+            <div style={{ fontSize: 14, marginTop: 4 }}>{m.text}</div>
+          </div>
+        ))}
+        <Textarea value={text} onChange={e => setText(e.target.value)} placeholder="Ваше сообщение..." />
+        <Button style={{ marginTop: 8 }} stretched onClick={send}>Отправить</Button>
+      </Group>
+    </ModalPage>
+  );
+};
+
+const OrgComposeModal = ({
+  onClose,
+  onCreated,
+  onSent,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  onSent?: () => void;
+}) => {
+  const [subject, setSubject] = useState('');
+  const [text, setText] = useState('');
+
+  const submit = async () => {
+    if (!text.trim()) return;
+    try {
+      await apiPost('/org/threads', { subject: subject.trim() || 'Обращение', text });
+      onCreated();
+      onSent?.();
+      onClose();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <ModalPage id="org-compose" onClose={onClose}>
+      <ModalPageHeader>Написать в дирекцию</ModalPageHeader>
+      <Group>
+        <Textarea value={subject} onChange={e => setSubject(e.target.value)} placeholder="Тема переписки (необязательно)" />
+        <Textarea value={text} onChange={e => setText(e.target.value)} placeholder="Ваше сообщение..." style={{ marginTop: 8 }} />
+        <Button size="l" stretched style={{ marginTop: 12 }} onClick={submit}>Отправить</Button>
+      </Group>
+    </ModalPage>
+  );
+};
+
 export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> = ({ id, onActivity }) => {
   const { setModal } = useAppModal();
   const [tab, setTab] = useState<ChatTab>('reflect');
@@ -55,17 +173,19 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const [exchange, setExchange] = useState<any[]>([]);
   const [myQuestions, setMyQuestions] = useState<any[]>([]);
   const [orgThreads, setOrgThreads] = useState<any[]>([]);
+  const [answerConfirmDefaults, setAnswerConfirmDefaults] = useState<AnswerConfirmationConfig>(DEFAULT_CONFIRM);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newQuestion, setNewQuestion] = useState('');
   const [exchangeAudience, setExchangeAudience] = useState<'all' | 'direction'>('all');
-  const [orgMessage, setOrgMessage] = useState('');
   const [activeQuestion, setActiveQuestion] = useState<any>(null);
   const [questionOptions, setQuestionOptions] = useState<any[]>([]);
   const [dayEvents, setDayEvents] = useState<any[]>([]);
   const [replyTo, setReplyTo] = useState<number | null>(null);
   const [replyParentId, setReplyParentId] = useState<number | null>(null);
-  const [snackbar, setSnackbar] = useState<string | null>(null);
+  const [successPayload, setSuccessPayload] = useState<SubmitSuccessPayload | null>(null);
+  const [orgThreadId, setOrgThreadId] = useState<number | null>(null);
+  const [orgComposeOpen, setOrgComposeOpen] = useState(false);
 
   const loadAll = useCallback(() => {
     setLoading(true);
@@ -77,6 +197,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
     ])
       .then(([q, ex, org]) => {
         setQuestions(q.questions || []);
+        if (q.answerConfirm) setAnswerConfirmDefaults(q.answerConfirm);
         setExchange(ex.questions || []);
         setMyQuestions((ex.questions || []).filter((item: any) => item.isMine));
         setOrgThreads(org.threads || []);
@@ -97,7 +218,9 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
       setQuestionOptions(detail.options || []);
       setDayEvents(detail.dayEvents || []);
     } catch (err) {
-      setSnackbar(err instanceof ApiError ? err.message : 'Не удалось открыть вопрос');
+      setSuccessPayload({
+        confirm: { ...DEFAULT_CONFIRM, titleTemplate: err instanceof ApiError ? err.message : 'Не удалось открыть вопрос' },
+      });
     }
   }, []);
 
@@ -109,15 +232,23 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
     }
   }, [openQuestion]);
 
+  const showSubmitSuccess = (p: SubmitSuccessPayload) => {
+    setSuccessPayload({
+      ...p,
+      confirm: p.confirm ?? answerConfirmDefaults,
+    });
+  };
+
   const submitAnswer = async (answerData: unknown) => {
     try {
-      const res = await apiPost<{ xpAwarded?: number; track?: string }>(`/questions/${activeQuestion.id}/answer`, { answerData });
+      const res = await apiPost<SubmitSuccessPayload>(`/questions/${activeQuestion.id}/answer`, { answerData });
       setActiveQuestion(null);
-      const xp = res.xpAwarded;
-      setSnackbar(xp ? `Ответ сохранён · +${xp} ${res.track === 'experience' ? 'Опыт' : 'Путь'}` : 'Ответ сохранён');
+      showSubmitSuccess(res);
       loadAll();
     } catch (err) {
-      setSnackbar(err instanceof ApiError ? err.message : 'Ошибка сохранения');
+      showSubmitSuccess({
+        confirm: { ...DEFAULT_CONFIRM, titleTemplate: err instanceof ApiError ? err.message : 'Ошибка сохранения' },
+      });
     }
   };
 
@@ -127,26 +258,36 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
       await apiPost('/exchange', { text: newQuestion, audience: exchangeAudience });
       setNewQuestion('');
       setExchangeAudience('all');
-      setSnackbar('Вопрос отправлен на модерацию');
+      showSubmitSuccess({ confirm: { ...DEFAULT_CONFIRM, titleTemplate: 'Вопрос отправлен на модерацию' }, xpAwarded: 0 });
       loadAll();
     } catch (err) {
-      setSnackbar(err instanceof ApiError ? err.message : 'Ошибка отправки');
-    }
-  };
-
-  const submitOrgMessage = async () => {
-    if (!orgMessage.trim()) return;
-    try {
-      await apiPost('/org/threads', { subject: 'Обращение', text: orgMessage });
-      setOrgMessage('');
-      setSnackbar('Сообщение отправлено организаторам');
-      loadAll();
-    } catch (err) {
-      setSnackbar(err instanceof ApiError ? err.message : 'Ошибка отправки');
+      showSubmitSuccess({
+        confirm: { ...DEFAULT_CONFIRM, titleTemplate: err instanceof ApiError ? err.message : 'Ошибка отправки' },
+      });
     }
   };
 
   useEffect(() => {
+    if (orgComposeOpen) {
+      setModal(
+        <ModalRoot activeModal="org-compose" onClose={() => setOrgComposeOpen(false)}>
+          <OrgComposeModal
+            onClose={() => setOrgComposeOpen(false)}
+            onCreated={loadAll}
+            onSent={() => showSubmitSuccess({ confirm: { ...DEFAULT_CONFIRM, titleTemplate: 'Сообщение отправлено' } })}
+          />
+        </ModalRoot>,
+      );
+      return;
+    }
+    if (orgThreadId) {
+      setModal(
+        <ModalRoot activeModal="org-thread" onClose={() => setOrgThreadId(null)}>
+          <OrgThreadMessenger threadId={orgThreadId} onClose={() => setOrgThreadId(null)} onRefreshList={loadAll} />
+        </ModalRoot>,
+      );
+      return;
+    }
     if (activeQuestion) {
       setModal(
         <ModalRoot activeModal="answer" onClose={() => setActiveQuestion(null)}>
@@ -159,7 +300,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
               onSubmit={submitAnswer}
             />
           </ModalPage>
-        </ModalRoot>
+        </ModalRoot>,
       );
     } else if (replyTo) {
       setModal(
@@ -169,14 +310,14 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
             parentAnswerId={replyParentId}
             onClose={() => { setReplyTo(null); setReplyParentId(null); }}
             onSuccess={loadAll}
-            setSnackbar={setSnackbar}
+            onSubmitSuccess={showSubmitSuccess}
           />
-        </ModalRoot>
+        </ModalRoot>,
       );
     } else {
       setModal(null);
     }
-  }, [activeQuestion, replyTo, replyParentId, questionOptions, setModal, loadAll]);
+  }, [activeQuestion, replyTo, replyParentId, questionOptions, setModal, loadAll, orgThreadId, orgComposeOpen, dayEvents]);
 
   useEffect(() => {
     return () => setModal(null);
@@ -186,9 +327,14 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
     q.status === 'active' || q.status === 'pending' || q.status === 'overdue',
   );
   const canAnswer = (status: string) => status === 'active' || status === 'overdue';
-  const answered = questions.filter(q => q.status === 'done');
+  const answeredToday = questions.filter(q => q.status === 'done' && q.answeredToday);
   const locked = questions.filter(q => q.status === 'locked');
   const peerApproved = exchange.filter(q => q.moderationStatus === 'approved' || !q.moderationStatus);
+
+  const orgStatusLabel = (status: string) => {
+    if (status === 'answered') return 'Отвечено';
+    return 'Ждёт ответа';
+  };
 
   return (
     <Panel id={id}>
@@ -214,32 +360,27 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
         ) : tab === 'reflect' ? (
           <>
             <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-              Рефлексивные вопросы форума. Ответы влияют на точки осмысления и базу знаний.
+              Вопросы от бота — для тебя. Отвечай в своё время, копи Путь
             </div>
             {unanswered.length > 0 && (
               <>
                 <div className="rq-hdr"><span className="rq-hdr-t">Не отвечено · {unanswered.length}</span></div>
                 {unanswered.map(q => (
                   <div key={q.id} className="rq-item m-card" style={{ marginBottom: 8 }}>
-                    <div className="rq-tag">{q.block || q.type}</div>
+                    <div className="rq-tag">{q.reflectionLabel || q.block || q.type}</div>
                     <div className="rq-q">{q.title}</div>
-                    <div className="rq-from" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <div className="rq-from" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
                       <span>
-                        {q.status === 'overdue'
+                        {q.timeWindowLabel || (q.status === 'overdue'
                           ? 'Пропущена — ещё можно'
                           : q.status === 'pending'
                             ? 'Скоро откроется'
-                            : 'Доступно'}
+                            : 'Доступно')}
                       </span>
-                      {typeof q.points === 'number' && <span>+{q.points} 📍</span>}
+                      <span>+{q.pathPointsPreview ?? q.points ?? 5} 📍 Путь</span>
                     </div>
-                    {q.closeTime && (
-                      <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>
-                        До {new Date(q.closeTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    )}
                     {canAnswer(q.status) && (
-                      <div className="rq-btn" onClick={() => openQuestion(q.id)}>Ответить →</div>
+                      <div className="rq-btn" onClick={() => openQuestion(q.id)}>Ответить</div>
                     )}
                   </div>
                 ))}
@@ -250,21 +391,20 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                 <div className="rq-hdr" style={{ marginTop: 12 }}><span className="rq-hdr-t">Заморожено</span></div>
                 {locked.map(q => (
                   <div key={q.id} className="rq-item m-card" style={{ marginBottom: 8, opacity: 0.5 }}>
-                    <div className="rq-tag">{q.block || q.type}</div>
+                    <div className="rq-tag">{q.reflectionLabel || q.block || q.type}</div>
                     <div className="rq-q">{q.title}</div>
                     <div className="rq-from">🔒 День закончился</div>
                   </div>
                 ))}
               </>
             )}
-            {answered.length > 0 && (
+            {answeredToday.length > 0 && (
               <>
-                <div className="rq-hdr" style={{ marginTop: 12 }}><span className="rq-hdr-t">Отвечено · {answered.length}</span></div>
-                {answered.map(q => (
+                <div className="rq-hdr" style={{ marginTop: 12 }}><span className="rq-hdr-t">Отвечено сегодня · {answeredToday.length}</span></div>
+                {answeredToday.map(q => (
                   <div key={q.id} className="rq-item m-card rq-done" style={{ marginBottom: 8, opacity: 0.55 }}>
-                    <div className="rq-tag">{q.block || q.type}</div>
+                    <div className="rq-tag">{q.reflectionLabel || q.block || q.type}</div>
                     <div className="rq-q">{q.title}</div>
-                    <div className="rq-from">✓ Отвечено</div>
                   </div>
                 ))}
               </>
@@ -325,10 +465,9 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                         onClick={async () => {
                           try {
                             await apiPost(`/exchange/answers/${a.id}/react`, { type: 'like' });
-                            setSnackbar('👍');
                             loadAll();
-                          } catch (err) {
-                            setSnackbar(err instanceof ApiError ? err.message : 'Ошибка');
+                          } catch {
+                            /* ignore */
                           }
                         }}
                       >
@@ -340,10 +479,9 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                         onClick={async () => {
                           try {
                             await apiPost(`/exchange/answers/${a.id}/react`, { type: 'discuss' });
-                            setSnackbar('Хочу обсудить');
                             loadAll();
-                          } catch (err) {
-                            setSnackbar(err instanceof ApiError ? err.message : 'Ошибка');
+                          } catch {
+                            /* ignore */
                           }
                         }}
                       >
@@ -351,7 +489,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                       </Button>
                       <Button size="s" mode="tertiary" onClick={() => {
                         if (a.parentAnswerId) {
-                          setSnackbar('Можно ответить только на ответ первого уровня');
+                          showSubmitSuccess({ confirm: { ...DEFAULT_CONFIRM, titleTemplate: 'Можно ответить только на ответ первого уровня' } });
                           return;
                         }
                         setReplyParentId(a.id);
@@ -380,34 +518,37 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
         ) : (
           <>
             <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-              Напиши организаторам — диалог сохранится в переписке.
+              Прямая линия к дирекции. Вопрос по программе, предложение, обратная связь — дирекция отвечает лично
             </div>
-            <div className="m-card">
-              <Textarea value={orgMessage} onChange={e => setOrgMessage(e.target.value)} placeholder="Ваше сообщение организаторам..." />
-              <Button style={{ marginTop: 8 }} onClick={submitOrgMessage}>Отправить</Button>
-            </div>
-            {orgThreads.length > 0 ? orgThreads.map(thread => (
-              <div key={thread.id} className="m-card" style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: thread.status === 'answered' ? '#2F855A' : '#B8621A' }}>
-                  {thread.subject || 'Обращение'} · {thread.status === 'answered' ? 'есть ответ' : 'ожидает ответа'}
-                </div>
-                {(thread.messages || []).map((m: any) => (
-                  <div key={m.id} style={{ marginTop: 8, padding: 8, background: m.senderType === 'admin' ? '#F0FFF4' : '#F7F7F7', borderRadius: 8 }}>
-                    <div style={{ fontSize: 10, color: '#888' }}>
-                      {m.senderType === 'admin' ? 'Организаторы' : 'Вы'} · {m.createdAt ? new Date(m.createdAt).toLocaleString('ru-RU') : ''}
+            {orgThreads.length > 0 ? (
+              <>
+                <div className="rq-hdr"><span className="rq-hdr-t">Твои переписки · {orgThreads.length}</span></div>
+                {orgThreads.map(thread => (
+                  <div
+                    key={thread.id}
+                    className="m-card"
+                    style={{ marginBottom: 8, cursor: 'pointer' }}
+                    onClick={() => setOrgThreadId(thread.id)}
+                  >
+                    <div style={{ fontWeight: 700, fontSize: 13 }}>{thread.subject || 'Обращение'}</div>
+                    <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>{thread.lastMessagePreview || '—'}</div>
+                    <div style={{ fontSize: 11, marginTop: 6, color: thread.status === 'answered' ? '#2F855A' : '#B8621A' }}>
+                      {orgStatusLabel(thread.status)}
                     </div>
-                    <div style={{ fontSize: 13, marginTop: 2 }}>{m.text}</div>
                   </div>
                 ))}
-              </div>
-            )) : (
+              </>
+            ) : (
               <EmptyState icon="✉️" title="Пока нет обращений" subtitle="Напишите, если нужна помощь организаторов" />
             )}
+            <div style={{ position: 'sticky', bottom: 8, marginTop: 16, paddingTop: 8 }}>
+              <Button size="l" stretched onClick={() => setOrgComposeOpen(true)}>+ Написать в дирекцию</Button>
+            </div>
           </>
         )}
       </Group>
 
-      {snackbar && <Snackbar onClose={() => setSnackbar(null)} onClosed={() => setSnackbar(null)}>{snackbar}</Snackbar>}
+      <AnswerSuccessOverlay payload={successPayload} onDone={() => setSuccessPayload(null)} />
     </Panel>
   );
 };

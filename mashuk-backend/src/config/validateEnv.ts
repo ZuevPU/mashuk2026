@@ -33,5 +33,9 @@ export function validateEnv(): boolean {
     console.warn('WARN: PUBLIC_URL is not set — uploaded file URLs may be incorrect');
   }
 
+  if (isProd && !env.VK_SERVICE_TOKEN && !env.VK_COMMUNITY_TOKEN) {
+    console.warn('WARN: VK_SERVICE_TOKEN and VK_COMMUNITY_TOKEN are both empty — push delivery will log skipped_no_token');
+  }
+
   return ok;
 }

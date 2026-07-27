@@ -53,7 +53,7 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
       .catch(() => undefined);
   }, []);
 
-  const canNextAnswers = goalQuestions.every((_, i) => (answers[i] || '').trim().length > 0);
+  const canNextAnswers = true;
   const canSubmit = !!strongRole && !!growthRole && growthWhy.trim().length > 0;
 
   const handleSubmit = async () => {

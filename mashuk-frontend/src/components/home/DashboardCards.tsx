@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '@vkontakte/vkui';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import '../../style.css';
 
@@ -115,20 +116,64 @@ export const MiniTasksCard: React.FC<{totalCount: number, hasNew?: boolean}> = (
   );
 };
 
+export const MissedTouchpointsCard: React.FC<{
+  items: { id: number; title: string; state: 'overdue' | 'locked' }[];
+  ctaQuestionId?: number | null;
+}> = ({ items, ctaQuestionId }) => {
+  const routeNavigator = useRouteNavigator();
+  if (items.length === 0) return null;
+  const n = items.length;
+  const titleWord = n === 1 ? 'точка' : n >= 2 && n <= 4 ? 'точки' : 'точек';
+  const fillable = items.filter(i => i.state === 'overdue');
+  const targetId = ctaQuestionId ?? fillable[0]?.id ?? items[0]?.id;
+
+  return (
+    <div className="m-card miss" style={{ background: '#FFF0F0', border: '1.5px solid rgba(229,62,62,.25)' }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: '#C53030', marginBottom: 8 }}>
+        {n} {titleWord} пропущено
+      </div>
+      <ul style={{ margin: '0 0 10px', paddingLeft: 18, fontSize: 12, color: '#742A2A', lineHeight: 1.45 }}>
+        {items.map(i => (
+          <li key={i.id}>
+            {i.title}
+            {i.state === 'locked' ? ' · 🔒' : ''}
+          </li>
+        ))}
+      </ul>
+      {targetId && fillable.length > 0 && (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => routeNavigator.push(`/questions?q=${targetId}`)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') routeNavigator.push(`/questions?q=${targetId}`); }}
+          style={{ fontSize: 12, fontWeight: 700, color: '#E53E3E', cursor: 'pointer' }}
+        >
+          Заполнить пропущенные →
+        </div>
+      )}
+      {fillable.length === 0 && (
+        <div style={{ fontSize: 11, color: '#888' }}>Окно закрыто — точки заморожены</div>
+      )}
+    </div>
+  );
+};
+
 export const StatsRow: React.FC<{
   path: number;
   exp: number;
   ideas: number;
+  total?: number;
   pathLevel?: number;
   experienceLevel?: number;
   pathProgress?: number;
   experienceProgress?: number;
   onIdeasClick?: () => void;
 }> = ({
-  path, exp, ideas,
+  path, exp, ideas, total,
   pathLevel, experienceLevel, pathProgress = 0, experienceProgress = 0,
   onIdeasClick,
 }) => {
+  const combined = total ?? path + exp;
   return (
     <div className="m-stats">
       <div className="m-st">
@@ -144,6 +189,10 @@ export const StatsRow: React.FC<{
         <div style={{ height: 4, background: '#E8E0D4', borderRadius: 4, marginTop: 6, overflow: 'hidden' }}>
           <div style={{ width: `${Math.round(experienceProgress * 100)}%`, height: '100%', background: '#B8621A', borderRadius: 4 }} />
         </div>
+      </div>
+      <div className="m-st">
+        <div className="m-sv">🏆 {combined}</div>
+        <div className="m-sl">Рейтинг</div>
       </div>
       <div
         className="m-st"
@@ -185,7 +234,8 @@ export const ExperimentCard: React.FC<{
   roleName?: string | null;
   status: string;
   onStatusChange: (status: 'in_progress' | 'done') => void;
-}> = ({ title, body, hint, roleName, status, onStatusChange }) => {
+  onSaveFixation?: () => void;
+}> = ({ title, body, hint, roleName, status, onStatusChange, onSaveFixation }) => {
   const [open, setOpen] = React.useState(true);
   return (
     <div className="m-card">
@@ -229,6 +279,11 @@ export const ExperimentCard: React.FC<{
               Сделано
             </button>
           </div>
+          {onSaveFixation && (
+            <Button size="m" stretched mode="secondary" style={{ marginTop: 10 }} onClick={onSaveFixation}>
+              Сохранить фиксацию в копилку
+            </Button>
+          )}
         </div>
       )}
     </div>

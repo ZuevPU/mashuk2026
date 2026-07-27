@@ -5,7 +5,8 @@ import {
   View, Spinner, Button,
   Epic, Tabbar, TabbarItem, Snackbar, SplitLayout, SplitCol,
 } from '@vkontakte/vkui';
-import { Icon28HomeOutline, Icon28CalendarOutline, Icon28ListOutline, Icon28HelpOutline, Icon28UserCircleOutline, Icon28ErrorCircleOutline } from '@vkontakte/icons';
+import { Icon28HomeOutline, Icon28CalendarOutline, Icon28ListOutline, Icon28HelpOutline, Icon28UserCircleOutline, Icon28ErrorCircleOutline, Icon28AddOutline } from '@vkontakte/icons';
+import { openQuickCapture } from './components/QuickCaptureFlow';
 import { useActiveVkuiLocation, useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { HomePanel } from './panels/Home';
 import { ProgramPanel } from './panels/Program';
@@ -58,6 +59,7 @@ export const App = () => {
   const [selfDeleted, setSelfDeleted] = useState(false);
   const [sectionsVisibility, setSectionsVisibility] = useState(DEFAULT_SECTIONS);
   const [questionsBadge, setQuestionsBadge] = useState(0);
+  const [showPiggyFab, setShowPiggyFab] = useState(false);
   const [apiErrorToast, setApiErrorToast] = useState<string | null>(null);
   const [modal, setModal] = useState<ReactNode | null>(null);
 
@@ -73,8 +75,9 @@ export const App = () => {
   const refreshTabCounts = useCallback(async () => {
     if (!isRegistered) return;
     try {
-      const home = await apiGet<{ counts?: { availableQuestions?: number } }>('/home');
+      const home = await apiGet<{ counts?: { availableQuestions?: number }; currentDay?: number; ui?: { showPiggybankFab?: boolean } }>('/home');
       setQuestionsBadge(home.counts?.availableQuestions ?? 0);
+      setShowPiggyFab(home.ui?.showPiggybankFab === true || (home.currentDay != null && home.currentDay !== 8));
     } catch {
       // ignore background refresh errors
     }
@@ -265,6 +268,17 @@ export const App = () => {
                     <Icon28HelpOutline />
                   </TabIcon>
                   <span className="tab-label">{TAB_LABELS.questions}</span>
+                </span>
+              </TabbarItem>
+            )}
+            {showPiggyFab && (
+              <TabbarItem
+                selected={false}
+                onClick={() => openQuickCapture(setModal, { onSaved: () => void refreshTabCounts() })}
+                aria-label="Добавить в копилку"
+              >
+                <span className="tab-item-inner tab-item-inner--fab">
+                  <Icon28AddOutline />
                 </span>
               </TabbarItem>
             )}

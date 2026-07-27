@@ -75,7 +75,7 @@ export async function runSeed() {
     ]);
 
     await db.insert(tasks).values([
-      { title: 'Познакомься с участником другого направления', category: 'Нетворкинг', points: 20, dayNumber: 1, publishTime: now, autoConfirm: true, confirmationType: 'auto' },
+      { title: 'Познакомься с участником другого направления', category: 'Полезные знакомства', points: 20, dayNumber: 1, publishTime: now, autoConfirm: true, confirmationType: 'auto' },
       { title: 'Напиши пост о форуме', category: 'Медиа', points: 30, dayNumber: 1, publishTime: now, autoConfirm: false, answerType: 'text_and_photo', confirmationType: 'post_url' },
       { title: 'Зафиксируй идею эксперимента', category: 'Образование', points: 25, dayNumber: 3, publishTime: now, autoConfirm: true, confirmationType: 'text_photo' },
       { title: 'Скан QR на площадке', category: 'Организация', points: 15, dayNumber: 2, publishTime: now, autoConfirm: true, confirmationType: 'qr' },
@@ -124,11 +124,12 @@ export async function runSeed() {
     ]);
 
     await db.insert(levelsConfig).values([
-      { actionType: 'question_answer', pointsPerUnit: 10, maxAccruals: 100 },
+      { actionType: 'question_answer', pointsPerUnit: 5, maxAccruals: 100 },
       { actionType: 'task_complete', pointsPerUnit: 20, maxAccruals: 100 },
       { actionType: 'exchange_answer', pointsPerUnit: 5, maxAccruals: 50 },
       { actionType: 'exchange_question', pointsPerUnit: 3, maxAccruals: 30 },
       { actionType: 'point_a_complete', pointsPerUnit: 20, maxAccruals: 1 },
+      { actionType: 'point_b_complete', pointsPerUnit: 30, maxAccruals: 1 },
       { actionType: 'piggybank_entry', pointsPerUnit: 3, maxAccruals: 100 },
       { actionType: 'piggybank_idea', pointsPerUnit: 5, maxAccruals: 50 },
       { actionType: 'piggybank_thought', pointsPerUnit: 3, maxAccruals: 50 },
@@ -384,8 +385,17 @@ export async function runSeed() {
 
   const ratingFixes: Array<{ actionType: string; pointsPerUnit: number; maxAccruals?: number }> = [
     { actionType: 'point_a_complete', pointsPerUnit: 20, maxAccruals: 1 },
+    { actionType: 'point_b_complete', pointsPerUnit: 30, maxAccruals: 1 },
+    { actionType: 'question_answer', pointsPerUnit: 5, maxAccruals: 100 },
+    { actionType: 'state_check_morning', pointsPerUnit: 5, maxAccruals: 8 },
+    { actionType: 'state_check_day', pointsPerUnit: 5, maxAccruals: 8 },
+    { actionType: 'state_check_evening', pointsPerUnit: 5, maxAccruals: 8 },
     { actionType: 'exchange_question', pointsPerUnit: 3, maxAccruals: 30 },
     { actionType: 'exchange_answer', pointsPerUnit: 5, maxAccruals: 50 },
+    { actionType: 'day_complete_bonus', pointsPerUnit: 20, maxAccruals: 8 },
+    { actionType: 'reflection_streak_7', pointsPerUnit: 50, maxAccruals: 1 },
+    { actionType: 'bonus_regularity', pointsPerUnit: 25, maxAccruals: 1 },
+    { actionType: 'bonus_diversity', pointsPerUnit: 25, maxAccruals: 1 },
     { actionType: 'attendance', pointsPerUnit: 5, maxAccruals: 40 },
   ];
   for (const row of ratingFixes) {

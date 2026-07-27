@@ -80,6 +80,23 @@ export function getCalendarForumDay(
  * Эффективный текущий день: max(admin currentDay, календарный день по startDate).
  * После 00:00 МСК прошлый день форума считается завершённым → точки locked.
  */
+/** Календарная дата дня форума (подпись для UI, МСК). */
+export function getForumDayDateLabel(
+  startDate: Date | null | undefined,
+  dayNumber: number,
+): string | null {
+  if (!startDate || dayNumber < 1) return null;
+  const startParts = getMoscowParts(startDate);
+  const baseMs = Date.parse(`${startParts.dateKey}T12:00:00+03:00`);
+  if (Number.isNaN(baseMs)) return null;
+  const dayMs = baseMs + (dayNumber - 1) * 86_400_000;
+  return new Date(dayMs).toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'Europe/Moscow',
+  });
+}
+
 export function resolveEffectiveCurrentDay(
   settings: { currentDay?: number | null; totalDays?: number | null; startDate?: Date | null },
   now = new Date(),
@@ -124,4 +141,8 @@ export function toTouchpointUiStatus(
   if (access === 'overdue') return 'overdue';
   if (access === 'soon') return 'pending';
   return 'active';
+}
+
+export function isSameMoscowCalendarDay(a: Date, b = new Date()): boolean {
+  return getMoscowParts(a).dateKey === getMoscowParts(b).dateKey;
 }

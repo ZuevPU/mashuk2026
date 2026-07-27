@@ -36,6 +36,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   const [slots, setSlots] = useState<ProgramSlot[]>([]);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [kb, setKb] = useState<any>(null);
+  const [kbDays, setKbDays] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dayPublished, setDayPublished] = useState(true);
@@ -68,6 +69,9 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : 'Не удалось загрузить настройки программы');
       });
+    apiGet<{ days: any[] }>('/program/knowledge-base/days')
+      .then(r => setKbDays(r.days || []))
+      .catch(() => setKbDays([]));
   }, []);
 
   useEffect(() => {
@@ -78,16 +82,22 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
     let status: DayStatus = 'future';
     if (dayNum < currentDay) status = 'done';
     else if (dayNum === currentDay) status = 'today';
+    const kbMeta = kbDays.find(d => d.day === dayNum);
+    const kbSub = activeTab === 'kb' && kbMeta?.switcherLabel
+      ? kbMeta.switcherLabel
+      : (dayNum < currentDay ? '✓' : dayNum === currentDay ? '→' : '🔒');
     const weekday = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс', 'пн · отъезд'][i] || '';
     return {
       id: dayNum,
       title: `День ${dayNum}`,
-      subtitle: dayNum < currentDay ? `✓ ${weekday}` : weekday,
-      status,
+      subtitle: activeTab === 'kb' ? kbSub : (dayNum < currentDay ? `✓ ${weekday}` : weekday),
+      status: activeTab === 'kb' && kbMeta?.kbStatus === 'locked' && dayNum > currentDay ? 'locked' as const : status,
     };
   });
 
   const handleRecClick = async (eventId: number) => {
+    const ev = slots.flatMap(s => s.events).find(e => e.id === eventId);
+    if (ev) setSelectedEvent(ev);
     try {
       await apiPost(`/program/events/${eventId}/attendance`);
     } catch {
@@ -209,6 +219,15 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
             </div>
           ) : (
             <div style={{ marginTop: 12 }}>
+              {kb?.dayTitle && (
+                <div className="m-card" style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800 }}>{kb.dayTitle}</div>
+                  {kb.dayDescription && <div style={{ fontSize: 11, color: '#666', marginTop: 4, lineHeight: 1.4 }}>{kb.dayDescription}</div>}
+                  <div style={{ fontSize: 10, color: '#888', marginTop: 6 }}>
+                    Точки осмысления: {kb.touchpointsCompleted ?? 0} / {kb.touchpointsTotal ?? 7}
+                  </div>
+                </div>
+              )}
               <KnowledgeBasePanel kb={kb} />
             </div>
           )}

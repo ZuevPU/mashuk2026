@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Panel, PanelHeader, Group, Spinner, SegmentedControl, Select, Button, Snackbar, Checkbox } from '@vkontakte/vkui';
+import { Panel, PanelHeader, Group, Spinner, SegmentedControl, Select, Button, Snackbar, Checkbox, Input } from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
-import { apiGet, apiPost, apiPatch, ApiError } from '../api/client';
+import { apiGet, apiPost, apiPatch, apiDownloadBlob, ApiError } from '../api/client';
+import { useAppModal } from '../App';
+import { openQuickCapture } from '../components/QuickCaptureFlow';
 import { EmptyState } from '../components/EmptyState';
 import { PIGGYBANK_TAGS, PIGGYBANK_SOURCES } from '../data/piggybank';
 import { buildParticipantVolunteerUrl } from '../utils/qrDeepLink';
+import { requestVkPushPermission } from '../utils/pushNotifications';
 
 const TAGS = ['', ...PIGGYBANK_TAGS];
 const SOURCES = ['', ...PIGGYBANK_SOURCES];
@@ -21,13 +24,17 @@ export const ProfilePanel: React.FC<{
   fetchedUser?: UserInfo | null;
   onSelfDeleted?: () => void;
 }> = ({ id, fetchedUser, onSelfDeleted }) => {
+  const { setModal } = useAppModal();
   const [profile, setProfile] = useState<any>(null);
   const [piggybank, setPiggybank] = useState<any[]>([]);
   const [previewPiggy, setPreviewPiggy] = useState<any[]>([]);
   const [medals, setMedals] = useState<any[]>([]);
-  const [section, setSection] = useState<'overview' | 'piggybank' | 'final' | 'settings' | 'rating'>('overview');
+  const [section, setSection] = useState<'overview' | 'piggybank' | 'final' | 'settings' | 'rating' | 'medals'>('overview');
   const [tagFilter, setTagFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
+  const [dayFilter, setDayFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [exportLoading, setExportLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
@@ -36,12 +43,19 @@ export const ProfilePanel: React.FC<{
   const [pushOptOut, setPushOptOut] = useState<Record<string, boolean>>({});
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [medalsCatalog, setMedalsCatalog] = useState<any[]>([]);
   const [lbTrack, setLbTrack] = useState<'total' | 'path' | 'experience'>('total');
+  const [lbScope, setLbScope] = useState<'total' | 'day' | 'shift'>('total');
+  const [lbDay, setLbDay] = useState('1');
   const [lbDirection, setLbDirection] = useState('');
   const [lbDirections, setLbDirections] = useState<string[]>([]);
   const [leaders, setLeaders] = useState<any[]>([]);
   const [myRank, setMyRank] = useState<number | null>(null);
   const [lbLoading, setLbLoading] = useState(false);
+  const [trackerOpen, setTrackerOpen] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [finalTagFilter, setFinalTagFilter] = useState('');
+  const [finalSourceFilter, setFinalSourceFilter] = useState('');
 
   const loadProfile = () => {
     setLoading(true);
@@ -72,7 +86,7 @@ export const ProfilePanel: React.FC<{
     if (qIndex === -1) return;
     const params = new URLSearchParams(hash.slice(qIndex + 1));
     const section = params.get('section');
-    if (section === 'piggybank' || section === 'final' || section === 'settings' || section === 'rating') {
+    if (section === 'piggybank' || section === 'final' || section === 'settings' || section === 'rating' || section === 'medals') {
       setSection(section);
     }
   }, []);
@@ -81,6 +95,8 @@ export const ProfilePanel: React.FC<{
     const params = new URLSearchParams();
     if (tagFilter) params.set('tag', tagFilter);
     if (sourceFilter) params.set('source', sourceFilter);
+    if (dayFilter) params.set('day', dayFilter);
+    if (searchQuery.trim()) params.set('q', searchQuery.trim());
     const qs = params.toString();
     apiGet<any>(`/piggybank${qs ? `?${qs}` : ''}`)
       .then(pb => setPiggybank(pb.entries || []))
@@ -88,14 +104,17 @@ export const ProfilePanel: React.FC<{
   };
 
   useEffect(() => {
-    if (section === 'piggybank') loadPiggybank();
-  }, [section, tagFilter, sourceFilter]);
+    if (section !== 'piggybank') return;
+    const t = window.setTimeout(loadPiggybank, searchQuery ? 350 : 0);
+    return () => window.clearTimeout(t);
+  }, [section, tagFilter, sourceFilter, dayFilter, searchQuery]);
 
   useEffect(() => {
     if (section !== 'rating') return;
     setLbLoading(true);
-    const params = new URLSearchParams({ track: lbTrack });
+    const params = new URLSearchParams({ track: lbTrack, scope: lbScope });
     if (lbDirection) params.set('direction', lbDirection);
+    if (lbScope === 'day') params.set('day', lbDay);
     apiGet<any>(`/leaderboard?${params}`)
       .then((res) => {
         setLeaders(res.leaders || []);
@@ -104,7 +123,14 @@ export const ProfilePanel: React.FC<{
       })
       .catch((err) => setSnackbar(err instanceof ApiError ? err.message : 'Не удалось загрузить рейтинг'))
       .finally(() => setLbLoading(false));
-  }, [section, lbTrack, lbDirection]);
+  }, [section, lbTrack, lbDirection, lbScope, lbDay]);
+
+  useEffect(() => {
+    if (section !== 'medals') return;
+    apiGet<any>('/profile/medals/catalog')
+      .then(res => setMedalsCatalog(res.medals || []))
+      .catch((err) => setSnackbar(err instanceof ApiError ? err.message : 'Не удалось загрузить медали'));
+  }, [section]);
 
   if (loading) {
     return (
@@ -130,9 +156,66 @@ export const ProfilePanel: React.FC<{
   const p = profile;
   const photo = fetchedUser?.photo_100 || fetchedUser?.photo_200;
   const initials = `${(p.user.firstName?.[0] || '')}${(p.user.lastName?.[0] || '')}`;
-  const pathPct = Math.min(100, Math.round(((p.points.path % 100) / 100) * 100));
+  const m = p.metrics ?? {};
+  const abPct = m.abProgress ?? p.trajectory?.progressPercent ?? 0;
   const finalCard = p.finalCard;
   const showFinal = !!finalCard?.available;
+  const actionStyle = p.actionStyle;
+  const tracker = p.dailyTracker;
+  const outcomeBullets: string[] = p.outcomes?.bullets ?? [];
+  const showOutcomes = p.outcomes?.visible ?? (p.currentDay >= 3);
+  const tagCounts = (p.piggybankTags ?? {}) as Record<string, number>;
+  const sourceCounts = (tracker?.piggybankSources ?? {}) as Record<string, number>;
+  const shiftLine = [p.user.direction, p.user.groupName ? `Группа «${p.user.groupName}»` : null, p.user.shiftLabel]
+    .filter(Boolean).join(' · ');
+
+  const goPiggybank = (tag?: string, source?: string) => {
+    if (tag) setTagFilter(tag);
+    if (source) setSourceFilter(source);
+    setSection('piggybank');
+  };
+
+  const exportPiggybank = async () => {
+    setExportLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (tagFilter) params.set('tag', tagFilter);
+      if (sourceFilter) params.set('source', sourceFilter);
+      if (dayFilter) params.set('day', dayFilter);
+      if (searchQuery.trim()) params.set('q', searchQuery.trim());
+      const qs = params.toString();
+      const blob = await apiDownloadBlob(`/piggybank/export${qs ? `?${qs}` : ''}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'piggybank.txt';
+      a.click();
+      URL.revokeObjectURL(url);
+      setSnackbar('Экспорт сохранён');
+    } catch (err) {
+      setSnackbar(err instanceof ApiError ? err.message : 'Не удалось экспортировать');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const downloadPdf = async () => {
+    setPdfLoading(true);
+    try {
+      const blob = await apiDownloadBlob('/profile/pdf');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'mashuk-profile.pdf';
+      a.click();
+      URL.revokeObjectURL(url);
+      setSnackbar('PDF сохранён');
+    } catch (err) {
+      setSnackbar(err instanceof ApiError ? err.message : 'Не удалось скачать PDF');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   const saveSettings = async () => {
     setSettingsSaving(true);
@@ -177,6 +260,7 @@ export const ProfilePanel: React.FC<{
   const sectionOptions = [
     { label: 'Обзор', value: 'overview' },
     { label: 'Рейтинг', value: 'rating' },
+    { label: 'Медали', value: 'medals' },
     { label: `Копилка (${p.piggybankCount ?? 0})`, value: 'piggybank' },
     ...(showFinal ? [{ label: 'Итог смены', value: 'final' }] : []),
     { label: '⚙', value: 'settings' },
@@ -188,7 +272,7 @@ export const ProfilePanel: React.FC<{
       <Group>
         <SegmentedControl
           value={section}
-          onChange={(v) => setSection(v as 'overview' | 'piggybank' | 'final' | 'settings' | 'rating')}
+          onChange={(v) => setSection(v as typeof section)}
           options={sectionOptions}
         />
 
@@ -200,12 +284,7 @@ export const ProfilePanel: React.FC<{
               </div>
               <div style={{ flex: 1 }}>
                 <div className="pf-n">{p.user.firstName} {p.user.lastName}</div>
-                <div className="pf-r">{p.user.direction}</div>
-                {p.user.groupName && (
-                  <div style={{ fontSize: 11, color: '#B8621A', marginTop: 2, fontWeight: 600 }}>
-                    Группа «{p.user.groupName}»
-                  </div>
-                )}
+                <div className="pf-r">{shiftLine || p.user.direction}</div>
                 {(p.user.leadingRoleStartName || p.user.pedagogicalRoleName) && (
                   <div style={{ fontSize: 12, color: '#B8621A', marginTop: 4, fontWeight: 700 }}>
                     ◆ Стартовая роль: {p.user.leadingRoleStartName || p.user.pedagogicalRoleName}
@@ -225,27 +304,54 @@ export const ProfilePanel: React.FC<{
                 <div className="ab-row">
                   <span style={{ fontSize: 11, fontWeight: 700 }}>{p.trajectory.from}</span>
                   <div className="ab-track">
-                    <div className="ab-track-fill" style={{ width: `${p.trajectory.progressPercent ?? pathPct}%` }} />
+                    <div className="ab-track-fill" style={{ width: `${abPct}%` }} />
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 700 }}>{p.trajectory.to}</span>
                 </div>
                 <div className="ab-dates">
                   <span>{p.trajectory.fromDate || 'Старт'}</span>
-                  <span>{p.trajectory.progressPercent ?? pathPct}% пути</span>
+                  <span>{abPct}% пути</span>
                   <span>{p.trajectory.toDate || 'Цель'}</span>
                 </div>
               </div>
             )}
 
-            {p.roleTrajectory?.route && (
+            {(actionStyle?.route || p.roleTrajectory?.route) && (
               <div className="m-card">
-                <div className="pb-lbl">Твой способ действия</div>
-                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>{p.roleTrajectory.route}</div>
-                {p.roleTrajectory.byDay?.length > 0 && (
-                  <div style={{ marginTop: 10, fontSize: 11, color: '#666' }}>
-                    {p.roleTrajectory.byDay.map((d: any) => (
-                      <div key={d.dayNumber}>Д{d.dayNumber}: {d.activeRoleName || '—'}</div>
+                <div className="pb-lbl">Твой способ действия на программе</div>
+                {actionStyle?.startRole && (
+                  <div style={{ fontSize: 12, marginTop: 6, color: '#666' }}>
+                    Старт: {actionStyle.startRole.name}
+                    {actionStyle.startRole.essence ? ` — ${actionStyle.startRole.essence}` : ''}
+                  </div>
+                )}
+                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 8 }}>
+                  {actionStyle?.route || p.roleTrajectory.route}
+                </div>
+                {actionStyle?.roleCounts?.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginTop: 10 }}>
+                    {actionStyle.roleCounts.map((r: { key: string; name: string; count: number }) => (
+                      <div key={r.key} style={{ fontSize: 11, background: '#FFF8E7', borderRadius: 8, padding: '6px 8px' }}>
+                        <span style={{ fontWeight: 700 }}>{r.name}</span>
+                        <span style={{ color: '#888' }}> · {r.count}</span>
+                      </div>
                     ))}
+                  </div>
+                )}
+                {actionStyle?.selfInsights?.length > 0 && (
+                  <ul className="pb-checks" style={{ marginTop: 10 }}>
+                    {actionStyle.selfInsights.map((line: string, i: number) => <li key={i}>{line}</li>)}
+                  </ul>
+                )}
+                {(p.user.strongRoleName || p.user.growthRoleName || p.user.nextExperiment) ? (
+                  <div style={{ marginTop: 10, fontSize: 12 }}>
+                    {p.user.strongRoleName && <div>Сильная роль: {p.user.strongRoleName}</div>}
+                    {p.user.growthRoleName && <div>Роль роста: {p.user.growthRoleName}</div>}
+                    {p.user.nextExperiment && <div>Эксперимент: {p.user.nextExperiment}</div>}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 8 }}>
+                    Выборы Точки Б появятся после финальной анкеты.
                   </div>
                 )}
               </div>
@@ -253,57 +359,72 @@ export const ProfilePanel: React.FC<{
 
             <div className="ab-card">
               <div className="ab-stats">
-                <div className="abs"><div className="abs-v">{p.stats.activities}</div><div className="abs-l">Активностей</div></div>
-                <div className="abs"><div className="abs-v">{p.stats.tasksDone}</div><div className="abs-l">Заданий</div></div>
-                <div className="abs"><div className="abs-v">{p.stats.ideas}</div><div className="abs-l">Идей</div></div>
-                <div className="abs"><div className="abs-v">{p.stats.answers}</div><div className="abs-l">Ответов</div></div>
+                <div className="abs"><div className="abs-v">{abPct}%</div><div className="abs-l">Прогресс A→B</div></div>
+                <div className="abs">
+                  <div className="abs-v">{m.activitiesVisited ?? p.stats.activities}/{m.activitiesTotal ?? '—'}</div>
+                  <div className="abs-l">Активностей</div>
+                </div>
+                <div className="abs"><div className="abs-v">{m.piggybankTotal ?? p.piggybankCount ?? 0}</div><div className="abs-l">Идей</div></div>
+                <div className="abs">
+                  <div className="abs-v">{m.eveningReflectionsDone ?? 0}/{m.eveningReflectionsTotal ?? 7}</div>
+                  <div className="abs-l">Рефлексий</div>
+                </div>
               </div>
             </div>
 
             <div className="m-stats">
               <div className="m-st"><div className="m-sv">📍 {p.points.path}</div><div className="m-sl">Путь · ур. {p.points.pathLevel}</div></div>
               <div className="m-st"><div className="m-sv">⚡ {p.points.experience}</div><div className="m-sl">Опыт · ур. {p.points.experienceLevel}</div></div>
+              <div className="m-st"><div className="m-sv">✦ {p.points.total ?? ((p.points.path ?? 0) + (p.points.experience ?? 0))}</div><div className="m-sl">Общий рейтинг</div></div>
             </div>
 
-            {(p.myRequest || p.goalSetting) && (
+            {(p.goalAnswers?.length > 0 || p.myRequest || p.goalSetting) && (
               <div className="pb m-card">
-                <div className="pb-lbl">🎯 Мой запрос</div>
-                <div className="pb-text">{p.myRequest || (p.goalSetting.interests as string[])?.join(', ') || '—'}</div>
+                <div className="pb-lbl">🎯 Мой запрос · Точка А</div>
+                {Array.isArray(p.goalAnswers) && p.goalAnswers.length > 0 ? (
+                  <ul className="pb-checks" style={{ marginTop: 6 }}>
+                    {p.goalAnswers.map((ans: string, i: number) => (
+                      <li key={i}>{ans || '—'}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="pb-text">{p.myRequest || (p.goalSetting.interests as string[])?.join(', ') || '—'}</div>
+                )}
               </div>
             )}
 
-            <div className="pb m-card">
+            <div className="pb m-card" style={{ opacity: showOutcomes ? 1 : 0.85 }}>
               <div className="pb-lbl">📋 Что получилось</div>
-              {p.outcomes?.summary ? (
+              {!showOutcomes ? (
+                <div style={{ fontSize: 12, color: '#888' }}>Блок откроется с 3-го дня форума.</div>
+              ) : outcomeBullets.length > 0 ? (
                 <ul className="pb-checks">
-                  <li>{p.outcomes.summary}</li>
-                  {p.stats.tasksDone > 0 && <li>Выполнено заданий: {p.stats.tasksDone}</li>}
-                  {p.stats.answers > 0 && <li>Ответов на вопросы: {p.stats.answers}</li>}
+                  {outcomeBullets.map((line: string, i: number) => <li key={i}>{line}</li>)}
                 </ul>
               ) : (
-                <div style={{ fontSize: 12, color: '#888' }}>Пока мало данных — ответьте на вопросы или запросите синтез.</div>
+                <div style={{ fontSize: 12, color: '#888' }}>Пока мало данных — нажмите «Обновить итог».</div>
               )}
-              <Button
-                size="s"
-                style={{ marginTop: 8 }}
-                loading={synthLoading}
-                onClick={async () => {
-                  setSynthLoading(true);
-                  try {
-                    const res = await apiPost<{ summary?: string; configured?: boolean }>('/profile/outcomes/synthesize', {});
-                    setSnackbar(res.configured === false
-                      ? 'ИИ не настроен — показан эвристический итог'
-                      : 'Итог обновлён');
-                    loadProfile();
-                  } catch (err) {
-                    setSnackbar(err instanceof ApiError ? err.message : 'Не удалось синтезировать');
-                  } finally {
-                    setSynthLoading(false);
-                  }
-                }}
-              >
-                Собрать «Что получилось» (GigaChat)
-              </Button>
+              {showOutcomes && (
+                <Button
+                  size="s"
+                  style={{ marginTop: 8 }}
+                  loading={synthLoading}
+                  onClick={async () => {
+                    setSynthLoading(true);
+                    try {
+                      await apiPost<{ bullets?: string[] }>('/profile/outcomes/synthesize', {});
+                      setSnackbar('Итог обновлён по вашим данным');
+                      loadProfile();
+                    } catch (err) {
+                      setSnackbar(err instanceof ApiError ? err.message : 'Не удалось обновить итог');
+                    } finally {
+                      setSynthLoading(false);
+                    }
+                  }}
+                >
+                  Обновить итог
+                </Button>
+              )}
             </div>
 
             {medals.length > 0 && (
@@ -316,6 +437,7 @@ export const ProfilePanel: React.FC<{
                     {m.description && <div style={{ fontSize: 11, color: '#666' }}>{m.description}</div>}
                   </div>
                 ))}
+                <div className="pb-link" onClick={() => setSection('medals')}>Все медали →</div>
               </div>
             )}
 
@@ -335,26 +457,101 @@ export const ProfilePanel: React.FC<{
               </div>
             )}
 
-            {p.piggybankTags && Object.keys(p.piggybankTags).length > 0 && (
-              <div className="m-card">
-                <div className="pb-lbl">📁 МОЯ КОПИЛКА</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                  {Object.entries(p.piggybankTags as Record<string, number>).map(([tag, count]) => (
-                    <span key={tag} style={{
+            <div className="m-card">
+              <div className="pb-lbl">📁 Моя копилка</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {PIGGYBANK_TAGS.map(tag => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => goPiggybank(tag, '')}
+                    style={{
                       fontSize: 11, background: '#FFF3E0', color: '#B8621A',
-                      borderRadius: 12, padding: '4px 10px', fontWeight: 600,
-                    }}>
-                      #{tag} · {count}
-                    </span>
-                  ))}
+                      borderRadius: 12, padding: '4px 10px', fontWeight: 600, border: 'none', cursor: 'pointer',
+                    }}
+                  >
+                    #{tag}{tagCounts[tag] ? ` · ${tagCounts[tag]}` : ''}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {PIGGYBANK_SOURCES.map(src => (
+                  <button
+                    key={src}
+                    type="button"
+                    onClick={() => goPiggybank('', src)}
+                    style={{
+                      fontSize: 10, background: '#f5f5f5', color: '#555',
+                      borderRadius: 12, padding: '4px 10px', border: 'none', cursor: 'pointer',
+                    }}
+                  >
+                    {src}{sourceCounts[src] ? ` · ${sourceCounts[src]}` : ''}
+                  </button>
+                ))}
+              </div>
+              <div className="pb-link" onClick={() => setSection('piggybank')}>
+                {p.piggybankCount ?? 0} идей и инструментов →
+              </div>
+            </div>
+
+            {tracker && (
+              <div className="m-card">
+                <div
+                  className="pb-lbl"
+                  style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}
+                  onClick={() => setTrackerOpen(v => !v)}
+                >
+                  <span>📊 Мой трекер</span>
+                  <span>{trackerOpen ? '▲' : '▼'}</span>
                 </div>
-                <div className="pb-link" onClick={() => setSection('piggybank')}>
-                  {p.piggybankCount} идей и инструментов →
-                </div>
+                {trackerOpen && (
+                  <div style={{ marginTop: 10, fontSize: 12 }}>
+                    {tracker.stateCurve?.length > 0 && (
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 6 }}>Кривая состояния</div>
+                        {tracker.stateCurve.map((d: { day: number; energy?: number; emotion?: number; delta?: number }) => (
+                          <div key={d.day} style={{ color: '#666' }}>
+                            Д{d.day}: энергия {d.energy ?? '—'}, эмоция {d.emotion ?? '—'}
+                            {d.delta != null && d.delta !== 0 && (
+                              <span style={{ color: d.delta > 0 ? '#2F855A' : '#C53030' }}>
+                                {' '}({d.delta > 0 ? '+' : ''}{d.delta})
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ marginBottom: 8 }}>
+                      Задания: {tracker.tasksDone}/{tracker.tasksTotal} · Опыт: {tracker.experiencePoints}
+                    </div>
+                    {tracker.myExchangeQuestions?.length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontWeight: 700 }}>Мои вопросы</div>
+                        {tracker.myExchangeQuestions.slice(0, 5).map((q: { id: number; text: string }) => (
+                          <div key={q.id} style={{ color: '#666' }}>· {q.text?.slice(0, 80)}</div>
+                        ))}
+                      </div>
+                    )}
+                    {tracker.touchpointsToday?.length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontWeight: 700 }}>7 точек сегодня</div>
+                        {tracker.touchpointsToday.map((tp: { title?: string; done?: boolean }, i: number) => (
+                          <div key={i}>{tp.done ? '✓' : '○'} {tp.title || `Точка ${i + 1}`}</div>
+                        ))}
+                      </div>
+                    )}
+                    {tracker.roleOfDay && (
+                      <div>
+                        Роль дня: {tracker.roleOfDay.activeRoleName || '—'}
+                        {tracker.roleOfDay.experimentStatus ? ` · ${tracker.roleOfDay.experimentStatus}` : ''}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
-            {previewPiggy.length > 0 && !p.piggybankTags && (
+            {previewPiggy.length > 0 && (
               <div className="m-card">
                 <div className="pb-lbl">Копилка · последние записи</div>
                 {previewPiggy.map(entry => (
@@ -369,9 +566,8 @@ export const ProfilePanel: React.FC<{
             <div className="ai-rec">
               <div className="ai-rec-t">💡 Рекомендация</div>
               <div className="ai-rec-b">
-                {p.stats.answers < 2
-                  ? 'Ответьте на рефлексивные вопросы — это откроет базу знаний и точки осмысления.'
-                  : 'Продолжайте фиксировать идеи в копилку — они пригодятся для итогов форума.'}
+                {p.recommendation?.text
+                  || 'Продолжайте фиксировать идеи в копилку — они пригодятся для итогов форума.'}
               </div>
             </div>
 
@@ -403,6 +599,30 @@ export const ProfilePanel: React.FC<{
                 <div style={{ fontSize: 13, marginTop: 6, fontWeight: 700, color: '#B8621A' }}>
                   Ваше место: #{myRank}
                 </div>
+              )}
+              <div className="time-sw" style={{ marginTop: 10 }}>
+                {([
+                  { key: 'total', label: 'Общий' },
+                  { key: 'day', label: 'День' },
+                  { key: 'shift', label: 'Смена (лог)' },
+                ] as const).map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    className={`time-btn ${lbScope === t.key ? 'on' : ''}`}
+                    onClick={() => setLbScope(t.key)}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              {lbScope === 'day' && (
+                <Select
+                  style={{ marginTop: 10 }}
+                  value={lbDay}
+                  onChange={(e) => setLbDay(e.target.value)}
+                  options={[1, 2, 3, 4, 5, 6, 7].map((d) => ({ label: `День ${d}`, value: String(d) }))}
+                />
               )}
               <div className="time-sw" style={{ marginTop: 10 }}>
                 {([
@@ -466,12 +686,59 @@ export const ProfilePanel: React.FC<{
               ))
             )}
           </>
+        ) : section === 'medals' ? (
+          <>
+            <div className="m-card">
+              <div className="pb-lbl">Все медали</div>
+              <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                Полученные и ещё не открытые награды смены
+              </div>
+            </div>
+            {medalsCatalog.length === 0 ? (
+              <EmptyState icon="🏅" title="Каталог пуст" subtitle="Медали появятся после настройки в админке" />
+            ) : (
+              medalsCatalog.map((m) => (
+                <div
+                  key={m.id}
+                  className="m-card"
+                  style={{ opacity: m.earned ? 1 : 0.55, marginBottom: 8 }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>
+                    {m.earned ? '🏅' : '🔒'} {m.name}
+                  </div>
+                  {m.description && (
+                    <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>{m.description}</div>
+                  )}
+                  <div style={{ fontSize: 10, color: '#888', marginTop: 6 }}>
+                    {m.earned ? 'Получена' : 'Ещё не получена'}
+                    {m.level ? ` · ${m.level}` : ''}
+                  </div>
+                </div>
+              ))
+            )}
+          </>
         ) : section === 'final' && finalCard ? (
           <>
             <div className="m-card" style={{ background: 'linear-gradient(135deg,#FFF8E7,#FFF3E0)' }}>
               <div style={{ fontSize: 14, fontWeight: 800 }}>Итоговая карточка</div>
               <div style={{ fontSize: 12, marginTop: 4, color: '#666' }}>{finalCard.roles?.route}</div>
+              {p.pdf?.available && (
+                <Button size="m" stretched loading={pdfLoading} style={{ marginTop: 12 }} onClick={downloadPdf}>
+                  Скачать итоговый PDF
+                </Button>
+              )}
             </div>
+
+            {finalCard.experienceSummary && (
+              <div className="m-card">
+                <div className="pb-lbl">Опыт смены</div>
+                <div style={{ fontSize: 12, marginTop: 6 }}>
+                  <div>Заданий выполнено: {finalCard.experienceSummary.tasksApproved}</div>
+                  <div>Медалей: {finalCard.experienceSummary.medalsCount}</div>
+                  <div>Посещений блоков: {finalCard.experienceSummary.attendanceCount}</div>
+                </div>
+              </div>
+            )}
 
             <div className="m-card">
               <div className="pb-lbl">Роли</div>
@@ -516,6 +783,36 @@ export const ProfilePanel: React.FC<{
               </div>
             )}
 
+            {finalCard.piggybankAll?.length > 0 && (
+              <div className="m-card">
+                <div className="pb-lbl">Вся копилка</div>
+                <div className="form-row" style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  <Select
+                    value={finalTagFilter}
+                    onChange={e => setFinalTagFilter(e.target.value)}
+                    options={TAGS.map(t => ({ label: t || 'Все теги', value: t }))}
+                  />
+                  <Select
+                    value={finalSourceFilter}
+                    onChange={e => setFinalSourceFilter(e.target.value)}
+                    options={SOURCES.map(s => ({ label: s || 'Все источники', value: s }))}
+                  />
+                </div>
+                {finalCard.piggybankAll
+                  .filter((e: { tag?: string; source?: string }) => {
+                    if (finalTagFilter && e.tag !== finalTagFilter) return false;
+                    if (finalSourceFilter && e.source !== finalSourceFilter) return false;
+                    return true;
+                  })
+                  .map((e: { id: number; tag: string; source: string; text: string }) => (
+                    <div key={e.id} style={{ fontSize: 12, marginTop: 8, borderTop: '1px solid #eee', paddingTop: 6 }}>
+                      <span style={{ color: '#B8621A', fontWeight: 700 }}>#{e.tag}</span> · {e.source}
+                      <div>{e.text}</div>
+                    </div>
+                  ))}
+              </div>
+            )}
+
             <div className="m-stats">
               <div className="m-st"><div className="m-sv">📍 {finalCard.points?.path}</div><div className="m-sl">Путь</div></div>
               <div className="m-st"><div className="m-sv">⚡ {finalCard.points?.experience}</div><div className="m-sl">Опыт</div></div>
@@ -537,6 +834,18 @@ export const ProfilePanel: React.FC<{
                   {t.label}
                 </Checkbox>
               ))}
+              <Button
+                size="s"
+                mode="secondary"
+                style={{ marginTop: 10 }}
+                onClick={() => {
+                  void requestVkPushPermission().then(ok => {
+                    setSnackbar(ok ? 'Запрос отправлен в VK' : 'Не удалось запросить уведомления (откройте из VK)');
+                  });
+                }}
+              >
+                Разрешить уведомления VK
+              </Button>
             </div>
             <div className="m-card">
               <div className="pb-lbl">Рейтинг</div>
@@ -582,16 +891,60 @@ export const ProfilePanel: React.FC<{
           </>
         ) : (
           <>
+            <Button
+              size="m"
+              stretched
+              style={{ marginBottom: 12 }}
+              onClick={() => openQuickCapture(setModal, {
+                onSaved: () => {
+                  loadPiggybank();
+                  setSnackbar('Запись добавлена в копилку');
+                },
+              })}
+            >
+              + Новая запись
+            </Button>
+            <Button
+              size="m"
+              stretched
+              mode="secondary"
+              loading={exportLoading}
+              style={{ marginBottom: 12 }}
+              onClick={exportPiggybank}
+            >
+              Экспортировать (.txt)
+            </Button>
+            <Input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Поиск по тексту"
+              style={{ marginBottom: 12 }}
+            />
             <div className="form-row" style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
               <Select value={tagFilter} onChange={e => setTagFilter(e.target.value)} options={TAGS.map(t => ({ label: t || 'Все теги', value: t }))} />
               <Select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} options={SOURCES.map(s => ({ label: s || 'Все источники', value: s }))} />
+              <Select
+                value={dayFilter}
+                onChange={e => setDayFilter(e.target.value)}
+                options={[
+                  { label: 'Все дни', value: '' },
+                  ...Array.from({ length: 7 }, (_, i) => ({ label: `День ${i + 1}`, value: String(i + 1) })),
+                ]}
+              />
             </div>
-            {piggybank.map((entry: any) => (
+            {piggybank.map((entry: any) => {
+              const tags: string[] = Array.isArray(entry.tags) && entry.tags.length
+                ? entry.tags
+                : (entry.tag ? [entry.tag] : []);
+              return (
               <div key={entry.id} className="m-card" style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 10, color: '#888', fontWeight: 600 }}>{entry.tag?.toUpperCase()} · {entry.source}</div>
+                <div style={{ fontSize: 10, color: '#888', fontWeight: 600 }}>
+                  {tags.map((t: string) => `#${t}`).join(' ')} · {entry.source}
+                  {entry.forumDay ? ` · Д${entry.forumDay}` : ''}
+                </div>
                 <div style={{ fontSize: 12, marginTop: 4 }}>{entry.text}</div>
               </div>
-            ))}
+            );})}
             {piggybank.length === 0 && (
               <EmptyState icon="📝" title="Копилка пуста" subtitle="Фиксируйте идеи и мысли на главной или в программе" />
             )}

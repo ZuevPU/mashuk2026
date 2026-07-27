@@ -11,16 +11,10 @@ import {
 } from '../services/helpers.js';
 import { getEventLiveStatus, resolveEventInterval } from '../services/eventSchedule.js';
 import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
-import { awardPoints, getLevelProgress } from '../services/pointsService.js';
+import { getLevelProgress, totalRatingScore } from '../services/pointsService.js';
 import { loadDayContext } from './dayStateController.js';
-import {
-  normalizePiggybankTag,
-  normalizePiggybankSource,
-  isAllowedPiggybankTag,
-  isAllowedPiggybankSource,
-  pointsActionForTag,
-  ORG_TAG,
-} from '../services/piggybankDict.js';
+import { resolveHomeActiveCard } from '../services/homeActiveCard.js';
+import { entryHasTag } from '../services/piggybankDict.js';
 
 export const getHome = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
@@ -80,8 +74,9 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const submittedTaskIds = new Set(submissions.map(s => s.taskId));
     const activeTasks = availableTasks.filter(t => !submittedTaskIds.has(t.id));
 
-    const ideas = await db.select().from(piggybank)
-      .where(and(eq(piggybank.participantId, participant.id), eq(piggybank.tag, 'идея')));
+    const piggyRows = await db.select().from(piggybank)
+      .where(eq(piggybank.participantId, participant.id));
+    const ideasCount = piggyRows.filter(e => entryHasTag(e, 'идея')).length;
 
     const stateCheckOrder = stateCheckTimePointOrder(now);
     let priorityQuestion: typeof publishedQuestions[0] | undefined;
@@ -155,7 +150,18 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     }
 
     const missedCount = activeMissed.filter(q => q.overdue).length + lockedMissed.length;
-    const dayContext = await loadDayContext(participant.id, currentDay, participant.pedagogicalRole);
+    const pointBQuestion = publishedQuestions.find(q => q.block === 'Точка Б');
+    const hasPointB = !!(participant.pointBAnswers && (
+      Array.isArray(participant.pointBAnswers)
+        ? participant.pointBAnswers.length > 0
+        : Object.keys(participant.pointBAnswers as object).length > 0
+    ));
+    const dayContext = await loadDayContext(participant.id, currentDay, participant.pedagogicalRole, {
+      now,
+      settings,
+      hasPointB,
+      pointBQuestionId: pointB?.id ?? pointBQuestion?.id ?? null,
+    });
 
     let priorityAction: Record<string, unknown> | null = null;
     if (currentDay === 8 && pointB) {
@@ -208,8 +214,31 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       return { id: q.id, title: q.title, state, block: q.block };
     });
 
+    const missedToday = touchpointItems
+      .filter(i => i.state === 'overdue' || i.state === 'locked')
+      .map(i => ({
+        id: i.id,
+        title: i.title ?? '',
+        state: i.state as 'overdue' | 'locked',
+      }));
+    const missedTodayCount = missedToday.length;
+    const ctaQuestionId = touchpointItems.find(i => i.state === 'overdue')?.id
+      ?? missedToday[0]?.id;
+    const dayMissedCount = missedTodayCount;
+
     const pathProg = await getLevelProgress(participant.pathPoints ?? 0, 'path');
     const expProg = await getLevelProgress(participant.experiencePoints ?? 0, 'experience');
+
+    const activeCard = resolveHomeActiveCard({
+      now,
+      eveningWrap,
+      currentDay,
+      priorityAction,
+      eveningCard,
+      eveningQuestionnaire: dayContext.eveningQuestionnaire,
+      schedule,
+      touchpointItems,
+    });
 
     res.json({
       user: {
@@ -231,6 +260,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         keyQuestion: focus.keyQuestion,
       } : null,
       priorityAction,
+      activeCard,
       roleOfDay: dayContext.roleOfDay,
       experiment: currentDay === 8 ? null : dayContext.experiment,
       eveningQuestionnaire: dayContext.eveningQuestionnaire,
@@ -247,7 +277,13 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       points: {
         path: participant.pathPoints ?? 0,
         experience: participant.experiencePoints ?? 0,
-        ideas: ideas.length,
+        bonus: participant.bonusPoints ?? 0,
+        total: totalRatingScore(
+          participant.pathPoints ?? 0,
+          participant.experiencePoints ?? 0,
+          participant.bonusPoints ?? 0,
+        ),
+        ideas: ideasCount,
         pathLevel: pathProg.level,
         experienceLevel: expProg.level,
         pathProgress: pathProg.progress,
@@ -256,11 +292,14 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       touchpoints: {
         completed: dayTouchpointsCompleted,
         total: dayTouchpointsTotal,
-        missed: missedCount,
-        message: missedCount > 0
-          ? (activeMissed.some(q => q.overdue)
-            ? `${activeMissed.filter(q => q.overdue).length} пропущена — ещё можно заполнить`
-            : 'Есть пропущенные точки')
+        missed: dayMissedCount,
+        missedToday,
+        missedTodayCount,
+        ctaQuestionId: ctaQuestionId ?? null,
+        message: dayMissedCount > 0
+          ? (missedToday.some(m => m.state === 'overdue')
+            ? `${missedToday.filter(m => m.state === 'overdue').length} пропущено — ещё можно заполнить`
+            : `${dayMissedCount} точек пропущено`)
           : 'Начни с утренней проверки состояния',
         items: touchpointItems,
       },
@@ -269,6 +308,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       ui: {
         showTasksBanner: false,
         showQuickCapture: timeSlot === 'day' && currentDay !== 8,
+        showPiggybankFab: currentDay !== 8,
         showEveningCard: !!eveningCard,
       },
       sectionsVisibility: settings.sectionsVisibility ?? {},
@@ -282,39 +322,27 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
 
 export const quickPiggybank = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
-    const { tag: rawTag, text, source: rawSource } = req.body;
-    if (!rawTag || !text) {
-      res.status(400).json({ error: 'tag and text required' });
+    const { tag: rawTag, tags: rawTags, text, source: rawSource, forumDay } = req.body;
+    const tagsInput = rawTags ?? rawTag;
+    if (!tagsInput || !text) {
+      res.status(400).json({ error: 'tag(s) and text required' });
       return;
     }
 
-    const tag = normalizePiggybankTag(String(rawTag));
-    if (!isAllowedPiggybankTag(tag)) {
-      res.status(400).json({ error: 'Invalid tag' });
-      return;
+    const { createPiggybankEntry } = await import('../services/piggybankService.js');
+    try {
+      const entry = await createPiggybankEntry({
+        participantId: req.participant!.id,
+        text,
+        tags: tagsInput,
+        source: rawSource,
+        forumDay: forumDay != null ? Number(forumDay) : undefined,
+      });
+      res.json({ entry });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Invalid payload';
+      res.status(400).json({ error: msg });
     }
-
-    // Организаторам — источник не обязателен
-    let source = normalizePiggybankSource(rawSource);
-    if (tag !== ORG_TAG) {
-      if (!source || !isAllowedPiggybankSource(source)) {
-        res.status(400).json({ error: 'source required (choose after text)' });
-        return;
-      }
-    } else {
-      source = source || 'Своя мысль';
-    }
-
-    const [entry] = await db.insert(piggybank).values({
-      participantId: req.participant!.id,
-      tag,
-      text,
-      source,
-    }).returning();
-
-    await awardPoints(req.participant!.id, pointsActionForTag(tag));
-
-    res.json({ entry });
   } catch (error) {
     console.error('quickPiggybank:', error);
     res.status(500).json({ error: 'Internal server error' });

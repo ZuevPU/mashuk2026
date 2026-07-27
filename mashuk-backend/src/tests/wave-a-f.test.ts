@@ -22,10 +22,19 @@ describe('pushCategoryOf', () => {
   it('maps scheduled slot triggers to touchpoints', () => {
     assert.equal(pushCategoryOf('auto_slot_0800'), 'touchpoints');
     assert.equal(pushCategoryOf('auto_retry_slot_0800'), 'touchpoints');
+    assert.equal(pushCategoryOf('touchpoint_open_42'), 'touchpoints');
   });
 
   it('maps question_publish to tasks', () => {
     assert.equal(pushCategoryOf('question_publish'), 'tasks');
+  });
+
+  it('maps transactional triggers', () => {
+    assert.equal(pushCategoryOf('transactional_medal'), 'tasks');
+    assert.equal(pushCategoryOf('transactional_level_up'), 'tasks');
+    assert.equal(pushCategoryOf('transactional_task_pending_1'), 'tasks');
+    assert.equal(pushCategoryOf('transactional_exchange_answer_received'), 'exchange');
+    assert.equal(pushCategoryOf('event_reminder_1'), 'program');
   });
 });
 

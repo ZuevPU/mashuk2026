@@ -2,7 +2,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { pointsLog, levelsConfig, participants } from '../db/schema.js';
 
-type PointTrack = 'path' | 'experience';
+export type PointTrack = 'path' | 'experience';
 
 const PATH_ACTIONS = new Set([
   'question_answer',
@@ -10,20 +10,35 @@ const PATH_ACTIONS = new Set([
   'piggybank_idea',
   'piggybank_thought',
   'piggybank_question',
-  'exchange_question',
-  'exchange_answer',
   'attendance',
   'point_a_complete',
+  'point_b_complete',
+  'exchange_question',
+  'exchange_answer',
+  'state_check_morning',
+  'state_check_day',
+  'state_check_evening',
+  'day_complete_bonus',
+  'reflection_streak_7',
 ]);
+
+const BONUS_ACTIONS = new Set(['bonus_regularity', 'bonus_diversity']);
+
 const EXP_ACTIONS = new Set(['task_complete', 'piggybank_entry']);
+
+export function pointsTrackForAction(actionType: string): PointTrack | 'bonus' {
+  if (BONUS_ACTIONS.has(actionType)) return 'bonus';
+  return PATH_ACTIONS.has(actionType) ? 'path' : 'experience';
+}
 
 const DEFAULT_THRESHOLDS = [0, 100, 250, 500, 1000];
 
 export async function awardPoints(
   participantId: number,
   actionType: string,
-  overridePoints?: number
-): Promise<{ awarded: number; track: PointTrack } | null> {
+  overridePoints?: number,
+  forumDay?: number,
+): Promise<{ awarded: number; track: PointTrack | 'bonus' } | null> {
   const [config] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, actionType)).limit(1);
   const points = overridePoints ?? config?.pointsPerUnit ?? 0;
   if (points <= 0) return null;
@@ -36,13 +51,31 @@ export async function awardPoints(
     if (count >= config.maxAccruals) return null;
   }
 
-  await db.insert(pointsLog).values({ participantId, actionType, points });
+  const [beforeRow] = await db.select({
+    pathPoints: participants.pathPoints,
+    experiencePoints: participants.experiencePoints,
+  }).from(participants).where(eq(participants.id, participantId)).limit(1);
+  const pointsBefore = {
+    path: beforeRow?.pathPoints ?? 0,
+    experience: beforeRow?.experiencePoints ?? 0,
+  };
 
-  const track: PointTrack = PATH_ACTIONS.has(actionType) ? 'path' : 'experience';
+  await db.insert(pointsLog).values({
+    participantId,
+    actionType,
+    points,
+    forumDay: forumDay ?? null,
+  });
+
+  const track = pointsTrackForAction(actionType);
 
   if (track === 'path') {
     await db.update(participants)
       .set({ pathPoints: sql`${participants.pathPoints} + ${points}` })
+      .where(eq(participants.id, participantId));
+  } else if (track === 'bonus') {
+    await db.update(participants)
+      .set({ bonusPoints: sql`${participants.bonusPoints} + ${points}` })
       .where(eq(participants.id, participantId));
   } else {
     await db.update(participants)
@@ -50,7 +83,17 @@ export async function awardPoints(
       .where(eq(participants.id, participantId));
   }
 
+  const { afterPointsAwarded } = await import('./ratingBonusesService.js');
+  await afterPointsAwarded(participantId, track, points, pointsBefore, {
+    forumDay,
+    actionType,
+  });
+
   return { awarded: points, track };
+}
+
+export function totalRatingScore(path: number, experience: number, bonus: number): number {
+  return path + experience + bonus;
 }
 
 export async function getLevelThresholds(track: PointTrack): Promise<number[]> {
@@ -97,4 +140,53 @@ export function getLevelSync(points: number, thresholds: number[] = DEFAULT_THRE
     if (points >= thresholds[i]) level = i + 1;
   }
   return level;
+}
+
+
+export async function revokePointsLogEntry(
+  logId: number,
+  participantId: number,
+  reason: string,
+): Promise<{ ok: true; reversalId: number } | { ok: false; error: string }> {
+  const [row] = await db.select().from(pointsLog).where(eq(pointsLog.id, logId)).limit(1);
+  if (!row || row.participantId !== participantId) {
+    return { ok: false, error: 'Not found' };
+  }
+  if (row.revokedAt) {
+    return { ok: false, error: 'Already revoked' };
+  }
+  if (row.points <= 0) {
+    return { ok: false, error: 'Cannot revoke non-positive entry' };
+  }
+
+  const track = pointsTrackForAction(row.actionType || '');
+  const neg = -row.points;
+
+  const [reversal] = await db.insert(pointsLog).values({
+    participantId,
+    actionType: `${row.actionType}_revoke`,
+    points: neg,
+    relatedLogId: logId,
+    revokeReason: reason,
+  }).returning();
+
+  await db.update(pointsLog)
+    .set({ revokedAt: new Date(), revokeReason: reason, relatedLogId: reversal.id })
+    .where(eq(pointsLog.id, logId));
+
+  if (track === 'path') {
+    await db.update(participants)
+      .set({ pathPoints: sql`GREATEST(0, ${participants.pathPoints} + ${neg})` })
+      .where(eq(participants.id, participantId));
+  } else if (track === 'bonus') {
+    await db.update(participants)
+      .set({ bonusPoints: sql`GREATEST(0, ${participants.bonusPoints} + ${neg})` })
+      .where(eq(participants.id, participantId));
+  } else {
+    await db.update(participants)
+      .set({ experiencePoints: sql`GREATEST(0, ${participants.experiencePoints} + ${neg})` })
+      .where(eq(participants.id, participantId));
+  }
+
+  return { ok: true, reversalId: reversal.id };
 }

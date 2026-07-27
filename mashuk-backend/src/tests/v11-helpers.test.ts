@@ -86,9 +86,39 @@ describe('effective current day', () => {
   });
 });
 
+describe('home active card', () => {
+  it('prefers program now in day phase', async () => {
+    const { resolveHomeActiveCard } = await import('../services/homeActiveCard.js');
+    const noon = new Date(Date.UTC(2026, 7, 12, 9, 0, 0)); // 12:00 MSK day phase
+    const card = resolveHomeActiveCard({
+      now: noon,
+      eveningWrap: false,
+      currentDay: 2,
+      priorityAction: null,
+      eveningCard: null,
+      eveningQuestionnaire: { available: false, completed: false },
+      schedule: [{ kind: 'now', title: 'Мастер-класс', time: '12:00', place: 'Зал' }],
+      touchpointItems: [],
+    });
+    assert.equal(card?.kind, 'program_now');
+  });
+});
+
 describe('piggybank dict', () => {
   it('aliases old tags and sources', () => {
     assert.equal(normalizePiggybankTag('забрать в работу'), 'в работу');
     assert.equal(normalizePiggybankSource('собственные размышления'), 'Своя мысль');
+  });
+});
+
+describe('KB material isNew', () => {
+  it('marks created within 24h as new', async () => {
+    const { materialIsNew } = await import('../controllers/programController.js');
+    const now = new Date('2026-08-12T12:00:00+03:00');
+    const recent = { isNew: false, createdAt: new Date('2026-08-12T10:00:00+03:00') } as import('../db/schema.js').materials.$inferSelect;
+    const old = { isNew: false, createdAt: new Date('2026-08-10T10:00:00+03:00') } as import('../db/schema.js').materials.$inferSelect;
+    assert.equal(materialIsNew(recent, now), true);
+    assert.equal(materialIsNew(old, now), false);
+    assert.equal(materialIsNew({ ...recent, isNew: true, createdAt: null } as typeof recent, now), true);
   });
 });

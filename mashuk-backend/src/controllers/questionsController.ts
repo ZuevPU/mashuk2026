@@ -5,9 +5,41 @@ import {
   questions, questionOptions, answers, exchangeQuestions, exchangeAnswers, participants, events,
 } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
-import { countWords, getForumSettings, getTouchpointAccess, resolveEffectiveCurrentDay, toTouchpointUiStatus } from '../services/helpers.js';
+import { countWords, getForumSettings, getTouchpointAccess, resolveEffectiveCurrentDay, toTouchpointUiStatus, isSameMoscowCalendarDay } from '../services/helpers.js';
 import { awardPoints } from '../services/pointsService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
+import { emotionIdToZone, EMOTION_ZONE_LABELS } from '../services/emotionZones.js';
+import { filterEventsForLessonSlot, lessonSlotIndexForQuestion } from '../services/lessonSlotEvents.js';
+import { formatQuestionTimeWindow, getReflectionTypeLabel } from '../services/reflectionTypeLabel.js';
+import { resolveAnswerConfirmation } from '../services/answerConfirmation.js';
+import { evaluateMedalsForParticipantDetailed } from '../services/medalEvaluator.js';
+import { sendPushNotification } from '../services/pushService.js';
+
+function isPointBQuestion(question: { block?: string | null; reflectionKind?: string | null }): boolean {
+  return question.block === 'Точка Б' || question.reflectionKind === 'point_b';
+}
+
+function pointsActionForQuestion(question: {
+  block?: string | null;
+  reflectionKind?: string | null;
+  type?: string | null;
+  timePoint?: string | null;
+}): string {
+  if (isPointBQuestion(question)) return 'point_b_complete';
+  if (question.type === 'checkin' || question.reflectionKind === 'state_check') {
+    const tp = (question.timePoint || '').toLowerCase();
+    if (tp.includes('утро')) return 'state_check_morning';
+    if (tp.includes('день')) return 'state_check_day';
+    if (tp.includes('вечер')) return 'state_check_evening';
+  }
+  return 'question_answer';
+}
+
+async function answerSubmitExtras(participantId: number, settings: Awaited<ReturnType<typeof getForumSettings>>) {
+  const newMedals = await evaluateMedalsForParticipantDetailed(participantId);
+  const confirm = resolveAnswerConfirmation((settings as { answerConfirmation?: unknown }).answerConfirmation);
+  return { newMedals, confirm };
+}
 
 function isLessonReflectionQuestion(q: { title?: string | null; block?: string | null }): boolean {
   const t = (q.title || '').toLowerCase();
@@ -27,15 +59,30 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
     const userAnswers = await db.select().from(answers)
       .where(eq(answers.participantId, req.participant!.id));
     const answeredIds = new Set(userAnswers.map(a => a.questionId));
+    const answerByQuestion = new Map(userAnswers.map(a => [a.questionId, a]));
 
     const result = list.map(q => {
       const access = getTouchpointAccess(q.dayNumber, currentDay, q.closeTime, now, q.publishTime);
+      const userAnswer = answerByQuestion.get(q.id);
       const answered = answeredIds.has(q.id);
       const status = toTouchpointUiStatus(access, answered);
-      return { ...q, status, access, answered };
+      const answeredAt = userAnswer?.createdAt ?? null;
+      const pathPointsPreview = q.points && q.points > 0 ? q.points : 5;
+      return {
+        ...q,
+        status,
+        access,
+        answered,
+        answeredAt,
+        answeredToday: answered && answeredAt ? isSameMoscowCalendarDay(answeredAt, now) : false,
+        reflectionLabel: getReflectionTypeLabel(q),
+        timeWindowLabel: formatQuestionTimeWindow(q.publishTime, q.closeTime),
+        pathPointsPreview,
+      };
     });
 
-    res.json({ questions: result, currentDay });
+    const confirm = resolveAnswerConfirmation((settings as { answerConfirmation?: unknown }).answerConfirmation);
+    res.json({ questions: result, currentDay, answerConfirm: confirm });
   } catch (error) {
     console.error('listForumQuestions:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -57,10 +104,10 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
     const options = await db.select().from(questionOptions).where(eq(questionOptions.questionId, id));
     let dayEvents: { id: number; title: string; place: string | null; startTime: Date | null }[] = [];
     if (isLessonReflectionQuestion(question) && question.dayNumber) {
+      const settings = await getForumSettings();
       const dayEv = await db.select().from(events).where(eq(events.dayNumber, question.dayNumber));
-      dayEvents = dayEv
-        .filter(e => e.isPublished !== false && e.dayPublished !== false)
-        .map(e => ({ id: e.id, title: e.title, place: e.place, startTime: e.startTime }));
+      const published = dayEv.filter(e => e.isPublished !== false && e.dayPublished !== false);
+      dayEvents = filterEventsForLessonSlot(question, published, settings);
     }
     res.json({
       question: {
@@ -125,11 +172,26 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
       typeof answerData === 'string' ? answerData : (answerData?.text || text),
     );
 
+    let normalizedAnswer = answerData;
+    if (question.type === 'checkin' && answerData && typeof answerData === 'object') {
+      const emo = String((answerData as { emotion?: string }).emotion || '');
+      const zone = emotionIdToZone(emo);
+      normalizedAnswer = {
+        ...answerData,
+        emotionZone: zone,
+        emotionZoneLabel: zone ? EMOTION_ZONE_LABELS[zone] : null,
+      };
+    }
+    if (isLessonReflectionQuestion(question) && answerData && typeof answerData === 'object') {
+      const slotIndex = lessonSlotIndexForQuestion(question);
+      normalizedAnswer = { ...answerData, slotIndex };
+    }
+
     let answer;
     if (existingAnswer && question.allowRetry) {
       [answer] = await db.update(answers)
         .set({
-          answerData,
+          answerData: normalizedAnswer,
           wordCount,
           questionTextSnapshot: question.text,
           pointsAwarded: question.points ?? 0,
@@ -141,7 +203,7 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
       [answer] = await db.insert(answers).values({
         participantId: req.participant!.id,
         questionId,
-        answerData,
+        answerData: normalizedAnswer,
         wordCount,
         questionTextSnapshot: question.text,
         pointsAwarded: question.points ?? 0,
@@ -181,17 +243,26 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
       }
     }
 
-    const pointsResult = await awardPoints(
-      req.participant!.id,
-      'question_answer',
-      question.block === 'Точка Б' ? (question.points ?? 30) : (question.points ?? undefined),
-    );
+    const actionType = pointsActionForQuestion(question);
+    const forumDay = question.dayNumber ?? undefined;
+    const pointsResult = actionType === 'point_b_complete'
+      ? await awardPoints(req.participant!.id, 'point_b_complete', undefined, forumDay)
+      : await awardPoints(
+        req.participant!.id,
+        actionType,
+        question.points && question.points > 0 ? question.points : undefined,
+        forumDay,
+      );
+
+    const { newMedals, confirm } = await answerSubmitExtras(req.participant!.id, settings);
 
     res.json({
       answer,
       reflectionDepth: depthLabel,
-      xpAwarded: pointsResult?.awarded ?? question.points ?? 0,
+      xpAwarded: pointsResult?.awarded ?? 0,
       track: pointsResult?.track ?? 'path',
+      newMedals,
+      confirm,
     });
   } catch (error) {
     console.error('submitAnswer:', error);
@@ -313,9 +384,30 @@ export const answerExchange = async (req: ParticipantRequest, res: Response): Pr
       reactions: { likes: 0, discuss: 0 },
     }).returning();
 
-    const pointsResult = await awardPoints(req.participant!.id, 'exchange_answer');
+    const settings = await getForumSettings();
+    const pointsResult = await awardPoints(
+      req.participant!.id,
+      'exchange_answer',
+      undefined,
+      resolveEffectiveCurrentDay(settings),
+    );
+    const { newMedals, confirm } = await answerSubmitExtras(req.participant!.id, settings);
 
-    res.json({ answer, xpAwarded: pointsResult?.awarded ?? 0, track: pointsResult?.track ?? 'path' });
+    if (question.participantId !== req.participant!.id) {
+      await sendPushNotification(
+        [question.participantId],
+        'На ваш вопрос в «Обмене опытом» ответили участники',
+        'transactional_exchange_answer_received',
+      );
+    }
+
+    res.json({
+      answer,
+      xpAwarded: pointsResult?.awarded ?? 0,
+      track: pointsResult?.track ?? 'path',
+      newMedals,
+      confirm,
+    });
   } catch (error) {
     console.error('answerExchange:', error);
     res.status(500).json({ error: 'Internal server error' });

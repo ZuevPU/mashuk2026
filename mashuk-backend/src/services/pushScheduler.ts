@@ -5,6 +5,7 @@ import {
 } from '../db/schema.js';
 import { getMoscowParts } from './timePhase.js';
 import { notifyAllParticipants, sendPushNotification } from './pushService.js';
+import { runTouchpointPushPlanner } from './touchpointPushPlanner.js';
 
 /** Слоты авто-push по ТЗ (минуты от полуночи МСК) */
 export const PUSH_SLOTS: { minutes: number; key: string; text: string; retryText: string }[] = [
@@ -12,7 +13,7 @@ export const PUSH_SLOTS: { minutes: number; key: string; text: string; retryText
   { minutes: 13 * 60, key: 'slot_1300', text: 'Две задачи дня: осмысление направления и проверка состояния', retryText: 'Напоминание: дневные точки осмысления ещё можно заполнить' },
   { minutes: 16 * 60, key: 'slot_1600', text: 'На каком уроке был? Коротко зафиксируй', retryText: 'Напоминание: рефлексия после урока ещё открыта' },
   { minutes: 18 * 60 + 30, key: 'slot_1830', text: 'Вечерняя проверка состояния и осмысление', retryText: 'Напоминание: вечерние точки ещё можно заполнить' },
-  { minutes: 22 * 60, key: 'slot_2200', text: 'Финал дня — оцени и поделись', retryText: 'Напоминание: итоговая анкета дня ещё открыта до полуночи' },
+  { minutes: 22 * 60, key: 'slot_2200', text: 'Финал дня — оцени и поделись. Откройте главную: #?evening=1', retryText: 'Напоминание: итоговая анкета дня ещё открыта до 01:00 · #?evening=1' },
   { minutes: 23 * 60, key: 'slot_2300', text: 'Спокойной ночи! Если остались мысли — запиши в копилку', retryText: '' },
 ];
 
@@ -82,14 +83,35 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
 
   const queue = await processPushQueue(now);
 
+  try {
+    const { expireStaleTeamSubmissions } = await import('./teamTaskService.js');
+    await expireStaleTeamSubmissions(now);
+  } catch {
+    // table may not exist pre-migration
+  }
+
   const slot = matchPushSlot(totalMinutes);
+  const [forumRowEarly] = await db.select().from(forumSettings).limit(1);
+  const nightEnabled = forumRowEarly?.pushNightSlotEnabled === true;
+
   if (slot) {
-    const trigger = `auto_${slot.key}`;
-    if (!(await alreadySentToday(trigger, dayStart))) {
-      const text = await resolveSlotText(slot.key, slot.text);
-      await notifyAllParticipants(text, trigger);
-      fired.push(trigger);
+    if (slot.key === 'slot_2300' && !nightEnabled) {
+      // optional night slot
+    } else {
+      const trigger = `auto_${slot.key}`;
+      if (!(await alreadySentToday(trigger, dayStart))) {
+        const text = await resolveSlotText(slot.key, slot.text);
+        await notifyAllParticipants(text, trigger);
+        fired.push(trigger);
+      }
     }
+  }
+
+  try {
+    const tpFired = await runTouchpointPushPlanner(now);
+    fired.push(...tpFired.slice(0, 5));
+  } catch (err) {
+    console.error('touchpointPushPlanner:', err);
   }
 
   const retry = matchRetrySlot(totalMinutes);
@@ -121,6 +143,9 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
 
   const in10 = new Date(now.getTime() + 10 * 60 * 1000);
   const in15 = new Date(now.getTime() + 15 * 60 * 1000);
+  const [forumRow] = await db.select().from(forumSettings).limit(1);
+  const pushBlockTypes = (forumRow?.pushBlockTypes as Record<string, boolean> | null) ?? {};
+
   const upcoming = await db.select().from(events)
     .where(and(
       eq(events.isPublished, true),
@@ -130,8 +155,17 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
       lte(events.startTime, in15),
     ));
 
+  const shouldRemindEvent = (ev: typeof upcoming[0]) => {
+    if (ev.isKeyBlock || ev.blockType === 'key_block') return true;
+    const t = ev.blockType || 'session';
+    if (pushBlockTypes[t] === true) return true;
+    if (pushBlockTypes[t] === false) return false;
+    return ev.isKeyBlock === true || ev.blockType === 'key_block';
+  };
+
   let eventCount = 0;
   for (const ev of upcoming) {
+    if (!shouldRemindEvent(ev)) continue;
     const trigger = `event_reminder_${ev.id}_${getMoscowParts(now).dateKey}`;
     if (await alreadySentToday(trigger, dayStart)) continue;
     await notifyAllParticipants(

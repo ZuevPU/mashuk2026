@@ -6,22 +6,22 @@ import { adminAuthMiddleware, requireAdminRole } from '../middlewares/adminAuth.
 import { getMe, register, completeOnboarding, listOnboardingMeta } from '../controllers/authController.js';
 import { listDirections } from '../controllers/directionsController.js';
 import { getHome, quickPiggybank } from '../controllers/homeController.js';
-import { updateExperimentStatus, submitEveningQuestionnaire } from '../controllers/dayStateController.js';
+import { updateExperimentStatus, submitEveningQuestionnaire, patchEveningDraft } from '../controllers/dayStateController.js';
 import {
-  getProgram, getProgramSettings, getRecommendations, markAttendance, getKnowledgeBase, saveMaterialToPiggybank,
+  getProgram, getProgramSettings, getRecommendations, markAttendance, getKnowledgeBase, getKnowledgeBaseDays, saveMaterialToPiggybank,
 } from '../controllers/programController.js';
-import { listTasks, submitTask } from '../controllers/tasksController.js';
+import { listTasks, submitTask, teamConfirmSubmission, searchTeammates } from '../controllers/tasksController.js';
 import {
   listForumQuestions, getQuestion, submitAnswer,
   listExchange, createExchangeQuestion, answerExchange, reactExchangeAnswer,
 } from '../controllers/questionsController.js';
 import {
   getProfile, listPiggybank, createPiggybank, updateProfileSettings, deleteMyProfile, getPublicLeaderboard,
-  exportPiggybankText, listMyMedals, synthesizeMyOutcomes,
+  exportPiggybankText, listMyMedals, listMedalsCatalog, synthesizeMyOutcomes, downloadMyProfilePdf,
 } from '../controllers/profileController.js';
 import { uploadPhoto } from '../controllers/uploadController.js';
 import { getActiveConsents } from '../controllers/consentsController.js';
-import { listMyOrgThreads, createOrgThread, replyOrgThread } from '../controllers/orgController.js';
+import { listMyOrgThreads, getMyOrgThread, createOrgThread, replyOrgThread } from '../controllers/orgController.js';
 import { volunteerConfirm } from '../controllers/volunteerController.js';
 
 const router = Router();
@@ -44,16 +44,20 @@ router.get('/home', vkAuthMiddleware, requireParticipant, getHome);
 router.post('/piggybank/quick', vkAuthMiddleware, requireParticipant, quickPiggybank);
 router.post('/day-state/experiment', vkAuthMiddleware, requireParticipant, updateExperimentStatus);
 router.post('/day-state/evening', vkAuthMiddleware, requireParticipant, submitEveningQuestionnaire);
+router.patch('/day-state/evening/draft', vkAuthMiddleware, requireParticipant, patchEveningDraft);
 
 router.get('/program/settings', vkAuthMiddleware, requireParticipant, getProgramSettings);
 router.get('/program', vkAuthMiddleware, requireParticipant, getProgram);
 router.get('/program/recommendations', vkAuthMiddleware, requireParticipant, getRecommendations);
 router.get('/program/knowledge-base', vkAuthMiddleware, requireParticipant, getKnowledgeBase);
+router.get('/program/knowledge-base/days', vkAuthMiddleware, requireParticipant, getKnowledgeBaseDays);
 router.post('/program/materials/:id/piggybank', vkAuthMiddleware, requireParticipant, saveMaterialToPiggybank);
 router.post('/program/events/:eventId/attendance', vkAuthMiddleware, requireParticipant, markAttendance);
 
 router.get('/tasks', vkAuthMiddleware, requireParticipant, listTasks);
 router.post('/tasks/:id/submit', vkAuthMiddleware, requireParticipant, submitTask);
+router.post('/tasks/submissions/:submissionId/team-confirm', vkAuthMiddleware, requireParticipant, teamConfirmSubmission);
+router.get('/participants/teammates-search', vkAuthMiddleware, requireParticipant, searchTeammates);
 
 router.get('/questions', vkAuthMiddleware, requireParticipant, listForumQuestions);
 router.get('/questions/:id', vkAuthMiddleware, requireParticipant, getQuestion);
@@ -65,14 +69,17 @@ router.post('/exchange/:id/answer', vkAuthMiddleware, requireParticipant, answer
 router.post('/exchange/answers/:answerId/react', vkAuthMiddleware, requireParticipant, reactExchangeAnswer);
 
 router.get('/org/threads', vkAuthMiddleware, requireParticipant, listMyOrgThreads);
+router.get('/org/threads/:id', vkAuthMiddleware, requireParticipant, getMyOrgThread);
 router.post('/org/threads', vkAuthMiddleware, requireParticipant, createOrgThread);
 router.post('/org/threads/:id/reply', vkAuthMiddleware, requireParticipant, replyOrgThread);
 
 router.get('/profile', vkAuthMiddleware, requireParticipant, getProfile);
+router.get('/profile/pdf', vkAuthMiddleware, requireParticipant, downloadMyProfilePdf);
 router.patch('/profile/settings', vkAuthMiddleware, requireParticipant, updateProfileSettings);
 router.post('/profile/delete', vkAuthMiddleware, requireParticipant, deleteMyProfile);
 router.post('/profile/outcomes/synthesize', vkAuthMiddleware, requireParticipant, synthesizeMyOutcomes);
 router.get('/profile/medals', vkAuthMiddleware, requireParticipant, listMyMedals);
+router.get('/profile/medals/catalog', vkAuthMiddleware, requireParticipant, listMedalsCatalog);
 router.get('/leaderboard', vkAuthMiddleware, requireParticipant, getPublicLeaderboard);
 router.get('/piggybank', vkAuthMiddleware, requireParticipant, listPiggybank);
 router.post('/piggybank', vkAuthMiddleware, requireParticipant, createPiggybank);

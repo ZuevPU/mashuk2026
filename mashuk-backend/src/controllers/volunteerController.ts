@@ -5,6 +5,7 @@ import { participants, taskSubmissions, tasks } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { VkAuthRequest } from '../middlewares/vkAuth.js';
 import { awardPoints } from '../services/pointsService.js';
+import { effectiveTaskPoints } from '../services/taskPoints.js';
 import { evaluateMedalsForParticipant } from '../services/medalEvaluator.js';
 import { logAdminAction } from '../services/adminActionsLog.js';
 
@@ -63,6 +64,12 @@ export const volunteerConfirm = async (req: AdminRequest & VkAuthRequest, res: R
       res.status(400).json({ error: 'Это задание не подтверждается по QR' });
       return;
     }
+    const now = new Date();
+    const { isQrInValidWindow, assertTaskSubmissionAllowed } = await import('../services/taskEligibility.js');
+    if (!isQrInValidWindow(task, now)) {
+      res.status(400).json({ error: 'QR-код задания сейчас не активен' });
+      return;
+    }
 
     const [existing] = await db.select().from(taskSubmissions)
       .where(and(
@@ -75,7 +82,16 @@ export const volunteerConfirm = async (req: AdminRequest & VkAuthRequest, res: R
       return;
     }
 
-    const pointsAwarded = task.points ?? 0;
+    const elig = await assertTaskSubmissionAllowed(participant.id, task, {
+      allowResubmitRejected: existing?.status === 'rejected',
+      existingStatus: existing?.status ?? null,
+    });
+    if (!elig.ok && existing?.status !== 'rejected') {
+      res.status(400).json({ error: elig.error });
+      return;
+    }
+
+    const pointsAwarded = effectiveTaskPoints(task);
     let submission;
     if (existing) {
       [submission] = await db.update(taskSubmissions).set({
@@ -98,7 +114,7 @@ export const volunteerConfirm = async (req: AdminRequest & VkAuthRequest, res: R
     }
 
     if (pointsAwarded > 0) {
-      await awardPoints(participant.id, 'task_complete', pointsAwarded);
+      await awardPoints(participant.id, 'task_complete', pointsAwarded, task.dayNumber ?? undefined);
     }
     await evaluateMedalsForParticipant(participant.id);
 

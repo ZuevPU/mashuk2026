@@ -10,5 +10,7 @@ export const env = {
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
   ADMIN_SECRET: process.env.ADMIN_SECRET || 'dev-admin-secret',
   VK_SERVICE_TOKEN: process.env.VK_SERVICE_TOKEN || '',
+  VK_GROUP_ID: process.env.VK_GROUP_ID || '',
+  VK_COMMUNITY_TOKEN: process.env.VK_COMMUNITY_TOKEN || '',
   PUBLIC_URL: process.env.PUBLIC_URL || '',
 };

@@ -48,11 +48,13 @@ async function getMetric(participantId: number, metric: string): Promise<number>
   }
 }
 
-export async function evaluateMedalsForParticipant(participantId: number): Promise<number> {
+export async function evaluateMedalsForParticipantDetailed(
+  participantId: number,
+): Promise<{ id: number; name: string }[]> {
   const active = await db.select().from(medals).where(eq(medals.isActive, true));
   const owned = await db.select().from(userMedals).where(eq(userMedals.participantId, participantId));
   const ownedIds = new Set(owned.map(u => u.medalId));
-  let awarded = 0;
+  const newlyAwarded: { id: number; name: string }[] = [];
 
   for (const medal of active) {
     if (ownedIds.has(medal.id)) continue;
@@ -66,15 +68,20 @@ export async function evaluateMedalsForParticipant(participantId: number): Promi
         medalId: medal.id,
         way: 'auto',
       });
-      awarded += 1;
+      newlyAwarded.push({ id: medal.id, name: medal.name });
       await sendPushNotification(
         [participantId],
         `Новая медаль: «${medal.name}»`,
-        'medal_auto',
+        'transactional_medal',
       ).catch(() => undefined);
     }
   }
-  return awarded;
+  return newlyAwarded;
+}
+
+export async function evaluateMedalsForParticipant(participantId: number): Promise<number> {
+  const list = await evaluateMedalsForParticipantDetailed(participantId);
+  return list.length;
 }
 
 export async function evaluateAllMedals(): Promise<{ participants: number; awarded: number }> {

@@ -184,6 +184,22 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   return handleResponse<T>(res);
 }
 
+export async function apiDownloadBlob(path: string): Promise<Blob> {
+  await initAuth();
+  ensureAuthReady();
+  const res = await fetchWithRetry(`${API_URL}${path}`, { headers: getAuthHeaders() });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    let message = text || `HTTP ${res.status}`;
+    try {
+      const j = JSON.parse(text) as { error?: string };
+      if (j.error) message = j.error;
+    } catch { /* plain text */ }
+    throw new ApiError(message, res.status);
+  }
+  return res.blob();
+}
+
 export function getHashSearchParams(): URLSearchParams {
   const hash = window.location.hash;
   const query = hash.includes('?') ? hash.split('?')[1] : '';

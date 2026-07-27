@@ -7,6 +7,7 @@ import * as p0 from '../controllers/adminP0P2Controller.js';
 import { adminLogin } from '../controllers/adminAuthController.js';
 import { adminListOrgThreads, adminReplyOrgThread } from '../controllers/orgController.js';
 import { ADMIN_RIGHTS_MATRIX } from '../utils/adminToken.js';
+import * as profilePdf from '../controllers/adminProfilePdfController.js';
 
 const router = Router();
 
@@ -41,6 +42,13 @@ router.post('/thematic-tags/merge', requireAdminRole('settings'), wrap(admin.cru
 
 router.get('/forum-settings', wrap(admin.getForumSettings));
 router.patch('/forum-settings', requireAdminRole('settings'), wrap(admin.updateForumSettings));
+router.get('/evening-questionnaire', wrap(admin.getAdminEveningQuestionnaire));
+router.patch('/evening-questionnaire', requireAdminRole('settings'), wrap(admin.patchAdminEveningQuestionnaire));
+router.post('/evening-questionnaire/copy', requireAdminRole('settings'), wrap(admin.copyAdminEveningQuestionnaire));
+router.post('/evening-questionnaire/reset', requireAdminRole('settings'), wrap(admin.resetAdminEveningQuestionnaire));
+router.get('/kb-unlocks', wrap(admin.listKbDayUnlocks));
+router.post('/kb-unlocks', requireAdminRole('settings'), wrap(admin.createKbDayUnlock));
+router.delete('/kb-unlocks/:participantId/:dayNumber', requireAdminRole('settings'), wrap(admin.deleteKbDayUnlock));
 router.get('/day-focus', wrap(admin.listDayFocus));
 router.post('/day-focus', requireAdminRole('settings'), wrap(admin.upsertDayFocus));
 
@@ -109,6 +117,7 @@ router.get('/exports/day', requireAdminRole('export'), wrap(p0.exportDayWorkbook
 router.get('/analytics/summary', wrap(admin.getAnalyticsSummary));
 router.get('/analytics/charts', wrap(admin.getAnalyticsCharts));
 router.get('/analytics/dashboards', wrap(p0.getExpandedDashboards));
+router.get('/analytics/departure-portrait', wrap(p0.getDeparturePortrait));
 router.post('/analytics/recalculate', requireAdminRole('settings'), wrap(admin.triggerAnalyticsRecalc));
 router.post('/push/send', requireAdminRole('settings'), wrap(admin.sendManualPush));
 router.get('/push/log', wrap(admin.listPushLog));
@@ -137,11 +146,19 @@ router.post('/medals/evaluate', requireAdminRole('settings'), wrap(p0.runMedalEv
 
 router.post('/qr/generate', requireAdminRole('settings'), wrap(ops.generateEntityQr));
 router.post('/qr/download', requireAdminRole('settings'), wrap(p0.generateAndDownloadQr));
+router.get('/qr/pack', requireAdminRole('settings'), wrap(p0.getQrPack));
+router.post('/participants/:id/points/:logId/revoke', requireAdminRole('settings'), wrap(p0.revokeParticipantPoints));
 router.get('/leaderboard', wrap(ops.getLeaderboard));
 router.get('/pdf-whitelist', wrap(ops.listPdfWhitelist));
 router.post('/pdf-whitelist', requireAdminRole('settings'), wrap(ops.setPdfWhitelist));
 router.get('/participants/:id/pdf-text', requireAdminRole('export'), wrap(ops.buildParticipantPdfText));
 router.get('/participants/:id/pdf', requireAdminRole('export'), wrap(p0.buildParticipantPdf));
+router.get('/participants/:id/pdf-preview', requireAdminRole('export'), wrap(profilePdf.previewAdminParticipantPdf));
+router.get('/participants/:id/pdf-draft', requireAdminRole('export'), wrap(profilePdf.getAdminParticipantPdfDraft));
+router.patch('/participants/:id/pdf-draft', requireAdminRole('export'), wrap(profilePdf.patchAdminParticipantPdfDraft));
+router.post('/participants/:id/pdf-publish', requireAdminRole('export'), wrap(profilePdf.publishAdminParticipantPdf));
+router.get('/pdf-template', wrap(profilePdf.getAdminPdfTemplate));
+router.patch('/pdf-template', requireAdminRole('settings'), wrap(profilePdf.patchAdminPdfTemplate));
 router.post('/integrations/delayed-survey', requireAdminRole('settings'), wrap(ops.scheduleDelayedSurvey));
 router.post('/integrations/import-diagnosis', requireAdminRole('settings'), wrap(ops.importDirectionDiagnosis));
 router.post('/integrations/club-match', requireAdminRole('settings'), wrap(p0.runClubMatching));
