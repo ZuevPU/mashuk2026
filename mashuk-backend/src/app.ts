@@ -14,7 +14,16 @@ export function createApp() {
   
   app.set('trust proxy', 1);
 
-  app.use(cors());
+  const corsOrigins = env.CORS_ORIGIN.split(',').map(s => s.trim()).filter(Boolean);
+  app.use(cors({
+    origin: corsOrigins.length === 1 && corsOrigins[0] === '*'
+      ? true
+      : corsOrigins.length > 0
+        ? corsOrigins
+        : true,
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }));
 
   app.use(express.json({ limit: '6mb' }));
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));

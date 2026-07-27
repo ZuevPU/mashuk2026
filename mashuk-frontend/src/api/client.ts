@@ -117,10 +117,29 @@ function ensureAuthReady(): void {
   }
 }
 
+function parseApiErrorMessage(status: number, text: string): string {
+  const trimmed = text.trim();
+  if (trimmed) {
+    try {
+      const body = JSON.parse(trimmed) as { error?: string; message?: string };
+      if (typeof body.error === 'string' && body.error) return body.error;
+      if (typeof body.message === 'string' && body.message) return body.message;
+    } catch {
+      if (trimmed.length <= 200 && !trimmed.startsWith('<')) return trimmed;
+    }
+  }
+  if (status === 401) return 'Нужна авторизация через VK Mini App';
+  if (status === 403) return 'Доступ запрещён';
+  if (status === 404) return 'Не найдено';
+  if (status === 400) return 'Некорректный запрос';
+  return `Ошибка сервера (${status})`;
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   const text = await res.text().catch(() => '');
   if (!res.ok) {
-    throw new ApiError(`HTTP ${res.status}: ${text}`, res.status);
+    const message = parseApiErrorMessage(res.status, text);
+    throw new ApiError(message, res.status);
   }
   const ct = res.headers.get('content-type') || '';
   if (ct.includes('text/html') || text.trimStart().startsWith('<!')) {

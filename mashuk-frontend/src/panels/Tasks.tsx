@@ -16,11 +16,30 @@ const STATUS_LABEL: Record<string, string> = {
 const CONFIRM_HINT: Record<string, string> = {
   photo: 'Нужно фото',
   post_url: 'Нужна ссылка на пост',
-  qr: 'Подтверждение по QR',
+  qr: 'QR на площадке',
   auto: 'Автоподтверждение',
   team: 'Командное задание',
   text_photo: 'Текст и/или фото',
 };
+
+function taskConfirmLabel(task: { confirmationType?: string; answerType?: string | null }): string {
+  const ct = task.confirmationType || 'text_photo';
+  if (ct === 'text_photo') {
+    const at = task.answerType || 'text_and_photo';
+    if (at === 'text') return 'Нужен текстовый ответ';
+    if (at === 'photo') return 'Нужно фото';
+    if (at === 'text_and_photo') return 'Текст и фото';
+  }
+  return CONFIRM_HINT[ct] || ct;
+}
+
+function isTaskAlreadySubmittedError(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes('already submitted')
+    || m.includes('уже выполн')
+    || m.includes('одноразовое')
+    || m.includes('лимит выполнений');
+}
 
 const TaskSubmitModal = ({
   taskId,
@@ -83,7 +102,10 @@ const TaskSubmitModal = ({
 
   const handleSubmit = async () => {
     if (!taskId) return;
-    if (needsText && !answerText.trim()) return;
+    if (needsText && !answerText.trim()) {
+      setSnackbar('Введите текст ответа');
+      return;
+    }
     if (needsPhoto && !photoUrl) {
       setSnackbar('Прикрепите фото');
       return;
@@ -94,6 +116,10 @@ const TaskSubmitModal = ({
     }
     if (needsTeam && selectedTeam.length < 1) {
       setSnackbar('Добавьте участников команды');
+      return;
+    }
+    if (isQr && !qrFromHash) {
+      setSnackbar('Отсканируйте QR задания');
       return;
     }
     try {
@@ -110,7 +136,12 @@ const TaskSubmitModal = ({
       onSuccess();
       onClose();
     } catch (err) {
-      setSnackbar(err instanceof ApiError ? err.message : 'Ошибка отправки');
+      const msg = err instanceof ApiError ? err.message : 'Ошибка отправки';
+      setSnackbar(msg);
+      if (err instanceof ApiError && isTaskAlreadySubmittedError(msg)) {
+        onSuccess();
+        onClose();
+      }
     }
   };
 
@@ -119,7 +150,7 @@ const TaskSubmitModal = ({
       <ModalPageHeader>Отправка задания</ModalPageHeader>
       <Group>
         <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
-          {CONFIRM_HINT[confirmationType] || confirmationType}
+          {taskConfirmLabel(meta || {})}
         </div>
         {isAuto && (
           <div style={{ fontSize: 13, marginBottom: 8 }}>Нажмите «Отправить» — задание подтвердится автоматически.</div>
@@ -356,7 +387,7 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
                 </div>
                 {t.description && <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>{t.description}</div>}
                 <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
-                  +{t.points ?? 0} · {CONFIRM_HINT[t.confirmationType] || t.confirmationType || 'текст/фото'}
+                  +{t.points ?? 0} · {taskConfirmLabel(t)}
                 </div>
                 {(t.status === 'available' || t.canResubmit) && (
                   <Button size="m" style={{ marginTop: 8 }} onClick={() => openSubmit(t)}>
