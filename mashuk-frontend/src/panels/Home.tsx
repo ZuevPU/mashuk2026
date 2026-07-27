@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Panel, PanelHeader, Group, Spinner, ModalRoot, Snackbar, Button, Div } from '@vkontakte/vkui';
+import { Panel, PanelHeader, Group, Spinner, Snackbar, Div } from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { useAppModal } from '../App';
@@ -10,7 +10,7 @@ import {
   PriorityAction, NextEventCard, TouchpointsCard, StatsRow,
   RoleOfDayCard, ExperimentCard, MissedTouchpointsCard,
 } from '../components/home/DashboardCards';
-import { EveningQuestionnaire } from '../components/home/EveningQuestionnaire';
+import { EveningQuestionnaire, type EveningQuestionnaireProps } from '../components/home/EveningQuestionnaire';
 import { apiGet, apiPost, ApiError } from '../api/client';
 
 interface ScheduleItem {
@@ -18,12 +18,6 @@ interface ScheduleItem {
   title: string;
   time: string;
   place?: string | null;
-}
-
-interface RoleMeta {
-  roleKey: string;
-  name: string;
-  quadrant?: string;
 }
 
 interface HomeData {
@@ -57,21 +51,14 @@ interface HomeData {
     available: boolean;
     opensAt?: string | null;
     completed: boolean;
-    askTomorrowRole?: boolean;
-    config?: { steps: { id: string; title: string; fields: unknown[] }[] };
-    scales?: { key: string; label: string }[];
-    roles: RoleMeta[];
-    saved?: Record<string, unknown> | null;
-    savedDraft?: { step?: number; form?: Record<string, unknown>; tomorrowRoleKey?: string } | null;
-    pointBQuestionId?: number | null;
-    hasPointB?: boolean;
-  };
+  } & EveningQuestionnaireProps['questionnaire'];
   missedQuestions: { id: number; title: string; closeTime: string; expired?: boolean; overdue?: boolean }[];
   counts: { availableQuestions: number; availableTasks: number; hasNewTasks: boolean };
   points: {
     path: number;
     experience: number;
     ideas: number;
+    total?: number;
     pathLevel?: number;
     experienceLevel?: number;
     pathProgress?: number;

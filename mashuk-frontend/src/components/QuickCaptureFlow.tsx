@@ -44,10 +44,6 @@ export function openQuickCapture(
 
   const TagPicker = () => {
     const [picked, setPicked] = useState<string[]>([]);
-    const labels: Record<string, string> = {
-      идея: '💡 Идея', мысль: '💭 Мысль', вопрос: '❓ Вопрос',
-      контакт: '📇 Контакт', 'на будущее': '📌 На будущее', 'в работу': '✅ В работу',
-    };
     const toggle = (tag: string) => {
       setPicked(prev => {
         if (prev.includes(tag)) return prev.filter(t => t !== tag);

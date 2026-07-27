@@ -3,7 +3,7 @@ import { Button, CustomSelect, FormItem } from '@vkontakte/vkui';
 import { apiPatch, apiPost } from '../../api/client';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 
-type EveningField = {
+export type EveningField = {
   key: string;
   type: string;
   label: string;
@@ -11,7 +11,7 @@ type EveningField = {
   visibleWhen?: { field: string; equals: boolean | string | number };
 };
 
-type EveningStep = {
+export type EveningStep = {
   id: string;
   title: string;
   fields: EveningField[];
