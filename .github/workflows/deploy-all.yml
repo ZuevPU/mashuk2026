@@ -1,0 +1,41 @@
+name: Deploy All (Timeweb webhooks)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  deploy:
+    name: Trigger Timeweb redeploy
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Backend webhook
+        env:
+          WEBHOOK: ${{ secrets.TIMEWEB_DEPLOY_WEBHOOK }}
+        run: |
+          if [ -n "$WEBHOOK" ]; then
+            curl -fsS -X POST "$WEBHOOK" -H "Content-Type: application/json" \
+              -d '{"service":"backend","sha":"${{ github.sha }}","trigger":"deploy-all"}'
+          else echo "Skip backend: TIMEWEB_DEPLOY_WEBHOOK not set"; fi
+
+      - name: Frontend webhook
+        env:
+          WEBHOOK: ${{ secrets.TIMEWEB_STATIC_WEBHOOK }}
+        run: |
+          if [ -n "$WEBHOOK" ]; then
+            curl -fsS -X POST "$WEBHOOK" -H "Content-Type: application/json" \
+              -d '{"service":"frontend","sha":"${{ github.sha }}","trigger":"deploy-all"}'
+          else echo "Skip frontend: TIMEWEB_STATIC_WEBHOOK not set"; fi
+
+      - name: Admin webhook
+        env:
+          WEBHOOK: ${{ secrets.TIMEWEB_ADMIN_WEBHOOK }}
+        run: |
+          if [ -n "$WEBHOOK" ]; then
+            curl -fsS -X POST "$WEBHOOK" -H "Content-Type: application/json" \
+              -d '{"service":"admin","sha":"${{ github.sha }}","trigger":"deploy-all"}'
+          else echo "Skip admin: TIMEWEB_ADMIN_WEBHOOK not set"; fi

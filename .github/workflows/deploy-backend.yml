@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'mashuk-backend/**'
+      - '.github/workflows/deploy-backend.yml'
+      - '.github/workflows/ci.yml'
   workflow_dispatch: {}
 
 jobs:
@@ -30,12 +32,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: mashuk-backend/package-lock.json
 
-      - name: Install, test and build
+      - name: Install, migrate, test and build
         working-directory: mashuk-backend
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mashuk?sslmode=disable
@@ -43,19 +46,17 @@ jobs:
           ADMIN_SECRET: dev-admin-secret
         run: |
           npm ci
-          npm run db:push
+          npm run db:migrate
           npm run db:seed
           npm test
           npm run build
 
       - name: Build Docker image
-        run: |
-          cd mashuk-backend
-          docker build -t mashuk-backend:${{ github.sha }} .
+        run: docker build -t mashuk-backend:${{ github.sha }} mashuk-backend
 
       - name: Deploy to Timeweb (webhook)
         if: ${{ env.TIMEWEB_DEPLOY_WEBHOOK != '' }}
         run: |
-          curl -X POST "$TIMEWEB_DEPLOY_WEBHOOK" \
+          curl -fsS -X POST "$TIMEWEB_DEPLOY_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d '{"service":"backend","sha":"${{ github.sha }}"}'

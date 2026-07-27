@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  workflow_call:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (test + build)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mashuk
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mashuk-backend/package-lock.json
+
+      - name: Install, migrate, seed, test, build
+        working-directory: mashuk-backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mashuk?sslmode=disable
+          SKIP_VK_SIGN: 'true'
+          ADMIN_SECRET: dev-admin-secret
+        run: |
+          npm ci
+          npm run db:migrate
+          npm run db:seed
+          npm test
+          npm run build
+
+  frontend:
+    name: Frontend (tsc + vite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mashuk-frontend/package-lock.json
+
+      - name: Install and build
+        working-directory: mashuk-frontend
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+        run: |
+          if [ -z "$VITE_API_URL" ]; then
+            export VITE_API_URL="https://zuevpu-mashuk2026-ae82.twc1.net/api"
+          fi
+          npm ci --legacy-peer-deps
+          npm run build
+
+  admin:
+    name: Admin (tsc + vite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mashuk-admin/package-lock.json
+
+      - name: Install and build
+        working-directory: mashuk-admin
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+        run: |
+          if [ -z "$VITE_API_URL" ]; then
+            export VITE_API_URL="https://zuevpu-mashuk2026-ae82.twc1.net/api"
+          fi
+          npm ci --prefer-offline --no-audit --no-fund
+          npm run build

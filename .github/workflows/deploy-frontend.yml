@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'mashuk-frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+      - '.github/workflows/ci.yml'
   workflow_dispatch: {}
 
 jobs:
@@ -15,16 +17,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: mashuk-frontend/package-lock.json
 
       - name: Install and Build
+        working-directory: mashuk-frontend
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
         run: |
-          cd mashuk-frontend
+          if [ -z "$VITE_API_URL" ]; then
+            export VITE_API_URL="https://zuevpu-mashuk2026-ae82.twc1.net/api"
+          fi
           npm ci --legacy-peer-deps
           npm run build
 
@@ -37,6 +43,6 @@ jobs:
       - name: Deploy to Timeweb Static (webhook)
         if: ${{ env.TIMEWEB_STATIC_WEBHOOK != '' }}
         run: |
-          curl -X POST "$TIMEWEB_STATIC_WEBHOOK" \
+          curl -fsS -X POST "$TIMEWEB_STATIC_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d '{"service":"frontend","sha":"${{ github.sha }}"}'
