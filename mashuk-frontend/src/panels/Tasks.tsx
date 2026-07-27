@@ -6,7 +6,7 @@ import { useAppModal } from '../App';
 import { EmptyState } from '../components/EmptyState';
 
 const STATUS_LABEL: Record<string, string> = {
-  soon: '⚪ Скоро',
+  soon: '⚪ Скоро откроется',
   available: '🔵 Доступно',
   pending: '🟡 На проверке',
   done: '🟢 Выполнено',
@@ -214,8 +214,9 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
   const filteredTasks = (data?.tasks ?? []).filter((t: { category?: string }) =>
     !categoryFilter || t.category === categoryFilter,
   );
-  const doneCount = (data?.tasks ?? []).filter((t: { status: string }) => t.status === 'done').length;
-  const totalCount = data?.tasks?.length ?? 0;
+  const doneCount = data?.progress?.done ?? (data?.tasks ?? []).filter((t: { status: string }) => t.status === 'done').length;
+  const totalCount = data?.progress?.total ?? data?.tasks?.length ?? 0;
+  const progressPercent = data?.progress?.percent ?? (totalCount ? Math.round((doneCount / totalCount) * 100) : 0);
 
   return (
     <Panel id={id}>
@@ -229,8 +230,21 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
         ) : (
           <>
             <div className="tasks-hdr">
-              <span className="tasks-hdr-t">День {data?.dayNumber ?? 1} · {doneCount} из {totalCount}</span>
+              <span className="tasks-hdr-t">{doneCount} из {totalCount} выполнено · День {data?.dayNumber ?? 1}</span>
               <span className="tasks-hdr-b">+{data?.progress?.pointsToday ?? 0}⚡ сегодня</span>
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#888', marginBottom: 4 }}>
+                <span>Прогресс дня · {progressPercent}%</span>
+                {data?.kbLocked && (
+                  <button type="button" className="time-btn" style={{ padding: '2px 8px', fontSize: 10 }} onClick={() => window.location.hash = '#/program'}>
+                    База знаний
+                  </button>
+                )}
+              </div>
+              <div style={{ height: 8, background: '#E8E0D4', borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ width: `${progressPercent}%`, height: '100%', background: 'var(--m-accent, #B8621A)', borderRadius: 8 }} />
+              </div>
             </div>
             <div className="time-sw" style={{ marginBottom: 8 }}>
               {(['all', 'active', 'done', 'pending'] as const).map(f => (
@@ -250,7 +264,15 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
             {filteredTasks.length === 0 ? (
               <EmptyState icon="📋" title="Нет заданий" subtitle="Задания появятся по ходу дня" />
             ) : filteredTasks.map((t: any) => (
-              <div key={t.id} className="m-card" style={{ marginBottom: 10 }}>
+              <div
+                key={t.id}
+                className="m-card"
+                style={{
+                  marginBottom: 10,
+                  border: (t.status === 'available' || t.canResubmit) ? '2px solid var(--m-accent, #B8621A)' : undefined,
+                  opacity: t.status === 'soon' ? 0.65 : 1,
+                }}
+              >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <strong>{t.title}</strong>
                   <span style={{ fontSize: 12 }}>{STATUS_LABEL[t.status] || t.status}</span>

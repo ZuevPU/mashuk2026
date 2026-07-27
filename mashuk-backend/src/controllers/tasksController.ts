@@ -19,6 +19,19 @@ function getTaskStatus(
   return 'pending';
 }
 
+const TASK_STATUS_SORT: Record<string, number> = {
+  available: 0,
+  soon: 1,
+  pending: 2,
+  rejected: 3,
+  done: 4,
+};
+
+function taskSortRank(item: { status: string; canResubmit?: boolean }): number {
+  if (item.status === 'available' || item.canResubmit) return 0;
+  return TASK_STATUS_SORT[item.status] ?? 5;
+}
+
 export const listTasks = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const filter = (req.query.filter as string) || 'all';
@@ -35,7 +48,24 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
 
     const subMap = new Map(submissions.map(s => [s.taskId, s]));
 
-    let result = allTasks.map(t => {
+    type TaskListItem = {
+      id: number;
+      title: string;
+      description: string | null;
+      points: number | null;
+      category: string | null;
+      deadline: Date | null;
+      answerType: string | null;
+      confirmationType: string;
+      autoConfirm: boolean | null;
+      allowRetry: boolean | null;
+      hasQr: boolean;
+      status: string;
+      canResubmit: boolean;
+      submission: typeof taskSubmissions.$inferSelect | null;
+    };
+
+    let result: TaskListItem[] = allTasks.map(t => {
       const sub = subMap.get(t.id);
       const status = getTaskStatus(t, sub, now);
       if (t.hideUntilPublish && t.publishTime && t.publishTime > now) return null;
@@ -56,13 +86,16 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
         canResubmit,
         submission: sub ?? null,
       };
-    }).filter(Boolean);
+    }).filter((t): t is TaskListItem => t != null);
 
-    if (filter === 'active') result = result.filter(t => t!.status === 'available' || t!.canResubmit);
-    if (filter === 'done') result = result.filter(t => t!.status === 'done');
-    if (filter === 'pending') result = result.filter(t => t!.status === 'pending');
+    result.sort((a, b) => taskSortRank(a) - taskSortRank(b) || a.id - b.id);
 
-    const done = result.filter(t => t!.status === 'done').length;
+    const progressDone = result.filter(t => t.status === 'done').length;
+    const progressTotal = result.length;
+
+    if (filter === 'active') result = result.filter(t => t.status === 'available' || t.canResubmit);
+    if (filter === 'done') result = result.filter(t => t.status === 'done');
+    if (filter === 'pending') result = result.filter(t => t.status === 'pending');
     const pointsToday = submissions
       .filter(s => s.status === 'approved' && s.checkedAt && s.checkedAt >= new Date(now.getFullYear(), now.getMonth(), now.getDate()))
       .reduce((sum, s) => sum + (s.pointsAwarded ?? 0), 0);
@@ -96,9 +129,9 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
       touchpointsTotal,
       requiredTouchpoints,
       progress: {
-        done,
-        total: result.length,
-        percent: result.length ? Math.round((done / result.length) * 100) : 0,
+        done: progressDone,
+        total: progressTotal,
+        percent: progressTotal ? Math.round((progressDone / progressTotal) * 100) : 0,
         pointsToday,
       },
     });
