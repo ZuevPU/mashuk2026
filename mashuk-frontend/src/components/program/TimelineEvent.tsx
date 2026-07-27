@@ -28,7 +28,7 @@ export const TimelineEvent: React.FC<TimelineEventProps> = ({ time, title, subti
             ))}
           </div>
         )}
-        {status === 'now' && <div className="m-tl-badge">сейчас</div>}
+        {status === 'now' && <div className="m-tl-badge" title="По московскому времени">Сейчас</div>}
       </div>
       {status === 'past' && <div className="m-tl-check">✓</div>}
       {status === 'now' && <div style={{ fontSize: '16px', color: 'rgba(255,255,255,.6)', marginLeft: '8px' }}>›</div>}

@@ -574,9 +574,10 @@ body {
 .m-dsb.done .dn { color: #7DC27D; }
 
 /* Timeline */
-.m-tl-wrap { background: #fff; color: var(--m-text-main); border-radius: 13px; overflow: hidden; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07), 0 0 0 1px rgba(0, 0, 0, 0.05); }
-.m-tl-row { display: flex; align-items: flex-start; padding: 10px 13px; border-bottom: 1px solid #F5F0E8; cursor: pointer; color: var(--m-text-main); }
-.m-tl-row:last-child { border-bottom: none; }
+.m-tl-wrap { display: flex; flex-direction: column; gap: 8px; background: transparent; box-shadow: none; overflow: visible; }
+.m-tl-row { display: flex; align-items: flex-start; padding: 12px 14px; cursor: pointer; color: var(--m-text-main); background: #fff; border-radius: 13px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07), 0 0 0 1px rgba(0, 0, 0, 0.05); }
+.m-tl-slot-group { display: flex; flex-direction: column; gap: 8px; }
+.m-tl-slot-label { font-size: 10px; font-weight: 700; color: #888; padding: 0 4px 2px; letter-spacing: 0.02em; }
 .m-tl-row.past { opacity: 0.5; }
 .m-tl-row.now-row { background: var(--m-accent); padding: 12px 13px; }
 .m-tl-row.now-row .m-tl-time,
@@ -607,9 +608,9 @@ body {
 .m-rec-arr { font-size: 15px; color: #D5CFC7; }
 
 /* Parallel events scroll */
-.m-parallel-scroll { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+.m-parallel-scroll { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 4px; margin-top: 0; }
 .m-parallel-scroll::-webkit-scrollbar { display: none; }
-.m-parallel-scroll .m-tl-wrap { min-width: 220px; flex-shrink: 0; }
+.m-parallel-scroll .m-tl-row { min-width: 220px; flex-shrink: 0; }
 
 /* Tasks panel */
 .pb-w { background: #fff; color: var(--m-text-main); border-radius: 13px; padding: 11px 13px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07); margin-bottom: 12px; }

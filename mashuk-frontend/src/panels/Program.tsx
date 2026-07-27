@@ -38,17 +38,19 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   const [kb, setKb] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dayPublished, setDayPublished] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<ProgramEvent | null>(null);
 
   const loadProgram = useCallback(() => {
     setLoading(true);
     setError(null);
     Promise.all([
-      apiGet<{ slots: ProgramSlot[] }>(`/program?day=${activeDay}`),
+      apiGet<{ slots: ProgramSlot[]; dayPublished?: boolean }>(`/program?day=${activeDay}`),
       apiGet<{ recommendations: any[] }>(`/program/recommendations?day=${activeDay}`),
       apiGet<any>(`/program/knowledge-base?day=${activeDay}`),
     ]).then(([prog, rec, knowledge]) => {
       setSlots(prog.slots || []);
+      setDayPublished(prog.dayPublished !== false);
       setRecommendations(rec.recommendations);
       setKb(knowledge);
     }).catch((err) => {
@@ -157,20 +159,22 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
               )}
               <div className="m-tl-wrap">
                 {slots.map(slot => (
-                  <div key={slot.timeSlot}>
+                  <div key={slot.timeSlot} className="m-tl-slot-group">
+                    {slot.parallel && (
+                      <div className="m-tl-slot-label">{slot.timeSlot} · параллельно</div>
+                    )}
                     {slot.parallel ? (
                       <div className="m-parallel-scroll">
                         {slot.events.map(e => (
-                          <div key={e.id} style={{ minWidth: 200, flex: '0 0 auto' }}>
-                            <TimelineEvent
-                              time={e.time}
-                              title={e.title}
-                              subtitle={e.subtitle}
-                              tags={e.tags}
-                              status={e.status}
-                              onClick={() => setSelectedEvent(e)}
-                            />
-                          </div>
+                          <TimelineEvent
+                            key={e.id}
+                            time={e.time}
+                            title={e.title}
+                            subtitle={e.subtitle}
+                            tags={e.tags}
+                            status={e.status}
+                            onClick={() => setSelectedEvent(e)}
+                          />
                         ))}
                       </div>
                     ) : (
@@ -189,7 +193,15 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
                   </div>
                 ))}
                 {slots.length === 0 && (
-                  <EmptyState icon="📅" title="Расписание пусто" subtitle={`События для дня ${activeDay} появятся позже`} />
+                  <EmptyState
+                    icon="📅"
+                    title={!dayPublished && activeDay > currentDay ? 'Расписание ещё не опубликовано' : 'Расписание пусто'}
+                    subtitle={
+                      !dayPublished && activeDay > currentDay
+                        ? `Расписание появится в конце дня ${activeDay - 1}`
+                        : `События для дня ${activeDay} появятся позже`
+                    }
+                  />
                 )}
               </div>
               </>
