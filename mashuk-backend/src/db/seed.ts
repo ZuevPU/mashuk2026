@@ -79,7 +79,7 @@ export async function runSeed() {
       { name: 'Полезные знакомства/общение', iconKey: 'network', sortOrder: 2 },
       { name: 'Медиа', iconKey: 'media', sortOrder: 3 },
       { name: 'Организация', iconKey: 'org', sortOrder: 6 },
-    ]);
+    ]).onConflictDoNothing({ target: taskCategories.name });
 
     const cats = await db.select().from(taskCategories);
     const catByName = (n: string) => cats.find(c => c.name === n)?.id;
