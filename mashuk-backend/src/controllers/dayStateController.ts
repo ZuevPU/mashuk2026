@@ -252,6 +252,7 @@ export async function loadDayContext(
         essence: row.essence || '',
         inClass: row.inClass || '',
         keywords: row.keywords || '',
+        iconKey: row.iconKey || '',
         sortOrder: row.sortOrder ?? 0,
       };
     }
