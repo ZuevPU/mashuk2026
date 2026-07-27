@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, timestamp, jsonb, integer, boolean, index, smallint } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, text, timestamp, jsonb, integer, boolean, index, uniqueIndex, smallint } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 export const directions = pgTable('directions', {
@@ -11,12 +11,26 @@ export const directions = pgTable('directions', {
 export const thematicTags = pgTable('thematic_tags', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 255 }).notNull().unique(),
+  slug: varchar('slug', { length: 255 }),
+  description: text('description'),
+  color: varchar('color', { length: 32 }),
+  isActive: boolean('is_active').default(true),
+  sortOrder: integer('sort_order').default(0),
+  applicationTypes: jsonb('application_types').default(['events', 'interests']),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
 export const programPlaces = pgTable('program_places', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 255 }).notNull().unique(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const taskCategories = pgTable('task_categories', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 255 }).notNull().unique(),
+  iconKey: varchar('icon_key', { length: 64 }),
+  sortOrder: integer('sort_order').default(0),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -94,6 +108,24 @@ export const scheduleDays = pgTable('schedule_days', {
   dayNumber: integer('day_number').notNull().unique(),
   isPublished: boolean('is_published').default(false),
   publishedAt: timestamp('published_at'),
+  calendarDate: timestamp('calendar_date'),
+  displayLabel: varchar('display_label', { length: 255 }),
+  shiftNumber: integer('shift_number'),
+});
+
+export const programBlockTypes = pgTable('program_block_types', {
+  id: serial('id').primaryKey(),
+  key: varchar('key', { length: 64 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  sortOrder: integer('sort_order').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const programSpeakers = pgTable('program_speakers', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  initials: varchar('initials', { length: 10 }),
+  createdAt: timestamp('created_at').defaultNow(),
 });
 
 export const kbDayUnlocks = pgTable('kb_day_unlocks', {
@@ -123,10 +155,72 @@ export const pushTemplates = pgTable('push_templates', {
   title: varchar('title', { length: 255 }),
   body: text('body').notNull(),
   slotKey: varchar('slot_key', { length: 50 }),
+  kind: varchar('kind', { length: 32 }).default('auto_slot'),
+  presetCategory: varchar('preset_category', { length: 50 }),
+  pushTitle: varchar('push_title', { length: 255 }),
+  icon: varchar('icon', { length: 32 }),
+  notificationType: varchar('notification_type', { length: 50 }),
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
+
+export const adminPushNotifications = pgTable('admin_push_notifications', {
+  id: serial('id').primaryKey(),
+  internalName: varchar('internal_name', { length: 255 }),
+  pushTitle: varchar('push_title', { length: 255 }),
+  body: text('body').notNull(),
+  icon: varchar('icon', { length: 32 }),
+  imageUrl: text('image_url'),
+  notificationType: varchar('notification_type', { length: 50 }).default('reminder'),
+  status: varchar('status', { length: 32 }).default('draft').notNull(),
+  programDay: integer('program_day'),
+  programDate: timestamp('program_date'),
+  publishAt: timestamp('publish_at'),
+  visibleUntil: timestamp('visible_until'),
+  sendMode: varchar('send_mode', { length: 32 }).default('now'),
+  triggerConfig: jsonb('trigger_config').default({}),
+  triggerFiredAt: timestamp('trigger_fired_at'),
+  audienceType: varchar('audience_type', { length: 32 }).default('all'),
+  audiencePayload: jsonb('audience_payload').default({}),
+  templateId: integer('template_id'),
+  createdByAdminId: integer('created_by_admin_id'),
+  sentAt: timestamp('sent_at'),
+  deliveredCount: integer('delivered_count').default(0),
+  openedCount: integer('opened_count').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index('admin_push_notifications_status_idx').on(table.status),
+  index('admin_push_notifications_publish_at_idx').on(table.publishAt),
+]);
+
+export const participantPushDeliveries = pgTable('participant_push_deliveries', {
+  id: serial('id').primaryKey(),
+  notificationId: integer('notification_id').notNull(),
+  participantId: integer('participant_id').notNull(),
+  personalizedBody: text('personalized_body').notNull(),
+  pushTitle: varchar('push_title', { length: 255 }),
+  icon: varchar('icon', { length: 32 }),
+  imageUrl: text('image_url'),
+  visibleUntil: timestamp('visible_until'),
+  vkDeliveryStatus: varchar('vk_delivery_status', { length: 64 }),
+  openedAt: timestamp('opened_at'),
+  dismissedAt: timestamp('dismissed_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index('participant_push_deliveries_participant_idx').on(table.participantId),
+  index('participant_push_deliveries_notification_idx').on(table.notificationId),
+]);
+
+export const pushTriggerFires = pgTable('push_trigger_fires', {
+  id: serial('id').primaryKey(),
+  notificationId: integer('notification_id').notNull(),
+  fireKey: varchar('fire_key', { length: 255 }).notNull(),
+  firedAt: timestamp('fired_at').defaultNow(),
+}, (table) => [
+  index('push_trigger_fires_notification_idx').on(table.notificationId),
+]);
 
 export const pushQueue = pgTable('push_queue', {
   id: serial('id').primaryKey(),
@@ -156,10 +250,28 @@ export const adminUsers = pgTable('admin_users', {
   login: varchar('login', { length: 255 }).unique().notNull(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
   role: varchar('role', { length: 50 }).default('admin'),
+  fullName: varchar('full_name', { length: 255 }),
+  email: varchar('email', { length: 255 }),
+  directionId: integer('direction_id'),
+  lastLoginAt: timestamp('last_login_at'),
   vkId: integer('vk_id'),
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+export const adminRolePermissions = pgTable('admin_role_permissions', {
+  id: serial('id').primaryKey(),
+  role: varchar('role', { length: 50 }).notNull(),
+  section: varchar('section', { length: 64 }).notNull(),
+  canRead: boolean('can_read').default(false).notNull(),
+  canCreate: boolean('can_create').default(false).notNull(),
+  canUpdate: boolean('can_update').default(false).notNull(),
+  canDelete: boolean('can_delete').default(false).notNull(),
+  canConfirm: boolean('can_confirm').default(false).notNull(),
+  canExport: boolean('can_export').default(false).notNull(),
+}, (table) => [
+  index('admin_role_permissions_role_idx').on(table.role),
+]);
 
 export const participants = pgTable('participants', {
   id: serial('id').primaryKey(),
@@ -196,6 +308,10 @@ export const participants = pgTable('participants', {
   pushOptOut: jsonb('push_opt_out').default({}),
   /** Участник удалил себя из программы через настройки профиля; строка и связанные данные сохраняются */
   selfDeletedAt: timestamp('self_deleted_at'),
+  lastActiveAt: timestamp('last_active_at'),
+  isBlocked: boolean('is_blocked').default(false),
+  blockedAt: timestamp('blocked_at'),
+  blockReason: varchar('block_reason', { length: 500 }),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('participants_direction_id_idx').on(table.directionId),
@@ -209,6 +325,7 @@ export const pedagogicalRoles = pgTable('pedagogical_roles', {
   essence: text('essence'),
   inClass: text('in_class'),
   keywords: text('keywords'),
+  iconKey: varchar('icon_key', { length: 32 }),
   sortOrder: integer('sort_order').default(0),
 });
 
@@ -219,8 +336,10 @@ export const dayExperiments = pgTable('day_experiments', {
   title: varchar('title', { length: 255 }).notNull(),
   body: text('body'),
   hint: text('hint'),
+  status: varchar('status', { length: 32 }).default('published').notNull(),
 }, (table) => [
   index('day_experiments_day_role_idx').on(table.dayNumber, table.roleKey),
+  uniqueIndex('day_experiments_day_role_unique_idx').on(table.dayNumber, table.roleKey),
 ]);
 
 export const participantDayState = pgTable('participant_day_state', {
@@ -244,22 +363,36 @@ export const questions = pgTable('questions', {
   title: varchar('title', { length: 255 }).notNull(),
   text: text('text').notNull(),
   type: varchar('type', { length: 50 }).notNull(),
+  answerType: varchar('answer_type', { length: 50 }),
+  questionKind: varchar('question_kind', { length: 50 }),
   block: varchar('block', { length: 100 }),
   reflectionKind: varchar('reflection_kind', { length: 50 }),
+  subtitle: varchar('subtitle', { length: 255 }),
   status: varchar('status', { length: 50 }).default('draft'),
   publishTime: timestamp('publish_time'),
   closeTime: timestamp('close_time'),
   points: integer('points').default(0),
   timePoint: varchar('time_point', { length: 50 }),
   dayNumber: integer('day_number'),
+  dayNumbers: jsonb('day_numbers').$type<number[]>().default([]),
   direction: varchar('direction', { length: 255 }),
+  audienceType: varchar('audience_type', { length: 32 }).default('all'),
+  audienceDirectionId: integer('audience_direction_id'),
+  audienceGroupId: integer('audience_group_id'),
+  audienceRole: varchar('audience_role', { length: 100 }),
+  isRequired: boolean('is_required').default(false),
+  isHidden: boolean('is_hidden').default(false),
+  sortOrder: integer('sort_order').default(0),
   allowRetry: boolean('allow_retry').default(false),
   pushOnPublish: boolean('push_on_publish').default(false),
+  pushTemplate: text('push_template'),
   parentQuestionId: integer('parent_question_id'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('questions_day_number_idx').on(table.dayNumber),
   index('questions_status_idx').on(table.status),
+  index('questions_question_kind_idx').on(table.questionKind),
+  index('questions_audience_type_idx').on(table.audienceType),
 ]);
 
 export const questionOptions = pgTable('question_options', {
@@ -303,9 +436,16 @@ export const events = pgTable('events', {
   blockType: varchar('block_type', { length: 50 }).default('session'),
   isKeyBlock: boolean('is_key_block').default(false),
   qrToken: varchar('qr_token', { length: 64 }),
+  parentEventId: integer('parent_event_id'),
+  hasSubSessions: boolean('has_sub_sessions').default(false),
+  audienceType: varchar('audience_type', { length: 32 }).default('all'),
+  audienceDirectionId: integer('audience_direction_id'),
+  speakerIds: jsonb('speaker_ids').default([]),
+  sortOrder: integer('sort_order').default(0),
 }, (table) => [
   index('events_day_number_idx').on(table.dayNumber),
   index('events_is_published_idx').on(table.isPublished),
+  index('events_parent_event_id_idx').on(table.parentEventId),
 ]);
 
 export const materials = pgTable('materials', {
@@ -344,12 +484,19 @@ export const tasks = pgTable('tasks', {
   id: serial('id').primaryKey(),
   title: varchar('title', { length: 255 }).notNull(),
   description: text('description'),
+  descriptionHtml: text('description_html'),
   points: integer('points').default(0),
   medalTask: boolean('medal_task').default(false),
   deadline: timestamp('deadline'),
   publishTime: timestamp('publish_time'),
   dayNumber: integer('day_number'),
+  dayNumbers: jsonb('day_numbers').$type<number[]>().default([]),
   category: varchar('category', { length: 100 }),
+  categoryId: integer('category_id').references(() => taskCategories.id),
+  status: varchar('status', { length: 32 }).default('draft'),
+  isHidden: boolean('is_hidden').default(false),
+  scopeType: varchar('scope_type', { length: 32 }).default('individual'),
+  confirmationMethods: jsonb('confirmation_methods').$type<string[]>().default([]),
   executionType: varchar('execution_type', { length: 50 }).default('once'),
   answerType: varchar('answer_type', { length: 50 }),
   autoConfirm: boolean('auto_confirm').default(true),
@@ -357,15 +504,23 @@ export const tasks = pgTable('tasks', {
   hideUntilPublish: boolean('hide_until_publish').default(true),
   allowRetry: boolean('allow_retry').default(true),
   direction: varchar('direction', { length: 255 }),
+  nomination: varchar('nomination', { length: 64 }),
+  programPlaceId: integer('program_place_id').references(() => programPlaces.id),
+  iconKey: varchar('icon_key', { length: 64 }),
   qrToken: varchar('qr_token', { length: 64 }),
   confirmationType: varchar('confirmation_type', { length: 50 }).default('text_photo'),
   dailyRepeatLimit: integer('daily_repeat_limit').default(1),
   qrValidFrom: timestamp('qr_valid_from'),
   qrValidTo: timestamp('qr_valid_to'),
+  availableFrom: timestamp('available_from'),
+  availableTo: timestamp('available_to'),
+  applicationDeadline: timestamp('application_deadline'),
   teamConfirmHours: integer('team_confirm_hours').default(24),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('tasks_day_number_idx').on(table.dayNumber),
+  index('tasks_status_idx').on(table.status),
+  index('tasks_category_id_idx').on(table.categoryId),
 ]);
 
 export const taskSubmissions = pgTable('task_submissions', {
@@ -407,6 +562,9 @@ export const piggybank = pgTable('piggybank', {
   source: varchar('source', { length: 100 }),
   text: text('text').notNull(),
   forumDay: smallint('forum_day'),
+  isHidden: boolean('is_hidden').default(false),
+  isViolation: boolean('is_violation').default(false),
+  deletedAt: timestamp('deleted_at'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('piggybank_participant_id_idx').on(table.participantId),
@@ -418,6 +576,7 @@ export const exchangeQuestions = pgTable('exchange_questions', {
   text: text('text').notNull(),
   audience: varchar('audience', { length: 100 }),
   moderationStatus: varchar('moderation_status', { length: 50 }).default('pending'),
+  moderatorComment: text('moderator_comment'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('exchange_questions_participant_id_idx').on(table.participantId),
@@ -457,6 +616,26 @@ export const levelsConfig = pgTable('levels_config', {
   pointsPerUnit: integer('points_per_unit'),
   maxAccruals: integer('max_accruals'),
   levelThresholds: jsonb('level_thresholds'),
+  track: varchar('track', { length: 20 }),
+  displayName: varchar('display_name', { length: 255 }),
+});
+
+export const ratingRecalcRuns = pgTable('rating_recalc_runs', {
+  id: serial('id').primaryKey(),
+  adminId: integer('admin_id'),
+  startedAt: timestamp('started_at').defaultNow(),
+  finishedAt: timestamp('finished_at'),
+  participantsProcessed: integer('participants_processed').default(0),
+  status: varchar('status', { length: 50 }).default('running'),
+  error: text('error'),
+});
+
+export const ratingBonusRules = pgTable('rating_bonus_rules', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 100 }).notNull().unique(),
+  enabled: boolean('enabled').default(true),
+  params: jsonb('params'),
+  pointsActionType: varchar('points_action_type', { length: 100 }),
 });
 
 export const pushLog = pgTable('push_log', {
@@ -466,6 +645,8 @@ export const pushLog = pgTable('push_log', {
   text: text('text').notNull(),
   sentAt: timestamp('sent_at'),
   deliveryStatus: varchar('delivery_status', { length: 50 }),
+  notificationId: integer('notification_id'),
+  deliveryId: integer('delivery_id'),
 }, (table) => [
   index('push_log_participant_id_idx').on(table.participantId),
 ]);
@@ -495,6 +676,9 @@ export const adminActionsLog = pgTable('admin_actions_log', {
   comment: text('comment'),
   ip: varchar('ip', { length: 100 }),
   isCritical: boolean('is_critical').default(false),
+  reviewedAt: timestamp('reviewed_at'),
+  reviewedByAdminId: integer('reviewed_by_admin_id'),
+  reviewComment: text('review_comment'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('admin_actions_log_admin_idx').on(table.adminId, table.createdAt),

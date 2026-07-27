@@ -28,6 +28,15 @@ export const requireParticipant = async (
     res.status(403).json({ error: 'Account removed from program', status: 'self_deleted' });
     return;
   }
+  if (user.isBlocked) {
+    res.status(403).json({ error: 'Participant blocked', status: 'blocked' });
+    return;
+  }
+
+  db.update(participants)
+    .set({ lastActiveAt: new Date() })
+    .where(eq(participants.id, user.id))
+    .catch(() => {});
 
   req.participant = user;
   next();

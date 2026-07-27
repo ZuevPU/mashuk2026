@@ -5,7 +5,7 @@ import {
   answers, clubMatches, consentTexts, dailyStats, eventAttendance, events, materials,
   participantDayState, participantGroups, participants, piggybank, pointsLog, pushQueue, pushTemplates,
   questions, scheduleDayVersions, scheduleDays, taskSubmissions, tasks, taskTeamConfirmations,
-  userMedals, medals,
+  userMedals, medals, adminActionsLog, forumSettings,
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { getForumSettings } from '../services/helpers.js';
@@ -144,24 +144,174 @@ export const listScheduleVersions = async (req: AdminRequest, res: Response): Pr
   res.json({ versions: rows.slice(0, 20), days });
 };
 
+export const crudScheduleDays = {
+  list: async (_req: AdminRequest, res: Response) => {
+    const days = await db.select().from(scheduleDays).orderBy(asc(scheduleDays.dayNumber));
+    res.json({ days });
+  },
+  create: async (req: AdminRequest, res: Response) => {
+    const dayNumber = Number(req.body.dayNumber);
+    if (!dayNumber) { res.status(400).json({ error: 'dayNumber required' }); return; }
+    const [existing] = await db.select().from(scheduleDays).where(eq(scheduleDays.dayNumber, dayNumber)).limit(1);
+    if (existing) { res.status(400).json({ error: 'Day already exists' }); return; }
+    const calendarDate = req.body.calendarDate ? new Date(req.body.calendarDate) : null;
+    const [day] = await db.insert(scheduleDays).values({
+      dayNumber,
+      displayLabel: req.body.displayLabel ? String(req.body.displayLabel) : `День ${dayNumber}`,
+      shiftNumber: req.body.shiftNumber != null ? Number(req.body.shiftNumber) : null,
+      calendarDate,
+      isPublished: false,
+    }).returning();
+    const settings = await getForumSettings();
+    if (dayNumber > (settings.totalDays ?? 8)) {
+      const [fs] = await db.select().from(forumSettings).limit(1);
+      if (fs) {
+        await db.update(forumSettings).set({ totalDays: dayNumber }).where(eq(forumSettings.id, fs.id));
+      }
+    }
+    res.json({ day });
+  },
+  update: async (req: AdminRequest, res: Response) => {
+    const id = Number(req.params.id);
+    const patch: Partial<typeof scheduleDays.$inferInsert> = {};
+    if (req.body.displayLabel != null) patch.displayLabel = String(req.body.displayLabel);
+    if (req.body.shiftNumber != null) patch.shiftNumber = Number(req.body.shiftNumber);
+    if (req.body.calendarDate != null) patch.calendarDate = new Date(req.body.calendarDate);
+    const [updated] = await db.update(scheduleDays).set(patch).where(eq(scheduleDays.id, id)).returning();
+    if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
+    res.json({ day: updated });
+  },
+};
+
+export const draftScheduleDay = async (req: AdminRequest, res: Response): Promise<void> => {
+  const dayNumber = Number(req.body.dayNumber);
+  if (!dayNumber) { res.status(400).json({ error: 'dayNumber required' }); return; }
+  await db.update(events).set({ isPublished: false, dayPublished: false }).where(eq(events.dayNumber, dayNumber));
+  await db.update(scheduleDays).set({ isPublished: false }).where(eq(scheduleDays.dayNumber, dayNumber));
+  const { clearCache } = await import('../services/cache.js');
+  clearCache(`events_day_${dayNumber}`);
+  res.json({ ok: true });
+};
+
+export const getParticipantActivity = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const [p] = await db.select().from(participants).where(eq(participants.id, id)).limit(1);
+  if (!p) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const [ans, subs, pts, att, pig] = await Promise.all([
+    db.select({ a: answers, q: questions }).from(answers)
+      .leftJoin(questions, eq(answers.questionId, questions.id))
+      .where(eq(answers.participantId, id)).orderBy(desc(answers.createdAt)).limit(40),
+    db.select({ s: taskSubmissions, t: tasks }).from(taskSubmissions)
+      .leftJoin(tasks, eq(taskSubmissions.taskId, tasks.id))
+      .where(eq(taskSubmissions.participantId, id)).orderBy(desc(taskSubmissions.submittedAt)).limit(40),
+    db.select().from(pointsLog).where(eq(pointsLog.participantId, id)).orderBy(desc(pointsLog.createdAt)).limit(40),
+    db.select({ a: eventAttendance, e: events }).from(eventAttendance)
+      .leftJoin(events, eq(eventAttendance.eventId, events.id))
+      .where(eq(eventAttendance.participantId, id)).orderBy(desc(eventAttendance.createdAt)).limit(40),
+    db.select().from(piggybank).where(eq(piggybank.participantId, id)).orderBy(desc(piggybank.createdAt)).limit(40),
+  ]);
+
+  type Item = { at: Date | null; kind: string; title: string; detail?: string };
+  const items: Item[] = [];
+  for (const r of ans) {
+    items.push({
+      at: r.a.createdAt,
+      kind: 'answer',
+      title: r.q?.title || 'Ответ',
+      detail: typeof r.a.answerData === 'string' ? r.a.answerData : JSON.stringify(r.a.answerData),
+    });
+  }
+  for (const r of subs) {
+    items.push({
+      at: r.s.submittedAt,
+      kind: 'task',
+      title: r.t?.title || 'Задание',
+      detail: r.s.status ?? undefined,
+    });
+  }
+  for (const pl of pts) {
+    items.push({
+      at: pl.createdAt,
+      kind: 'points',
+      title: pl.actionType || 'Баллы',
+      detail: `${pl.points > 0 ? '+' : ''}${pl.points}`,
+    });
+  }
+  for (const r of att) {
+    items.push({
+      at: r.a.createdAt,
+      kind: 'attendance',
+      title: r.e?.title || 'Посещение',
+    });
+  }
+  for (const pg of pig) {
+    items.push({
+      at: pg.createdAt,
+      kind: 'piggybank',
+      title: 'Копилка',
+      detail: pg.text?.slice(0, 120),
+    });
+  }
+  items.sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0));
+
+  res.json({ items: items.slice(0, 100) });
+};
+
+export const getParticipantAdminActions = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const sid = String(id);
+  const rows = await db.select().from(adminActionsLog)
+    .where(eq(adminActionsLog.objectId, sid))
+    .orderBy(desc(adminActionsLog.createdAt))
+    .limit(100);
+  res.json({ actions: rows });
+};
+
 // ─── Push templates + queue ───────────────────────────────────
 
 export const crudPushTemplates = {
-  list: async (_req: AdminRequest, res: Response) => {
-    res.json({ templates: await db.select().from(pushTemplates).orderBy(asc(pushTemplates.key)) });
+  list: async (req: AdminRequest, res: Response) => {
+    const kind = req.query.kind as string | undefined;
+    let q = db.select().from(pushTemplates).orderBy(asc(pushTemplates.key));
+    if (kind === 'preset') {
+      q = q.where(eq(pushTemplates.kind, 'preset')) as typeof q;
+    } else if (kind === 'auto_slot') {
+      q = q.where(eq(pushTemplates.kind, 'auto_slot')) as typeof q;
+    }
+    res.json({ templates: await q });
   },
   create: async (req: AdminRequest, res: Response) => {
-    const { key, title, body, slotKey, isActive } = req.body;
+    const {
+      key, title, body, slotKey, isActive, kind, presetCategory, pushTitle, icon, notificationType,
+    } = req.body;
     if (!key || !body) { res.status(400).json({ error: 'key and body required' }); return; }
     const [t] = await db.insert(pushTemplates).values({
-      key, title, body, slotKey, isActive: isActive !== false,
+      key,
+      title,
+      body,
+      slotKey,
+      isActive: isActive !== false,
+      kind: kind ?? (slotKey ? 'auto_slot' : 'preset'),
+      presetCategory,
+      pushTitle,
+      icon,
+      notificationType,
     }).returning();
     res.json({ template: t });
   },
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
+    const allowed = [
+      'title', 'body', 'slotKey', 'isActive', 'kind', 'presetCategory',
+      'pushTitle', 'icon', 'notificationType',
+    ];
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    for (const k of allowed) {
+      if (req.body[k] !== undefined) patch[k] = req.body[k];
+    }
     const [updated] = await db.update(pushTemplates)
-      .set({ ...req.body, updatedAt: new Date() })
+      .set(patch)
       .where(eq(pushTemplates.id, id)).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ template: updated });
@@ -677,7 +827,7 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
   const revokedPointsRows = await db.select().from(pointsLog).where(isNotNull(pointsLog.revokedAt));
   const programEvents = await db.select().from(events);
   const allMats = await db.select().from(materials);
-  const matsInAnalytics = allMats.filter(m => m.includeInAnalytics !== false);
+  const matsInAnalytics = allMats;
   const attendance = await db.select().from(eventAttendance);
   const dayStates = await db.select().from(participantDayState);
 

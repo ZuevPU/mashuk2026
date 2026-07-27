@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   directions, thematicTags, forumSettings, dayFocus,
-  events, tasks, questions, levelsConfig, materials,
+  events, tasks, taskCategories, questions, levelsConfig, materials,
   participants, answers, taskSubmissions,
   exchangeQuestions, exchangeAnswers, eventAttendance,
   pedagogicalRoles, dayExperiments,
@@ -74,11 +74,74 @@ export async function runSeed() {
       { title: 'Вечерняя рефлексия', place: 'В боте', dayNumber: 3, startTime: new Date(day1Start.getTime() + 2 * 86400000 + 12 * 3600000), tags: ['аналитика'] },
     ]);
 
+    await db.insert(taskCategories).values([
+      { name: 'Образование', iconKey: 'education', sortOrder: 1 },
+      { name: 'Полезные знакомства/общение', iconKey: 'network', sortOrder: 2 },
+      { name: 'Медиа', iconKey: 'media', sortOrder: 3 },
+      { name: 'Организация', iconKey: 'org', sortOrder: 6 },
+    ]);
+
+    const cats = await db.select().from(taskCategories);
+    const catByName = (n: string) => cats.find(c => c.name === n)?.id;
+    const networkingCat = catByName('Полезные знакомства/общение');
+    const mediaCat = catByName('Медиа');
+    const eduCat = catByName('Образование');
+    const orgCat = catByName('Организация');
+
     await db.insert(tasks).values([
-      { title: 'Познакомься с участником другого направления', category: 'Полезные знакомства', points: 20, dayNumber: 1, publishTime: now, autoConfirm: true, confirmationType: 'auto' },
-      { title: 'Напиши пост о форуме', category: 'Медиа', points: 30, dayNumber: 1, publishTime: now, autoConfirm: false, answerType: 'text_and_photo', confirmationType: 'post_url' },
-      { title: 'Зафиксируй идею эксперимента', category: 'Образование', points: 25, dayNumber: 3, publishTime: now, autoConfirm: true, confirmationType: 'text_photo' },
-      { title: 'Скан QR на площадке', category: 'Организация', points: 15, dayNumber: 2, publishTime: now, autoConfirm: true, confirmationType: 'qr' },
+      {
+        title: 'Познакомься с участником другого направления',
+        category: 'Полезные знакомства/общение',
+        categoryId: networkingCat,
+        points: 20,
+        dayNumber: 1,
+        dayNumbers: [1],
+        status: 'published',
+        publishTime: now,
+        autoConfirm: true,
+        confirmationType: 'auto',
+        confirmationMethods: [],
+      },
+      {
+        title: 'Напиши пост о форуме',
+        category: 'Медиа',
+        categoryId: mediaCat,
+        points: 30,
+        dayNumber: 1,
+        dayNumbers: [1],
+        status: 'published',
+        publishTime: now,
+        autoConfirm: false,
+        answerType: 'text_and_photo',
+        confirmationType: 'post_url',
+        confirmationMethods: ['link', 'moderator'],
+      },
+      {
+        title: 'Зафиксируй идею эксперимента',
+        category: 'Образование',
+        categoryId: eduCat,
+        points: 25,
+        dayNumber: 3,
+        dayNumbers: [3],
+        status: 'published',
+        publishTime: now,
+        autoConfirm: true,
+        confirmationType: 'text_photo',
+        confirmationMethods: ['photo'],
+      },
+      {
+        title: 'Скан QR на площадке',
+        category: 'Организация',
+        categoryId: orgCat,
+        points: 15,
+        dayNumber: 2,
+        dayNumbers: [2],
+        status: 'published',
+        publishTime: now,
+        autoConfirm: true,
+        confirmationType: 'qr',
+        confirmationMethods: ['qr'],
+      },
     ]);
 
     // 7 точек × дни 1–7 с окнами МСК по startDate
@@ -174,6 +237,8 @@ export async function runSeed() {
     const [existing] = await db.select().from(pedagogicalRoles).where(eq(pedagogicalRoles.roleKey, role.roleKey)).limit(1);
     if (!existing) {
       await db.insert(pedagogicalRoles).values(role);
+    } else if (!existing.iconKey) {
+      await db.update(pedagogicalRoles).set({ iconKey: role.iconKey }).where(eq(pedagogicalRoles.id, existing.id));
     }
   }
 
@@ -189,6 +254,7 @@ export async function runSeed() {
           title: `Эксперимент: ${role.name}`,
           body: `Сегодня попробуй проявить роль «${role.name}» в одном живом взаимодействии на форуме.`,
           hint: role.keywords,
+          status: 'published',
         });
       }
     }
@@ -372,9 +438,42 @@ export async function runSeed() {
         { key: 'slot_1830', slotKey: 'slot_1830', title: 'Вечер', body: 'Вечерняя проверка состояния и осмысление' },
         { key: 'slot_2200', slotKey: 'slot_2200', title: 'Итог', body: 'Финал дня — оцени и поделись' },
         { key: 'slot_2300', slotKey: 'slot_2300', title: 'Ночь', body: 'Спокойной ночи! Если остались мысли — запиши в копилку' },
-      ].map(t => ({ ...t, isActive: true })),
+      ].map(t => ({ ...t, isActive: true, kind: 'auto_slot' as const })),
     );
     console.log('Push templates seeded.');
+  }
+
+  const presetKeys = ['preset_morning', 'preset_state', 'preset_question', 'preset_reminder', 'preset_urgent'];
+  const existingPresets = await db.select().from(pushTemplates).where(eq(pushTemplates.key, presetKeys[0])).limit(1);
+  if (existingPresets.length === 0) {
+    await db.insert(pushTemplates).values([
+      {
+        key: 'preset_morning', kind: 'preset', presetCategory: 'morning', title: 'Утро',
+        pushTitle: 'Доброе утро', icon: '🌅', notificationType: 'reminder',
+        body: '{ФИО}, доброе утро! {День} смены — проверка состояния открыта.',
+      },
+      {
+        key: 'preset_state', kind: 'preset', presetCategory: 'state_check', title: 'Проверка состояния',
+        pushTitle: 'Проверка состояния', icon: '💚', notificationType: 'state_check',
+        body: '{ФИО}, как ты сейчас? Открой проверку состояния.',
+      },
+      {
+        key: 'preset_question', kind: 'preset', presetCategory: 'question_of_day', title: 'Вопрос дня',
+        pushTitle: 'Вопрос дня', icon: '❓', notificationType: 'day_summary',
+        body: '{ФИО}, {День}: новый вопрос для размышления.',
+      },
+      {
+        key: 'preset_reminder', kind: 'preset', presetCategory: 'reminder', title: 'Напоминание',
+        pushTitle: 'Напоминание', icon: '🔔', notificationType: 'reminder',
+        body: '{ФИО}, напоминание: {Событие} скоро начнётся.',
+      },
+      {
+        key: 'preset_urgent', kind: 'preset', presetCategory: 'urgent', title: 'Срочное',
+        pushTitle: 'Важно', icon: '⚡', notificationType: 'org',
+        body: '{ФИО}, срочное сообщение от организаторов.',
+      },
+    ].map(t => ({ ...t, isActive: true })));
+    console.log('Push preset templates seeded.');
   }
 
   // Ensure evening_complete rate exists

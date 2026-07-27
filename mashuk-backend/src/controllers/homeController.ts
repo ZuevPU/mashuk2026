@@ -240,6 +240,21 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       touchpointItems,
     });
 
+    let activePushBanners: {
+      id: number;
+      pushTitle: string | null;
+      personalizedBody: string;
+      icon: string | null;
+      imageUrl: string | null;
+      visibleUntil: Date | null;
+    }[] = [];
+    try {
+      const { listActivePushBanners } = await import('./pushBannerController.js');
+      activePushBanners = await listActivePushBanners(participant.id, now);
+    } catch {
+      // migration pending
+    }
+
     res.json({
       user: {
         firstName: participant.firstName,
@@ -313,6 +328,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       },
       sectionsVisibility: settings.sectionsVisibility ?? {},
       startDate: settings.startDate ?? null,
+      activePushBanners,
     });
   } catch (error) {
     console.error('getHome:', error);

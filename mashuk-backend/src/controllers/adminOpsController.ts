@@ -1,8 +1,9 @@
+import crypto from 'crypto';
 import { Response } from 'express';
-import { and, count, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq, gte, ilike, isNull, lte, or, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  adminActionsLog, adminUsers, answers, delayedSurvey, medals, participants,
+  adminActionsLog, adminUsers, answers, delayedSurvey, directions, medals, participants,
   pdfWhitelist, userMedals, events, tasks,
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
@@ -14,62 +15,266 @@ import { sendPushNotification } from '../services/pushService.js';
 import { synthesizeOutcomes, isGigachatConfigured } from '../services/gigachatService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { isNotNull } from 'drizzle-orm';
+import { ADMIN_USER_ROLES, adminUserCreateSchema, adminUserUpdateSchema, medalCreateSchema, medalUpdateSchema, parseBody } from '../validation/adminSchemas.js';
+import { MEDAL_RULE_METRICS } from '../services/medalRuleMetrics.js';
 
-const ALLOWED_ROLES = ['admin', 'moderator', 'analyst', 'director'];
+const ALLOWED_ROLES = [...ADMIN_USER_ROLES];
+
+function loginFromEmail(email: string): string {
+  const base = email.split('@')[0]?.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 40) || 'user';
+  return base;
+}
+
+async function uniqueLogin(preferred: string): Promise<string> {
+  let login = preferred;
+  let n = 0;
+  while (n < 100) {
+    const [ex] = await db.select({ id: adminUsers.id }).from(adminUsers).where(eq(adminUsers.login, login)).limit(1);
+    if (!ex) return login;
+    n += 1;
+    login = `${preferred}${n}`;
+  }
+  return `${preferred}_${Date.now()}`;
+}
+
+function generateTempPassword(): string {
+  return crypto.randomBytes(9).toString('base64url');
+}
+
+function mapAdminUserRow(u: typeof adminUsers.$inferSelect, directionName?: string | null) {
+  return {
+    id: u.id,
+    login: u.login,
+    fullName: u.fullName,
+    email: u.email,
+    role: u.role,
+    directionId: u.directionId,
+    directionName: directionName ?? null,
+    vkId: u.vkId,
+    isActive: u.isActive,
+    lastLoginAt: u.lastLoginAt,
+    createdAt: u.createdAt,
+  };
+}
 
 export const listAdminActions = async (req: AdminRequest, res: Response): Promise<void> => {
   const critical = req.query.critical === '1' || req.query.critical === 'true';
+  const reviewFilter = req.query.review as string | undefined;
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 50));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+  const adminId = req.query.adminId ? Number(req.query.adminId) : null;
+  const section = typeof req.query.section === 'string' ? req.query.section : null;
+  const actionType = typeof req.query.actionType === 'string' ? req.query.actionType : null;
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+  const dateFrom = typeof req.query.dateFrom === 'string' ? new Date(req.query.dateFrom) : null;
+  const dateTo = typeof req.query.dateTo === 'string' ? new Date(req.query.dateTo) : null;
+
+  const conditions = [];
+  if (critical) conditions.push(eq(adminActionsLog.isCritical, true));
+  if (adminId) conditions.push(eq(adminActionsLog.adminId, adminId));
+  if (section) conditions.push(eq(adminActionsLog.section, section));
+  if (actionType) conditions.push(eq(adminActionsLog.actionType, actionType));
+  if (dateFrom && !Number.isNaN(dateFrom.getTime())) conditions.push(gte(adminActionsLog.createdAt, dateFrom));
+  if (dateTo && !Number.isNaN(dateTo.getTime())) conditions.push(lte(adminActionsLog.createdAt, dateTo));
+  if (reviewFilter === 'pending') conditions.push(isNull(adminActionsLog.reviewedAt));
+  if (reviewFilter === 'reviewed') conditions.push(sql`${adminActionsLog.reviewedAt} IS NOT NULL`);
+  if (search) {
+    conditions.push(or(
+      ilike(adminActionsLog.objectId, `%${search}%`),
+      ilike(adminActionsLog.comment, `%${search}%`),
+      ilike(adminActionsLog.adminLogin, `%${search}%`),
+    ));
+  }
+
+  const where = conditions.length ? and(...conditions) : undefined;
+
+  const [totalRow] = await db.select({ count: count() }).from(adminActionsLog).where(where);
+  const rows = await db.select().from(adminActionsLog)
+    .where(where)
+    .orderBy(desc(adminActionsLog.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  res.json({ actions: rows, total: totalRow?.count ?? 0, limit, offset });
+};
+
+export const exportAdminActionsXlsx = async (req: AdminRequest, res: Response): Promise<void> => {
+  req.query.limit = '5000';
+  const critical = req.query.critical === '1' || req.query.critical === 'true';
+  const conditions = critical ? [eq(adminActionsLog.isCritical, true)] : [];
+  const where = conditions.length ? and(...conditions) : undefined;
+  const rows = await db.select().from(adminActionsLog).where(where).orderBy(desc(adminActionsLog.createdAt)).limit(5000);
+
+  const ExcelJS = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Journal');
+  ws.addRow(['Дата', 'Пользователь', 'Раздел', 'Действие', 'Объект', 'Старое', 'Новое', 'IP', 'Критичное', 'Отревьюено']);
+  for (const a of rows) {
+    ws.addRow([
+      a.createdAt ? new Date(a.createdAt).toISOString() : '',
+      a.adminLogin,
+      a.section,
+      a.actionType,
+      a.objectId,
+      a.oldValue ? JSON.stringify(a.oldValue) : '',
+      a.newValue ? JSON.stringify(a.newValue) : '',
+      a.ip,
+      a.isCritical ? 'да' : '',
+      a.reviewedAt ? 'да' : '',
+    ]);
+  }
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename=admin_actions_log.xlsx');
+  await wb.xlsx.write(res);
+};
+
+export const reviewAdminAction = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const [updated] = await db.update(adminActionsLog).set({
+    reviewedAt: new Date(),
+    reviewedByAdminId: req.adminId ?? null,
+    reviewComment: typeof req.body?.comment === 'string' ? req.body.comment : null,
+  }).where(eq(adminActionsLog.id, id)).returning();
+  if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
+  res.json({ action: updated });
+};
+
+export const rollbackAdminAction = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const [row] = await db.select().from(adminActionsLog).where(eq(adminActionsLog.id, id)).limit(1);
+  if (!row) { res.status(404).json({ error: 'Not found' }); return; }
+  if (row.actionType === 'points_adjust' && row.newValue && typeof row.newValue === 'object') {
+    const nv = row.newValue as { participantId?: number; points?: number; track?: string };
+    const participantId = nv.participantId ?? Number(row.objectId);
+    const points = Number(nv.points);
+    if (participantId && Number.isFinite(points) && points !== 0) {
+      req.params = { id: String(participantId) };
+      req.body = {
+        points: -points,
+        track: nv.track === 'experience' ? 'experience' : 'path',
+        reason: `rollback log #${id}`,
+      };
+      const { adjustParticipantPoints } = await import('./adminController.js');
+      await adjustParticipantPoints(req, res);
+      return;
+    }
+  }
+  res.status(400).json({ error: 'Rollback not supported for this action type' });
+};
+
+export const listAdminUsers = async (req: AdminRequest, res: Response): Promise<void> => {
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+  const role = typeof req.query.role === 'string' ? req.query.role : '';
+  const directionId = req.query.directionId ? Number(req.query.directionId) : null;
+
+  let q = db.select({
+    user: adminUsers,
+    directionName: directions.name,
+  }).from(adminUsers).leftJoin(directions, eq(adminUsers.directionId, directions.id));
+
+  const all = await q;
+  let filtered = all;
+  if (search) {
+    const s = search.toLowerCase();
+    filtered = filtered.filter(r =>
+      (r.user.login?.toLowerCase().includes(s))
+      || (r.user.email?.toLowerCase().includes(s))
+      || (r.user.fullName?.toLowerCase().includes(s)),
+    );
+  }
+  if (role) filtered = filtered.filter(r => r.user.role === role);
+  if (directionId) filtered = filtered.filter(r => r.user.directionId === directionId);
+
+  res.json({
+    total: filtered.length,
+    users: filtered.map(r => mapAdminUserRow(r.user, r.directionName)),
+  });
+};
+
+export const getAdminUser = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const [row] = await db.select({
+    user: adminUsers,
+    directionName: directions.name,
+  }).from(adminUsers).leftJoin(directions, eq(adminUsers.directionId, directions.id))
+    .where(eq(adminUsers.id, id)).limit(1);
+  if (!row) { res.status(404).json({ error: 'Not found' }); return; }
+  res.json({ user: mapAdminUserRow(row.user, row.directionName) });
+};
+
+export const listAdminUserActions = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
   const limit = Math.min(200, Number(req.query.limit) || 50);
-  const rows = critical
-    ? await db.select().from(adminActionsLog).where(eq(adminActionsLog.isCritical, true))
-      .orderBy(desc(adminActionsLog.createdAt)).limit(limit)
-    : await db.select().from(adminActionsLog).orderBy(desc(adminActionsLog.createdAt)).limit(limit);
+  const rows = await db.select().from(adminActionsLog)
+    .where(eq(adminActionsLog.adminId, id))
+    .orderBy(desc(adminActionsLog.createdAt))
+    .limit(limit);
   res.json({ actions: rows });
 };
 
-export const listAdminUsers = async (_req: AdminRequest, res: Response): Promise<void> => {
-  const list = await db.select({
-    id: adminUsers.id,
-    login: adminUsers.login,
-    role: adminUsers.role,
-    vkId: adminUsers.vkId,
-    isActive: adminUsers.isActive,
-    createdAt: adminUsers.createdAt,
-  }).from(adminUsers);
-  res.json({ users: list });
-};
-
 export const createAdminUser = async (req: AdminRequest, res: Response): Promise<void> => {
-  const { login, password, role } = req.body;
-  if (!login || !password) {
-    res.status(400).json({ error: 'login and password required' });
+  const parsed = adminUserCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
+  const { fullName, email, password, role, directionId, login: loginOverride } = parsed.data;
   const r = role && ALLOWED_ROLES.includes(role) ? role : 'moderator';
-  const passwordHash = await hashPassword(password);
+  if (r === 'curator' && !directionId) {
+    res.status(400).json({ error: 'directionId required for curator role' });
+    return;
+  }
+  const pwd = password || generateTempPassword();
+  const emailNorm = email?.trim().toLowerCase() || (loginOverride ? `${loginOverride.trim()}@local` : '');
+  const login = loginOverride?.trim() || await uniqueLogin(loginFromEmail(emailNorm));
+  const passwordHash = await hashPassword(pwd);
   try {
     const [created] = await db.insert(adminUsers).values({
-      login: String(login).trim(),
+      login,
+      email: emailNorm || null,
+      fullName: fullName?.trim() || null,
       passwordHash,
       role: r,
+      directionId: directionId ?? null,
       isActive: true,
     }).returning();
     await logAdminAction({
       req, actionType: 'admin_user_change', section: 'admins', objectId: created.id,
-      newValue: { login: created.login, role: created.role }, isCritical: true,
+      newValue: { login: created.login, email: created.email, role: created.role }, isCritical: true,
     });
-    res.json({ user: { id: created.id, login: created.login, role: created.role, isActive: created.isActive } });
+    res.json({
+      user: mapAdminUserRow(created),
+      temporaryPassword: password ? undefined : pwd,
+    });
   } catch {
-    res.status(400).json({ error: 'Login already exists' });
+    res.status(400).json({ error: 'Login or email already exists' });
   }
 };
 
 export const updateAdminUser = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
+  const parsed = adminUserUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const [before] = await db.select().from(adminUsers).where(eq(adminUsers.id, id)).limit(1);
+  if (!before) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const body = parsed.data;
+  const nextRole = body.role ?? before.role ?? 'moderator';
+  if (nextRole === 'curator' && !(body.directionId ?? before.directionId)) {
+    res.status(400).json({ error: 'directionId required for curator role' });
+    return;
+  }
+
   const patch: Partial<typeof adminUsers.$inferInsert> = {};
-  if (req.body.role && ALLOWED_ROLES.includes(req.body.role)) patch.role = req.body.role;
-  if (typeof req.body.isActive === 'boolean') patch.isActive = req.body.isActive;
-  if (req.body.password) patch.passwordHash = await hashPassword(req.body.password);
+  if (body.fullName != null) patch.fullName = body.fullName.trim();
+  if (body.email != null) patch.email = body.email.trim().toLowerCase();
+  if (body.role && ALLOWED_ROLES.includes(body.role)) patch.role = body.role;
+  if (body.directionId !== undefined) patch.directionId = body.directionId;
+  if (typeof body.isActive === 'boolean') patch.isActive = body.isActive;
+  if (body.password) patch.passwordHash = await hashPassword(body.password);
   if (Object.keys(patch).length === 0) {
     res.status(400).json({ error: 'No fields' });
     return;
@@ -78,9 +283,47 @@ export const updateAdminUser = async (req: AdminRequest, res: Response): Promise
   if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
   await logAdminAction({
     req, actionType: 'admin_user_change', section: 'admins', objectId: id,
+    oldValue: { role: before.role, isActive: before.isActive },
     newValue: { role: updated.role, isActive: updated.isActive }, isCritical: true,
   });
-  res.json({ user: { id: updated.id, login: updated.login, role: updated.role, isActive: updated.isActive } });
+  res.json({ user: mapAdminUserRow(updated) });
+};
+
+export const resetAdminUserPassword = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const temporaryPassword = typeof req.body?.password === 'string' && req.body.password.length >= 6
+    ? req.body.password
+    : generateTempPassword();
+  const passwordHash = await hashPassword(temporaryPassword);
+  const [updated] = await db.update(adminUsers).set({ passwordHash }).where(eq(adminUsers.id, id)).returning();
+  if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
+  await logAdminAction({
+    req, actionType: 'admin_user_change', section: 'admins', objectId: id,
+    comment: 'password reset', isCritical: true,
+  });
+  res.json({ ok: true, temporaryPassword });
+};
+
+export const deleteAdminUser = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  if (id === req.adminId) {
+    res.status(400).json({ error: 'Cannot delete yourself' });
+    return;
+  }
+  const admins = await db.select().from(adminUsers).where(eq(adminUsers.isActive, true));
+  const activeAdmins = admins.filter(a => a.role === 'admin' || a.role === 'superadmin');
+  const [target] = await db.select().from(adminUsers).where(eq(adminUsers.id, id)).limit(1);
+  if (!target) { res.status(404).json({ error: 'Not found' }); return; }
+  if ((target.role === 'admin' || target.role === 'superadmin') && activeAdmins.length <= 1) {
+    res.status(400).json({ error: 'Cannot delete the last admin' });
+    return;
+  }
+  const [deleted] = await db.delete(adminUsers).where(eq(adminUsers.id, id)).returning();
+  await logAdminAction({
+    req, actionType: 'admin_user_change', section: 'admins', objectId: id,
+    oldValue: { login: deleted?.login, email: deleted?.email }, isCritical: true,
+  });
+  res.json({ ok: true });
 };
 
 export const getQuestionAnswerCount = async (req: AdminRequest, res: Response): Promise<void> => {
@@ -90,36 +333,84 @@ export const getQuestionAnswerCount = async (req: AdminRequest, res: Response): 
 };
 
 export const crudMedals = {
-  list: async (_req: AdminRequest, res: Response) => {
-    res.json({ medals: await db.select().from(medals).orderBy(desc(medals.createdAt)) });
+  list: async (req: AdminRequest, res: Response) => {
+    const status = String(req.query.status || '');
+    const category = String(req.query.category || '');
+    const level = String(req.query.level || '');
+    const awardType = String(req.query.awardType || '');
+    const visibility = String(req.query.visibility || '');
+
+    const conditions = [];
+    if (status === 'active') conditions.push(eq(medals.isActive, true));
+    if (status === 'draft') conditions.push(eq(medals.isActive, false));
+    if (category) conditions.push(eq(medals.category, category));
+    if (level) conditions.push(eq(medals.level, level));
+    if (awardType) conditions.push(eq(medals.awardType, awardType));
+    if (visibility) conditions.push(eq(medals.visibility, visibility));
+
+    const whereClause = conditions.length ? and(...conditions) : undefined;
+
+    const [totalRow] = await db.select({ count: count() }).from(medals).where(whereClause);
+    const totalCount = Number(totalRow?.count ?? 0);
+
+    const rows = await db.select().from(medals)
+      .where(whereClause)
+      .orderBy(desc(medals.createdAt));
+
+    const awardRows = await db.select({
+      medalId: userMedals.medalId,
+      c: count(),
+    }).from(userMedals).groupBy(userMedals.medalId);
+    const awardMap = new Map(awardRows.map(r => [r.medalId, Number(r.c)]));
+
+    res.json({
+      medals: rows.map(m => ({
+        ...m,
+        awardedCount: awardMap.get(m.id) ?? 0,
+      })),
+      totalCount,
+    });
   },
   create: async (req: AdminRequest, res: Response) => {
+    const parsed = parseBody(medalCreateSchema, req.body);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+    const b = parsed.data;
     const [m] = await db.insert(medals).values({
-      name: req.body.name,
-      description: req.body.description,
-      conditionRule: req.body.conditionRule,
-      iconUrl: req.body.iconUrl,
-      category: req.body.category,
-      level: req.body.level || 'bronze',
-      awardType: req.body.awardType || 'manual',
-      visibility: req.body.visibility || 'open',
-      isActive: true,
+      name: b.name,
+      description: b.description ?? null,
+      conditionRule: b.conditionRule ?? null,
+      iconUrl: b.iconUrl ?? null,
+      category: b.category ?? null,
+      level: b.level || 'bronze',
+      awardType: b.awardType || 'manual',
+      visibility: b.visibility || 'open',
+      isActive: b.isActive !== false,
     }).returning();
     res.json({ medal: m });
   },
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
-    const [m] = await db.update(medals).set({
-      name: req.body.name,
-      description: req.body.description,
-      conditionRule: req.body.conditionRule,
-      iconUrl: req.body.iconUrl,
-      category: req.body.category,
-      level: req.body.level,
-      awardType: req.body.awardType,
-      visibility: req.body.visibility,
-      isActive: req.body.isActive,
-    }).where(eq(medals.id, id)).returning();
+    const parsed = parseBody(medalUpdateSchema, req.body);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+    const b = parsed.data;
+    const patch: Record<string, unknown> = {};
+    if (b.name !== undefined) patch.name = b.name;
+    if (b.description !== undefined) patch.description = b.description;
+    if (b.conditionRule !== undefined) patch.conditionRule = b.conditionRule;
+    if (b.iconUrl !== undefined) patch.iconUrl = b.iconUrl;
+    if (b.category !== undefined) patch.category = b.category;
+    if (b.level !== undefined) patch.level = b.level;
+    if (b.awardType !== undefined) patch.awardType = b.awardType;
+    if (b.visibility !== undefined) patch.visibility = b.visibility;
+    if (b.isActive !== undefined) patch.isActive = b.isActive;
+
+    const [m] = await db.update(medals).set(patch).where(eq(medals.id, id)).returning();
     if (!m) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ medal: m });
   },
@@ -128,8 +419,15 @@ export const crudMedals = {
     await db.delete(userMedals).where(eq(userMedals.medalId, id));
     const [d] = await db.delete(medals).where(eq(medals.id, id)).returning();
     if (!d) { res.status(404).json({ error: 'Not found' }); return; }
+    await logAdminAction({
+      req, actionType: 'medal_delete', section: 'medals', objectId: id, oldValue: d, isCritical: true,
+    });
     res.json({ ok: true });
   },
+};
+
+export const listMedalRuleMetrics = async (_req: AdminRequest, res: Response): Promise<void> => {
+  res.json({ metrics: MEDAL_RULE_METRICS });
 };
 
 export const awardMedal = async (req: AdminRequest, res: Response): Promise<void> => {

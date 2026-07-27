@@ -75,6 +75,9 @@ const LABELS: Record<string, string> = {
   // Роли команды (кратко)
   team: 'Команда',
   auto: 'Автоподтверждение',
+  confirm_link: 'Ссылка',
+  confirm_volunteer: 'Волонтёр',
+  confirm_moderator: 'Модератор',
   morning: 'Утро',
   evening: 'Вечер',
 
@@ -113,6 +116,20 @@ const LABELS: Record<string, string> = {
   analyst: 'Аналитик',
   director: 'Дирекция',
 
+  admin_user_change: 'Изменение пользователя админки',
+  points_adjust: 'Ручное начисление баллов',
+  task_moderate: 'Модерация задания',
+  question_update: 'Изменение вопроса',
+  question_delete: 'Удаление вопроса',
+  event_delete: 'Удаление события',
+  event_update: 'Изменение программы',
+  task_delete: 'Удаление задания',
+  material_delete: 'Удаление материала',
+  medal_delete: 'Удаление медали',
+  tag_merge: 'Слияние тегов',
+  tag_delete: 'Удаление тега',
+  forum_settings: 'Настройки форума',
+
   // Выгрузки (префикс export_ — не путать с типами вопросов)
   export_all: 'Все типы',
   export_checkin: 'Проверка состояния',
@@ -141,7 +158,16 @@ export function label(key: string): string {
   }
   if (key.startsWith('auto_slot_')) {
     const t = key.replace('auto_slot_', '');
-    return `Авто слот ${t.slice(0, 2)}:${t.slice(2)}`;
+    return SLOT_LABELS[`slot_${t}`] ?? `Авто слот ${t.slice(0, 2)}:${t.slice(2)}`;
   }
-  return LABELS[key] ?? key;
+  return LABELS[key] ?? SLOT_LABELS[key] ?? key;
 }
+
+const SLOT_LABELS: Record<string, string> = {
+  slot_0800: 'Утро · 08:00',
+  slot_1300: 'День · 13:00',
+  slot_1600: 'После урока · 16:00',
+  slot_1830: 'Вечер · 18:30',
+  slot_2200: 'Итоги дня · 22:00',
+  slot_2300: 'Ночь · 23:00',
+};

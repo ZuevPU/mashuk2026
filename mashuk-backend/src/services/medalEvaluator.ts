@@ -1,22 +1,24 @@
-import { and, asc, count, desc, eq } from 'drizzle-orm';
+import { and, count, eq, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   medals, userMedals, taskSubmissions, piggybank, answers, participants,
+  eventAttendance, exchangeAnswers,
 } from '../db/schema.js';
 import { sendPushNotification } from './pushService.js';
 import { isNotNull } from 'drizzle-orm';
+import { medalRuleLabel } from './medalRuleMetrics.js';
+import { piggybankStreak, reflectionStreak } from './streakHelpers.js';
 
-/**
- * Simple rule evaluator: tasks_completed>=N, piggybank_count>=N, answers_count>=N, path_points>=N
- */
-function parseRule(rule: string | null | undefined): { metric: string; op: '>='; value: number } | null {
+export type ParsedMedalRule = { metric: string; op: '>='; value: number };
+
+export function parseMedalRule(rule: string | null | undefined): ParsedMedalRule | null {
   if (!rule?.trim()) return null;
   const m = rule.trim().match(/^(\w+)\s*(>=)\s*(\d+)$/);
   if (!m) return null;
   return { metric: m[1], op: '>=', value: Number(m[3]) };
 }
 
-async function getMetric(participantId: number, metric: string): Promise<number> {
+export async function getMedalMetricValue(participantId: number, metric: string): Promise<number> {
   switch (metric) {
     case 'tasks_completed': {
       const [r] = await db.select({ c: count() }).from(taskSubmissions)
@@ -25,7 +27,7 @@ async function getMetric(participantId: number, metric: string): Promise<number>
     }
     case 'piggybank_count': {
       const [r] = await db.select({ c: count() }).from(piggybank)
-        .where(eq(piggybank.participantId, participantId));
+        .where(and(eq(piggybank.participantId, participantId), isNull(piggybank.deletedAt)));
       return Number(r?.c ?? 0);
     }
     case 'answers_count': {
@@ -43,9 +45,35 @@ async function getMetric(participantId: number, metric: string): Promise<number>
         .from(participants).where(eq(participants.id, participantId)).limit(1);
       return p?.experiencePoints ?? 0;
     }
+    case 'event_attendance': {
+      const [r] = await db.select({ c: count() }).from(eventAttendance)
+        .where(eq(eventAttendance.participantId, participantId));
+      return Number(r?.c ?? 0);
+    }
+    case 'reflection_streak':
+      return reflectionStreak(participantId);
+    case 'piggybank_streak':
+      return piggybankStreak(participantId);
+    case 'exchange_answers': {
+      const [r] = await db.select({ c: count() }).from(exchangeAnswers)
+        .where(eq(exchangeAnswers.participantId, participantId));
+      return Number(r?.c ?? 0);
+    }
     default:
       return 0;
   }
+}
+
+export async function getMedalRuleProgress(
+  participantId: number,
+  parsed: ParsedMedalRule,
+): Promise<{ current: number; target: number; conditionLabel: string }> {
+  const current = await getMedalMetricValue(participantId, parsed.metric);
+  return {
+    current,
+    target: parsed.value,
+    conditionLabel: medalRuleLabel(parsed.metric, parsed.value),
+  };
 }
 
 export async function evaluateMedalsForParticipantDetailed(
@@ -59,9 +87,9 @@ export async function evaluateMedalsForParticipantDetailed(
   for (const medal of active) {
     if (ownedIds.has(medal.id)) continue;
     if (medal.awardType === 'manual') continue;
-    const parsed = parseRule(medal.conditionRule);
+    const parsed = parseMedalRule(medal.conditionRule);
     if (!parsed) continue;
-    const value = await getMetric(participantId, parsed.metric);
+    const value = await getMedalMetricValue(participantId, parsed.metric);
     if (value >= parsed.value) {
       await db.insert(userMedals).values({
         participantId,

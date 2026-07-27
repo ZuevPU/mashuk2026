@@ -3,9 +3,13 @@ import { label } from '../../labels/ru';
 import type { AdminTabProps } from '../admin/types';
 import { EveningQuestionnaireBuilder } from './EveningQuestionnaireBuilder';
 import { ProfilePdfSettings } from './ProfilePdfSettings';
+import { OrgThreadsSection } from './OrgThreadsSection';
 import { SECTIONS } from './types';
 
+type ForumSegment = 'settings' | 'org';
+
 export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
+  const [forumSegment, setForumSegment] = useState<ForumSegment>('settings');
   const [forumSettings, setForumSettings] = useState<any>(null);
   const [recThreshold, setRecThreshold] = useState(1);
   const [totalDaysDraft, setTotalDaysDraft] = useState(8);
@@ -85,16 +89,31 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       setScheduleVersions(r.versions || []);
     }, 'История загружена');
 
-  if (loading || !forumSettings) {
+  if (forumSegment === 'settings' && (loading || !forumSettings)) {
     return <p className="adm-muted">Загрузка конструктора форума…</p>;
   }
 
-  const totalDays = forumSettings.totalDays ?? 8;
-  const currentDay = forumSettings.currentDay ?? 1;
+  const totalDays = forumSettings?.totalDays ?? 8;
+  const currentDay = forumSettings?.currentDay ?? 1;
   const focusFilled = new Set(dayFocusList.filter(f => f.title || f.text).map(f => f.dayNumber));
 
   return (
     <div className="adm-forum">
+      <div className="adm-seg" style={{ marginBottom: 12 }}>
+        <button type="button" className={forumSegment === 'settings' ? 'on' : ''} onClick={() => setForumSegment('settings')}>
+          Настройки форума
+        </button>
+        <button type="button" className={forumSegment === 'org' ? 'on' : ''} onClick={() => setForumSegment('org')}>
+          Обращения к организаторам
+        </button>
+      </div>
+
+      {forumSegment === 'org' && (
+        <OrgThreadsSection adminFetch={adminFetch} act={act} reloadKey={reloadKey} />
+      )}
+
+      {forumSegment === 'settings' && (
+      <>
       <div className="adm-forum-hero card">
         <h2 className="adm-forum-hero-title">
           Сейчас для участников: <span className="adm-forum-accent">день {currentDay}</span> из {totalDays}
@@ -454,6 +473,8 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           </div>
         ))}
       </div>
+      </>
+      )}
     </div>
   );
 }

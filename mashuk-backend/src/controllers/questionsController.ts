@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { eq, and, or } from 'drizzle-orm';
+import { eq, and, or, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   questions, questionOptions, answers, exchangeQuestions, exchangeAnswers, participants, events,
@@ -12,6 +12,7 @@ import { emotionIdToZone, EMOTION_ZONE_LABELS } from '../services/emotionZones.j
 import { filterEventsForLessonSlot, lessonSlotIndexForQuestion } from '../services/lessonSlotEvents.js';
 import { formatQuestionTimeWindow, getReflectionTypeLabel } from '../services/reflectionTypeLabel.js';
 import { resolveAnswerConfirmation } from '../services/answerConfirmation.js';
+import { questionVisibleToParticipant, resolveQuestionDayForAccess } from '../services/questionEligibility.js';
 import { evaluateMedalsForParticipantDetailed } from '../services/medalEvaluator.js';
 import { sendPushNotification } from '../services/pushService.js';
 
@@ -56,13 +57,20 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
         eq(questions.status, 'published'),
       ));
 
+    const me = req.participant!;
+    const visible = list.filter(q =>
+      questionVisibleToParticipant(q, me, currentDay));
+
     const userAnswers = await db.select().from(answers)
-      .where(eq(answers.participantId, req.participant!.id));
+      .where(eq(answers.participantId, me.id));
     const answeredIds = new Set(userAnswers.map(a => a.questionId));
     const answerByQuestion = new Map(userAnswers.map(a => [a.questionId, a]));
 
-    const result = list.map(q => {
-      const access = getTouchpointAccess(q.dayNumber, currentDay, q.closeTime, now, q.publishTime);
+    const result = visible
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id)
+      .map(q => {
+      const dayForAccess = resolveQuestionDayForAccess(q, currentDay);
+      const access = getTouchpointAccess(dayForAccess, currentDay, q.closeTime, now, q.publishTime);
       const userAnswer = answerByQuestion.get(q.id);
       const answered = answeredIds.has(q.id);
       const status = toTouchpointUiStatus(access, answered);
@@ -70,6 +78,8 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
       const pathPointsPreview = q.points && q.points > 0 ? q.points : 5;
       return {
         ...q,
+        subtitle: q.subtitle ?? null,
+        sortOrder: q.sortOrder ?? 0,
         status,
         access,
         answered,
@@ -101,10 +111,20 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       res.status(403).json({ error: 'Question not available' });
       return;
     }
-    const options = await db.select().from(questionOptions).where(eq(questionOptions.questionId, id));
+    if (question.isHidden) {
+      res.status(403).json({ error: 'Question not available' });
+      return;
+    }
+    const settings = await getForumSettings();
+    const currentDay = resolveEffectiveCurrentDay(settings, new Date());
+    if (!questionVisibleToParticipant(question, req.participant!, currentDay)) {
+      res.status(403).json({ error: 'Question not available' });
+      return;
+    }
+    const options = await db.select().from(questionOptions).where(eq(questionOptions.questionId, id))
+      .orderBy(asc(questionOptions.sortOrder));
     let dayEvents: { id: number; title: string; place: string | null; startTime: Date | null }[] = [];
     if (isLessonReflectionQuestion(question) && question.dayNumber) {
-      const settings = await getForumSettings();
       const dayEv = await db.select().from(events).where(eq(events.dayNumber, question.dayNumber));
       const published = dayEv.filter(e => e.isPublished !== false && e.dayPublished !== false);
       dayEvents = filterEventsForLessonSlot(question, published, settings).map(e => ({
@@ -145,7 +165,12 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
     const now = new Date();
     const settings = await getForumSettings();
     const currentDay = resolveEffectiveCurrentDay(settings, now);
-    const access = getTouchpointAccess(question.dayNumber, currentDay, question.closeTime, now, question.publishTime);
+    if (question.isHidden || !questionVisibleToParticipant(question, req.participant!, currentDay)) {
+      res.status(403).json({ error: 'Question not available' });
+      return;
+    }
+    const dayForAccess = resolveQuestionDayForAccess(question, currentDay);
+    const access = getTouchpointAccess(dayForAccess, currentDay, question.closeTime, now, question.publishTime);
     if (access === 'locked' || access === 'soon') {
       res.status(400).json({
         error: access === 'locked'

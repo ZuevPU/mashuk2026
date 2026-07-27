@@ -1,22 +1,13 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { label } from '../../labels/ru';
 import type { AdminTabProps } from '../admin/types';
+import {
+  taskSubmissionAnswerCell,
+  teamBlocked,
+  type TaskSubmissionRow,
+} from './taskSubmissionShared';
 
-export type TaskSubmissionRow = {
-  id: number;
-  participantId: number;
-  participantName?: string;
-  taskId: number;
-  taskTitle?: string;
-  status: string;
-  answerText?: string | null;
-  photoUrl?: string | null;
-  postUrl?: string | null;
-  pointsAwarded?: number | null;
-  submittedAt?: string | null;
-  moderatorComment?: string | null;
-  teamConfirmations?: { participantId: number; name: string; status: string }[];
-};
+export type { TaskSubmissionRow };
 
 type SortKey = 'submittedAt' | 'participant' | 'status' | 'points';
 
@@ -25,31 +16,6 @@ type Props = Pick<AdminTabProps, 'adminFetch' | 'act'> & {
   taskTitle: string;
   onClose: () => void;
 };
-
-function answerCell(row: TaskSubmissionRow) {
-  const parts: ReactNode[] = [];
-  if (row.answerText?.trim()) {
-    parts.push(<div key="t">{row.answerText}</div>);
-  }
-  if (row.postUrl) {
-    parts.push(
-      <div key="p">
-        <a href={row.postUrl} target="_blank" rel="noreferrer">Ссылка на пост</a>
-      </div>,
-    );
-  }
-  if (row.photoUrl) {
-    parts.push(
-      <div key="ph">
-        <a href={row.photoUrl} target="_blank" rel="noreferrer">Фото</a>
-        {' · '}
-        <img src={row.photoUrl} alt="" style={{ maxWidth: 80, maxHeight: 60, verticalAlign: 'middle', marginLeft: 4 }} />
-      </div>,
-    );
-  }
-  if (parts.length === 0) return <span className="adm-muted">—</span>;
-  return <>{parts}</>;
-}
 
 export function TaskSubmissionsModeration({ taskId, taskTitle, adminFetch, act, onClose }: Props) {
   const [loading, setLoading] = useState(true);
@@ -213,13 +179,12 @@ export function TaskSubmissionsModeration({ taskId, taskTitle, adminFetch, act, 
               </thead>
               <tbody>
                 {rows.map(s => {
-                  const teamBlocked = (s.teamConfirmations?.length ?? 0) > 0
-                    && !s.teamConfirmations!.every(c => c.status === 'confirmed');
+                  const blocked = teamBlocked(s);
                   return (
                     <tr key={s.id}>
                       <td>{s.participantName || `#${s.participantId}`}</td>
                       <td>{label(s.status)}</td>
-                      <td style={{ maxWidth: 280 }}>{answerCell(s)}</td>
+                      <td style={{ maxWidth: 280 }}>{taskSubmissionAnswerCell(s)}</td>
                       <td>{s.pointsAwarded ?? '—'}</td>
                       <td style={{ fontSize: 11 }}>
                         {s.teamConfirmations?.length
@@ -245,9 +210,9 @@ export function TaskSubmissionsModeration({ taskId, taskTitle, adminFetch, act, 
                               <button
                                 type="button"
                                 className="adm-btn adm-btn-sm"
-                                disabled={teamBlocked}
-                                title={teamBlocked ? 'Дождитесь подтверждения команды' : undefined}
-                                onClick={() => moderate(s.id, 'approved', teamBlocked)}
+                                disabled={blocked}
+                                title={blocked ? 'Дождитесь подтверждения команды' : undefined}
+                                onClick={() => moderate(s.id, 'approved', blocked)}
                               >
                                 Принять
                               </button>

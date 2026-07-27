@@ -15,11 +15,13 @@ export type Tab =
   | 'push'
   | 'admins'
   | 'journal'
-  | 'medals';
+  | 'medals'
+  | 'piggybank'
+  | 'recommendation-tags';
 
 export const TAB_ORDER: Tab[] = [
   'participants', 'directions', 'onboarding', 'forum', 'events', 'knowledge', 'tasks', 'questions',
-  'moderation', 'data', 'levels', 'analytics', 'exports', 'push', 'admins', 'journal', 'medals',
+  'moderation', 'piggybank', 'data', 'levels', 'analytics', 'exports', 'push', 'recommendation-tags', 'admins', 'journal', 'medals',
 ];
 
 export const TAB_LABELS: Record<Tab, string> = {
@@ -32,11 +34,13 @@ export const TAB_LABELS: Record<Tab, string> = {
   questions: 'Вопросы',
   forum: 'Форум',
   moderation: 'Модерация',
+  piggybank: 'Копилка',
   data: 'Данные',
-  levels: 'Баллы',
+  levels: 'Рейтинг',
   analytics: 'Аналитика',
   exports: 'Выгрузки',
   push: 'Уведомления',
+  'recommendation-tags': 'Теги',
   admins: 'Админы',
   journal: 'Журнал',
   medals: 'Медали',

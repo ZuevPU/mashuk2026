@@ -10,6 +10,7 @@ import {
   PriorityAction, NextEventCard, TouchpointsCard, StatsRow,
   RoleOfDayCard, ExperimentCard, MissedTouchpointsCard,
 } from '../components/home/DashboardCards';
+import { PushBanner, type PushBannerItem } from '../components/home/PushBanner';
 import { EveningQuestionnaire, type EveningQuestionnaireProps } from '../components/home/EveningQuestionnaire';
 import { apiGet, apiPost, ApiError } from '../api/client';
 
@@ -81,6 +82,7 @@ interface HomeData {
     showPiggybankFab?: boolean;
     showEveningCard?: boolean;
   };
+  activePushBanners?: PushBannerItem[];
 }
 
 const scheduleKindLabel = (kind: string) => {
@@ -102,6 +104,7 @@ export const HomePanel: React.FC<{
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showEvening, setShowEvening] = useState(false);
+  const [dismissedBanners, setDismissedBanners] = useState<number[]>([]);
 
   const reload = () => {
     setLoading(true);
@@ -175,6 +178,7 @@ export const HomePanel: React.FC<{
   const hidePriorityDup = card && d.priorityAction && card.route === d.priorityAction.route;
   const hideEveningDup = card?.kind === 'evening_survey';
   const hideNowSchedule = card?.kind === 'program_now' || card?.kind === 'program_soon';
+  const pushBanners = (d.activePushBanners ?? []).filter(b => !dismissedBanners.includes(b.id));
 
   const eveningQuestionnaireBlock = showEvening ? (
     d.eveningQuestionnaire?.available ? (
@@ -214,6 +218,11 @@ export const HomePanel: React.FC<{
           focusSubtitle={d.dayFocus?.text || ''}
           focusKeyQuestion={d.dayFocus?.keyQuestion}
           progressPercent={(d.currentDay / d.totalDays) * 100}
+        />
+
+        <PushBanner
+          banners={pushBanners}
+          onDismiss={id => setDismissedBanners(prev => [...prev, id])}
         />
 
         {card && (

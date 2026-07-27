@@ -20,6 +20,7 @@ import {
   exportPiggybankText, listMyMedals, listMedalsCatalog, synthesizeMyOutcomes, downloadMyProfilePdf,
 } from '../controllers/profileController.js';
 import { uploadPhoto } from '../controllers/uploadController.js';
+import { dismissPushBanner, openPushBanner, pushWebhookTrigger } from '../controllers/pushBannerController.js';
 import { getActiveConsents } from '../controllers/consentsController.js';
 import { listMyOrgThreads, getMyOrgThread, createOrgThread, replyOrgThread } from '../controllers/orgController.js';
 import { volunteerConfirm } from '../controllers/volunteerController.js';
@@ -86,6 +87,9 @@ router.post('/piggybank', vkAuthMiddleware, requireParticipant, createPiggybank)
 router.get('/piggybank/export', vkAuthMiddleware, requireParticipant, exportPiggybankText);
 
 router.post('/upload', vkAuthMiddleware, requireParticipant, uploadPhoto);
+router.post('/push-banners/:id/open', vkAuthMiddleware, requireParticipant, openPushBanner);
+router.post('/push-banners/:id/dismiss', vkAuthMiddleware, requireParticipant, dismissPushBanner);
+router.post('/push/webhook/:token', pushWebhookTrigger);
 
 // Volunteer confirm: admin token OR vk staff
 router.post('/volunteer/confirm', (req, res, next) => {

@@ -132,11 +132,13 @@ export function ParticipantCardModal({
 
   const initials = `${(p.firstName || '?')[0]}${(p.lastName || '?')[0]}`.toUpperCase();
 
-  const tabs = ['profile', 'answers', 'tasks', 'points', 'medals', 'piggybank'] as const;
+  const tabs = ['profile', 'activity', 'answers', 'tasks', 'points', 'medals', 'piggybank', 'logs'] as const;
 
   const tabLabels: Record<string, string> = {
 
     profile: 'Профиль',
+
+    activity: 'Активность',
 
     answers: 'Ответы',
 
@@ -147,6 +149,8 @@ export function ParticipantCardModal({
     medals: 'Медали',
 
     piggybank: 'Копилка',
+
+    logs: 'Логи',
 
   };
 
@@ -159,6 +163,12 @@ export function ParticipantCardModal({
   const [pdfOutcomes, setPdfOutcomes] = useState('');
 
   const [pdfNextSteps, setPdfNextSteps] = useState('');
+
+  const [activityItems, setActivityItems] = useState<any[]>([]);
+
+  const [adminLogs, setAdminLogs] = useState<any[]>([]);
+
+  const [answerDayFilter, setAnswerDayFilter] = useState('');
 
 
 
@@ -183,6 +193,24 @@ export function ParticipantCardModal({
       .catch(() => { /* optional */ });
 
   }, [p.id, p.outcomesEdited, p.nextStepsEdited, adminFetch]);
+
+
+
+  useEffect(() => {
+
+    if (tab === 'activity') {
+
+      adminFetch(`/participants/${p.id}/activity`).then((r: { items?: any[] }) => setActivityItems(r.items || [])).catch(() => setActivityItems([]));
+
+    }
+
+    if (tab === 'logs') {
+
+      adminFetch(`/participants/${p.id}/admin-actions`).then((r: { actions?: any[] }) => setAdminLogs(r.actions || [])).catch(() => setAdminLogs([]));
+
+    }
+
+  }, [tab, p.id, adminFetch]);
 
 
 
@@ -219,7 +247,45 @@ export function ParticipantCardModal({
 
           <div className="adm-pc-name">{p.firstName} {p.lastName}</div>
 
-          <div className="adm-pc-meta">{p.direction || '—'}{p.groupName ? ` · ${p.groupName}` : ''}</div>
+          <div className="adm-pc-meta">
+            VK {p.vkId} · {p.direction || '—'}{p.groupName ? ` · ${p.groupName}` : ''} · {p.pedagogicalRole ? label(p.pedagogicalRole) : 'роль не задана'}
+          </div>
+
+          <div className="adm-forum-toolbar" style={{ justifyContent: 'center', marginTop: 10, flexWrap: 'wrap' }}>
+
+            <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setTab('profile')}>Скорректировать</button>
+
+            <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => {
+
+              const text = prompt('Текст пуша');
+
+              if (!text?.trim()) return;
+
+              act(() => adminFetch(`/participants/${p.id}/push`, { method: 'POST', body: JSON.stringify({ text: text.trim() }) }), 'Пуш отправлен');
+
+            }}>Пуш</button>
+
+            <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => {
+
+              const pts = Number(prompt('Баллы (+ или −)'));
+
+              if (!Number.isFinite(pts) || pts === 0) return;
+
+              const track = confirm('Линия «Опыт»? OK — Опыт, Отмена — Путь') ? 'experience' : 'path';
+
+              const reason = prompt('Причина') || 'Ручная корректировка';
+
+              act(async () => {
+
+                await adminFetch(`/participants/${p.id}/points/adjust`, { method: 'POST', body: JSON.stringify({ points: pts, track, reason }) });
+
+                onReloadCard();
+
+              }, 'Баллы обновлены');
+
+            }}>Баллы ±</button>
+
+          </div>
 
           <div className="adm-pc-chips">
 
@@ -509,13 +575,31 @@ export function ParticipantCardModal({
 
           {tab === 'answers' && (
 
+            <>
+
+            <div className="adm-forum-toolbar" style={{ marginBottom: 8 }}>
+
+              <select className="adm-input" value={answerDayFilter} onChange={e => setAnswerDayFilter(e.target.value)}>
+
+                <option value="">Все дни</option>
+
+                {[...new Set((card.answers || []).map((a: any) => a.dayNumber).filter(Boolean))].sort().map((d: any) => (
+
+                  <option key={d} value={String(d)}>День {d}</option>
+
+                ))}
+
+              </select>
+
+            </div>
+
             <table className="adm-table">
 
               <thead><tr><th>Вопрос</th><th>День</th><th>Ответ</th></tr></thead>
 
               <tbody>
 
-                {(card.answers || []).slice(0, 50).map((a: any) => (
+                {(card.answers || []).filter((a: any) => !answerDayFilter || String(a.dayNumber) === answerDayFilter).slice(0, 100).map((a: any) => (
 
                   <tr key={a.id}>
 
@@ -533,7 +617,69 @@ export function ParticipantCardModal({
 
             </table>
 
+            </>
+
           )}
+
+
+
+          {tab === 'activity' && (
+
+            <div className="adm-stack">
+
+              {activityItems.length === 0 && <p className="adm-muted">Нет событий активности</p>}
+
+              {activityItems.map((it, i) => (
+
+                <div key={i} className="card" style={{ padding: 10, fontSize: 12 }}>
+
+                  <div style={{ color: '#888' }}>{it.at ? new Date(it.at).toLocaleString('ru-RU') : '—'} · {it.kind}</div>
+
+                  <strong>{it.title}</strong>
+
+                  {it.detail && <div style={{ marginTop: 4 }}>{it.detail}</div>}
+
+                </div>
+
+              ))}
+
+            </div>
+
+          )}
+
+
+
+          {tab === 'logs' && (
+
+            <table className="adm-table">
+
+              <thead><tr><th>Когда</th><th>Действие</th><th>Раздел</th><th>Комментарий</th></tr></thead>
+
+              <tbody>
+
+                {adminLogs.map((lg: any) => (
+
+                  <tr key={lg.id}>
+
+                    <td style={{ whiteSpace: 'nowrap' }}>{lg.createdAt ? new Date(lg.createdAt).toLocaleString('ru-RU') : '—'}</td>
+
+                    <td>{lg.actionType}</td>
+
+                    <td>{lg.section || '—'}</td>
+
+                    <td>{lg.comment || '—'}</td>
+
+                  </tr>
+
+                ))}
+
+              </tbody>
+
+            </table>
+
+          )}
+
+
 
           {tab === 'tasks' && (
 

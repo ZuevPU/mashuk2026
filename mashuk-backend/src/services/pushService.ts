@@ -1,7 +1,12 @@
 import { eq, isNotNull, isNull, and } from 'drizzle-orm';
 import { env } from '../config/env.js';
 import { db } from '../db/index.js';
-import { pushLog, participants } from '../db/schema.js';
+import {
+  adminPushNotifications, participantPushDeliveries, pushLog, participants,
+} from '../db/schema.js';
+import { optOutCategoryForNotificationType, triggerTypeForCampaign } from './pushNotificationTypes.js';
+import { expandPushPlaceholders, type PlaceholderContext } from './pushPlaceholderExpand.js';
+import { resolvePushAudience, type AudiencePayload } from './pushAudienceResolve.js';
 
 const VK_API = 'https://api.vk.com/method';
 const VK_VERSION = '5.199';
@@ -75,7 +80,9 @@ export function pushCategoryOf(triggerType: string): string {
   if (/event|program|schedule|remind/i.test(triggerType)) return 'program';
   if (/^transactional_task|^transactional_medal|^transactional_level/i.test(triggerType)) return 'tasks';
   if (/^task_|medal|moderate|volunteer|level_up/i.test(triggerType)) return 'tasks';
-  if (/exchange|org|peer|answer_received/i.test(triggerType)) return 'exchange';
+  if (/exchange|peer|answer_received/i.test(triggerType)) return 'exchange';
+  if (/^admin_campaign_.*_org/.test(triggerType)) return 'org';
+  if (/^admin_campaign_/i.test(triggerType)) return 'program';
   return triggerType;
 }
 
@@ -151,4 +158,126 @@ export async function notifyAllParticipants(text: string, triggerType: string): 
   const all = await db.select({ id: participants.id }).from(participants)
     .where(and(isNotNull(participants.onboardingCompletedAt), isNull(participants.selfDeletedAt)));
   await sendPushNotification(all.map(p => p.id), text, triggerType);
+}
+
+export type AdminPushRow = typeof adminPushNotifications.$inferSelect;
+
+function isDeliveredOk(status: string): boolean {
+  return status === 'sent_mini' || status === 'sent_community' || status === 'ok';
+}
+
+/** VK text: title + body for mini-app (254 char limit on notifications.send) */
+export function formatVkPushText(pushTitle: string | null | undefined, body: string): string {
+  const t = pushTitle?.trim();
+  if (t) return `${t}: ${body}`.slice(0, 254);
+  return body.slice(0, 254);
+}
+
+export async function executeAdminPushCampaign(
+  notification: AdminPushRow,
+  ctx: PlaceholderContext = {},
+): Promise<{ delivered: number; opened: number }> {
+  const audiencePayload = (notification.audiencePayload ?? {}) as AudiencePayload;
+  const participantIds = await resolvePushAudience(
+    notification.audienceType ?? 'all',
+    audiencePayload,
+  );
+  const triggerType = triggerTypeForCampaign(notification.id, notification.notificationType ?? 'reminder');
+  const optCat = optOutCategoryForNotificationType(notification.notificationType ?? 'reminder');
+  const hasAnyToken = !!(env.VK_SERVICE_TOKEN || env.VK_COMMUNITY_TOKEN);
+
+  let delivered = 0;
+  const now = new Date();
+
+  for (const participantId of participantIds) {
+    const [p] = await db.select().from(participants).where(eq(participants.id, participantId)).limit(1);
+    if (!p) continue;
+
+    const personalizedBody = expandPushPlaceholders(notification.body, p, {
+      programDay: notification.programDay ?? ctx.programDay,
+      eventTitle: ctx.eventTitle,
+    });
+    const vkText = formatVkPushText(notification.pushTitle, personalizedBody);
+
+    const optOut = (p.pushOptOut as Record<string, boolean> | null) ?? {};
+    let vkDeliveryStatus = 'skipped_no_token';
+    if (optOut.all === true || optOut[optCat] === true) {
+      vkDeliveryStatus = 'skipped_opt_out';
+    } else if (!hasAnyToken) {
+      vkDeliveryStatus = 'skipped_no_token';
+    } else if (p.vkId) {
+      vkDeliveryStatus = await deliverToVkUser(p.vkId, vkText);
+    } else {
+      vkDeliveryStatus = 'skipped_no_vk_id';
+    }
+
+    const visibleUntil = notification.visibleUntil
+      ?? new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const [delivery] = await db.insert(participantPushDeliveries).values({
+      notificationId: notification.id,
+      participantId,
+      personalizedBody,
+      pushTitle: notification.pushTitle,
+      icon: notification.icon,
+      imageUrl: notification.imageUrl,
+      visibleUntil,
+      vkDeliveryStatus,
+    }).returning();
+
+    await db.insert(pushLog).values({
+      participantId,
+      text: vkText,
+      triggerType,
+      sentAt: new Date(),
+      deliveryStatus: vkDeliveryStatus,
+      notificationId: notification.id,
+      deliveryId: delivery.id,
+    });
+
+    if (isDeliveredOk(vkDeliveryStatus)) delivered += 1;
+  }
+
+  await db.update(adminPushNotifications)
+    .set({
+      status: 'sent',
+      sentAt: now,
+      deliveredCount: delivered,
+      openedCount: 0,
+      updatedAt: now,
+    })
+    .where(eq(adminPushNotifications.id, notification.id));
+
+  return { delivered, opened: 0 };
+}
+
+export async function sendTestCampaignToParticipant(
+  notification: AdminPushRow,
+  participantId: number,
+  ctx: PlaceholderContext = {},
+): Promise<string> {
+  const [p] = await db.select().from(participants).where(eq(participants.id, participantId)).limit(1);
+  if (!p) throw new Error('Participant not found');
+  const personalizedBody = expandPushPlaceholders(notification.body, p, {
+    programDay: notification.programDay ?? ctx.programDay,
+    eventTitle: ctx.eventTitle,
+  });
+  const vkText = formatVkPushText(notification.pushTitle, personalizedBody);
+  const triggerType = `admin_test_${notification.id}`;
+  await sendPushNotification([participantId], vkText, triggerType);
+  return personalizedBody;
+}
+
+export async function refreshNotificationStats(notificationId: number): Promise<void> {
+  const rows = await db.select().from(participantPushDeliveries)
+    .where(eq(participantPushDeliveries.notificationId, notificationId));
+  let delivered = 0;
+  let opened = 0;
+  for (const r of rows) {
+    if (isDeliveredOk(r.vkDeliveryStatus ?? '')) delivered += 1;
+    if (r.openedAt) opened += 1;
+  }
+  await db.update(adminPushNotifications)
+    .set({ deliveredCount: delivered, openedCount: opened, updatedAt: new Date() })
+    .where(eq(adminPushNotifications.id, notificationId));
 }

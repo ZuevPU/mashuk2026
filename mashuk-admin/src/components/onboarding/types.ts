@@ -19,6 +19,7 @@ export type AdminRole = {
   essence?: string | null;
   inClass?: string | null;
   keywords?: string | null;
+  iconKey?: string | null;
   sortOrder?: number;
 };
 
@@ -29,13 +30,14 @@ export type DayExperiment = {
   title: string;
   body?: string | null;
   hint?: string | null;
+  status?: string | null;
 };
 
 export const ONBOARDING_STEPS: { id: OnboardingStep; label: string }[] = [
   { id: 'goals', label: 'Цели' },
   { id: 'interests', label: 'Интересы' },
   { id: 'diag', label: 'Диагностика' },
-  { id: 'roles', label: 'Роли (тексты)' },
-  { id: 'advice', label: 'Советы по дням' },
+  { id: 'roles', label: 'Роли' },
+  { id: 'advice', label: 'Каталог советов' },
   { id: 'preview', label: 'Превью' },
 ];

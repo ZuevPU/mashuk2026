@@ -9,7 +9,6 @@ export type MaterialRow = {
   eventId?: number | null;
   direction?: string | null;
   isGeneral?: boolean;
-  includeInAnalytics?: boolean;
   createdAt?: string;
 };
 
@@ -17,12 +16,11 @@ type Draft = {
   title: string;
   url: string;
   tags: string[];
-  includeInAnalytics: boolean;
 };
 
 type Props = {
   material: MaterialRow;
-  onSave: (body: { title: string; url: string; tags: string[]; includeInAnalytics: boolean }) => void;
+  onSave: (body: { title: string; url: string; tags: string[] }) => void;
   onDelete: () => void;
 };
 
@@ -31,7 +29,6 @@ export function MaterialCard({ material, onSave, onDelete }: Props) {
     title: material.title || '',
     url: material.url || '',
     tags: [...((material.tags as string[]) || [])],
-    includeInAnalytics: material.includeInAnalytics !== false,
   }));
   const [tagInput, setTagInput] = useState('');
 
@@ -40,7 +37,6 @@ export function MaterialCard({ material, onSave, onDelete }: Props) {
       title: material.title || '',
       url: material.url || '',
       tags: [...((material.tags as string[]) || [])],
-      includeInAnalytics: material.includeInAnalytics !== false,
     });
   }, [material]);
 
@@ -53,6 +49,11 @@ export function MaterialCard({ material, onSave, onDelete }: Props) {
 
   const removeTag = (tag: string) => setDraft(d => ({ ...d, tags: d.tags.filter(x => x !== tag) }));
 
+  const confirmDelete = () => {
+    if (!window.confirm('Точно удалить? Действие необратимо')) return;
+    onDelete();
+  };
+
   return (
     <div className="card adm-kb-material" style={{ fontSize: 12 }}>
       <strong>{material.title}</strong> · Д{material.dayNumber}
@@ -60,7 +61,6 @@ export function MaterialCard({ material, onSave, onDelete }: Props) {
       {material.direction ? ` · ${material.direction}` : ''}
       {material.isGeneral ? ' · общий' : ''}
       {material.createdAt ? ` · ${new Date(material.createdAt).toLocaleString('ru-RU')}` : ''}
-      {material.includeInAnalytics === false ? ' · вне аналитики' : ''}
       <div className="form-row" style={{ marginTop: 4 }}>
         <input
           className="adm-input"
@@ -75,16 +75,8 @@ export function MaterialCard({ material, onSave, onDelete }: Props) {
           placeholder="Ссылка"
           style={{ flex: 1 }}
         />
-        <label className="adm-forum-check">
-          <input
-            type="checkbox"
-            checked={draft.includeInAnalytics}
-            onChange={e => setDraft(d => ({ ...d, includeInAnalytics: e.target.checked }))}
-          />
-          аналитика
-        </label>
         <button type="button" className="adm-btn" onClick={() => onSave(draft)}>Сохранить</button>
-        <button type="button" className="adm-btn btn-danger" onClick={onDelete}>×</button>
+        <button type="button" className="adm-btn btn-danger" onClick={confirmDelete}>Удалить</button>
       </div>
       <div className="form-row" style={{ marginTop: 4, flexWrap: 'wrap', gap: 6 }}>
         {draft.tags.map(tag => (

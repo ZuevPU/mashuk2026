@@ -19,7 +19,6 @@ const emptyMaterial = () => ({
   title: '',
   url: '',
   isGeneral: false,
-  includeInAnalytics: true,
 });
 
 export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }: AdminTabProps & {
@@ -63,7 +62,6 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
           eventId: newMaterial.eventId ? Number(newMaterial.eventId) : null,
           tags,
           isGeneral: !!newMaterial.isGeneral,
-          includeInAnalytics: newMaterial.includeInAnalytics !== false,
         }),
       });
       setNewMaterial(emptyMaterial());
@@ -220,14 +218,6 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
               onChange={e => setNewMaterial({ ...newMaterial, isGeneral: e.target.checked })}
             />
             Общий
-          </label>
-          <label className="adm-forum-check">
-            <input
-              type="checkbox"
-              checked={newMaterial.includeInAnalytics}
-              onChange={e => setNewMaterial({ ...newMaterial, includeInAnalytics: e.target.checked })}
-            />
-            В аналитике
           </label>
           <button type="button" className="adm-btn" onClick={createMaterial}>Добавить</button>
         </div>

@@ -7,16 +7,15 @@ import {
   DEFAULT_GOAL_QUESTIONS,
   DEFAULT_INTEREST_GROUPS,
 } from './constants';
-import { DayAdviceEditor, type AdviceForm } from './DayAdviceEditor';
+import { AdviceCatalogSection } from './AdviceCatalogSection';
 import { GoalsStepEditor } from './GoalsStepEditor';
 import { InterestsStepEditor } from './InterestsStepEditor';
 import { OnboardingPreview } from './OnboardingPreview';
-import { RoleCatalogEditor } from './RoleCatalogEditor';
+import { RolesListSection } from './RolesListSection';
 import { RoleDiagnosticEditor } from './RoleDiagnosticEditor';
 import {
   ONBOARDING_STEPS,
   type AdminRole,
-  type DayExperiment,
   type OnboardingStep,
   type RoleDiagnosticsConfig,
 } from './types';
@@ -38,14 +37,8 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
   const [savedConfigJson, setSavedConfigJson] = useState('');
 
   const [roles, setRoles] = useState<AdminRole[]>([]);
-  const [dayExperiments, setDayExperiments] = useState<DayExperiment[]>([]);
-  const [expForm, setExpForm] = useState<AdviceForm>({
-    dayNumber: 2,
-    roleKey: 'meaning_researcher',
-    title: '',
-    body: '',
-    hint: '',
-  });
+  const [adviceRoleFilter, setAdviceRoleFilter] = useState('');
+  const [adviceFilterVersion, setAdviceFilterVersion] = useState(0);
 
   const currentConfig = useMemo((): RoleDiagnosticsConfig => ({
     goalQuestions,
@@ -90,13 +83,11 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [rolesRes, expRes, fs] = await Promise.all([
+      const [rolesRes, fs] = await Promise.all([
         adminFetch('/roles'),
-        adminFetch('/day-experiments'),
         adminFetch('/forum-settings'),
       ]);
       setRoles(rolesRes.roles || []);
-      setDayExperiments(expRes.experiments || []);
 
       const cfg = fs.settings?.roleDiagnosticsConfig || {};
       const matrix = cfg.optionToRole;
@@ -146,9 +137,10 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
 
   const saveAllConfig = () => saveConfig('Весь онбординг (config) сохранён');
 
-  const refreshExperiments = async () => {
-    const expRes = await adminFetch('/day-experiments');
-    setDayExperiments(expRes.experiments || []);
+  const openAdviceForRole = (roleKey: string) => {
+    setAdviceRoleFilter(roleKey);
+    setAdviceFilterVersion(v => v + 1);
+    setStep('advice');
   };
 
   const stepDirty = (id: OnboardingStep) => {
@@ -218,36 +210,20 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
         />
       )}
       {step === 'roles' && (
-        <RoleCatalogEditor
+        <RolesListSection
           roles={roles}
           adminFetch={adminFetch}
           act={(fn, msg) => act(fn, msg)}
           onRolesUpdated={setRoles}
+          onViewAdviceForRole={openAdviceForRole}
         />
       )}
       {step === 'advice' && (
-        <DayAdviceEditor
-          experiments={dayExperiments}
-          form={expForm}
-          onFormChange={setExpForm}
-          onSave={() => act(async () => {
-            await adminFetch('/day-experiments', {
-              method: 'POST',
-              body: JSON.stringify(expForm),
-            });
-            await refreshExperiments();
-          }, 'Совет сохранён')}
-          onDelete={id => act(async () => {
-            await adminFetch(`/day-experiments/${id}`, { method: 'DELETE' });
-            await refreshExperiments();
-          }, 'Удалено')}
-          onEditLoad={e => setExpForm({
-            dayNumber: e.dayNumber,
-            roleKey: e.roleKey,
-            title: e.title,
-            body: e.body || '',
-            hint: e.hint || '',
-          })}
+        <AdviceCatalogSection
+          adminFetch={adminFetch}
+          act={(fn, msg) => act(fn, msg)}
+          initialRoleFilter={adviceRoleFilter}
+          filterVersion={adviceFilterVersion}
         />
       )}
       {step === 'preview' && (

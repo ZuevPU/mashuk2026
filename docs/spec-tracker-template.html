@@ -186,16 +186,61 @@
     tbody tr.hidden { display: none; }
     td.sub { width: 11rem; font-weight: 500; color: var(--audit); }
     td.task { min-width: 14rem; }
-    td.note { color: var(--muted); font-size: 0.8rem; max-width: 18rem; }
+    td.note { color: var(--muted); font-size: 0.8rem; max-width: 28rem; }
     .empty { padding: 2rem; text-align: center; color: var(--muted); }
+    .page-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-bottom: 1rem;
+    }
+    .page-tabs button {
+      padding: 0.45rem 0.85rem;
+      font: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      cursor: pointer;
+      color: var(--muted);
+      box-shadow: var(--shadow);
+    }
+    .page-tabs button[aria-selected="true"] {
+      border-color: #6366f1;
+      background: #eef2ff;
+      color: #3730a3;
+    }
+    .view-panel.hidden { display: none; }
+    .flat-list-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .flat-list-wrap .table-scroll { max-height: none; }
+    tr.section-divider td {
+      background: #eef2ff;
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: #3730a3;
+      border-bottom: 1px solid #c7d2fe;
+    }
+    header .subtitle { margin: 0 0 1rem; color: var(--muted); font-size: 0.95rem; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
       <h1>Трекер соответствия ТЗ</h1>
-      <p>Статус по коду (аудит). Пересборка: <code>node scripts/generate-spec-tracker.mjs</code>.</p>
+      <p class="subtitle" id="page-subtitle">Статус по коду (аудит). Пересборка: <code>node scripts/generate-spec-tracker.mjs</code>.</p>
     </header>
+
+    <div class="page-tabs" role="tablist" aria-label="Режим просмотра">
+      <button type="button" role="tab" id="tab-audit" aria-selected="true" aria-controls="panel-audit">Аудит по коду</button>
+      <button type="button" role="tab" id="tab-impl" aria-selected="false" aria-controls="panel-impl">Реализация (проверка UI)</button>
+    </div>
 
     <div class="legend" aria-label="Легенда статусов">
       <span class="badge badge--yes">Да</span>
@@ -208,39 +253,84 @@
       <span class="badge badge--dash">—</span>
     </div>
 
-    <div class="controls">
-      <div>
-        <label for="q">Поиск</label>
-        <input type="search" id="q" placeholder="Задача, подраздел, примечание…" autocomplete="off" />
-      </div>
-      <div>
-        <label for="section-filter">Раздел</label>
-        <select id="section-filter">
-          <option value="">Все разделы</option>
-        </select>
-      </div>
-      <div class="audit-filter-block">
-        <span class="filter-label">По коду (аудит) — показывать</span>
-        <div id="audit-filters" class="audit-filters" role="group" aria-label="Фильтр статуса аудита"></div>
-        <div class="audit-quick">
-          <button type="button" data-audit-preset="all">Все</button>
-          <button type="button" data-audit-preset="yes">Только «Да»</button>
-          <button type="button" data-audit-preset="no">Только «Нет»</button>
-          <button type="button" data-audit-preset="partial">Только «Частично»</button>
-          <button type="button" data-audit-preset="gaps">«Нет» + «Частично»</button>
-          <button type="button" data-audit-preset="other">Остальные статусы</button>
+    <div id="panel-audit" class="view-panel" role="tabpanel" aria-labelledby="tab-audit">
+      <div class="controls">
+        <div>
+          <label for="q">Поиск</label>
+          <input type="search" id="q" placeholder="Задача, подраздел, примечание…" autocomplete="off" />
+        </div>
+        <div>
+          <label for="section-filter">Раздел</label>
+          <select id="section-filter">
+            <option value="">Все разделы</option>
+          </select>
+        </div>
+        <div class="audit-filter-block">
+          <span class="filter-label" id="status-filter-label">По коду (аудит) — показывать</span>
+          <div id="status-filters" class="audit-filters" role="group" aria-label="Фильтр статуса"></div>
+          <div class="audit-quick">
+            <button type="button" data-status-preset="all">Все</button>
+            <button type="button" data-status-preset="yes">Только «Да»</button>
+            <button type="button" data-status-preset="no">Только «Нет»</button>
+            <button type="button" data-status-preset="partial">Только «Частично»</button>
+            <button type="button" data-status-preset="gaps">«Нет» + «Частично»</button>
+            <button type="button" data-status-preset="other">Остальные статусы</button>
+          </div>
         </div>
       </div>
+
+      <div class="summary" id="summary" aria-live="polite"></div>
+      <div id="sections"></div>
+      <p class="empty hidden" id="no-results">Ничего не найдено по фильтрам.</p>
     </div>
 
-    <div class="summary" id="summary" aria-live="polite"></div>
-    <div id="sections"></div>
-    <p class="empty hidden" id="no-results">Ничего не найдено по фильтрам.</p>
+    <div id="panel-impl" class="view-panel hidden" role="tabpanel" aria-labelledby="tab-impl">
+      <div class="controls">
+        <div>
+          <label for="q-flat">Поиск</label>
+          <input type="search" id="q-flat" placeholder="Задача, подраздел, примечание…" autocomplete="off" />
+        </div>
+        <div>
+          <label for="section-filter-flat">Раздел</label>
+          <select id="section-filter-flat">
+            <option value="">Все разделы</option>
+          </select>
+        </div>
+        <div class="audit-filter-block">
+          <span class="filter-label">Реализовано — показывать</span>
+          <div id="impl-status-filters" class="audit-filters" role="group" aria-label="Фильтр реализации"></div>
+          <div class="audit-quick">
+            <button type="button" data-impl-preset="all">Все</button>
+            <button type="button" data-impl-preset="yes">Только «Да»</button>
+            <button type="button" data-impl-preset="no">Только «Нет»</button>
+            <button type="button" data-impl-preset="gaps">«Нет» + «Частично» + «Надо обсудить»</button>
+          </div>
+        </div>
+      </div>
+      <div class="summary" id="summary-flat" aria-live="polite"></div>
+      <div class="flat-list-wrap">
+        <div class="table-scroll">
+          <table id="flat-table">
+            <thead>
+              <tr>
+                <th>Подраздел</th>
+                <th>Задача / функция</th>
+                <th>Реализовано</th>
+                <th>Примечание</th>
+              </tr>
+            </thead>
+            <tbody id="flat-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <p class="empty hidden" id="no-results-flat">Ничего не найдено по фильтрам.</p>
+    </div>
   </div>
 
   <script type="application/json" id="spec-data">__SPEC_DATA__</script>
   <script>
     const ROWS = JSON.parse(document.getElementById('spec-data').textContent);
+    let viewMode = 'audit';
 
     function badgeClass(status) {
       switch (status) {
@@ -268,12 +358,23 @@
         .replace(/"/g, '&quot;');
     }
 
-    function normalizeAuditStatus(s) {
+    function normalizeStatus(s) {
       const t = (s ?? '').trim();
       return t || '—';
     }
 
-    const AUDIT_ORDER = [
+    function rowStatus(row) {
+      return viewMode === 'audit' ? row.statusAudit : row.statusUser;
+    }
+
+    function rowNote(row) {
+      if (viewMode === 'audit') {
+        return [row.note, row.auditNote].filter(Boolean).join(' · ');
+      }
+      return row.note || '';
+    }
+
+    const STATUS_ORDER = [
       'Да',
       'Нет',
       'Частично',
@@ -283,59 +384,64 @@
       '—',
     ];
 
-    function collectAuditStatuses() {
+    function collectStatuses(mode) {
       const set = new Set();
       for (const row of ROWS) {
         if (!row.sectionId) continue;
-        set.add(normalizeAuditStatus(row.statusAudit));
+        const s = mode === 'audit' ? row.statusAudit : row.statusUser;
+        set.add(normalizeStatus(s));
       }
-      const ordered = AUDIT_ORDER.filter((s) => set.has(s));
+      const ordered = STATUS_ORDER.filter((s) => set.has(s));
       for (const s of set) {
         if (!ordered.includes(s)) ordered.push(s);
       }
       return ordered;
     }
 
-    const allowedAudit = new Set(collectAuditStatuses());
-    const auditFiltersEl = document.getElementById('audit-filters');
+    const allowedAudit = new Set(collectStatuses('audit'));
+    const allowedImpl = new Set(collectStatuses('impl'));
+    const statusFiltersEl = document.getElementById('status-filters');
+    const implStatusFiltersEl = document.getElementById('impl-status-filters');
 
-    function syncAuditCheckboxesFromSet() {
-      auditFiltersEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
-        cb.checked = allowedAudit.has(cb.value);
+    function buildStatusFilters(container, allowedSet, mode, onChange) {
+      container.innerHTML = '';
+      for (const status of collectStatuses(mode)) {
+        const lbl = document.createElement('label');
+        lbl.className = 'audit-chk';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = status;
+        cb.checked = allowedSet.has(status);
+        cb.addEventListener('change', () => {
+          if (cb.checked) allowedSet.add(status);
+          else allowedSet.delete(status);
+          onChange();
+        });
+        lbl.appendChild(cb);
+        lbl.appendChild(document.createTextNode(status));
+        container.appendChild(lbl);
+      }
+    }
+
+    buildStatusFilters(statusFiltersEl, allowedAudit, 'audit', () => updateUI());
+    buildStatusFilters(implStatusFiltersEl, allowedImpl, 'impl', () => updateFlatUI());
+
+    function syncCheckboxes(container, allowedSet) {
+      container.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+        cb.checked = allowedSet.has(cb.value);
       });
     }
 
-    for (const status of collectAuditStatuses()) {
-      const lbl = document.createElement('label');
-      lbl.className = 'audit-chk';
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.value = status;
-      cb.checked = true;
-      cb.addEventListener('change', () => {
-        if (cb.checked) allowedAudit.add(status);
-        else allowedAudit.delete(status);
-        updateUI();
-      });
-      lbl.appendChild(cb);
-      lbl.appendChild(document.createTextNode(status));
-      auditFiltersEl.appendChild(lbl);
-    }
-
-    document.querySelectorAll('[data-audit-preset]').forEach((btn) => {
+    document.querySelectorAll('[data-status-preset]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const preset = btn.getAttribute('data-audit-preset');
-        const all = collectAuditStatuses();
+        const preset = btn.getAttribute('data-status-preset');
+        const all = collectStatuses('audit');
         allowedAudit.clear();
-        if (preset === 'all') {
-          all.forEach((s) => allowedAudit.add(s));
-        } else if (preset === 'yes') {
-          allowedAudit.add('Да');
-        } else if (preset === 'no') {
-          allowedAudit.add('Нет');
-        } else if (preset === 'partial') {
-          allowedAudit.add('Частично');
-        } else if (preset === 'gaps') {
+        if (preset === 'all') all.forEach((s) => allowedAudit.add(s));
+        else if (preset === 'yes') allowedAudit.add('Да');
+        else if (preset === 'no') allowedAudit.add('Нет');
+        else if (preset === 'partial') allowedAudit.add('Частично');
+        else if (preset === 'gaps') {
           allowedAudit.add('Нет');
           allowedAudit.add('Частично');
         } else if (preset === 'other') {
@@ -343,16 +449,42 @@
             if (!['Да', 'Нет', 'Частично'].includes(s)) allowedAudit.add(s);
           });
         }
-        syncAuditCheckboxesFromSet();
+        syncCheckboxes(statusFiltersEl, allowedAudit);
         updateUI();
       });
     });
 
-    function rowMatchesFilters(row, q, sectionId) {
+    document.querySelectorAll('[data-impl-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const preset = btn.getAttribute('data-impl-preset');
+        const all = collectStatuses('impl');
+        allowedImpl.clear();
+        if (preset === 'all') all.forEach((s) => allowedImpl.add(s));
+        else if (preset === 'yes') allowedImpl.add('Да');
+        else if (preset === 'no') allowedImpl.add('Нет');
+        else if (preset === 'gaps') {
+          allowedImpl.add('Нет');
+          allowedImpl.add('Частично');
+          allowedImpl.add('Надо обсудить');
+        }
+        syncCheckboxes(implStatusFiltersEl, allowedImpl);
+        updateFlatUI();
+      });
+    });
+
+    function rowMatchesAuditFilters(row, q, sectionId) {
       if (sectionId && String(row.sectionId) !== sectionId) return false;
-      if (!allowedAudit.has(normalizeAuditStatus(row.statusAudit))) return false;
+      if (!allowedAudit.has(normalizeStatus(row.statusAudit))) return false;
       if (!q) return true;
       const hay = `${row.subsection} ${row.task} ${row.note} ${row.auditNote}`.toLowerCase();
+      return hay.includes(q);
+    }
+
+    function rowMatchesImplFilters(row, q, sectionId) {
+      if (sectionId && String(row.sectionId) !== sectionId) return false;
+      if (!allowedImpl.has(normalizeStatus(row.statusUser))) return false;
+      if (!q) return true;
+      const hay = `${row.subsection} ${row.task} ${row.note}`.toLowerCase();
       return hay.includes(q);
     }
 
@@ -371,14 +503,17 @@
     }
 
     const sectionFilter = document.getElementById('section-filter');
-    [...sectionsMap.values()]
-      .sort((a, b) => a.id - b.id)
-      .forEach((sec) => {
-        const opt = document.createElement('option');
-        opt.value = String(sec.id);
-        opt.textContent = `${sec.id}. ${sec.title}`;
-        sectionFilter.appendChild(opt);
-      });
+    const sectionFilterFlat = document.getElementById('section-filter-flat');
+    for (const sel of [sectionFilter, sectionFilterFlat]) {
+      [...sectionsMap.values()]
+        .sort((a, b) => a.id - b.id)
+        .forEach((sec) => {
+          const opt = document.createElement('option');
+          opt.value = String(sec.id);
+          opt.textContent = `${sec.id}. ${sec.title}`;
+          sel.appendChild(opt);
+        });
+    }
 
     const sectionsEl = document.getElementById('sections');
     for (const sec of [...sectionsMap.values()].sort((a, b) => a.id - b.id)) {
@@ -386,6 +521,7 @@
       det.className = 'section';
       det.dataset.sectionId = String(sec.id);
       if (sec.id === 2) det.open = true;
+      if (sec.id === 14) det.dataset.adminSection = '1';
 
       const summary = document.createElement('summary');
       summary.innerHTML = `<span>${sec.id}. ${escapeHtml(sec.title)}</span>
@@ -398,7 +534,7 @@
       table.innerHTML = `<thead><tr>
         <th>Подраздел</th>
         <th>Задача / функция</th>
-        <th>По коду (аудит)</th>
+        <th class="col-status">По коду (аудит)</th>
         <th>Примечание</th>
       </tr></thead><tbody></tbody>`;
       const tbody = table.querySelector('tbody');
@@ -406,15 +542,6 @@
       for (const row of sec.rows) {
         const tr = document.createElement('tr');
         tr.dataset.rowId = `${row.sectionId}-${tbody.children.length}`;
-        const llm = row.llmDeferred
-          ? ' <span class="badge badge--llm">Потом · LLM, не горит</span>'
-          : '';
-        const noteText = [row.note, row.auditNote].filter(Boolean).join(' · ');
-        tr.innerHTML = `
-          <td class="sub">${escapeHtml(row.subsection)}</td>
-          <td class="task">${escapeHtml(row.task)}${llm}</td>
-          <td>${renderBadge(row.statusAudit)}</td>
-          <td class="note">${escapeHtml(noteText)}</td>`;
         tbody.appendChild(tr);
       }
 
@@ -423,7 +550,51 @@
       sectionsEl.appendChild(det);
     }
 
+    function paintSectionRows() {
+      document.querySelectorAll('details.section').forEach((det) => {
+        const sid = Number(det.dataset.sectionId);
+        const sec = sectionsMap.get(sid);
+        const tbody = det.querySelector('tbody');
+        sec.rows.forEach((row, idx) => {
+          const tr = tbody.children[idx];
+          const llm = row.llmDeferred && viewMode === 'audit'
+            ? ' <span class="badge badge--llm">Потом · LLM, не горит</span>'
+            : '';
+          tr.innerHTML = `
+          <td class="sub">${escapeHtml(row.subsection)}</td>
+          <td class="task">${escapeHtml(row.task)}${llm}</td>
+          <td>${renderBadge(rowStatus(row))}</td>
+          <td class="note">${escapeHtml(rowNote(row))}</td>`;
+        });
+        const statusCol = viewMode === 'audit' ? 'По коду (аудит)' : 'Реализовано';
+        const th = det.querySelector('.col-status');
+        if (th) th.textContent = statusCol;
+      });
+    }
+
+    const flatTbody = document.getElementById('flat-tbody');
+    for (const sec of [...sectionsMap.values()].sort((a, b) => a.id - b.id)) {
+      const divider = document.createElement('tr');
+      divider.className = 'section-divider';
+      divider.dataset.sectionId = String(sec.id);
+      divider.innerHTML = `<td colspan="4">${sec.id}. ${escapeHtml(sec.title)} · ${sec.rows.length} пунктов</td>`;
+      flatTbody.appendChild(divider);
+      sec.rows.forEach((row, rowIdx) => {
+        const tr = document.createElement('tr');
+        tr.dataset.sectionId = String(sec.id);
+        tr.dataset.rowIdx = String(rowIdx);
+        tr.innerHTML = `
+          <td class="sub">${escapeHtml(row.subsection)}</td>
+          <td class="task">${escapeHtml(row.task)}</td>
+          <td>${renderBadge(row.statusUser)}</td>
+          <td class="note">${escapeHtml(row.note || '')}</td>`;
+        flatTbody.appendChild(tr);
+      });
+    }
+
     function updateUI() {
+      viewMode = 'audit';
+      paintSectionRows();
       const q = document.getElementById('q').value.trim().toLowerCase();
       const sectionId = sectionFilter.value;
 
@@ -454,7 +625,7 @@
         let secAuditYes = 0;
         det.querySelectorAll('tbody tr').forEach((tr, idx) => {
           const row = sectionsMap.get(Number(sid)).rows[idx];
-          const show = rowMatchesFilters(row, q, sectionId);
+          const show = rowMatchesAuditFilters(row, q, sectionId);
           tr.classList.toggle('hidden', !show);
           if (show) {
             secVisible++;
@@ -475,15 +646,99 @@
       document.getElementById('summary').innerHTML = `
         <span>Всего пунктов: <strong>${total}</strong></span>
         <span>Показано: <strong>${visible}</strong></span>
-        <span>Фильтр аудита: <strong>${allowedAudit.size}</strong> из ${collectAuditStatuses().length} типов</span>
+        <span>Фильтр: <strong>${allowedAudit.size}</strong> из ${collectStatuses('audit').length} типов</span>
         <span>Аудит «Да»: <strong>${auditYes}</strong></span>
         <span>Аудит «Нет»: <strong>${auditNo}</strong></span>
         <span>Аудит «Частично»: <strong>${auditPartial}</strong></span>`;
       document.getElementById('no-results').classList.toggle('hidden', anyVisible);
     }
 
+    function updateFlatUI() {
+      const q = document.getElementById('q-flat').value.trim().toLowerCase();
+      const sectionId = sectionFilterFlat.value;
+      let visible = 0;
+      let implYes = 0;
+      let implNo = 0;
+
+      for (const row of ROWS) {
+        if (!row.sectionId) continue;
+        if (row.statusUser === 'Да') implYes++;
+        if (row.statusUser === 'Нет') implNo++;
+      }
+
+      let anyVisible = false;
+      flatTbody.querySelectorAll('tr:not(.section-divider)').forEach((tr) => {
+        const sid = tr.dataset.sectionId;
+        const row = sectionsMap.get(Number(sid)).rows[Number(tr.dataset.rowIdx)];
+        const show = rowMatchesImplFilters(row, q, sectionId);
+        tr.classList.toggle('hidden', !show);
+        if (show) {
+          anyVisible = true;
+          visible++;
+        }
+      });
+
+      flatTbody.querySelectorAll('tr.section-divider').forEach((div) => {
+        const sid = div.dataset.sectionId;
+        if (sectionId && sid !== sectionId) {
+          div.classList.add('hidden');
+          return;
+        }
+        let hasRows = false;
+        let next = div.nextElementSibling;
+        while (next && !next.classList.contains('section-divider')) {
+          if (!next.classList.contains('hidden') && next.dataset.sectionId === sid) {
+            hasRows = true;
+            break;
+          }
+          next = next.nextElementSibling;
+        }
+        div.classList.toggle('hidden', !hasRows);
+      });
+
+      const total = ROWS.filter((r) => r.sectionId).length;
+      document.getElementById('summary-flat').innerHTML = `
+        <span>Всего пунктов: <strong>${total}</strong></span>
+        <span>Показано: <strong>${visible}</strong></span>
+        <span>Реализовано «Да»: <strong>${implYes}</strong></span>
+        <span>Реализовано «Нет»: <strong>${implNo}</strong></span>`;
+      document.getElementById('no-results-flat').classList.toggle('hidden', anyVisible);
+    }
+
+    const tabAudit = document.getElementById('tab-audit');
+    const tabImpl = document.getElementById('tab-impl');
+    const panelAudit = document.getElementById('panel-audit');
+    const panelImpl = document.getElementById('panel-impl');
+    const pageSubtitle = document.getElementById('page-subtitle');
+
+    function setTab(which) {
+      const impl = which === 'impl';
+      tabAudit.setAttribute('aria-selected', impl ? 'false' : 'true');
+      tabImpl.setAttribute('aria-selected', impl ? 'true' : 'false');
+      panelAudit.classList.toggle('hidden', impl);
+      panelImpl.classList.toggle('hidden', !impl);
+      pageSubtitle.innerHTML = impl
+        ? 'Проверка реализации в интерфейсе (колонка «Реализовано»). Данные: <code>scripts/spec-tracker-source.tsv</code> + <code>scripts/spec-tracker-admin.tsv</code>. Пересборка: <code>node scripts/generate-spec-tracker.mjs</code>.'
+        : 'Статус по коду (аудит). Пересборка: <code>node scripts/generate-spec-tracker.mjs</code>.';
+      if (impl) {
+        updateFlatUI();
+        if (sectionFilterFlat.value === '' && sectionsMap.has(14)) {
+          sectionFilterFlat.value = '14';
+          updateFlatUI();
+        }
+      } else {
+        updateUI();
+      }
+    }
+
+    tabAudit.addEventListener('click', () => setTab('audit'));
+    tabImpl.addEventListener('click', () => setTab('impl'));
+
     document.getElementById('q').addEventListener('input', updateUI);
     sectionFilter.addEventListener('change', updateUI);
+    document.getElementById('q-flat').addEventListener('input', updateFlatUI);
+    sectionFilterFlat.addEventListener('change', updateFlatUI);
+
     updateUI();
   </script>
 </body>

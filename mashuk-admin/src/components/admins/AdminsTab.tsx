@@ -1,181 +1,228 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AdminPageHero } from '../admin/AdminPageHero';
-import { EnumOptions } from '../admin/EnumOptions';
+import { RowActionsMenu } from '../participants/RowActionsMenu';
 import type { AdminTabProps } from '../admin/types';
-
-const ADMIN_ROLES = ['admin', 'moderator', 'analyst', 'director'] as const;
-const RIGHTS_ACTIONS = ['read', 'moderate', 'export', 'settings', 'users', 'delete'] as const;
+import { AdminRightsMatrix } from './AdminRightsMatrix';
+import { AdminUserForm } from './AdminUserForm';
 
 type AdminUser = {
   id: number;
-  login: string;
+  login?: string;
+  fullName?: string | null;
+  email?: string | null;
   role?: string;
+  directionName?: string | null;
+  lastLoginAt?: string | null;
   isActive?: boolean;
 };
 
-type RightsRow = {
-  role: string;
-  label: string;
-  actions?: Record<string, boolean>;
-};
+type Direction = { id: number; name: string };
+
+const ROLE_FILTER = ['', 'admin', 'director', 'analyst', 'curator', 'moderator', 'volunteer', 'organizer'];
 
 export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
-  const [rightsMatrix, setRightsMatrix] = useState<RightsRow[]>([]);
-  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
-  const [newAdmin, setNewAdmin] = useState({ login: '', password: '', role: 'moderator' });
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [directionFilter, setDirectionFilter] = useState('');
+  const [directions, setDirections] = useState<Direction[]>([]);
+  const [view, setView] = useState<'list' | 'form'>('list');
+  const [editUser, setEditUser] = useState<AdminUser | null>(null);
+  const [tempPasswordModal, setTempPasswordModal] = useState<string | null>(null);
+  const [logsModal, setLogsModal] = useState<{ user: AdminUser; actions: unknown[] } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [usersRes, matrixRes] = await Promise.all([
-        adminFetch('/admin-users'),
-        adminFetch('/rights-matrix'),
-      ]);
-      setAdminUsers(usersRes.users || []);
-      setRightsMatrix(matrixRes.matrix || []);
+      const sp = new URLSearchParams();
+      if (search.trim()) sp.set('search', search.trim());
+      if (roleFilter) sp.set('role', roleFilter);
+      if (directionFilter) sp.set('directionId', directionFilter);
+      const res = await adminFetch(`/admin-users?${sp.toString()}`);
+      setUsers(res.users || []);
+      setTotal(res.total ?? res.users?.length ?? 0);
     } finally {
       setLoading(false);
     }
-  }, [adminFetch]);
+  }, [adminFetch, search, roleFilter, directionFilter]);
 
   useEffect(() => {
     load().catch(() => setLoading(false));
   }, [load, reloadKey]);
 
-  const createAdmin = () =>
-    act(async () => {
-      await adminFetch('/admin-users', {
-        method: 'POST',
-        body: JSON.stringify(newAdmin),
-      });
-      setNewAdmin({ login: '', password: '', role: 'moderator' });
-      await load();
-    }, 'Админ создан');
+  useEffect(() => {
+    adminFetch('/directions').then(r => setDirections(r.directions || [])).catch(() => {});
+  }, [adminFetch]);
 
-  const patchAdmin = (id: number, body: Record<string, unknown>, msg?: string) =>
-    act(async () => {
-      await adminFetch(`/admin-users/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(body),
-      });
-      await load();
-    }, msg);
+  const openLogs = (u: AdminUser) => {
+    adminFetch(`/admin-users/${u.id}/actions`)
+      .then(r => setLogsModal({ user: u, actions: r.actions || [] }))
+      .catch(() => {});
+  };
 
-  if (loading) {
-    return <p className="adm-muted">Загрузка администраторов…</p>;
+  if (view === 'form') {
+    return (
+      <div className="adm-forum">
+        <AdminUserForm
+          adminFetch={adminFetch}
+          act={act}
+          reloadKey={reloadKey}
+          initial={editUser ? {
+            id: editUser.id,
+            fullName: editUser.fullName ?? '',
+            email: editUser.email ?? '',
+            role: editUser.role ?? 'moderator',
+          } : undefined}
+          onCancel={() => { setView('list'); setEditUser(null); }}
+          onSaved={pwd => {
+            setView('list');
+            setEditUser(null);
+            if (pwd) setTempPasswordModal(pwd);
+            load();
+          }}
+        />
+      </div>
+    );
   }
 
   return (
     <div className="adm-forum">
       <AdminPageHero
-        title="Администраторы"
-        hint="Права задаются в коде (roleCan). Роли пользователей можно менять ниже."
+        title={`Пользователи админки · ${total} всего`}
+        hint="Управление доступом к админ-панели. Email используется для идентификации; вход — по логину."
       />
 
-      <div className="card adm-forum-block">
-        <h3>Матрица прав (только просмотр)</h3>
-        <table className="adm-table">
-          <thead>
-            <tr>
-              <th>Роль</th>
-              <th>чтение</th>
-              <th>модерация</th>
-              <th>выгрузка</th>
-              <th>настройки</th>
-              <th>пользователи</th>
-              <th>удаление</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rightsMatrix.map(row => (
-              <tr key={row.role}>
-                <td>{row.label}</td>
-                {RIGHTS_ACTIONS.map(a => (
-                  <td key={a}>{row.actions?.[a] ? '✓' : '—'}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <AdminRightsMatrix adminFetch={adminFetch} act={act} reloadKey={reloadKey} />
 
       <div className="card adm-forum-block">
-        <h3>Учётные записи</h3>
         <div className="adm-forum-toolbar">
           <input
             className="adm-input"
-            value={newAdmin.login}
-            onChange={e => setNewAdmin({ ...newAdmin, login: e.target.value })}
-            placeholder="Логин"
+            placeholder="Поиск"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
           />
-          <input
-            className="adm-input"
-            type="password"
-            value={newAdmin.password}
-            onChange={e => setNewAdmin({ ...newAdmin, password: e.target.value })}
-            placeholder="Пароль"
-          />
-          <select
-            className="adm-input"
-            value={newAdmin.role}
-            onChange={e => setNewAdmin({ ...newAdmin, role: e.target.value })}
-          >
-            <EnumOptions values={[...ADMIN_ROLES]} />
+          <select className="adm-input" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
+            <option value="">Все роли</option>
+            {ROLE_FILTER.filter(Boolean).map(r => (
+              <option key={r} value={r}>{r}</option>
+            ))}
           </select>
-          <button type="button" className="adm-btn adm-btn-primary" onClick={createAdmin}>
-            Добавить
+          <select className="adm-input" value={directionFilter} onChange={e => setDirectionFilter(e.target.value)}>
+            <option value="">Все направления</option>
+            {directions.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => load()}>Применить</button>
+          <button
+            type="button"
+            className="adm-btn adm-btn-primary"
+            onClick={() => { setEditUser(null); setView('form'); }}
+          >
+            + Добавить пользователя
           </button>
         </div>
 
-        <table className="adm-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Логин</th>
-              <th>Роль</th>
-              <th>Активен</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {adminUsers.map(u => (
-              <tr key={u.id}>
-                <td>{u.id}</td>
-                <td>{u.login}</td>
-                <td>
-                  <select
-                    className="adm-input"
-                    value={u.role || 'admin'}
-                    onChange={e =>
-                      patchAdmin(u.id, { role: e.target.value })
-                    }
-                  >
-                    <EnumOptions values={[...ADMIN_ROLES]} />
-                  </select>
-                </td>
-                <td>{u.isActive === false ? 'нет' : 'да'}</td>
-                <td>
-                  <button
-                    type="button"
-                    className="adm-btn adm-btn-secondary"
-                    onClick={() =>
-                      patchAdmin(
-                        u.id,
-                        { isActive: u.isActive === false },
-                        u.isActive === false ? 'Разблокирован' : 'Заблокирован',
-                      )
-                    }
-                  >
-                    {u.isActive === false ? 'Разблок' : 'Блок'}
-                  </button>
-                </td>
+        {loading ? (
+          <p className="adm-muted">Загрузка…</p>
+        ) : (
+          <table className="adm-table">
+            <thead>
+              <tr>
+                <th>ФИО</th>
+                <th>Email</th>
+                <th>Роль</th>
+                <th>Направление</th>
+                <th>Последний вход</th>
+                <th>Статус</th>
+                <th />
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {adminUsers.length === 0 && <p className="adm-muted">Нет пользователей</p>}
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id}>
+                  <td>{u.fullName || u.login || '—'}</td>
+                  <td>{u.email || '—'}</td>
+                  <td>{u.role}</td>
+                  <td>{u.directionName || '—'}</td>
+                  <td>{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('ru-RU') : '—'}</td>
+                  <td>{u.isActive === false ? 'заблокирован' : 'активен'}</td>
+                  <td>
+                    <RowActionsMenu
+                      actions={[
+                        {
+                          label: 'Редактировать',
+                          onClick: () => { setEditUser(u); setView('form'); },
+                        },
+                        {
+                          label: 'Сбросить пароль',
+                          onClick: () => act(async () => {
+                            const r = await adminFetch(`/admin-users/${u.id}/reset-password`, { method: 'POST', body: '{}' });
+                            setTempPasswordModal(r.temporaryPassword);
+                          }, 'Пароль сброшен'),
+                        },
+                        {
+                          label: u.isActive === false ? 'Разблокировать' : 'Заблокировать',
+                          onClick: () => act(() => adminFetch(`/admin-users/${u.id}`, {
+                            method: 'PATCH',
+                            body: JSON.stringify({ isActive: u.isActive === false }),
+                          }).then(load), u.isActive === false ? 'Разблокирован' : 'Заблокирован'),
+                        },
+                        {
+                          label: 'Удалить',
+                          danger: true,
+                          onClick: () => {
+                            if (!window.confirm('Точно удалить? Действие необратимо')) return;
+                            act(() => adminFetch(`/admin-users/${u.id}`, { method: 'DELETE' }).then(load), 'Удалён');
+                          },
+                        },
+                        { label: 'Логи действий', onClick: () => openLogs(u) },
+                      ]}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
+
+      {tempPasswordModal && (
+        <div className="adm-modal-backdrop" onClick={() => setTempPasswordModal(null)}>
+          <div className="adm-modal" onClick={e => e.stopPropagation()}>
+            <h3>Временный пароль</h3>
+            <p>Сохраните и передайте пользователю один раз:</p>
+            <code style={{ fontSize: 18 }}>{tempPasswordModal}</code>
+            <button type="button" className="adm-btn adm-btn-primary" style={{ marginTop: 12 }} onClick={() => setTempPasswordModal(null)}>Закрыть</button>
+          </div>
+        </div>
+      )}
+
+      {logsModal && (
+        <div className="adm-modal-backdrop" onClick={() => setLogsModal(null)}>
+          <div className="adm-modal adm-modal-wide" onClick={e => e.stopPropagation()}>
+            <h3>Логи · {logsModal.user.fullName || logsModal.user.email}</h3>
+            <table className="adm-table">
+              <thead>
+                <tr><th>Время</th><th>Действие</th><th>Раздел</th></tr>
+              </thead>
+              <tbody>
+                {(logsModal.actions as Array<{ createdAt?: string; actionType?: string; section?: string }>).map((a, i) => (
+                  <tr key={i}>
+                    <td>{a.createdAt ? new Date(a.createdAt).toLocaleString('ru-RU') : ''}</td>
+                    <td>{a.actionType}</td>
+                    <td>{a.section}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setLogsModal(null)}>Закрыть</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

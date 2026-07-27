@@ -19,6 +19,8 @@ interface ProgramEvent {
   place?: string;
   tags?: string[];
   status: 'past' | 'now' | 'future';
+  hasSubSessions?: boolean;
+  children?: { id: number; title: string; place?: string; time: string; endTime?: string }[];
 }
 
 interface ProgramSlot {
@@ -41,6 +43,11 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   const [error, setError] = useState<string | null>(null);
   const [dayPublished, setDayPublished] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<ProgramEvent | null>(null);
+  const [expandedParents, setExpandedParents] = useState<Record<number, boolean>>({});
+
+  const toggleParent = (id: number) => {
+    setExpandedParents(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const loadProgram = useCallback(() => {
     setLoading(true);
@@ -94,6 +101,58 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
       status: activeTab === 'kb' && kbMeta?.kbStatus === 'locked' && dayNum > currentDay ? 'locked' as const : status,
     };
   });
+
+  const renderEvent = (e: ProgramEvent, nested?: boolean) => {
+    const hasChildren = e.hasSubSessions && (e.children?.length ?? 0) > 0;
+    const expanded = expandedParents[e.id];
+    return (
+      <React.Fragment key={e.id}>
+        <TimelineEvent
+          time={e.time}
+          title={e.title}
+          subtitle={hasChildren && !expanded ? `${e.subtitle} · ${e.children!.length} тем` : e.subtitle}
+          tags={e.tags}
+          status={e.status}
+          onClick={() => {
+            if (hasChildren) {
+              toggleParent(e.id);
+            } else {
+              setSelectedEvent(e);
+            }
+          }}
+        />
+        {hasChildren && expanded && (
+          <div className="m-tl-children" style={{ marginLeft: nested ? 8 : 24, marginBottom: 8 }}>
+            {e.children!.map(ch => (
+              <div
+                key={ch.id}
+                className="m-tl-row future"
+                style={{ padding: '8px 12px', marginTop: 4, background: '#FAFAF8', borderRadius: 8, cursor: 'pointer' }}
+                onClick={() => setSelectedEvent({
+                  ...e,
+                  id: ch.id,
+                  title: ch.title,
+                  place: ch.place,
+                  time: ch.time,
+                  endTime: ch.endTime,
+                  subtitle: [ch.place, ch.title].filter(Boolean).join(' · '),
+                  hasSubSessions: false,
+                  children: [],
+                })}
+              >
+                <div className="m-tl-time" style={{ fontSize: 11 }}>{ch.time}</div>
+                <div className="m-tl-body">
+                  <div className="m-tl-title" style={{ fontSize: 13 }}>{ch.title}</div>
+                  {ch.place && <div className="m-tl-sub">{ch.place}</div>}
+                </div>
+                <div className="m-tl-arr">›</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </React.Fragment>
+    );
+  };
 
   const handleRecClick = async (eventId: number) => {
     const ev = slots.flatMap(s => s.events).find(e => e.id === eventId);
@@ -175,30 +234,10 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
                     )}
                     {slot.parallel ? (
                       <div className="m-parallel-scroll">
-                        {slot.events.map(e => (
-                          <TimelineEvent
-                            key={e.id}
-                            time={e.time}
-                            title={e.title}
-                            subtitle={e.subtitle}
-                            tags={e.tags}
-                            status={e.status}
-                            onClick={() => setSelectedEvent(e)}
-                          />
-                        ))}
+                        {slot.events.map(e => renderEvent(e))}
                       </div>
                     ) : (
-                      slot.events.map(e => (
-                        <TimelineEvent
-                          key={e.id}
-                          time={e.time}
-                          title={e.title}
-                          subtitle={e.subtitle}
-                          tags={e.tags}
-                          status={e.status}
-                          onClick={() => setSelectedEvent(e)}
-                        />
-                      ))
+                      slot.events.map(e => renderEvent(e))
                     )}
                   </div>
                 ))}

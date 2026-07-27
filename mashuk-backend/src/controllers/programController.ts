@@ -210,9 +210,19 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
     const settings = await getForumSettings();
     const now = new Date();
     const effectiveDay = resolveEffectiveCurrentDay(settings, now);
-    const mapEvent = (e: typeof list[0]) => {
+    const mapEvent = (e: typeof list[0], children: typeof list = []) => {
       const { start, end } = resolveEventInterval(e, settings);
       const status = getEventLiveStatus(day, effectiveDay, start, end, now);
+      const childMapped = children.map(c => {
+        const iv = resolveEventInterval(c, settings);
+        return {
+          id: c.id,
+          title: c.title,
+          place: c.place,
+          time: formatTime(iv.start),
+          endTime: formatTime(iv.end),
+        };
+      });
 
       return {
         id: e.id,
@@ -226,10 +236,29 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
         timeSlot: e.timeSlot ?? formatTime(start),
         status,
         attended: attendedIds.has(e.id),
+        hasSubSessions: e.hasSubSessions === true,
+        children: childMapped,
       };
     };
 
-    const mapped = list.map(mapEvent);
+    const pid = req.participant!.directionId;
+    const visible = list.filter(e => {
+      if (e.audienceType === 'direction' && e.audienceDirectionId && pid && e.audienceDirectionId !== pid) {
+        return false;
+      }
+      return true;
+    });
+    const childByParent = new Map<number, typeof list>();
+    for (const e of visible) {
+      if (e.parentEventId) {
+        const arr = childByParent.get(e.parentEventId) || [];
+        arr.push(e);
+        childByParent.set(e.parentEventId, arr);
+      }
+    }
+    const topLevel = visible.filter(e => !e.parentEventId);
+
+    const mapped = topLevel.map(e => mapEvent(e, (childByParent.get(e.id) || []).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))));
     const slotMap = new Map<string, typeof mapped>();
     for (const ev of mapped) {
       const slot = ev.timeSlot || ev.time;

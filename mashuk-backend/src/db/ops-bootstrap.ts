@@ -162,6 +162,9 @@ async function ensureContent() {
   for (const role of ROLE_CATALOG) {
     const [existing] = await db.select().from(pedagogicalRoles).where(eq(pedagogicalRoles.roleKey, role.roleKey)).limit(1);
     if (!existing) await db.insert(pedagogicalRoles).values(role);
+    else if (!existing.iconKey) {
+      await db.update(pedagogicalRoles).set({ iconKey: role.iconKey }).where(eq(pedagogicalRoles.id, existing.id));
+    }
   }
 
   if ((await db.select().from(dayExperiments).limit(1)).length === 0) {
@@ -174,6 +177,7 @@ async function ensureContent() {
           title: `Эксперимент: ${role.name}`,
           body: `Сегодня попробуй проявить роль «${role.name}» в одном живом взаимодействии на форуме.`,
           hint: role.keywords,
+          status: 'published',
         });
       }
     }

@@ -72,6 +72,29 @@ export const ROLE_PRIORITY: RoleKey[] = [
   'environment_keeper',
 ];
 
+/** Default display icon per pedagogical role (editable in admin). */
+export const DEFAULT_ROLE_ICON: Record<RoleKey, string> = {
+  meaning_researcher: '🔍',
+  practice_realizer: '⚡',
+  communication_guide: '🤝',
+  content_packer: '📋',
+  process_navigator: '🧭',
+  environment_keeper: '🌿',
+};
+
+export const ROLE_MATRIX: Record<'leader' | 'org', Record<'thinking' | 'actions' | 'people', RoleKey>> = {
+  leader: {
+    thinking: 'meaning_researcher',
+    actions: 'practice_realizer',
+    people: 'communication_guide',
+  },
+  org: {
+    thinking: 'content_packer',
+    actions: 'process_navigator',
+    people: 'environment_keeper',
+  },
+};
+
 export const ROLE_CATALOG: Array<{
   roleKey: RoleKey;
   name: string;
@@ -79,6 +102,7 @@ export const ROLE_CATALOG: Array<{
   essence: string;
   inClass: string;
   keywords: string;
+  iconKey: string;
   sortOrder: number;
 }> = [
   {
@@ -88,6 +112,7 @@ export const ROLE_CATALOG: Array<{
     essence: 'Человек действия. Быстро превращает идею в работающий процесс. Смыслы держит в голове, но говорит через практику: «А давайте попробуем так».',
     inClass: 'Ты первый пробуешь новые форматы. Не ждёшь методичек — собираешь урок из того, что уже работает у других, и адаптируешь под своих детей.',
     keywords: 'пробовать · собирать · сделать · запустить · применить',
+    iconKey: DEFAULT_ROLE_ICON.practice_realizer,
     sortOrder: 1,
   },
   {
@@ -97,6 +122,7 @@ export const ROLE_CATALOG: Array<{
     essence: 'Ищет «зачем» раньше «как». Задаёт неудобные вопросы, держит глубину и помогает другим не сваливаться в суету.',
     inClass: 'Ты возвращаешь класс к смыслу задания. Помогаешь ученикам понять, зачем им это, а не только как выполнить.',
     keywords: 'зачем · смысл · вопрос · понять · разобраться',
+    iconKey: DEFAULT_ROLE_ICON.meaning_researcher,
     sortOrder: 2,
   },
   {
@@ -106,6 +132,7 @@ export const ROLE_CATALOG: Array<{
     essence: 'Связывает людей и разговоры. Видит, кого надо услышать, и создаёт пространство для диалога.',
     inClass: 'Ты умеешь включить тихих и охладить конфликт. Класс работает как команда, а не как набор одиночек.',
     keywords: 'связать · услышать · договориться · диалог · включить',
+    iconKey: DEFAULT_ROLE_ICON.communication_guide,
     sortOrder: 3,
   },
   {
@@ -115,6 +142,7 @@ export const ROLE_CATALOG: Array<{
     essence: 'Делает сложное понятным. Структурирует материал, пишет инструкции, собирает «упаковку», которой можно пользоваться.',
     inClass: 'У тебя появляются схемы, чек-листы и памятки. Ученики знают, куда смотреть и как двигаться дальше.',
     keywords: 'структура · схема · инструкция · ясность · упаковать',
+    iconKey: DEFAULT_ROLE_ICON.content_packer,
     sortOrder: 4,
   },
   {
@@ -124,6 +152,7 @@ export const ROLE_CATALOG: Array<{
     essence: 'Держит ритм и этапы. Видит маршрут от старта до финиша и не даёт команде потеряться.',
     inClass: 'Урок и проекты идут по понятным этапам. Ты заранее продумываешь переходы и дедлайны.',
     keywords: 'план · этап · ритм · маршрут · довести',
+    iconKey: DEFAULT_ROLE_ICON.process_navigator,
     sortOrder: 5,
   },
   {
@@ -133,6 +162,7 @@ export const ROLE_CATALOG: Array<{
     essence: 'Заботится об атмосфере и устойчивости. Замечает выгорание, поддерживает правила и психологическую безопасность.',
     inClass: 'В твоём классе безопасно ошибаться. Ты следишь за тоном, ритуалами и тем, чтобы никто не выпадал.',
     keywords: 'атмосфера · забота · устойчивость · правила · поддержка',
+    iconKey: DEFAULT_ROLE_ICON.environment_keeper,
     sortOrder: 6,
   },
 ];

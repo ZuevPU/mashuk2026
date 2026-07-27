@@ -1,215 +1,300 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AdminPageHero } from '../admin/AdminPageHero';
-import { EnumOptions } from '../admin/EnumOptions';
 import type { AdminTabProps } from '../admin/types';
 import { AnswerConfirmationSettings, type AnswerConfirmForm } from './AnswerConfirmationSettings';
-import { QuestionCard, type QuestionRow } from './QuestionCard';
-
-type Segment = 'questions' | 'confirm' | 'org' | 'templates';
-
-type OrgThread = {
-  id: number;
-  participantId?: number;
-  participantName?: string;
-  subject?: string;
-  status?: string;
-  messages?: { id: number; text: string; senderType: string }[];
-};
-
-const emptyQuestion = () => ({
-  title: '',
-  text: '',
-  type: 'open',
-  block: 'Целеполагание',
-  reflectionKind: '' as string,
-  status: 'published',
-  timePoint: '',
-  dayNumber: 1,
-  points: 10,
-  allowRetry: false,
-  pushOnPublish: false,
-  publishTime: '',
-  closeTime: '',
-});
+import { QuestionAnswersModal } from './QuestionAnswersModal';
+import { QuestionForm } from './QuestionForm';
+import { QuestionParticipantPreview } from './QuestionParticipantPreview';
+import { QuestionsListTable } from './QuestionsListTable';
+import {
+  KIND_TABS,
+  type AdminQuestion,
+  type QuestionDraft,
+  type QuestionKindTab,
+  buildListQuery,
+  bodyFromDraft,
+  draftFromQuestion,
+  emptyDraft,
+} from './types';
 
 export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps) {
-  const [segment, setSegment] = useState<Segment>('questions');
   const [loading, setLoading] = useState(true);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [questions, setQuestions] = useState<QuestionRow[]>([]);
-  const [questionOptionsMap, setQuestionOptionsMap] = useState<Record<number, { id: number; label: string }[]>>({});
+  const [totalAll, setTotalAll] = useState(0);
+  const [questions, setQuestions] = useState<AdminQuestion[]>([]);
+  const [totalDays, setTotalDays] = useState(8);
+  const [forumDay, setForumDay] = useState(1);
+
+  const [kindTab, setKindTab] = useState<QuestionKindTab>('all');
+  const [search, setSearch] = useState('');
+  const [dayFilter, setDayFilter] = useState('');
+  const [audienceFilter, setAudienceFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
+  const [view, setView] = useState<'list' | 'form' | 'confirm' | 'tools'>('list');
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draft, setDraft] = useState<QuestionDraft>(() => emptyDraft(1));
+  const [showPreview, setShowPreview] = useState(false);
+  const [formTab, setFormTab] = useState<'main' | 'versions'>('main');
+  const [versions, setVersions] = useState<{ id: number; title: string; status?: string; createdAt?: string }[]>([]);
+  const [versionNotice, setVersionNotice] = useState<string | null>(null);
+  const [answerCount, setAnswerCount] = useState(0);
+
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkTargetDay, setBulkTargetDay] = useState(2);
+  const [copyDayForm, setCopyDayForm] = useState({ fromDay: 1, toDay: 2, overwrite: false });
+
+  const [answersModal, setAnswersModal] = useState<{ open: boolean; title: string; loading: boolean; rows: any[] }>({
+    open: false, title: '', loading: false, rows: [],
+  });
+
   const [answerConfirmForm, setAnswerConfirmForm] = useState<AnswerConfirmForm>({
     enabled: true,
     showPoints: true,
     titleTemplate: 'Ответ отправлен',
   });
-  const [orgThreads, setOrgThreads] = useState<OrgThread[]>([]);
-  const [orgReplyDraft, setOrgReplyDraft] = useState<Record<number, string>>({});
-  const [copyDayForm, setCopyDayForm] = useState({ fromDay: 1, toDay: 2, overwrite: false });
-  const [newQuestion, setNewQuestion] = useState(emptyQuestion);
-  const [optionForm, setOptionForm] = useState({ questionId: '', label: '', value: '' });
 
-  const loadOptionsForQuestions = async (qs: QuestionRow[]) => {
-    const needOpts = qs.filter(q => ['choice', 'multi', 'dependent'].includes(q.type || ''));
-    const optsEntries: [number, { id: number; label: string }[]][] = [];
-    for (const q of needOpts) {
-      try {
-        const r = await adminFetch(`/questions/${q.id}/options`) as { options: { id: number; label: string }[] };
-        optsEntries.push([q.id, r.options || []]);
-      } catch {
-        optsEntries.push([q.id, []]);
-      }
+  const readOnly = kindTab === 'exchange' || kindTab === 'org_director';
+
+  const listQuery = useMemo(
+    () => buildListQuery({
+      kindTab,
+      q: search,
+      day: dayFilter,
+      audienceType: audienceFilter,
+      status: statusFilter,
+    }),
+    [kindTab, search, dayFilter, audienceFilter, statusFilter],
+  );
+
+  const loadMeta = useCallback(async () => {
+    const fs = (await adminFetch('/forum-settings')).settings;
+    const td = fs?.totalDays ?? 8;
+    const cd = fs?.currentDay ?? 1;
+    setTotalDays(td);
+    setForumDay(cd);
+    if (fs?.answerConfirmation) {
+      const ac = fs.answerConfirmation as AnswerConfirmForm;
+      setAnswerConfirmForm({
+        enabled: ac.enabled !== false,
+        showPoints: ac.showPoints !== false,
+        titleTemplate: ac.titleTemplate || 'Ответ отправлен',
+      });
     }
-    setQuestionOptionsMap(Object.fromEntries(optsEntries));
-  };
+    const allRes = await adminFetch('/questions');
+    setTotalAll(allRes.totalCount ?? allRes.questions?.length ?? 0);
+    return { td, cd };
+  }, [adminFetch]);
+
+  const loadQuestions = useCallback(async () => {
+    const res = await adminFetch(`/questions?${listQuery}`);
+    setQuestions(res.questions || []);
+    if (res.totalCount != null && kindTab !== 'exchange' && kindTab !== 'org_director') {
+      setTotalAll(res.totalCount);
+    }
+  }, [adminFetch, listQuery, kindTab]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const qs = (await adminFetch('/questions')).questions as QuestionRow[];
-      setQuestions(qs);
-      const fs = (await adminFetch('/forum-settings')).settings;
-      if (fs?.answerConfirmation) {
-        const ac = fs.answerConfirmation as AnswerConfirmForm & { enabled?: boolean; showPoints?: boolean };
-        setAnswerConfirmForm({
-          enabled: ac.enabled !== false,
-          showPoints: ac.showPoints !== false,
-          titleTemplate: ac.titleTemplate || 'Ответ отправлен',
-        });
-      }
-      setOrgThreads((await adminFetch('/org/threads')).threads || []);
-      await loadOptionsForQuestions(qs);
+      await loadMeta();
+      await loadQuestions();
     } finally {
       setLoading(false);
     }
-  }, [adminFetch]);
+  }, [loadMeta, loadQuestions]);
 
   useEffect(() => {
     load().catch(() => setLoading(false));
   }, [load, reloadKey]);
 
-  const refreshOptions = (questionId: number) => {
-    adminFetch(`/questions/${questionId}/options`)
-      .then((r: { options: { id: number; label: string }[] }) => {
-        setQuestionOptionsMap(m => ({ ...m, [questionId]: r.options || [] }));
-      })
-      .catch(() => {});
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [kindTab, listQuery]);
+
+  const openCreate = async () => {
+    const meta = await loadMeta();
+    const day = dayFilter ? Number(dayFilter) : meta.cd;
+    setEditingId(null);
+    setDraft(emptyDraft(day));
+    setVersionNotice(null);
+    setAnswerCount(0);
+    setVersions([]);
+    setFormTab('main');
+    setShowPreview(false);
+    setView('form');
   };
 
-  const createQuestion = () =>
-    act(async () => {
-      const title = newQuestion.title.trim();
-      if (!title) {
-        setNotice('⚠ Укажите заголовок вопроса');
-        throw new Error('title required');
-      }
-      const text = (newQuestion.text.trim() || title);
-      const body: Record<string, unknown> = {
-        ...newQuestion,
-        title,
-        text,
-        dayNumber: Number(newQuestion.dayNumber),
-      };
-      if (newQuestion.publishTime) body.publishTime = new Date(newQuestion.publishTime).toISOString();
-      else delete body.publishTime;
-      if (newQuestion.closeTime) body.closeTime = new Date(newQuestion.closeTime).toISOString();
-      else delete body.closeTime;
-      if (!newQuestion.reflectionKind) delete body.reflectionKind;
-      await adminFetch('/questions', { method: 'POST', body: JSON.stringify(body) });
-      setNewQuestion(emptyQuestion());
-    }, 'Вопрос создан');
+  const openEdit = async (q: AdminQuestion) => {
+    setEditingId(q.id);
+    setVersionNotice(null);
+    setFormTab('main');
+    setShowPreview(false);
+    setView('form');
+    const detail = await adminFetch(`/questions/${q.id}`);
+    setDraft(draftFromQuestion(detail.question, detail.options || []));
+    setAnswerCount(detail.question?.answerCount ?? q.answerCount ?? 0);
+    const ver = await adminFetch(`/questions/${q.id}/versions`);
+    setVersions(ver.versions || []);
+  };
 
-  const addOption = () =>
-    act(async () => {
-      if (!optionForm.questionId || !optionForm.label) return;
-      const qid = Number(optionForm.questionId);
-      await adminFetch(`/questions/${qid}/options`, {
+  const persistOptions = async (questionId: number, options: QuestionDraft['options']) => {
+    const existing = (await adminFetch(`/questions/${questionId}/options`)).options || [];
+    for (const ex of existing) {
+      await adminFetch(`/questions/${questionId}/options/${ex.id}`, { method: 'DELETE' });
+    }
+    const ids: number[] = [];
+    for (const o of options) {
+      if (!o.label.trim()) continue;
+      const r = await adminFetch(`/questions/${questionId}/options`, {
         method: 'POST',
-        body: JSON.stringify({ label: optionForm.label, value: optionForm.value || optionForm.label }),
+        body: JSON.stringify({ label: o.label, value: o.value || o.label }),
       });
-      setOptionForm({ questionId: '', label: '', value: '' });
-      refreshOptions(qid);
+      if (r.option?.id) ids.push(r.option.id);
+    }
+    if (ids.length) {
+      await adminFetch(`/questions/${questionId}/options/reorder`, {
+        method: 'PATCH',
+        body: JSON.stringify({ optionIds: ids }),
+      });
+    }
+  };
+
+  const persist = (publish: boolean) => {
+    if (!draft.title.trim()) {
+      alert('Укажите заголовок вопроса.');
+      return;
+    }
+    act(async () => {
+      const body = bodyFromDraft(draft, publish);
+      let qid = editingId;
+      let res: { question?: AdminQuestion; versioned?: boolean; previousAnswerCount?: number };
+      if (editingId) {
+        res = await adminFetch(`/questions/${editingId}`, { method: 'PATCH', body: JSON.stringify(body) });
+        qid = res.question?.id ?? editingId;
+      } else {
+        res = await adminFetch('/questions', { method: 'POST', body: JSON.stringify(body) });
+        qid = res.question?.id ?? null;
+        if (res.question) {
+          setEditingId(res.question.id);
+          setDraft(draftFromQuestion(res.question, draft.options.map((o, i) => ({ id: i, label: o.label, value: o.value }))));
+        }
+      }
+      if (qid && ['choice', 'multi', 'dependent'].includes(draft.answerType)) {
+        await persistOptions(qid, draft.options);
+      }
+      if (res.versioned) {
+        setVersionNotice(`⚠ Уже собрано ${res.previousAnswerCount} ответов на прежнюю формулировку. Старые ответы сохранили прежний текст в снэпшоте.`);
+        if (res.question) setEditingId(res.question.id);
+      }
+      await loadQuestions();
+      if (publish) {
+        setView('list');
+        setEditingId(null);
+      }
+    }, publish ? 'Опубликовано' : 'Сохранено');
+  };
+
+  const duplicateQuestion = (id: number) =>
+    act(async () => {
+      const r = await adminFetch(`/questions/${id}/duplicate`, { method: 'POST', body: '{}' });
+      await loadQuestions();
+      if (r.question) openEdit(r.question);
+    }, 'Копия создана');
+
+  const copyToDay = (id: number) => {
+    const dayStr = prompt('Скопировать на день (1–8):', String(forumDay + 1));
+    if (!dayStr) return;
+    const targetDay = Number(dayStr);
+    if (!targetDay || targetDay < 1 || targetDay > 8) return;
+    act(async () => {
+      await adminFetch(`/questions/${id}/copy-to-day`, {
+        method: 'POST',
+        body: JSON.stringify({ targetDay }),
+      });
+      await loadQuestions();
+    }, 'Скопировано на день');
+  };
+
+  const hideQuestion = (id: number) =>
+    act(async () => {
+      await adminFetch(`/questions/${id}`, { method: 'PATCH', body: JSON.stringify({ isHidden: true }) });
+      await loadQuestions();
+    }, 'Скрыто');
+
+  const deleteQuestion = (id: number) => {
+    if (!confirm('Удалить вопрос?')) return;
+    act(async () => {
+      await adminFetch(`/questions/${id}`, { method: 'DELETE' });
+      await loadQuestions();
+    }, 'Удалено');
+  };
+
+  const viewAnswers = (q: AdminQuestion) => {
+    setAnswersModal({ open: true, title: q.title, loading: true, rows: [] });
+    adminFetch(`/questions/${q.id}/answers?limit=50`)
+      .then(r => setAnswersModal(m => ({ ...m, loading: false, rows: r.answers || [] })))
+      .catch(() => setAnswersModal(m => ({ ...m, loading: false, rows: [] })));
+  };
+
+  const bulkCopy = () => {
+    if (selectedIds.size === 0) return;
+    act(async () => {
+      await adminFetch('/questions/copy-selected', {
+        method: 'POST',
+        body: JSON.stringify({ ids: [...selectedIds], targetDay: bulkTargetDay }),
+      });
+      setSelectedIds(new Set());
+      await loadQuestions();
+    }, 'Скопировано');
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
+  };
 
-  const segments: { key: Segment; label: string }[] = [
-    { key: 'questions', label: 'Вопросы' },
-    { key: 'confirm', label: 'Подтверждение' },
-    { key: 'org', label: 'Организаторы' },
-    { key: 'templates', label: 'Шаблоны' },
-  ];
+  const toggleAll = () => {
+    if (questions.every(q => selectedIds.has(q.id))) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(questions.map(q => q.id)));
+    }
+  };
 
-  if (loading) return <p className="adm-muted">Загрузка вопросов…</p>;
+  if (loading && view === 'list') {
+    return <p className="adm-muted">Загрузка вопросов…</p>;
+  }
 
   return (
     <div className="adm-forum">
-      <AdminPageHero title="Вопросы и touchpoints" hint="Рефлексия по дням, варианты ответов и настройки подтверждения для участников." />
+      <AdminPageHero
+        title={`Вопросы · ${totalAll} всего`}
+        hint="Touchpoints рефлексии в одном разделе. Обмен и дирекция — просмотр и модерация."
+      />
 
-      {notice && (
-        <p className="card" style={{ fontSize: 13, marginBottom: 8, background: notice.startsWith('⚠') ? '#FFFAF0' : '#F0FFF4' }}>
-          {notice}
-        </p>
+      {view === 'confirm' && (
+        <>
+          <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" style={{ marginBottom: 8 }} onClick={() => setView('list')}>← К списку</button>
+          <AnswerConfirmationSettings
+            form={answerConfirmForm}
+            onChange={patch => setAnswerConfirmForm(f => ({ ...f, ...patch }))}
+            onSave={() => act(() => adminFetch('/forum-settings', {
+              method: 'PATCH',
+              body: JSON.stringify({ answerConfirmation: answerConfirmForm }),
+            }), 'Сохранено')}
+          />
+        </>
       )}
 
-      <div className="adm-seg" style={{ marginBottom: 12 }}>
-        {segments.map(s => (
-          <button key={s.key} type="button" className={segment === s.key ? 'on' : ''} onClick={() => setSegment(s.key)}>
-            {s.label}
-          </button>
-        ))}
-      </div>
-
-      {segment === 'confirm' && (
-        <AnswerConfirmationSettings
-          form={answerConfirmForm}
-          onChange={patch => setAnswerConfirmForm(f => ({ ...f, ...patch }))}
-          onSave={() => act(() => adminFetch('/forum-settings', {
-            method: 'PATCH',
-            body: JSON.stringify({ answerConfirmation: answerConfirmForm }),
-          }), 'Сохранено')}
-        />
-      )}
-
-      {segment === 'org' && (
+      {view === 'tools' && (
         <div className="card adm-forum-block">
-          <h3>Обмен с организаторами</h3>
-          <p className="adm-muted" style={{ fontSize: 12 }}>Прямая линия участников. Полный список также в «Модерация».</p>
-          {orgThreads.length === 0 && <p className="adm-muted">Нет обращений</p>}
-          {orgThreads.map(t => (
-            <div key={t.id} className="card" style={{ marginTop: 8 }}>
-              <strong>{t.participantName || `Участник #${t.participantId}`}</strong>
-              <span style={{ marginLeft: 8, fontSize: 12 }}>{t.subject || 'Обращение'} · {t.status}</span>
-              {(t.messages || []).slice(-2).map(m => (
-                <p key={m.id} style={{ fontSize: 12, margin: '4px 0' }}>
-                  {m.senderType === 'admin' ? 'Дирекция' : 'Участник'}: {m.text}
-                </p>
-              ))}
-              <textarea
-                className="adm-input"
-                rows={2}
-                style={{ width: '100%', marginTop: 6 }}
-                value={orgReplyDraft[t.id] || ''}
-                onChange={e => setOrgReplyDraft({ ...orgReplyDraft, [t.id]: e.target.value })}
-                placeholder="Ответ дирекции..."
-              />
-              <button
-                type="button"
-                className="adm-btn"
-                onClick={() => act(() => adminFetch(`/org/threads/${t.id}/reply`, {
-                  method: 'POST',
-                  body: JSON.stringify({ text: orgReplyDraft[t.id], sendPush: true }),
-                }).then(() => setOrgReplyDraft({ ...orgReplyDraft, [t.id]: '' })), 'Ответ отправлен')}
-              >
-                Ответить
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {segment === 'templates' && (
-        <div className="card adm-forum-block">
-          <h3>Шаблон 7 точек × дни</h3>
-          <div className="form-row">
+          <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" style={{ marginBottom: 8 }} onClick={() => setView('list')}>← К списку</button>
+          <h3>Инструменты</h3>
+          <div className="form-row" style={{ marginBottom: 12 }}>
             <button
               type="button"
               className="adm-btn"
@@ -219,23 +304,12 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
             >
               Развернуть шаблон 7×7
             </button>
-            <input
-              type="number"
-              className="adm-input"
-              value={copyDayForm.fromDay}
-              onChange={e => setCopyDayForm({ ...copyDayForm, fromDay: Number(e.target.value) })}
-              placeholder="С дня"
-              style={{ width: 70 }}
-            />
+          </div>
+          <div className="form-row">
+            <span>Скопировать день</span>
+            <input type="number" className="adm-input" style={{ width: 70 }} value={copyDayForm.fromDay} onChange={e => setCopyDayForm({ ...copyDayForm, fromDay: Number(e.target.value) })} />
             <span>→</span>
-            <input
-              type="number"
-              className="adm-input"
-              value={copyDayForm.toDay}
-              onChange={e => setCopyDayForm({ ...copyDayForm, toDay: Number(e.target.value) })}
-              placeholder="На день"
-              style={{ width: 70 }}
-            />
+            <input type="number" className="adm-input" style={{ width: 70 }} value={copyDayForm.toDay} onChange={e => setCopyDayForm({ ...copyDayForm, toDay: Number(e.target.value) })} />
             <label className="adm-forum-check">
               <input type="checkbox" checked={copyDayForm.overwrite} onChange={e => setCopyDayForm({ ...copyDayForm, overwrite: e.target.checked })} />
               overwrite
@@ -245,75 +319,126 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
               className="adm-btn"
               onClick={() => act(() => adminFetch('/questions/copy-day', {
                 method: 'POST', body: JSON.stringify(copyDayForm),
-              }), 'Скопировано')}
+              }).then(() => loadQuestions()), 'Скопировано')}
             >
-              Скопировать день
+              Скопировать
             </button>
           </div>
         </div>
       )}
 
-      {segment === 'questions' && (
+      {view === 'form' && (
+        <QuestionForm
+          draft={draft}
+          totalDays={totalDays}
+          isNew={!editingId}
+          answerCount={answerCount}
+          versionNotice={versionNotice}
+          formTab={formTab}
+          versions={versions}
+          onFormTab={setFormTab}
+          onChange={patch => setDraft(d => ({ ...d, ...patch }))}
+          onSaveDraft={() => persist(false)}
+          onPublish={() => persist(true)}
+          onCancel={() => { setView('list'); setEditingId(null); }}
+          showPreview={showPreview}
+          onTogglePreview={() => setShowPreview(v => !v)}
+          onReorderOption={(from, to) => {
+            setDraft(d => {
+              const options = [...d.options];
+              const [item] = options.splice(from, 1);
+              options.splice(to, 0, item);
+              return { ...d, options };
+            });
+          }}
+          onAddOption={() => setDraft(d => ({ ...d, options: [...d.options, { label: '', value: '' }] }))}
+          onRemoveOption={i => setDraft(d => ({ ...d, options: d.options.filter((_, idx) => idx !== i) }))}
+          previewSlot={<QuestionParticipantPreview draft={draft} />}
+        />
+      )}
+
+      {view === 'list' && (
         <>
-          <div className="card adm-forum-block">
-            <h3>Новый вопрос</h3>
-            <div className="form-row">
-              <input className="adm-input" value={newQuestion.title} onChange={e => setNewQuestion({ ...newQuestion, title: e.target.value })} placeholder="Заголовок" />
-              <select className="adm-input" value={newQuestion.type} onChange={e => setNewQuestion({ ...newQuestion, type: e.target.value })}>
-                <EnumOptions values={['open', 'checkin', 'choice', 'multi', 'dependent']} />
-              </select>
-              <input className="adm-input" value={newQuestion.block} onChange={e => setNewQuestion({ ...newQuestion, block: e.target.value })} placeholder="Блок" />
-              <select className="adm-input" value={newQuestion.reflectionKind} onChange={e => setNewQuestion({ ...newQuestion, reflectionKind: e.target.value })}>
-                <option value="">— метка для участника —</option>
-                <option value="state_check">Проверка состояния</option>
-                <option value="after_event">После события</option>
-                <option value="evening_summary">Итоги дня</option>
-                <option value="point_a">Точка А</option>
-                <option value="point_b">Точка Б</option>
-              </select>
-              <select className="adm-input" value={newQuestion.timePoint} onChange={e => setNewQuestion({ ...newQuestion, timePoint: e.target.value })}>
-                <option value="">—</option>
-                <option value="утро">утро</option>
-                <option value="день">день</option>
-                <option value="вечер">вечер</option>
-              </select>
-              <input type="number" className="adm-input" value={newQuestion.dayNumber} onChange={e => setNewQuestion({ ...newQuestion, dayNumber: Number(e.target.value) })} placeholder="День" style={{ width: 70 }} />
-              <button type="button" className="adm-btn" onClick={createQuestion}>Создать</button>
-            </div>
-            <div className="form-row" style={{ marginTop: 8 }}>
-              <label>Открытие <input type="datetime-local" value={newQuestion.publishTime} onChange={e => setNewQuestion({ ...newQuestion, publishTime: e.target.value })} /></label>
-              <label>Закрытие <input type="datetime-local" value={newQuestion.closeTime} onChange={e => setNewQuestion({ ...newQuestion, closeTime: e.target.value })} /></label>
-            </div>
-            <input className="adm-input" value={newQuestion.text} onChange={e => setNewQuestion({ ...newQuestion, text: e.target.value })} placeholder="Текст вопроса" style={{ width: '100%', padding: 8, marginTop: 8 }} />
+          <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setView('confirm')}>Подтверждение ответа</button>
+            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setView('tools')}>Инструменты</button>
+            {!readOnly && (
+              <button type="button" className="adm-btn" style={{ marginLeft: 'auto' }} onClick={openCreate}>+ Создать вопрос</button>
+            )}
+            {readOnly && setTab && (
+              <button type="button" className="adm-btn" style={{ marginLeft: 'auto' }} onClick={() => setTab('moderation')}>Модерация</button>
+            )}
           </div>
-          <div className="card adm-forum-block">
-            <h3>Добавить вариант ответа</h3>
-            <div className="form-row">
-              <select className="adm-input" value={optionForm.questionId} onChange={e => setOptionForm({ ...optionForm, questionId: e.target.value })}>
-                <option value="">Вопрос</option>
-                {questions.map(q => <option key={q.id} value={q.id}>{q.id}: {q.title}</option>)}
-              </select>
-              <input className="adm-input" value={optionForm.label} onChange={e => setOptionForm({ ...optionForm, label: e.target.value })} placeholder="Подпись варианта" />
-              <input className="adm-input" value={optionForm.value} onChange={e => setOptionForm({ ...optionForm, value: e.target.value })} placeholder="Значение варианта" />
-              <button type="button" className="adm-btn" onClick={addOption}>Добавить</button>
-            </div>
+
+          <div className="adm-seg" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
+            {KIND_TABS.map(t => (
+              <button key={t.key} type="button" className={kindTab === t.key ? 'on' : ''} onClick={() => setKindTab(t.key)}>
+                {t.label}
+              </button>
+            ))}
           </div>
-          {questions.map(q => (
-            <QuestionCard
-              key={q.id}
-              question={q}
-              options={questionOptionsMap[q.id] || []}
-              adminFetch={adminFetch}
-              act={act}
-              onSaved={msg => {
-                setNotice(msg || null);
-                load().catch(() => {});
-              }}
-              onDeleteOption={() => refreshOptions(q.id)}
+
+          <div className="form-row" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <input
+              className="adm-input"
+              placeholder="Поиск"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ minWidth: 160 }}
             />
-          ))}
+            <select className="adm-input" value={dayFilter} onChange={e => setDayFilter(e.target.value)}>
+              <option value="">День: все</option>
+              {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
+                <option key={d} value={String(d)}>День {d}</option>
+              ))}
+            </select>
+            <select className="adm-input" value={audienceFilter} onChange={e => setAudienceFilter(e.target.value)}>
+              <option value="">Аудитория: все</option>
+              <option value="all">Все</option>
+              <option value="direction">Направление</option>
+              <option value="group">Группа</option>
+              <option value="role">Роль</option>
+            </select>
+            <select className="adm-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="">Статус: все</option>
+              <option value="published">Опубликован</option>
+              <option value="draft">Черновик</option>
+            </select>
+          </div>
+
+          {!readOnly && selectedIds.size > 0 && (
+            <div className="form-row card" style={{ marginBottom: 12, alignItems: 'center' }}>
+              <span>Выбрано: {selectedIds.size}</span>
+              <span>→ день</span>
+              <input type="number" className="adm-input" style={{ width: 64 }} min={1} max={8} value={bulkTargetDay} onChange={e => setBulkTargetDay(Number(e.target.value))} />
+              <button type="button" className="adm-btn adm-btn-sm" onClick={bulkCopy}>Скопировать выбранные</button>
+            </div>
+          )}
+
+          <QuestionsListTable
+            questions={questions}
+            selectedIds={selectedIds}
+            readOnly={readOnly}
+            onToggleSelect={toggleSelect}
+            onToggleAll={toggleAll}
+            onEdit={openEdit}
+            onDuplicate={duplicateQuestion}
+            onViewAnswers={viewAnswers}
+            onCopyToDay={copyToDay}
+            onHide={hideQuestion}
+            onDelete={deleteQuestion}
+            onOpenModeration={setTab ? () => setTab('moderation') : undefined}
+          />
         </>
       )}
+
+      <QuestionAnswersModal
+        questionTitle={answersModal.title}
+        open={answersModal.open}
+        loading={answersModal.loading}
+        answers={answersModal.rows}
+        onClose={() => setAnswersModal(m => ({ ...m, open: false }))}
+      />
     </div>
   );
 }

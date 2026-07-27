@@ -2,13 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { label } from '../../labels/ru';
 import { EventCard } from './EventCard';
 import { PlaceSelect, ProgramPlacesBlock } from './ProgramPlacesBlock';
+import { ProgramBlockTypesBlock, ProgramSpeakersBlock, SpeakerMultiPick } from './ProgramCatalogs';
 import {
   BLOCK_TYPE_OPTIONS,
   buildTimeSlot,
   eventVisibilityLabel,
   groupEventsBySlot,
+  type ProgramBlockType,
   type ProgramEvent,
   type ProgramPlace,
+  type ProgramSpeaker,
+  type ScheduleDayRow,
   type ThematicTag,
 } from './types';
 
@@ -24,6 +28,11 @@ const emptyForm = (day: number) => ({
   pushReminder: true,
   tagNames: [] as string[],
   dayNumber: day,
+  audienceType: 'all' as 'all' | 'direction',
+  audienceDirectionId: '' as string | number,
+  speakerIds: [] as number[],
+  hasSubSessions: false,
+  isPublished: false,
 });
 
 export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
@@ -34,20 +43,45 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [events, setEvents] = useState<ProgramEvent[]>([]);
   const [tags, setTags] = useState<ThematicTag[]>([]);
   const [places, setPlaces] = useState<ProgramPlace[]>([]);
-  const [scheduleDays, setScheduleDays] = useState<{ dayNumber: number; isPublished?: boolean }[]>([]);
+  const [blockTypes, setBlockTypes] = useState<ProgramBlockType[]>([]);
+  const [speakers, setSpeakers] = useState<ProgramSpeaker[]>([]);
+  const [directions, setDirections] = useState<{ id: number; name: string }[]>([]);
+  const [scheduleDays, setScheduleDays] = useState<ScheduleDayRow[]>([]);
   const [versions, setVersions] = useState<any[]>([]);
   const [newTagName, setNewTagName] = useState('');
   const [newPlaceName, setNewPlaceName] = useState('');
+  const [newBlockTypeName, setNewBlockTypeName] = useState('');
+  const [newSpeakerName, setNewSpeakerName] = useState('');
   const [editingTag, setEditingTag] = useState<{ id: number; name: string } | null>(null);
   const [editingPlace, setEditingPlace] = useState<{ id: number; name: string } | null>(null);
+  const [editingBlockType, setEditingBlockType] = useState<{ id: number; name: string } | null>(null);
+  const [editingSpeaker, setEditingSpeaker] = useState<{ id: number; name: string } | null>(null);
+  const [newDayNumber, setNewDayNumber] = useState('');
+  const [newDayLabel, setNewDayLabel] = useState('');
+  const [newDayDate, setNewDayDate] = useState('');
   const [mergeFrom, setMergeFrom] = useState('');
   const [mergeTo, setMergeTo] = useState('');
   const [copyFromDay, setCopyFromDay] = useState(1);
   const [form, setForm] = useState(emptyForm(1));
 
-  const reloadEvents = useCallback(async () => {
-    const res = await adminFetch('/events');
+  const reloadEvents = useCallback(async (day: number) => {
+    const res = await adminFetch(`/events?day=${day}`);
     setEvents(res.events || []);
+  }, [adminFetch]);
+
+  const reloadBlockTypes = useCallback(async () => {
+    const res = await adminFetch('/program-block-types');
+    setBlockTypes(res.blockTypes || []);
+  }, [adminFetch]);
+
+  const reloadSpeakers = useCallback(async () => {
+    const res = await adminFetch('/program-speakers');
+    setSpeakers(res.speakers || []);
+  }, [adminFetch]);
+
+  const reloadScheduleDays = useCallback(async () => {
+    const res = await adminFetch('/schedule/days');
+    setScheduleDays(res.days || []);
   }, [adminFetch]);
 
   const reloadTags = useCallback(async () => {
@@ -70,14 +104,22 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       setForumCurrentDay(cd);
       setSelectedDay(cd);
       setForm(emptyForm(cd));
-      await Promise.all([reloadEvents(), reloadTags(), reloadPlaces()]);
+      await Promise.all([
+        reloadEvents(cd),
+        reloadTags(),
+        reloadPlaces(),
+        reloadBlockTypes(),
+        reloadSpeakers(),
+        reloadScheduleDays(),
+      ]);
+      setDirections((await adminFetch('/directions')).directions || []);
       const sched = await adminFetch(`/schedule/versions?day=${cd}`);
       setScheduleDays(sched.days || []);
       setVersions(sched.versions || []);
     } finally {
       setLoading(false);
     }
-  }, [adminFetch, reloadEvents, reloadTags, reloadPlaces]);
+  }, [adminFetch, reloadEvents, reloadTags, reloadPlaces, reloadBlockTypes, reloadSpeakers, reloadScheduleDays]);
 
   useEffect(() => {
     load().catch(() => setLoading(false));
@@ -85,6 +127,7 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
   useEffect(() => {
     setForm(f => ({ ...f, dayNumber: selectedDay }));
+    reloadEvents(selectedDay).catch(() => {});
     adminFetch(`/schedule/versions?day=${selectedDay}`)
       .then(r => {
         setVersions(r.versions || []);
@@ -95,12 +138,20 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         });
       })
       .catch(() => {});
-  }, [selectedDay, adminFetch]);
+  }, [selectedDay, adminFetch, reloadEvents]);
 
-  const dayEvents = useMemo(
-    () => events.filter(e => (e.dayNumber ?? 1) === selectedDay),
-    [events, selectedDay],
-  );
+  const dayTabs = useMemo(() => {
+    if (scheduleDays.length) {
+      return [...scheduleDays].sort((a, b) => a.dayNumber - b.dayNumber);
+    }
+    return Array.from({ length: totalDays }, (_, i) => ({
+      dayNumber: i + 1,
+      isPublished: false,
+      displayLabel: `День ${i + 1}`,
+    } as ScheduleDayRow));
+  }, [scheduleDays, totalDays]);
+
+  const dayEvents = useMemo(() => events, [events]);
 
   const slotGroups = useMemo(() => groupEventsBySlot(dayEvents), [dayEvents]);
 
@@ -143,11 +194,17 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           blockType: isKeyBlock ? 'key_block' : form.blockType,
           isKeyBlock,
           pushReminder: form.pushReminder,
-          isPublished: false,
+          isPublished: form.isPublished === true,
           dayPublished: false,
+          audienceType: form.audienceType,
+          audienceDirectionId: form.audienceType === 'direction' && form.audienceDirectionId
+            ? Number(form.audienceDirectionId)
+            : null,
+          speakerIds: form.speakerIds,
+          hasSubSessions: form.hasSubSessions,
         }),
       });
-      await reloadEvents();
+      await reloadEvents(selectedDay);
       setForm(emptyForm(selectedDay));
     }, 'Событие добавлено в черновик');
   };
@@ -157,16 +214,17 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       alert('Выберите другой исходный день.');
       return;
     }
-    const source = events.filter(e => (e.dayNumber ?? 1) === copyFromDay);
-    if (source.length === 0) {
-      alert(`На дне ${copyFromDay} нет событий.`);
-      return;
-    }
-    if (!confirm(`Скопировать ${source.length} событ. с дня ${copyFromDay} на день ${selectedDay}?`)) return;
     act(async () => {
+      const res = await adminFetch(`/events?day=${copyFromDay}`);
+      const source = (res.events || []) as ProgramEvent[];
+      if (source.length === 0) {
+        alert(`На дне ${copyFromDay} нет событий.`);
+        return;
+      }
+      if (!confirm(`Скопировать ${source.length} блок(ов) с дня ${copyFromDay} на день ${selectedDay}?`)) return;
       for (const e of source) {
         const isKeyBlock = e.blockType === 'key_block' || e.isKeyBlock;
-        await adminFetch('/events', {
+        const created = await adminFetch('/events', {
           method: 'POST',
           body: JSON.stringify({
             title: e.title,
@@ -180,10 +238,32 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             pushReminder: e.pushReminder !== false,
             isPublished: false,
             dayPublished: false,
+            audienceType: e.audienceType || 'all',
+            audienceDirectionId: e.audienceDirectionId ?? null,
+            speakerIds: e.speakerIds || [],
+            hasSubSessions: e.hasSubSessions === true,
           }),
         });
+        const parentId = created.event?.id;
+        for (const ch of e.children || []) {
+          await adminFetch('/events', {
+            method: 'POST',
+            body: JSON.stringify({
+              title: ch.title,
+              place: ch.place,
+              description: ch.description,
+              dayNumber: selectedDay,
+              timeSlot: ch.timeSlot || e.timeSlot,
+              parentEventId: parentId,
+              isPublished: false,
+              dayPublished: false,
+              blockType: ch.blockType || 'session',
+              tags: ch.tags || [],
+            }),
+          });
+        }
       }
-      await reloadEvents();
+      await reloadEvents(selectedDay);
     }, 'День скопирован');
   };
 
@@ -198,7 +278,7 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         method: 'POST',
         body: JSON.stringify({ dayNumber: selectedDay }),
       });
-      await reloadEvents();
+      await reloadEvents(selectedDay);
       const sched = await adminFetch(`/schedule/versions?day=${selectedDay}`);
       setVersions(sched.versions || []);
       setScheduleDays(sched.days || []);
@@ -223,9 +303,9 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           <strong>{dayPublished ? label('day_published') : label('day_draft')}</strong>
         </p>
         <div className="adm-seg adm-forum-day-seg">
-          {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
-            <button key={d} type="button" className={selectedDay === d ? 'on' : ''} onClick={() => setSelectedDay(d)}>
-              Д{d}
+          {dayTabs.map(d => (
+            <button key={d.dayNumber} type="button" className={selectedDay === d.dayNumber ? 'on' : ''} onClick={() => setSelectedDay(d.dayNumber)}>
+              {d.displayLabel || `Д${d.dayNumber}`}
             </button>
           ))}
         </div>
@@ -327,7 +407,7 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                   setMergeFrom('');
                   setMergeTo('');
                   await reloadTags();
-                  await reloadEvents();
+                  await reloadEvents(selectedDay);
                 }, 'Теги объединены');
               }}
             >
@@ -360,7 +440,7 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             });
             setEditingPlace(null);
             await reloadPlaces();
-            await reloadEvents();
+            await reloadEvents(selectedDay);
           }, 'Сохранено');
         }}
         onDelete={id => {
@@ -368,10 +448,118 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           act(async () => {
             await adminFetch(`/program-places/${id}`, { method: 'DELETE' });
             await reloadPlaces();
-            await reloadEvents();
+            await reloadEvents(selectedDay);
           });
         }}
       />
+
+      <ProgramBlockTypesBlock
+        blockTypes={blockTypes}
+        newName={newBlockTypeName}
+        onNewNameChange={setNewBlockTypeName}
+        editing={editingBlockType}
+        onEditingChange={setEditingBlockType}
+        onAdd={() => {
+          if (!newBlockTypeName.trim()) return;
+          const key = newBlockTypeName.trim().toLowerCase().replace(/\s+/g, '_').slice(0, 64);
+          act(async () => {
+            await adminFetch('/program-block-types', { method: 'POST', body: JSON.stringify({ key, name: newBlockTypeName.trim() }) });
+            setNewBlockTypeName('');
+            await reloadBlockTypes();
+          }, 'Тип добавлен');
+        }}
+        onSaveEdit={() => {
+          if (!editingBlockType) return;
+          act(async () => {
+            await adminFetch(`/program-block-types/${editingBlockType.id}`, { method: 'PATCH', body: JSON.stringify({ name: editingBlockType.name }) });
+            setEditingBlockType(null);
+            await reloadBlockTypes();
+          }, 'Сохранено');
+        }}
+        onDelete={id => {
+          if (!confirm('Удалить тип блока?')) return;
+          act(async () => {
+            await adminFetch(`/program-block-types/${id}`, { method: 'DELETE' });
+            await reloadBlockTypes();
+          });
+        }}
+      />
+
+      <ProgramSpeakersBlock
+        speakers={speakers}
+        newName={newSpeakerName}
+        onNewNameChange={setNewSpeakerName}
+        editing={editingSpeaker}
+        onEditingChange={setEditingSpeaker}
+        onAdd={() => {
+          if (!newSpeakerName.trim()) return;
+          act(async () => {
+            await adminFetch('/program-speakers', { method: 'POST', body: JSON.stringify({ name: newSpeakerName.trim() }) });
+            setNewSpeakerName('');
+            await reloadSpeakers();
+          }, 'Спикер добавлен');
+        }}
+        onSaveEdit={() => {
+          if (!editingSpeaker) return;
+          act(async () => {
+            await adminFetch(`/program-speakers/${editingSpeaker.id}`, { method: 'PATCH', body: JSON.stringify({ name: editingSpeaker.name }) });
+            setEditingSpeaker(null);
+            await reloadSpeakers();
+          }, 'Сохранено');
+        }}
+        onDelete={id => {
+          if (!confirm('Удалить спикера?')) return;
+          act(async () => {
+            await adminFetch(`/program-speakers/${id}`, { method: 'DELETE' });
+            await reloadSpeakers();
+          });
+        }}
+      />
+
+      <div className="card adm-forum-block">
+        <h3>Дни смены</h3>
+        <p className="adm-forum-hint">Добавление дня увеличивает totalDays при необходимости. «Черновик дня» снимает публикацию со всех событий дня.</p>
+        <div className="adm-forum-grid-2">
+          <label className="adm-field">
+            <span className="adm-label">Номер дня</span>
+            <input className="adm-input" value={newDayNumber} onChange={e => setNewDayNumber(e.target.value)} placeholder="9" />
+          </label>
+          <label className="adm-field">
+            <span className="adm-label">Подпись</span>
+            <input className="adm-input" value={newDayLabel} onChange={e => setNewDayLabel(e.target.value)} placeholder="День 9" />
+          </label>
+          <label className="adm-field">
+            <span className="adm-label">Дата</span>
+            <input type="date" className="adm-input" value={newDayDate} onChange={e => setNewDayDate(e.target.value)} />
+          </label>
+        </div>
+        <div className="adm-forum-toolbar">
+          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => {
+            const dn = Number(newDayNumber);
+            if (!dn) return;
+            act(async () => {
+              await adminFetch('/schedule/days', {
+                method: 'POST',
+                body: JSON.stringify({
+                  dayNumber: dn,
+                  displayLabel: newDayLabel.trim() || `День ${dn}`,
+                  calendarDate: newDayDate || undefined,
+                }),
+              });
+              setNewDayNumber('');
+              setNewDayLabel('');
+              setNewDayDate('');
+              await reloadScheduleDays();
+              setSelectedDay(dn);
+            }, 'День добавлен');
+          }}>+ Добавить день</button>
+          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => act(async () => {
+            await adminFetch('/schedule/draft', { method: 'POST', body: JSON.stringify({ dayNumber: selectedDay }) });
+            await reloadEvents(selectedDay);
+            await reloadScheduleDays();
+          }, 'Черновик дня сохранён')}>Сохранить черновик дня</button>
+        </div>
+      </div>
 
       <div className="card adm-forum-block">
         <h3>Добавить событие в день {selectedDay}</h3>
@@ -402,11 +590,33 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         <label className="adm-field">
           <span className="adm-label">Тип блока</span>
           <select className="adm-input" value={form.blockType} onChange={e => setForm({ ...form, blockType: e.target.value })}>
-            {BLOCK_TYPE_OPTIONS.map(o => (
-              <option key={o.value} value={o.value}>{label(o.labelKey)}</option>
+            {(blockTypes.length ? blockTypes.map(b => ({ value: b.key, label: b.name })) : BLOCK_TYPE_OPTIONS.map(o => ({ value: o.value, label: label(o.labelKey) }))).map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
         </label>
+        <div className="adm-forum-grid-2">
+          <label className="adm-field">
+            <span className="adm-label">Аудитория</span>
+            <select className="adm-input" value={form.audienceType} onChange={e => setForm({ ...form, audienceType: e.target.value as 'all' | 'direction' })}>
+              <option value="all">Все</option>
+              <option value="direction">Направление</option>
+            </select>
+          </label>
+          {form.audienceType === 'direction' && (
+            <label className="adm-field">
+              <span className="adm-label">Направление</span>
+              <select className="adm-input" value={form.audienceDirectionId} onChange={e => setForm({ ...form, audienceDirectionId: e.target.value })}>
+                <option value="">—</option>
+                {directions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </label>
+          )}
+        </div>
+        <div className="adm-field">
+          <span className="adm-label">Спикеры</span>
+          <SpeakerMultiPick speakers={speakers} selectedIds={form.speakerIds} onChange={ids => setForm({ ...form, speakerIds: ids })} />
+        </div>
         <div className="adm-field">
           <span className="adm-label">Теги</span>
           <div className="adm-program-tag-pick">
@@ -421,6 +631,14 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         <label className="adm-forum-check">
           <input type="checkbox" checked={form.pushReminder} onChange={e => setForm({ ...form, pushReminder: e.target.checked })} />
           Уведомление за ~15 мин
+        </label>
+        <label className="adm-forum-check">
+          <input type="checkbox" checked={form.hasSubSessions} onChange={e => setForm({ ...form, hasSubSessions: e.target.checked })} />
+          Блок с под-темами
+        </label>
+        <label className="adm-forum-check">
+          <input type="checkbox" checked={form.isPublished} onChange={e => setForm({ ...form, isPublished: e.target.checked })} />
+          Сразу опубликовать событие
         </label>
         <button type="button" className="adm-btn adm-btn-primary" style={{ marginTop: 12 }} onClick={createEvent}>
           Добавить в черновик
@@ -458,9 +676,13 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                   event={e}
                   allTags={tags}
                   allPlaces={places}
+                  blockTypes={blockTypes}
+                  speakers={speakers}
+                  directions={directions}
+                  selectedDay={selectedDay}
                   adminFetch={adminFetch}
                   act={act}
-                  onSaved={reloadEvents}
+                  onSaved={() => reloadEvents(selectedDay)}
                 />
               ))}
             </div>

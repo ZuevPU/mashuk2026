@@ -3,6 +3,7 @@ import { env } from './config/env.js';
 import { validateEnv } from './config/validateEnv.js';
 import { createApp } from './app.js';
 import { runMigrations } from './db/migrate.js';
+import { ensureAdminPermissionsSeeded } from './services/adminPermissionsService.js';
 import { runSeed } from './db/seed.js';
 import { startAnalyticsScheduler } from './services/analyticsService.js';
 import { startPushScheduler } from './services/pushScheduler.js';
@@ -31,6 +32,7 @@ app.listen(port, host, () => {
 
     try {
       await runMigrations();
+      await ensureAdminPermissionsSeeded();
       if (process.env.AUTO_SEED === 'true') {
         try {
           await runSeed();

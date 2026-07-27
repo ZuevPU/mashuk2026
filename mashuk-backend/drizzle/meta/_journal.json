@@ -134,6 +134,69 @@
       "when": 1798000000000,
       "tag": "0018_program_places",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1799000000000,
+      "tag": "0019_participants_wave1",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1800000000000,
+      "tag": "0020_program_wave1",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1801000000000,
+      "tag": "0021_tasks_admin_full",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1802000000000,
+      "tag": "0022_moderation_rating",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1803000000000,
+      "tag": "0023_admin_rbac_tags_journal",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1804000000000,
+      "tag": "0024_questions_admin_wave",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1805000000000,
+      "tag": "0025_push_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1806000000000,
+      "tag": "0026_piggybank_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1807000000000,
+      "tag": "0027_roles_advice_admin",
+      "breakpoints": true
     }
   ]
 }

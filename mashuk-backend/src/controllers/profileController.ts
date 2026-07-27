@@ -122,7 +122,11 @@ export const listPiggybank = async (req: ParticipantRequest, res: Response): Pro
     const q = req.query.q as string | undefined;
 
     const entries = await db.select().from(piggybank)
-      .where(eq(piggybank.participantId, req.participant!.id))
+      .where(and(
+        eq(piggybank.participantId, req.participant!.id),
+        isNull(piggybank.deletedAt),
+        or(eq(piggybank.isHidden, false), isNull(piggybank.isHidden)),
+      ))
       .orderBy(desc(piggybank.createdAt));
 
     const filtered = filterPiggybankEntries(entries, {
@@ -359,13 +363,30 @@ export const listMyMedals = async (req: ParticipantRequest, res: Response): Prom
 export const listMedalsCatalog = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const { medals, userMedals } = await import('../db/schema.js');
+    const { parseMedalRule, getMedalRuleProgress } = await import('../services/medalEvaluator.js');
     const catalog = await db.select().from(medals).where(eq(medals.isActive, true));
     const owned = await db.select().from(userMedals)
       .where(eq(userMedals.participantId, req.participant!.id));
     const ownedMedalIds = new Set(owned.map(o => o.medalId));
+    const participantId = req.participant!.id;
 
-    res.json({
-      medals: catalog.map(m => ({
+    const visible = catalog.filter(m => {
+      const earned = ownedMedalIds.has(m.id);
+      if (m.visibility === 'hidden' && !earned) return false;
+      return true;
+    });
+
+    const medalsOut = await Promise.all(visible.map(async m => {
+      const earned = ownedMedalIds.has(m.id);
+      const parsed = parseMedalRule(m.conditionRule);
+      let progress: { current: number; target: number } | null = null;
+      let conditionLabel: string | null = null;
+      if (!earned && m.awardType === 'auto' && m.visibility === 'open' && parsed) {
+        const p = await getMedalRuleProgress(participantId, parsed);
+        progress = { current: p.current, target: p.target };
+        conditionLabel = p.conditionLabel;
+      }
+      return {
         id: m.id,
         name: m.name,
         description: m.description,
@@ -373,10 +394,15 @@ export const listMedalsCatalog = async (req: ParticipantRequest, res: Response):
         category: m.category,
         iconUrl: m.iconUrl,
         awardType: m.awardType,
-        earned: ownedMedalIds.has(m.id),
+        visibility: m.visibility,
+        earned,
         awardedAt: owned.find(o => o.medalId === m.id)?.awardedAt ?? null,
-      })),
-    });
+        progress,
+        conditionLabel,
+      };
+    }));
+
+    res.json({ medals: medalsOut });
   } catch (error) {
     console.error('listMedalsCatalog:', error);
     res.status(500).json({ error: 'Internal server error' });

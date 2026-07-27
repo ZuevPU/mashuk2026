@@ -11,11 +11,31 @@ export type ProgramEvent = {
   pushReminder?: boolean | null;
   blockType?: string | null;
   isKeyBlock?: boolean | null;
+  hasSubSessions?: boolean | null;
+  audienceType?: string | null;
+  audienceDirectionId?: number | null;
+  speakerIds?: number[] | null;
+  sortOrder?: number | null;
+  children?: ProgramEvent[];
+  speakers?: { id: number; name: string; initials?: string | null }[];
 };
 
 export type ThematicTag = { id: number; name: string };
 
 export type ProgramPlace = { id: number; name: string };
+
+export type ProgramBlockType = { id: number; key: string; name: string; sortOrder?: number };
+
+export type ProgramSpeaker = { id: number; name: string; initials?: string | null };
+
+export type ScheduleDayRow = {
+  id: number;
+  dayNumber: number;
+  isPublished?: boolean;
+  displayLabel?: string | null;
+  calendarDate?: string | null;
+  shiftNumber?: number | null;
+};
 
 export const BLOCK_TYPE_OPTIONS: { value: string; labelKey: string }[] = [
   { value: 'session', labelKey: 'block_session' },

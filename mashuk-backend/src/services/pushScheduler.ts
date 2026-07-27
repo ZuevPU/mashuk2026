@@ -83,6 +83,21 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
 
   const queue = await processPushQueue(now);
 
+  let adminScheduled = 0;
+  try {
+    const { processScheduledAdminPush } = await import('./pushCampaignExecutor.js');
+    adminScheduled = await processScheduledAdminPush(now);
+  } catch {
+    // migration pending
+  }
+
+  try {
+    const { runProgramEventBeforeTriggers } = await import('./pushTriggerRunner.js');
+    await runProgramEventBeforeTriggers(now);
+  } catch {
+    // migration pending
+  }
+
   try {
     const { expireStaleTeamSubmissions } = await import('./teamTaskService.js');
     await expireStaleTeamSubmissions(now);

@@ -33,15 +33,30 @@ const CONFIRM_HINT: Record<string, string> = {
   text_photo: 'Текст и/или фото',
 };
 
-function taskConfirmLabel(task: { confirmationType?: string; answerType?: string | null }): string {
-  const ct = task.confirmationType || 'text_photo';
-  if (ct === 'text_photo') {
-    const at = task.answerType || 'text_and_photo';
-    if (at === 'text') return 'Нужен текстовый ответ';
-    if (at === 'photo') return 'Нужно фото';
-    if (at === 'text_and_photo') return 'Текст и фото';
-  }
-  return CONFIRM_HINT[ct] || ct;
+function taskMethodsFromMeta(meta: { confirmationMethods?: string[]; confirmationType?: string } | null): string[] {
+  if (meta?.confirmationMethods?.length) return meta.confirmationMethods;
+  const ct = meta?.confirmationType || 'text_photo';
+  if (ct === 'qr') return ['qr'];
+  if (ct === 'photo') return ['photo'];
+  if (ct === 'post_url') return ['link'];
+  if (ct === 'team') return ['team'];
+  if (ct === 'auto') return [];
+  return ['photo'];
+}
+
+function taskConfirmLabel(task: { confirmationMethods?: string[]; confirmationType?: string; answerType?: string | null }): string {
+  const methods = taskMethodsFromMeta(task);
+  if (methods.length === 0) return CONFIRM_HINT.auto;
+  const parts = methods.map(m => {
+    if (m === 'photo') return 'Фото до 5 МБ';
+    if (m === 'link') return 'Ссылка';
+    if (m === 'qr') return 'QR';
+    if (m === 'volunteer') return 'Волонтёр';
+    if (m === 'team') return 'Команда';
+    if (m === 'moderator') return 'Модератор';
+    return m;
+  });
+  return parts.join(' · ');
 }
 
 function isTaskAlreadySubmittedError(message: string): boolean {
@@ -73,16 +88,16 @@ const TaskSubmitModal = ({
   const [teamSearch, setTeamSearch] = useState('');
   const [teamResults, setTeamResults] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
+  const methods = taskMethodsFromMeta(meta);
   const confirmationType = meta?.confirmationType || 'text_photo';
   const qrFromHash = getHashSearchParams().get('qr');
 
-  const needsText = confirmationType === 'text_photo' && meta?.answerType !== 'photo';
-  const needsPhoto = confirmationType === 'photo'
-    || (confirmationType === 'text_photo' && (meta?.answerType === 'photo' || meta?.answerType === 'text_and_photo'));
-  const needsPostUrl = confirmationType === 'post_url';
-  const needsTeam = confirmationType === 'team';
-  const isQr = confirmationType === 'qr';
-  const isAuto = confirmationType === 'auto';
+  const needsText = methods.includes('photo') && meta?.answerType !== 'photo';
+  const needsPhoto = methods.includes('photo');
+  const needsPostUrl = methods.includes('link');
+  const needsTeam = methods.includes('team');
+  const isQr = methods.includes('qr');
+  const isAuto = methods.length === 0;
 
   useEffect(() => {
     if (!needsTeam || teamSearch.trim().length < 2) {
@@ -145,7 +160,7 @@ const TaskSubmitModal = ({
         qrToken: qrFromHash || undefined,
       });
       const xp = res.xpAwarded ?? 0;
-      const teamPending = confirmationType === 'team';
+      const teamPending = methods.includes('team');
       onSubmitSuccess({
         confirm: {
           ...TASK_SUBMIT_CONFIRM,

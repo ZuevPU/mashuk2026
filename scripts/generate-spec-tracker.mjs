@@ -34,9 +34,19 @@ function repairUtf8FromFile(buffer) {
   return buffer.toString('utf8').replace(/^\uFEFF/, '');
 }
 
-const SPEC_TABLE_TSV = repairUtf8FromFile(
-  fs.readFileSync(path.join(__dirname, 'spec-tracker-source.tsv')),
-);
+function loadSpecTableTsv() {
+  const parts = ['spec-tracker-source.tsv', 'spec-tracker-admin.tsv'];
+  return parts
+    .map((name) => {
+      const p = path.join(__dirname, name);
+      if (!fs.existsSync(p)) return '';
+      return repairUtf8FromFile(fs.readFileSync(p));
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+const SPEC_TABLE_TSV = loadSpecTableTsv();
 
 function normalizeStatus(s) {
   const t = s.trim();

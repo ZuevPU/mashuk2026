@@ -17,6 +17,7 @@ const PUSH_TYPES = [
   { key: 'program', label: 'Программа и события' },
   { key: 'tasks', label: 'Задания и модерация' },
   { key: 'exchange', label: 'Общение и ответы' },
+  { key: 'org', label: 'Организационные сообщения' },
 ] as const;
 
 export const ProfilePanel: React.FC<{
@@ -708,6 +709,14 @@ export const ProfilePanel: React.FC<{
                   </div>
                   {m.description && (
                     <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>{m.description}</div>
+                  )}
+                  {!m.earned && m.conditionLabel && (
+                    <div style={{ fontSize: 11, color: '#555', marginTop: 4 }}>{m.conditionLabel}</div>
+                  )}
+                  {!m.earned && m.progress && m.progress.target > 0 && (
+                    <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>
+                      Прогресс: {m.progress.current} / {m.progress.target}
+                    </div>
                   )}
                   <div style={{ fontSize: 10, color: '#888', marginTop: 6 }}>
                     {m.earned ? 'Получена' : 'Ещё не получена'}

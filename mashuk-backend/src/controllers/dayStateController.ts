@@ -263,6 +263,7 @@ export async function loadDayContext(
       .where(and(
         eq(dayExperiments.dayNumber, dayNumber),
         eq(dayExperiments.roleKey, activeRoleKey),
+        eq(dayExperiments.status, 'published'),
       )).limit(1);
     if (exp) {
       experiment = {

@@ -15,6 +15,14 @@ import {
   normalizePostUrl,
 } from '../services/taskEligibility.js';
 import {
+  isTaskOnForumDay,
+  isTaskPublishedVisible,
+  isTaskSubmissionOpen,
+  resolveSubmissionOutcome,
+  taskMethodsForParticipant,
+  validateTaskSubmissionPayload,
+} from '../services/taskAdminHelpers.js';
+import {
   createTeamConfirmations,
   notifyTeamConfirmRequest,
   tryFinalizeTeamSubmission,
@@ -58,10 +66,10 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
     const settings = await getForumSettings();
     const now = new Date();
 
-    const allTasks = await db.select().from(tasks)
-      .where(and(
-        or(isNull(tasks.dayNumber), eq(tasks.dayNumber, settings.currentDay ?? 1)),
-      ));
+    const allTasksRaw = await db.select().from(tasks);
+    const allTasks = allTasksRaw.filter(t =>
+      isTaskPublishedVisible(t, now) && isTaskOnForumDay(t, settings.currentDay ?? 1),
+    );
 
     const submissions = await db.select().from(taskSubmissions)
       .where(eq(taskSubmissions.participantId, req.participant!.id));
@@ -74,9 +82,11 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
       description: string | null;
       points: number | null;
       category: string | null;
+      categoryIconKey: string | null;
       deadline: Date | null;
       answerType: string | null;
       confirmationType: string;
+      confirmationMethods: string[];
       autoConfirm: boolean | null;
       allowRetry: boolean | null;
       hasQr: boolean;
@@ -85,20 +95,24 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
       submission: typeof taskSubmissions.$inferSelect | null;
     };
 
-    let result: TaskListItem[] = allTasks.map(t => {
+    let result = allTasks.map(t => {
       const sub = subMap.get(t.id);
       const status = getTaskStatus(t, sub, now);
       if (t.hideUntilPublish && t.publishTime && t.publishTime > now) return null;
-      const canResubmit = (status === 'rejected') && t.allowRetry;
+      if (!isTaskSubmissionOpen(t, now) && !sub) return null;
+      const methods = taskMethodsForParticipant(t);
+      const canResubmit = (status === 'rejected') && t.allowRetry && isTaskSubmissionOpen(t, now);
       return {
         id: t.id,
         title: t.title,
-        description: t.description,
+        description: t.descriptionHtml || t.description,
         points: t.points,
         category: t.category,
-        deadline: t.deadline,
+        categoryIconKey: t.iconKey ?? null,
+        deadline: t.deadline ?? t.availableTo,
         answerType: t.answerType,
         confirmationType: t.confirmationType || 'text_photo',
+        confirmationMethods: methods,
         autoConfirm: t.autoConfirm,
         allowRetry: t.allowRetry,
         hasQr: Boolean(t.qrToken),
@@ -106,7 +120,7 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
         canResubmit,
         submission: sub ?? null,
       };
-    }).filter((t): t is TaskListItem => t != null);
+    }).filter((t): t is TaskListItem => t !== null);
 
     result.sort((a, b) => taskSortRank(a) - taskSortRank(b) || a.id - b.id);
 
@@ -197,8 +211,13 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
     }
 
     const now = new Date();
-    if ((task.confirmationType === 'qr' || qrToken) && !isQrInValidWindow(task, now)) {
+    const methods = taskMethodsForParticipant(task);
+    if ((methods.includes('qr') || qrToken) && !isQrInValidWindow(task, now)) {
       res.status(400).json({ error: 'QR-код задания сейчас не активен' });
+      return;
+    }
+    if (!isTaskSubmissionOpen(task, now)) {
+      res.status(400).json({ error: 'Срок приёма заявки по этому заданию истёк' });
       return;
     }
 
@@ -207,46 +226,16 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
       return;
     }
 
-    const confirmationType = task.confirmationType || 'text_photo';
-    const answerType = task.answerType || 'text_and_photo';
+    const payloadCheck = validateTaskSubmissionPayload(task, { answerText, photoUrl, postUrl, teamMemberIds, qrToken });
+    if (!payloadCheck.ok) {
+      res.status(400).json({ error: payloadCheck.error });
+      return;
+    }
 
-    if (confirmationType === 'photo' && !photoUrl) {
-      res.status(400).json({ error: 'Требуется фото' });
-      return;
-    }
-    if (confirmationType === 'post_url' && !postUrl?.trim()) {
-      res.status(400).json({ error: 'Требуется ссылка на пост' });
-      return;
-    }
-    if (confirmationType === 'qr') {
-      if (!task.qrToken) {
-        res.status(400).json({ error: 'QR для задания ещё не сгенерирован' });
-        return;
-      }
-      if (!qrToken || qrToken !== task.qrToken) {
-        res.status(400).json({ error: 'Отсканируйте QR задания или дождитесь подтверждения волонтёра' });
-        return;
-      }
-    }
+    const confirmationType = task.confirmationType || 'text_photo';
     let teamIds: number[] | null = null;
-    if (confirmationType === 'team') {
+    if (methods.includes('team') || confirmationType === 'team') {
       teamIds = Array.isArray(teamMemberIds) ? teamMemberIds.map(Number).filter(Boolean) : [];
-      if (teamIds.length < 1) {
-        res.status(400).json({ error: 'Укажите участников команды' });
-        return;
-      }
-    }
-    if (confirmationType === 'auto') {
-      // no extra fields
-    } else if (confirmationType === 'text_photo' || !task.confirmationType) {
-      if (answerType === 'text' && !answerText?.trim()) {
-        res.status(400).json({ error: 'Text answer required' });
-        return;
-      }
-      if ((answerType === 'photo' || answerType === 'text_and_photo') && !photoUrl) {
-        res.status(400).json({ error: 'Photo required' });
-        return;
-      }
     }
 
     let postUrlNormalized: string | null = null;
@@ -279,9 +268,10 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
       return;
     }
 
-    const isTeam = confirmationType === 'team';
-    const forceAuto = !isTeam && (task.autoConfirm || confirmationType === 'auto' || confirmationType === 'qr');
-    const status = isTeam ? 'pending_team' : (forceAuto ? 'approved' : 'pending');
+    const outcome = resolveSubmissionOutcome(task, { qrToken });
+    const isTeam = outcome.isTeam;
+    const forceAuto = outcome.forceAuto;
+    const status = outcome.status;
     const pointsAwarded = forceAuto ? effectiveTaskPoints(task) : 0;
 
     let submission;

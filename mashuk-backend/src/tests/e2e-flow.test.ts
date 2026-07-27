@@ -193,9 +193,41 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
     const roles = await request(app).get('/api/admin/roles').set(adminAuth);
     assert.equal(roles.status, 200);
     assert.ok((roles.body.roles?.length ?? 0) >= 6);
+    const firstRole = roles.body.roles[0];
+    if (firstRole?.id) {
+      const patched = await request(app)
+        .patch(`/api/admin/roles/${firstRole.id}`)
+        .set(adminAuth)
+        .send({ iconKey: '⭐' });
+      assert.equal(patched.status, 200);
+      assert.equal(patched.body.role.iconKey, '⭐');
+    }
 
     const exps = await request(app).get('/api/admin/day-experiments').set(adminAuth);
     assert.equal(exps.status, 200);
+
+    const upsert = await request(app)
+      .post('/api/admin/day-experiments')
+      .set(adminAuth)
+      .send({
+        dayNumber: 2,
+        roleKey: 'meaning_researcher',
+        title: 'E2E совет',
+        body: 'Короткий текст',
+        status: 'published',
+      });
+    assert.equal(upsert.status, 200);
+    assert.equal(upsert.body.experiment.status, 'published');
+
+    const filtered = await request(app)
+      .get('/api/admin/day-experiments?q=E2E&status=published&day=2&roleKey=meaning_researcher')
+      .set(adminAuth);
+    assert.equal(filtered.status, 200);
+    assert.ok(filtered.body.experiments.some((e: { title: string }) => e.title === 'E2E совет'));
+
+    const tpl = await request(app).get('/api/admin/day-experiments/csv-template').set(adminAuth);
+    assert.equal(tpl.status, 200);
+    assert.match(String(tpl.text), /role_key/);
 
     const list = await request(app).get('/api/admin/participants').set(adminAuth);
     const p = list.body.participants.find((x: { vkId: number }) => x.vkId === E2E_VK_ID);
@@ -220,6 +252,13 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
 
     const subs = await request(app).get('/api/admin/task-submissions').set(adminAuth);
     assert.equal(subs.status, 200);
+
+    const modSummary = await request(app).get('/api/admin/moderation/summary').set(adminAuth);
+    assert.equal(modSummary.status, 200);
+    assert.ok(typeof modSummary.body.pendingExchange === 'number');
+
+    const queue = await request(app).get('/api/admin/task-submissions?status=pending,pending_team').set(adminAuth);
+    assert.equal(queue.status, 200);
 
     const exchange = await request(app).get('/api/admin/exchange').set(adminAuth);
     assert.equal(exchange.status, 200);

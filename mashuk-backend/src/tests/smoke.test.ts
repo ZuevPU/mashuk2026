@@ -99,4 +99,89 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
       .send({ points: 10 });
     assert.equal(res.status, 400);
   });
+
+  it('POST draft task then publish', async () => {
+    const token = await getAdminBearerToken(app);
+    const created = await request(app)
+      .post('/api/admin/tasks')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: `Smoke task ${Date.now()}`,
+        status: 'draft',
+        dayNumbers: [1],
+        confirmationMethods: ['photo'],
+      });
+    assert.equal(created.status, 200);
+    assert.equal(created.body.task?.status, 'draft');
+    const id = created.body.task?.id;
+    const published = await request(app)
+      .patch(`/api/admin/tasks/${id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'published', publishTime: new Date().toISOString() });
+    assert.equal(published.status, 200);
+    assert.equal(published.body.task?.status, 'published');
+    const listed = await request(app)
+      .get('/api/admin/tasks?status=draft')
+      .set('Authorization', `Bearer ${token}`);
+    assert.ok(!listed.body.tasks.some((t: { id: number }) => t.id === id));
+  });
+
+  it('GET /api/admin/questions with filters', async () => {
+    const token = await getAdminBearerToken(app);
+    const res = await request(app)
+      .get('/api/admin/questions?status=published')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.questions));
+    assert.ok(typeof res.body.totalCount === 'number');
+    if (res.body.questions.length) {
+      assert.ok('answerCount' in res.body.questions[0]);
+    }
+  });
+
+  it('POST admin question, duplicate, copy-selected', async () => {
+    const token = await getAdminBearerToken(app);
+    const created = await request(app)
+      .post('/api/admin/questions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: `Smoke Q ${Date.now()}`,
+        text: 'Текст',
+        questionKind: 'extra',
+        answerType: 'text',
+        dayNumbers: [1],
+        status: 'draft',
+      });
+    assert.equal(created.status, 200);
+    const id = created.body.question?.id;
+    assert.ok(id);
+
+    const dup = await request(app)
+      .post(`/api/admin/questions/${id}/duplicate`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+    assert.equal(dup.status, 200);
+    assert.notEqual(dup.body.question?.id, id);
+
+    const copied = await request(app)
+      .post('/api/admin/questions/copy-selected')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ids: [id], targetDay: 2 });
+    assert.equal(copied.status, 200);
+    assert.ok(copied.body.count >= 1);
+
+    await request(app)
+      .delete(`/api/admin/questions/${dup.body.question.id}`)
+      .set('Authorization', `Bearer ${token}`);
+  });
+
+  it('GET exchange source list', async () => {
+    const token = await getAdminBearerToken(app);
+    const res = await request(app)
+      .get('/api/admin/questions?source=exchange')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.source, 'exchange');
+    assert.ok(Array.isArray(res.body.questions));
+  });
 });

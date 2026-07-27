@@ -24,9 +24,13 @@ const PATH_ACTIONS = new Set([
 
 const BONUS_ACTIONS = new Set(['bonus_regularity', 'bonus_diversity']);
 
-const EXP_ACTIONS = new Set(['task_complete', 'piggybank_entry']);
+const EXP_ACTIONS = new Set(['task_complete', 'piggybank_entry', 'admin_manual_experience']);
 
 export function pointsTrackForAction(actionType: string): PointTrack | 'bonus' {
+  if (actionType === 'admin_manual_path') return 'path';
+  if (actionType === 'admin_manual_experience') return 'experience';
+  if (actionType === 'admin_manual_deduct_path') return 'path';
+  if (actionType === 'admin_manual_deduct_experience') return 'experience';
   if (BONUS_ACTIONS.has(actionType)) return 'bonus';
   return PATH_ACTIONS.has(actionType) ? 'path' : 'experience';
 }
@@ -99,8 +103,8 @@ export function totalRatingScore(path: number, experience: number, bonus: number
 export async function getLevelThresholds(track: PointTrack): Promise<number[]> {
   const actionType = track === 'path' ? 'path_level' : 'exp_level';
   const [config] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, actionType)).limit(1);
-  const thresholds = config?.levelThresholds as number[] | null;
-  return thresholds?.length ? thresholds : DEFAULT_THRESHOLDS;
+  const { normalizeLevelThresholds } = await import('./ratingRecalcService.js');
+  return normalizeLevelThresholds(config?.levelThresholds);
 }
 
 export async function getLevel(points: number, track: PointTrack = 'path'): Promise<number> {

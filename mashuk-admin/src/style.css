@@ -330,7 +330,20 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 .adm-tag-icon-btn-delete { font-size: 22px; font-weight: 400; }
 .adm-tag-icon-btn-delete:hover { color: #9B2C2C; background: rgba(197, 48, 48, 0.1); }
 .adm-program-empty { padding: 16px; background: #FAFAF8; border-radius: 10px; }
-.adm-program-merge summary { cursor: pointer; font-size: 13px; color: #666; }
+.adm-row-menu { position: relative; display: inline-block; }
+.adm-row-menu-pop {
+  position: absolute; right: 0; top: 100%; z-index: 20;
+  background: #fff; border: 1px solid var(--m-border); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12); min-width: 200px; padding: 4px 0;
+}
+.adm-row-menu-item {
+  display: block; width: 100%; text-align: left; border: none; background: none;
+  padding: 8px 12px; font-size: 12px; cursor: pointer; font-family: inherit;
+}
+.adm-row-menu-item:hover { background: var(--m-surface); }
+.adm-row-menu-item.danger { color: #C53030; }
+.adm-table-row-click { cursor: pointer; }
+.adm-table-row-click:hover { background: #FAFAF8; }
 
 /* Onboarding constructor */
 .adm-onboarding-seg { margin-top: 4px; }
@@ -343,6 +356,11 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   background: none; border: none; padding: 0; color: var(--m-accent); font-size: inherit;
   font-weight: 600; cursor: pointer; text-decoration: underline;
 }
+.adm-rich-toolbar { display: flex; gap: 6px; margin-bottom: 6px; }
+.adm-rich-editor {
+  min-height: 120px; overflow: auto; line-height: 1.45;
+}
+.adm-task-preview { margin-bottom: 16px; }
 .adm-forum-diag-row {
   display: grid; grid-template-columns: 72px 1fr; gap: 8px; align-items: start; margin-bottom: 10px;
 }
@@ -364,6 +382,64 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 .adm-onboarding-preview-list { margin: 0; padding-left: 20px; font-size: 13px; }
 .adm-onboarding-preview-roles { display: grid; gap: 10px; }
 .adm-onboarding-preview-role { font-size: 13px; }
+
+.adm-role-matrix-wrap { overflow-x: auto; }
+.adm-role-matrix-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) repeat(3, minmax(100px, 1fr));
+  gap: 8px;
+  align-items: stretch;
+  min-width: 520px;
+}
+.adm-role-matrix-corner { min-height: 1px; }
+.adm-role-matrix-col-head,
+.adm-role-matrix-row-head {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #888;
+  display: flex;
+  align-items: center;
+  padding: 6px 4px;
+}
+.adm-role-matrix-row-head { justify-content: flex-end; text-align: right; padding-right: 10px; }
+.adm-role-matrix-cell {
+  border: 1px solid var(--m-border);
+  border-radius: 12px;
+  background: var(--m-surface);
+  padding: 12px 10px;
+  min-height: 72px;
+}
+.adm-role-matrix-cell-btn {
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.adm-role-matrix-cell-btn:hover {
+  border-color: var(--m-accent);
+  box-shadow: 0 2px 12px rgba(255, 85, 0, 0.12);
+}
+.adm-role-matrix-icon { font-size: 22px; line-height: 1; }
+.adm-role-matrix-name { font-size: 12px; font-weight: 700; line-height: 1.35; }
+.adm-role-table-desc { max-width: 280px; font-size: 13px; color: #555; line-height: 1.4; }
+.adm-role-edit-modal { max-width: 520px; width: 100%; }
+
+.adm-advice-toolbar { flex-wrap: wrap; gap: 8px; margin-top: 12px; display: flex; align-items: center; }
+.adm-advice-preview { margin-bottom: 16px; }
+.adm-advice-preview-card {
+  border: 1px solid var(--m-border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #fff;
+}
+.adm-advice-preview-kicker { font-size: 11px; color: #888; font-weight: 600; }
+.adm-advice-preview-title { font-size: 15px; font-weight: 700; margin-top: 4px; }
+.adm-advice-preview-role { font-size: 11px; margin-top: 8px; color: #555; }
+.adm-advice-preview-body { font-size: 13px; line-height: 1.45; margin: 10px 0 0; color: #333; }
 
 .adm-crud-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 12px; }
 .adm-crud-pagination { display: flex; gap: 8px; margin-top: 16px; align-items: center; font-size: 14px; flex-wrap: wrap; }

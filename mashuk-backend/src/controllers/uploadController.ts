@@ -13,6 +13,23 @@ function ensureUploadDir() {
   }
 }
 
+export async function saveUploadedImage(dataUrl: string): Promise<string> {
+  const match = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+  if (!match) {
+    throw new Error('Invalid dataUrl format');
+  }
+  const ext = match[1].split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
+  const buffer = Buffer.from(match[2], 'base64');
+  if (buffer.length > 5 * 1024 * 1024) {
+    throw new Error('Image too large (max 5MB)');
+  }
+  ensureUploadDir();
+  const filename = `${crypto.randomUUID()}.${ext}`;
+  fs.writeFileSync(path.join(UPLOAD_DIR, filename), buffer);
+  const baseUrl = env.PUBLIC_URL || `http://localhost:${env.PORT}`;
+  return `${baseUrl}/uploads/${filename}`;
+}
+
 export const uploadPhoto = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const { dataUrl, photoUrl } = req.body as { dataUrl?: string; photoUrl?: string };
@@ -27,25 +44,8 @@ export const uploadPhoto = async (req: ParticipantRequest, res: Response): Promi
       return;
     }
 
-    const match = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
-    if (!match) {
-      res.status(400).json({ error: 'Invalid dataUrl format' });
-      return;
-    }
-
-    const ext = match[1].split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
-    const buffer = Buffer.from(match[2], 'base64');
-    if (buffer.length > 5 * 1024 * 1024) {
-      res.status(400).json({ error: 'Image too large (max 5MB)' });
-      return;
-    }
-
-    ensureUploadDir();
-    const filename = `${crypto.randomUUID()}.${ext}`;
-    fs.writeFileSync(path.join(UPLOAD_DIR, filename), buffer);
-
-    const baseUrl = env.PUBLIC_URL || `http://localhost:${env.PORT}`;
-    res.json({ url: `${baseUrl}/uploads/${filename}` });
+    const url = await saveUploadedImage(dataUrl);
+    res.json({ url });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Upload failed' });

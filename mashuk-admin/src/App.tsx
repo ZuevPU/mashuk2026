@@ -16,6 +16,7 @@ import { JournalTab } from './components/journal/JournalTab';
 import { KnowledgeTab } from './components/knowledge/KnowledgeTab';
 import { LevelsTab } from './components/levels/LevelsTab';
 import { MedalsTab } from './components/medals/MedalsTab';
+import { PiggybankTab } from './components/piggybank/PiggybankTab';
 import { ModerationTab } from './components/moderation/ModerationTab';
 import { OnboardingTab } from './components/onboarding/OnboardingTab';
 import { ROLE_OPTIONS } from './components/onboarding/roleOptions';
@@ -23,6 +24,7 @@ import { ParticipantCardModal } from './components/ParticipantCard';
 import { ParticipantsTab } from './components/participants/ParticipantsTab';
 import { ProgramTab } from './components/program/ProgramTab';
 import { PushTab } from './components/push/PushTab';
+import { RecommendationTagsTab } from './components/tags/RecommendationTagsTab';
 import { QuestionsTab } from './components/questions/QuestionsTab';
 import { TasksTab } from './components/tasks/TasksTab';
 import { TAB_LABELS, TAB_ORDER, type Tab } from './tabs';
@@ -37,7 +39,7 @@ export const App = () => {
 
   const [participantCard, setParticipantCard] = useState<any>(null);
   const [participantCardTab, setParticipantCardTab] = useState<
-    'profile' | 'answers' | 'tasks' | 'medals' | 'points' | 'piggybank'
+    'profile' | 'activity' | 'answers' | 'tasks' | 'medals' | 'points' | 'piggybank' | 'logs'
   >('profile');
 
   const openParticipantCard = (
@@ -148,15 +150,17 @@ export const App = () => {
         {tab === 'moderation' && (
           <ModerationTab {...tabProps} onOpenCard={openParticipantCard} />
         )}
+        {tab === 'piggybank' && (
+          <PiggybankTab {...tabProps} onOpenCard={openParticipantCard} />
+        )}
         {tab === 'data' && <DataTab {...tabProps} />}
         {tab === 'levels' && <LevelsTab {...tabProps} />}
         {tab === 'analytics' && (
           <AnalyticsTab {...tabProps} onOpenCard={openParticipantCard} />
         )}
         {tab === 'exports' && <ExportsTab {...tabProps} />}
-        {tab === 'push' && (
-          <PushTab {...tabProps} onOpenCard={openParticipantCard} />
-        )}
+        {tab === 'push' && <PushTab {...tabProps} />}
+        {tab === 'recommendation-tags' && <RecommendationTagsTab {...tabProps} />}
         {tab === 'admins' && <AdminsTab {...tabProps} />}
         {tab === 'journal' && <JournalTab {...tabProps} />}
         {tab === 'medals' && <MedalsTab {...tabProps} />}

@@ -1,57 +1,106 @@
-import { useCallback, useEffect, useState } from 'react';
-import { label } from '../../labels/ru';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AdminPageHero } from '../admin/AdminPageHero';
-import { EnumOptions } from '../admin/EnumOptions';
 import type { AdminTabProps } from '../admin/types';
-
-const MEDAL_LEVELS = ['bronze', 'silver', 'gold'] as const;
-const AWARD_TYPES = ['manual', 'auto'] as const;
-
-type Medal = {
-  id: number;
-  name: string;
-  description?: string;
-  level?: string;
-  awardType?: string;
-  conditionRule?: string | null;
-};
-
-const defaultNewMedal = {
-  name: '',
-  description: '',
-  level: 'bronze',
-  awardType: 'manual',
-  conditionRule: '',
-};
+import { MedalForm } from './MedalForm';
+import { MedalsListTable } from './MedalsListTable';
+import {
+  bodyFromDraft,
+  buildMedalsQuery,
+  draftFromMedal,
+  emptyMedalDraft,
+  type ListTab,
+  type Medal,
+  type MedalDraft,
+  type RuleMetricOption,
+} from './types';
 
 export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
-  const [medals, setMedals] = useState<Medal[]>([]);
-  const [newMedal, setNewMedal] = useState({ ...defaultNewMedal });
   const [loading, setLoading] = useState(true);
+  const [medals, setMedals] = useState<Medal[]>([]);
+  const [totalAll, setTotalAll] = useState(0);
+  const [metrics, setMetrics] = useState<RuleMetricOption[]>([]);
+  const [tab, setTab] = useState<ListTab>('active');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [levelFilter, setLevelFilter] = useState('');
+  const [awardFilter, setAwardFilter] = useState('');
+  const [visibilityFilter, setVisibilityFilter] = useState('');
+  const [view, setView] = useState<'list' | 'form'>('list');
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draft, setDraft] = useState<MedalDraft>(() => emptyMedalDraft());
+
+  const listQuery = useMemo(
+    () => buildMedalsQuery({
+      tab,
+      category: categoryFilter,
+      level: levelFilter,
+      awardType: awardFilter,
+      visibility: visibilityFilter,
+    }),
+    [tab, categoryFilter, levelFilter, awardFilter, visibilityFilter],
+  );
+
+  const loadMeta = useCallback(async () => {
+    const mRes = await adminFetch('/medals/rule-metrics');
+    const list = mRes.metrics || [];
+    setMetrics(list);
+    const allRes = await adminFetch('/medals');
+    setTotalAll(allRes.totalCount ?? (allRes.medals?.length || 0));
+    return list[0]?.key || 'tasks_completed';
+  }, [adminFetch]);
+
+  const loadMedals = useCallback(async () => {
+    const res = await adminFetch(`/medals?${listQuery}`);
+    setMedals(res.medals || []);
+  }, [adminFetch, listQuery]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await adminFetch('/medals');
-      setMedals(res.medals || []);
+      await loadMeta();
+      await loadMedals();
     } finally {
       setLoading(false);
     }
-  }, [adminFetch]);
+  }, [loadMeta, loadMedals]);
 
   useEffect(() => {
     load().catch(() => setLoading(false));
   }, [load, reloadKey]);
 
-  const createMedal = () =>
+  const openCreate = async () => {
+    const defaultMetric = (await loadMeta()) as string;
+    setEditingId(null);
+    setDraft({ ...emptyMedalDraft(), ruleMetric: defaultMetric });
+    setView('form');
+  };
+
+  const openEdit = (m: Medal) => {
+    const defaultMetric = metrics[0]?.key || 'tasks_completed';
+    setEditingId(m.id);
+    setDraft(draftFromMedal(m, defaultMetric));
+    setView('form');
+  };
+
+  const save = () =>
     act(async () => {
-      await adminFetch('/medals', {
-        method: 'POST',
-        body: JSON.stringify(newMedal),
-      });
-      setNewMedal({ ...defaultNewMedal });
+      const body = bodyFromDraft(draft);
+      if (editingId) {
+        await adminFetch(`/medals/${editingId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      } else {
+        await adminFetch('/medals', { method: 'POST', body: JSON.stringify(body) });
+      }
+      setView('list');
       await load();
-    }, 'Медаль создана');
+    }, editingId ? 'Медаль сохранена' : 'Медаль создана');
+
+  const hideMedal = (m: Medal) =>
+    act(async () => {
+      await adminFetch(`/medals/${m.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ visibility: 'hidden' }),
+      });
+      await load();
+    }, 'Видимость: скрытая');
 
   const deleteMedal = (id: number) =>
     act(async () => {
@@ -65,94 +114,81 @@ export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       await load();
     }, 'Авто-оценка запущена');
 
-  if (loading) {
+  if (loading && view === 'list') {
     return <p className="adm-muted">Загрузка медалей…</p>;
   }
+
+  if (view === 'form') {
+    return (
+      <div className="adm-forum">
+        <AdminPageHero title={editingId ? 'Редактирование медали' : 'Новая медаль'} />
+        <MedalForm
+          draft={draft}
+          metrics={metrics}
+          editing={!!editingId}
+          onChange={patch => setDraft(d => ({ ...d, ...patch }))}
+          onSave={save}
+          onBack={() => setView('list')}
+          onEvaluate={runEvaluate}
+          adminFetch={adminFetch}
+          act={act}
+        />
+      </div>
+    );
+  }
+
+  const tabs: { key: ListTab; label: string }[] = [
+    { key: 'active', label: 'Активные' },
+    { key: 'drafts', label: 'Черновики' },
+  ];
 
   return (
     <div className="adm-forum">
       <AdminPageHero
-        title="Медали"
-        hint="Каталог медалей и правила автоматической выдачи. Авто-оценка проверяет условия для всех участников."
-      />
-
-      <div className="card adm-forum-block">
-        <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap' }}>
-          <input
-            className="adm-input"
-            value={newMedal.name}
-            onChange={e => setNewMedal({ ...newMedal, name: e.target.value })}
-            placeholder="Название"
-          />
-          <input
-            className="adm-input"
-            value={newMedal.description}
-            onChange={e => setNewMedal({ ...newMedal, description: e.target.value })}
-            placeholder="Описание"
-          />
-          <select
-            className="adm-input"
-            value={newMedal.level}
-            onChange={e => setNewMedal({ ...newMedal, level: e.target.value })}
-          >
-            <EnumOptions values={[...MEDAL_LEVELS]} />
+        title={`Медали · ${totalAll} всего`}
+        hint="Каталог наград смены. Автоматические медали проверяются по правилам; ручные выдаются из карточки участника."
+      >
+        <div className="adm-seg" style={{ marginBottom: 12 }}>
+          {tabs.map(t => (
+            <button key={t.key} type="button" className={tab === t.key ? 'on' : ''} onClick={() => setTab(t.key)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <select className="adm-input" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
+            <option value="">Категория</option>
+            <option value="tasks">Задания</option>
+            <option value="piggybank">Копилка</option>
+            <option value="reflection">Рефлексия</option>
+            <option value="points">Баллы</option>
+            <option value="program">Программа</option>
+            <option value="exchange">Обмен</option>
           </select>
-          <select
-            className="adm-input"
-            value={newMedal.awardType}
-            onChange={e => setNewMedal({ ...newMedal, awardType: e.target.value })}
-          >
-            <EnumOptions values={[...AWARD_TYPES]} />
+          <select className="adm-input" value={levelFilter} onChange={e => setLevelFilter(e.target.value)}>
+            <option value="">Уровень</option>
+            <option value="bronze">Бронза</option>
+            <option value="silver">Серебро</option>
+            <option value="gold">Золото</option>
           </select>
-          <input
-            className="adm-input"
-            value={newMedal.conditionRule}
-            onChange={e => setNewMedal({ ...newMedal, conditionRule: e.target.value })}
-            placeholder="tasks_completed>=1"
-            style={{ minWidth: 160 }}
-          />
-          <button type="button" className="adm-btn adm-btn-primary" onClick={createMedal}>
-            Создать
-          </button>
-          <button type="button" className="adm-btn adm-btn-secondary" onClick={runEvaluate}>
-            Авто-оценка
+          <select className="adm-input" value={awardFilter} onChange={e => setAwardFilter(e.target.value)}>
+            <option value="">Тип выдачи</option>
+            <option value="auto">Автоматическая</option>
+            <option value="manual">Ручная</option>
+          </select>
+          <select className="adm-input" value={visibilityFilter} onChange={e => setVisibilityFilter(e.target.value)}>
+            <option value="">Видимость</option>
+            <option value="open">Открытая</option>
+            <option value="hidden">Скрытая</option>
+          </select>
+          <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={openCreate}>
+            + Создать медаль
           </button>
         </div>
-      </div>
+      </AdminPageHero>
 
-      <div className="card adm-forum-block">
-        <table className="adm-table">
-          <thead>
-            <tr>
-              <th>Название</th>
-              <th>Уровень</th>
-              <th>Тип</th>
-              <th>Правило</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {medals.map(m => (
-              <tr key={m.id}>
-                <td>{m.name}</td>
-                <td>{label(m.level ?? '')}</td>
-                <td>{label(m.awardType ?? '')}</td>
-                <td style={{ fontSize: 11 }}>{m.conditionRule || '—'}</td>
-                <td>
-                  <button
-                    type="button"
-                    className="adm-btn adm-btn-secondary"
-                    onClick={() => deleteMedal(m.id)}
-                    aria-label="Удалить"
-                  >
-                    ✕
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {medals.length === 0 && <p className="adm-muted">Медалей пока нет</p>}
+      <div className="card">
+        <MedalsListTable medals={medals} onEdit={openEdit} onHide={hideMedal} onDelete={deleteMedal} />
       </div>
     </div>
   );

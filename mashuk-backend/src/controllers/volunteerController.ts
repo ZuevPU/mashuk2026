@@ -8,6 +8,7 @@ import { awardPoints } from '../services/pointsService.js';
 import { effectiveTaskPoints } from '../services/taskPoints.js';
 import { evaluateMedalsForParticipant } from '../services/medalEvaluator.js';
 import { logAdminAction } from '../services/adminActionsLog.js';
+import { taskMethodsForParticipant } from '../services/taskAdminHelpers.js';
 
 /**
  * POST /volunteer/confirm
@@ -60,8 +61,9 @@ export const volunteerConfirm = async (req: AdminRequest & VkAuthRequest, res: R
       return;
     }
     const confirmType = task.confirmationType || 'text_photo';
-    if (confirmType !== 'qr' && confirmType !== 'auto') {
-      res.status(400).json({ error: 'Это задание не подтверждается по QR' });
+    const methods = taskMethodsForParticipant(task);
+    if (!methods.includes('volunteer') && !methods.includes('qr') && confirmType !== 'qr' && confirmType !== 'auto') {
+      res.status(400).json({ error: 'Это задание не подтверждается по QR/волонтёру' });
       return;
     }
     const now = new Date();

@@ -25,9 +25,11 @@ export async function adminLogin(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  await db.update(adminUsers).set({ lastLoginAt: new Date() }).where(eq(adminUsers.id, user.id));
+
   const token = createAdminToken(user.id, user.login, user.role || 'admin');
   res.json({
     token,
-    admin: { id: user.id, login: user.login, role: user.role },
+    admin: { id: user.id, login: user.login, role: user.role, email: user.email, fullName: user.fullName },
   });
 }

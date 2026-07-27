@@ -1,191 +1,259 @@
-import { useCallback, useEffect, useState } from 'react';
-import { label } from '../../labels/ru';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
+import { PushAutoSettingsCard } from './PushAutoSettingsCard';
+import { PushListTable } from './PushListTable';
+import { PushNotificationForm } from './PushNotificationForm';
+import { PushTemplatesPanel } from './PushTemplatesPanel';
+import {
+  draftToPayload,
+  emptyPushDraft,
+  rowToDraft,
+  type PushDraft,
+  type PushNotificationRow,
+  type PushTemplateRow,
+  PUSH_NOTIFICATION_TYPE_OPTIONS,
+  PUSH_AUDIENCE_OPTIONS,
+} from './types';
 
-type ParticipantCardTab = 'profile' | 'answers' | 'tasks' | 'medals' | 'points' | 'piggybank';
+type ListTab = 'sent' | 'queued' | 'drafts' | 'templates';
+type View = 'list' | 'form';
 
-export type PushTabProps = AdminTabProps & {
-  onOpenCard?: (id: number, tab?: ParticipantCardTab) => void;
-};
+export type PushTabProps = AdminTabProps;
 
-export function PushTab({ adminFetch, act, reloadKey, onOpenCard }: PushTabProps) {
+export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
   const [loading, setLoading] = useState(true);
-  const [pushLog, setPushLog] = useState<any[]>([]);
-  const [pushTemplates, setPushTemplates] = useState<any[]>([]);
-  const [pushNightSlot, setPushNightSlot] = useState(false);
-  const [pushBlockTypesJson, setPushBlockTypesJson] = useState('{}');
-  const [pushText, setPushText] = useState('');
-  const [pushParticipantId, setPushParticipantId] = useState('');
-  const [newPushTemplate, setNewPushTemplate] = useState({ key: '', title: '', body: '', slotKey: '', isActive: true });
-  const [templateNotice, setTemplateNotice] = useState<string | null>(null);
+  const [view, setView] = useState<View>('list');
+  const [listTab, setListTab] = useState<ListTab>('sent');
+  const [notifications, setNotifications] = useState<PushNotificationRow[]>([]);
+  const [summary, setSummary] = useState({ total: 0, queued: 0 });
+  const [templates, setTemplates] = useState<PushTemplateRow[]>([]);
+  const [directions, setDirections] = useState<{ id: number; name: string }[]>([]);
+  const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
+  const [totalDays, setTotalDays] = useState(8);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draft, setDraft] = useState<PushDraft>(emptyPushDraft);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+
+  const [typeFilter, setTypeFilter] = useState('');
+  const [audienceFilter, setAudienceFilter] = useState('');
+  const [sentFrom, setSentFrom] = useState('');
+  const [sentTo, setSentTo] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setPushLog((await adminFetch('/push/log')).log || []);
-      setPushTemplates((await adminFetch('/push/templates')).templates || []);
+      const params = new URLSearchParams();
+      if (typeFilter) params.set('type', typeFilter);
+      if (audienceFilter) params.set('audience', audienceFilter);
+      if (sentFrom) params.set('sentFrom', sentFrom);
+      if (sentTo) params.set('sentTo', sentTo);
+      const q = params.toString();
+      const res = await adminFetch(`/push/notifications${q ? `?${q}` : ''}`) as {
+        notifications: PushNotificationRow[];
+        summary: { total: number; queued: number };
+      };
+      setNotifications(res.notifications || []);
+      setSummary(res.summary || { total: 0, queued: 0 });
+      setTemplates((await adminFetch('/push/templates?kind=preset')).templates || []);
+      setDirections((await adminFetch('/directions')).directions || []);
+      setGroups((await adminFetch('/participants/groups')).groups || []);
       const fs = (await adminFetch('/forum-settings')).settings;
-      setPushNightSlot(!!fs?.pushNightSlotEnabled);
-      setPushBlockTypesJson(JSON.stringify(fs?.pushBlockTypes || {}, null, 2));
+      setTotalDays(fs?.totalDays ?? 8);
     } finally {
       setLoading(false);
     }
-  }, [adminFetch]);
+  }, [adminFetch, typeFilter, audienceFilter, sentFrom, sentTo]);
 
   useEffect(() => {
     load().catch(() => setLoading(false));
   }, [load, reloadKey]);
 
-  if (loading) return <p className="adm-muted">Загрузка уведомлений…</p>;
+  const tabRows = useMemo(() => {
+    if (listTab === 'sent') return notifications.filter(n => n.status === 'sent');
+    if (listTab === 'queued') return notifications.filter(n => n.status === 'queued');
+    if (listTab === 'drafts') return notifications.filter(n => n.status === 'draft');
+    return [];
+  }, [notifications, listTab]);
+
+  const openCreate = () => {
+    setEditingId(null);
+    setDraft(emptyPushDraft());
+    setPreviewText(null);
+    setView('form');
+  };
+
+  const openEdit = async (id: number) => {
+    const res = await adminFetch(`/push/notifications/${id}`) as { notification: PushNotificationRow };
+    setEditingId(id);
+    setDraft(rowToDraft(res.notification));
+    setView('form');
+  };
+
+  const persist = async (status?: string): Promise<number> => {
+    const payload = draftToPayload({ ...draft, status: status ?? draft.status });
+    if (editingId) {
+      await adminFetch(`/push/notifications/${editingId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      return editingId;
+    }
+    const created = await adminFetch('/push/notifications', {
+      method: 'POST',
+      body: JSON.stringify({ ...payload, status: status ?? 'draft' }),
+    }) as { notification: PushNotificationRow };
+    setEditingId(created.notification.id);
+    return created.notification.id;
+  };
+
+  const applyTemplate = async (templateId: number) => {
+    const res = await adminFetch(`/push/templates/${templateId}/apply`) as {
+      draft: Partial<PushDraft>;
+    };
+    setDraft(d => ({ ...d, ...res.draft, templateId }));
+  };
+
+  const uploadImage = async (file: File) => {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+    const up = await adminFetch('/upload-image', {
+      method: 'POST',
+      body: JSON.stringify({ dataUrl }),
+    }) as { url: string };
+    setDraft(d => ({ ...d, imageUrl: up.url }));
+  };
+
+  const runPreview = async () => {
+    if (!editingId) {
+      setPreviewText(draft.body);
+      return;
+    }
+    const res = await adminFetch(`/push/notifications/${editingId}/preview`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }) as { preview: { body: string } };
+    setPreviewText(res.preview.body);
+  };
+
+  if (loading && view === 'list') {
+    return <p className="adm-muted">Загрузка пушей…</p>;
+  }
+
+  if (view === 'form') {
+    return (
+      <div className="adm-forum">
+        <PushNotificationForm
+          draft={draft}
+          templates={templates}
+          directions={directions}
+          groups={groups}
+          totalDays={totalDays}
+          showPreview={showPreview}
+          previewText={previewText}
+          onChange={patch => setDraft(d => ({ ...d, ...patch }))}
+          onApplyTemplate={applyTemplate}
+          onSaveDraft={() => act(async () => {
+            await persist('draft');
+          }, 'Черновик сохранён')}
+          onTest={() => act(async () => {
+            const id = await persist('draft');
+            await adminFetch(`/push/notifications/${id}/test`, { method: 'POST', body: '{}' });
+          }, 'Тест отправлен')}
+          onTogglePreview={() => {
+            setShowPreview(v => !v);
+            if (!showPreview) runPreview().catch(() => setPreviewText(draft.body));
+          }}
+          onSend={mode => act(async () => {
+            const nextStatus = mode === 'queue' || draft.sendMode !== 'now' ? 'queued' : 'draft';
+            const id = await persist(nextStatus);
+            await adminFetch(`/push/notifications/${id}/send`, {
+              method: 'POST',
+              body: JSON.stringify({ mode }),
+            });
+            setView('list');
+            await load();
+          }, mode === 'queue' ? 'В очереди' : 'Отправлено')}
+          onCancel={() => { setView('list'); setEditingId(null); }}
+          onImagePick={file => act(() => uploadImage(file), 'Картинка загружена')}
+        />
+      </div>
+    );
+  }
+
+  const tabs: { key: ListTab; label: string }[] = [
+    { key: 'sent', label: 'Отправлено' },
+    { key: 'queued', label: 'В очереди' },
+    { key: 'drafts', label: 'Черновики' },
+    { key: 'templates', label: 'Шаблоны' },
+  ];
 
   return (
     <div className="adm-forum">
-      <AdminPageHero title="Уведомления" hint="Автопush, шаблоны, ручная отправка и журнал доставки." />
-
-      <div className="card adm-forum-block">
-        <h3>Настройки автопush</h3>
-        <label className="adm-forum-check" style={{ display: 'block', marginBottom: 8 }}>
-          <input type="checkbox" checked={pushNightSlot} onChange={e => setPushNightSlot(e.target.checked)} />
-          {' '}Ночной push 23:00 («Спокойной ночи»)
-        </label>
-        <p className="adm-muted" style={{ fontSize: 12 }}>
-          Напоминания о блоках программы: JSON типов блоков (true = push за 10–15 мин). Пример: {`{"session":true,"key_block":true}`}
-        </p>
-        <textarea
-          className="adm-input"
-          value={pushBlockTypesJson}
-          onChange={e => setPushBlockTypesJson(e.target.value)}
-          rows={4}
-          style={{ width: '100%', fontFamily: 'monospace', fontSize: 12 }}
-        />
-        <button
-          type="button"
-          className="adm-btn"
-          style={{ marginTop: 8 }}
-          onClick={() => act(async () => {
-            let parsed: Record<string, boolean> = {};
-            try {
-              parsed = JSON.parse(pushBlockTypesJson || '{}');
-            } catch {
-              throw new Error('Некорректный JSON push_block_types');
-            }
-            await adminFetch('/forum-settings', {
-              method: 'PATCH',
-              body: JSON.stringify({
-                pushNightSlotEnabled: pushNightSlot,
-                pushBlockTypes: parsed,
-              }),
-            });
-          }, 'Настройки push сохранены')}
-        >
-          Сохранить настройки push
-        </button>
-      </div>
-
-      <div className="card adm-forum-block">
-        <h3>Шаблоны уведомлений</h3>
-        {templateNotice && <p className="adm-muted" style={{ fontSize: 12 }}>{templateNotice}</p>}
-        <div className="form-row">
-          <input className="adm-input" value={newPushTemplate.key} onChange={e => setNewPushTemplate({ ...newPushTemplate, key: e.target.value })} placeholder="Ключ шаблона" />
-          <input className="adm-input" value={newPushTemplate.slotKey} onChange={e => setNewPushTemplate({ ...newPushTemplate, slotKey: e.target.value })} placeholder="Слот (утро / вечер…)" />
-          <input className="adm-input" value={newPushTemplate.title} onChange={e => setNewPushTemplate({ ...newPushTemplate, title: e.target.value })} placeholder="Заголовок" />
-        </div>
-        <textarea className="adm-input" value={newPushTemplate.body} onChange={e => setNewPushTemplate({ ...newPushTemplate, body: e.target.value })} placeholder="Текст шаблона" rows={2} style={{ width: '100%' }} />
-        <button
-          type="button"
-          className="adm-btn"
-          style={{ marginTop: 8 }}
-          onClick={() => act(() => adminFetch('/push/templates', {
-            method: 'POST', body: JSON.stringify(newPushTemplate),
-          }).then(() => setNewPushTemplate({ key: '', title: '', body: '', slotKey: '', isActive: true })), 'Шаблон создан')}
-        >
-          Добавить шаблон
-        </button>
-        {pushTemplates.map(t => (
-          <div key={t.id} className="card" style={{ marginTop: 8, fontSize: 12 }}>
-            <strong>{t.title || t.key}</strong>{t.slotKey ? ` · ${label(t.slotKey)}` : ''} {t.isActive === false ? '· выкл' : ''}
-            <div>{t.title}</div>
-            <div style={{ color: '#666' }}>{t.body}</div>
-            <div className="form-row" style={{ marginTop: 6 }}>
-              <button type="button" className="adm-btn adm-btn-secondary" onClick={() => {
-                setPushText(t.body || '');
-                setTemplateNotice('Текст шаблона подставлен');
-              }}>
-                Использовать
-              </button>
-              <button type="button" className="adm-btn adm-btn-secondary" onClick={() => act(() => adminFetch(`/push/templates/${t.id}`, {
-                method: 'PATCH', body: JSON.stringify({ isActive: t.isActive === false }),
-              }), t.isActive === false ? 'Включён' : 'Выключен')}>
-                {t.isActive === false ? 'Вкл' : 'Выкл'}
-              </button>
-              <button type="button" className="adm-btn btn-danger" onClick={() => {
-                if (confirm('Удалить шаблон?')) act(() => adminFetch(`/push/templates/${t.id}`, { method: 'DELETE' }));
-              }}>
-                ×
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="card adm-forum-block">
-        <textarea className="adm-input" value={pushText} onChange={e => setPushText(e.target.value)} placeholder="Текст уведомления" rows={3} style={{ width: '100%' }} />
-        <div className="form-row" style={{ marginTop: 8 }}>
-          <input
-            type="number"
-            className="adm-input"
-            value={pushParticipantId}
-            onChange={e => setPushParticipantId(e.target.value)}
-            placeholder="ID участника (пусто = всем)"
-            style={{ flex: 1 }}
-          />
-          <button
-            type="button"
-            className="adm-btn adm-btn-secondary"
-            onClick={() => {
-              const id = Number(pushParticipantId);
-              if (id && onOpenCard) onOpenCard(id);
-            }}
-          >
-            Карточка
-          </button>
-          <button
-            type="button"
-            className="adm-btn"
-            onClick={() => act(async () => {
-              await adminFetch('/push/send', {
-                method: 'POST',
-                body: JSON.stringify({
-                  text: pushText,
-                  ...(pushParticipantId ? { participantId: Number(pushParticipantId) } : {}),
-                }),
-              });
-              setPushText('');
-              setPushParticipantId('');
-            }, 'Уведомление отправлено')}
-          >
-            Отправить
-          </button>
-          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => act(() => adminFetch('/integrations/club-match', { method: 'POST' }), 'Подбор клубов выполнен')}>
-            Подбор клубов (ИИ)
-          </button>
-        </div>
-      </div>
-
-      <table className="adm-table">
-        <thead><tr><th>Текст</th><th>Триггер</th><th>Статус</th><th>Дата</th></tr></thead>
-        <tbody>
-          {pushLog.map(l => (
-            <tr key={l.id}>
-              <td>{l.text}</td>
-              <td>{label(l.triggerType)}</td>
-              <td>{label(l.deliveryStatus)}</td>
-              <td>{l.sentAt ? new Date(l.sentAt).toLocaleString('ru-RU') : ''}</td>
-            </tr>
+      <AdminPageHero
+        title={`Пуши · ${summary.total} всего · ${summary.queued} в очереди`}
+        hint="Ручные и запланированные уведомления, баннер в мини-приложении до времени окончания."
+      >
+        <div className="adm-seg" style={{ marginBottom: 12 }}>
+          {tabs.map(t => (
+            <button key={t.key} type="button" className={listTab === t.key ? 'on' : ''} onClick={() => setListTab(t.key)}>
+              {t.label}
+            </button>
           ))}
-        </tbody>
-      </table>
+        </div>
+        {listTab !== 'templates' && (
+          <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
+            <select className="adm-input" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+              <option value="">Тип</option>
+              {PUSH_NOTIFICATION_TYPE_OPTIONS.map(o => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
+            </select>
+            <select className="adm-input" value={audienceFilter} onChange={e => setAudienceFilter(e.target.value)}>
+              <option value="">Аудитория</option>
+              {PUSH_AUDIENCE_OPTIONS.map(o => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
+            </select>
+            <input type="date" className="adm-input" value={sentFrom} onChange={e => setSentFrom(e.target.value)} title="Дата отправки от" />
+            <input type="date" className="adm-input" value={sentTo} onChange={e => setSentTo(e.target.value)} title="Дата отправки до" />
+            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => load()}>Применить</button>
+            <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={openCreate}>
+              + Создать уведомление
+            </button>
+          </div>
+        )}
+      </AdminPageHero>
+
+      {listTab === 'templates' ? (
+        <PushTemplatesPanel adminFetch={adminFetch} act={act} templates={templates} onReload={() => load()} />
+      ) : (
+        <div className="card">
+          <PushListTable
+            rows={tabRows}
+            onEdit={id => act(() => openEdit(id))}
+            onDuplicate={id => act(async () => {
+              await adminFetch(`/push/notifications/${id}/duplicate`, { method: 'POST', body: '{}' });
+              await load();
+            }, 'Копия создана')}
+            onDelete={id => {
+              if (confirm('Удалить уведомление?')) {
+                act(async () => {
+                  await adminFetch(`/push/notifications/${id}`, { method: 'DELETE' });
+                  await load();
+                });
+              }
+            }}
+          />
+        </div>
+      )}
+
+      <PushAutoSettingsCard adminFetch={adminFetch} act={act} />
     </div>
   );
 }
