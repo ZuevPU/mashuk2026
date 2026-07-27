@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'mashuk-admin/**'
+      - '.github/workflows/deploy-admin.yml'
+      - '.github/workflows/ci.yml'
   workflow_dispatch: {}
 
 jobs:
@@ -15,17 +17,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: mashuk-admin/package-lock.json
 
       - name: Install and Build
+        working-directory: mashuk-admin
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
         run: |
-          cd mashuk-admin
-          npm ci
+          if [ -z "$VITE_API_URL" ]; then
+            export VITE_API_URL="https://zuevpu-mashuk2026-ae82.twc1.net/api"
+          fi
+          npm ci --prefer-offline --no-audit --no-fund
           npm run build
 
       - name: Upload artifact
@@ -34,9 +40,9 @@ jobs:
           name: mashuk-admin-dist
           path: mashuk-admin/dist
 
-      - name: Deploy to Timeweb Static (webhook)
+      - name: Deploy to Timeweb (webhook)
         if: ${{ env.TIMEWEB_ADMIN_WEBHOOK != '' }}
         run: |
-          curl -X POST "$TIMEWEB_ADMIN_WEBHOOK" \
+          curl -fsS -X POST "$TIMEWEB_ADMIN_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d '{"service":"admin","sha":"${{ github.sha }}"}'

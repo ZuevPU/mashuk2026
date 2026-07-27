@@ -66,6 +66,17 @@ export const ProfilePanel: React.FC<{
 
   useEffect(() => { loadProfile(); }, []);
 
+  useEffect(() => {
+    const hash = window.location.hash || '';
+    const qIndex = hash.indexOf('?');
+    if (qIndex === -1) return;
+    const params = new URLSearchParams(hash.slice(qIndex + 1));
+    const section = params.get('section');
+    if (section === 'piggybank' || section === 'final' || section === 'settings' || section === 'rating') {
+      setSection(section);
+    }
+  }, []);
+
   const loadPiggybank = () => {
     const params = new URLSearchParams();
     if (tagFilter) params.set('tag', tagFilter);

@@ -232,7 +232,7 @@ export async function loadDayContext(participantId: number, dayNumber: number, p
     }
   }
 
-  const showRoleOfDay = dayNumber >= 2 && dayNumber <= 7 && !!roleMeta;
+  const showRoleOfDay = dayNumber >= 1 && dayNumber <= 7 && !!roleMeta;
   const eveningDone = !!state?.eveningRatings;
   const askTomorrowRole = dayNumber >= 1 && dayNumber <= 6;
 

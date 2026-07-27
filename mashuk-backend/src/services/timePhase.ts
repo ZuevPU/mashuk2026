@@ -32,6 +32,29 @@ export function isEveningWrapWindow(now = new Date()): boolean {
   return totalMinutes >= 22 * 60;
 }
 
+/** Какую «Проверку состояния» показывать первой на главной (МСК). */
+export type StateCheckPhase = 'утро' | 'день' | 'вечер' | 'ночь';
+
+export function getPreferredStateCheckPhase(now = new Date()): StateCheckPhase {
+  const { totalMinutes } = getMoscowParts(now);
+  if (totalMinutes < 13 * 60) return 'утро';
+  if (totalMinutes < 18 * 60) return 'день';
+  if (totalMinutes < 22 * 60) return 'вечер';
+  return 'ночь';
+}
+
+const STATE_CHECK_PRIORITY: Record<StateCheckPhase, ('утро' | 'день' | 'вечер')[]> = {
+  утро: ['утро', 'день', 'вечер'],
+  день: ['день', 'утро', 'вечер'],
+  вечер: ['вечер', 'день', 'утро'],
+  ночь: ['вечер', 'день', 'утро'],
+};
+
+/** Порядок timePoint для незакрытых проверок состояния текущего дня. */
+export function stateCheckTimePointOrder(now = new Date()): ('утро' | 'день' | 'вечер')[] {
+  return STATE_CHECK_PRIORITY[getPreferredStateCheckPhase(now)];
+}
+
 /**
  * Календарный день форума по startDate (день 1 = дата старта в МСК).
  * После полуночи МСК следующего календарного дня номер растёт.
