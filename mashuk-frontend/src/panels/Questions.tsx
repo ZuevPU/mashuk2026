@@ -182,8 +182,11 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
     return () => setModal(null);
   }, [setModal]);
 
-  const unanswered = questions.filter(q => q.status === 'available' || q.status === 'overdue');
-  const answered = questions.filter(q => q.status === 'done' || q.status === 'answered');
+  const unanswered = questions.filter(q =>
+    q.status === 'active' || q.status === 'pending' || q.status === 'overdue',
+  );
+  const canAnswer = (status: string) => status === 'active' || status === 'overdue';
+  const answered = questions.filter(q => q.status === 'done');
   const locked = questions.filter(q => q.status === 'locked');
   const peerApproved = exchange.filter(q => q.moderationStatus === 'approved' || !q.moderationStatus);
 
@@ -215,13 +218,19 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
             </div>
             {unanswered.length > 0 && (
               <>
-                <div className="rq-hdr"><span className="rq-hdr-t">Не отвечено</span></div>
+                <div className="rq-hdr"><span className="rq-hdr-t">Не отвечено · {unanswered.length}</span></div>
                 {unanswered.map(q => (
                   <div key={q.id} className="rq-item m-card" style={{ marginBottom: 8 }}>
                     <div className="rq-tag">{q.block || q.type}</div>
                     <div className="rq-q">{q.title}</div>
                     <div className="rq-from" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>{q.status === 'overdue' ? 'Пропущена — ещё можно' : 'Доступно'}</span>
+                      <span>
+                        {q.status === 'overdue'
+                          ? 'Пропущена — ещё можно'
+                          : q.status === 'pending'
+                            ? 'Скоро откроется'
+                            : 'Доступно'}
+                      </span>
                       {typeof q.points === 'number' && <span>+{q.points} 📍</span>}
                     </div>
                     {q.closeTime && (
@@ -229,7 +238,9 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                         До {new Date(q.closeTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     )}
-                    <div className="rq-btn" onClick={() => openQuestion(q.id)}>Ответить →</div>
+                    {canAnswer(q.status) && (
+                      <div className="rq-btn" onClick={() => openQuestion(q.id)}>Ответить →</div>
+                    )}
                   </div>
                 ))}
               </>
@@ -248,7 +259,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
             )}
             {answered.length > 0 && (
               <>
-                <div className="rq-hdr" style={{ marginTop: 12 }}><span className="rq-hdr-t">Отвечено</span></div>
+                <div className="rq-hdr" style={{ marginTop: 12 }}><span className="rq-hdr-t">Отвечено · {answered.length}</span></div>
                 {answered.map(q => (
                   <div key={q.id} className="rq-item m-card rq-done" style={{ marginBottom: 8, opacity: 0.55 }}>
                     <div className="rq-tag">{q.block || q.type}</div>

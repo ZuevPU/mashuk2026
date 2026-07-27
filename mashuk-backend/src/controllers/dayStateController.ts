@@ -157,16 +157,17 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
           eq(answers.questionId, summaryQ.id),
         )).limit(1);
       if (!existing) {
+        const eveningPoints = 15;
         await db.insert(answers).values({
           participantId: req.participant!.id,
           questionId: summaryQ.id,
           answerData: ratings,
           questionTextSnapshot: summaryQ.text,
-          pointsAwarded: summaryQ.points ?? 15,
+          pointsAwarded: eveningPoints,
           wordCount: String(ratings.mainThesis || ratings.freeNote || '').split(/\s+/).filter(Boolean).length,
         });
-        await awardPoints(req.participant!.id, 'question_answer', summaryQ.points ?? 15);
-        await awardPoints(req.participant!.id, 'evening_complete', 15);
+        // Single Path award: evening questionnaire covers touchpoint 7 (avoid question_answer + evening_complete).
+        await awardPoints(req.participant!.id, 'evening_complete', eveningPoints);
       }
     }
 

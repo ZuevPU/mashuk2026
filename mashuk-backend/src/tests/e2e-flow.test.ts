@@ -109,7 +109,7 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
 
     const questions = await request(app).get('/api/questions').set(headers);
     assert.equal(questions.status, 200);
-    const q = questions.body.questions?.find((x: { status: string }) => x.status === 'available');
+    const q = questions.body.questions?.find((x: { status: string }) => x.status === 'active');
     if (q) {
       const ans = await request(app)
         .post(`/api/questions/${q.id}/answer`)
