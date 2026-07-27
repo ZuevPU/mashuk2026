@@ -315,7 +315,7 @@ export const answerExchange = async (req: ParticipantRequest, res: Response): Pr
 
     const pointsResult = await awardPoints(req.participant!.id, 'exchange_answer');
 
-    res.json({ answer, xpAwarded: pointsResult?.awarded ?? 0, track: pointsResult?.track ?? 'experience' });
+    res.json({ answer, xpAwarded: pointsResult?.awarded ?? 0, track: pointsResult?.track ?? 'path' });
   } catch (error) {
     console.error('answerExchange:', error);
     res.status(500).json({ error: 'Internal server error' });

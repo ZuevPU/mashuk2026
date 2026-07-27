@@ -10,8 +10,12 @@ const PATH_ACTIONS = new Set([
   'piggybank_idea',
   'piggybank_thought',
   'piggybank_question',
+  'exchange_question',
+  'exchange_answer',
+  'attendance',
+  'point_a_complete',
 ]);
-const EXP_ACTIONS = new Set(['task_complete', 'exchange_question', 'exchange_answer', 'piggybank_entry']);
+const EXP_ACTIONS = new Set(['task_complete', 'piggybank_entry']);
 
 const DEFAULT_THRESHOLDS = [0, 100, 250, 500, 1000];
 

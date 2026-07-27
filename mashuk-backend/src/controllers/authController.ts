@@ -7,6 +7,7 @@ import { VkAuthRequest } from '../middlewares/vkAuth.js';
 import { scorePedagogicalRole, getRoleMeta, normalizeOnboardingConfig, interestTagsFromConfig } from '../services/roleService.js';
 import { getActiveConsentVersions } from './consentsController.js';
 import { generateQrToken } from '../services/qrService.js';
+import { awardPoints } from '../services/pointsService.js';
 
 
 async function getForumOnboardingConfig() {
@@ -194,6 +195,8 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
     } else {
       [user] = await db.insert(participants).values(values).returning();
     }
+
+    await awardPoints(user.id, 'point_a_complete');
 
     res.json({ status: 'ok', user, role: getRoleMeta(pedagogicalRole) });
   } catch (error) {

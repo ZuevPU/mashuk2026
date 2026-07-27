@@ -177,7 +177,15 @@ export const markAttendance = async (req: ParticipantRequest, res: Response): Pr
       eventId,
     }).returning();
 
-    res.json({ ok: true, record });
+    const { awardPoints } = await import('../services/pointsService.js');
+    const pointsResult = await awardPoints(req.participant!.id, 'attendance');
+
+    res.json({
+      ok: true,
+      record,
+      xpAwarded: pointsResult?.awarded ?? 0,
+      track: pointsResult?.track ?? 'path',
+    });
   } catch (error) {
     console.error('markAttendance:', error);
     res.status(500).json({ error: 'Internal server error' });

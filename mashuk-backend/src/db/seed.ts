@@ -75,7 +75,7 @@ export async function runSeed() {
     ]);
 
     await db.insert(tasks).values([
-      { title: 'Познакомься с участником другого направления', category: 'Полезные знакомства и общение', points: 20, dayNumber: 1, publishTime: now, autoConfirm: true, confirmationType: 'auto' },
+      { title: 'Познакомься с участником другого направления', category: 'Нетворкинг', points: 20, dayNumber: 1, publishTime: now, autoConfirm: true, confirmationType: 'auto' },
       { title: 'Напиши пост о форуме', category: 'Медиа', points: 30, dayNumber: 1, publishTime: now, autoConfirm: false, answerType: 'text_and_photo', confirmationType: 'post_url' },
       { title: 'Зафиксируй идею эксперимента', category: 'Образование', points: 25, dayNumber: 3, publishTime: now, autoConfirm: true, confirmationType: 'text_photo' },
       { title: 'Скан QR на площадке', category: 'Организация', points: 15, dayNumber: 2, publishTime: now, autoConfirm: true, confirmationType: 'qr' },
@@ -127,7 +127,8 @@ export async function runSeed() {
       { actionType: 'question_answer', pointsPerUnit: 10, maxAccruals: 100 },
       { actionType: 'task_complete', pointsPerUnit: 20, maxAccruals: 100 },
       { actionType: 'exchange_answer', pointsPerUnit: 5, maxAccruals: 50 },
-      { actionType: 'exchange_question', pointsPerUnit: 5, maxAccruals: 30 },
+      { actionType: 'exchange_question', pointsPerUnit: 3, maxAccruals: 30 },
+      { actionType: 'point_a_complete', pointsPerUnit: 20, maxAccruals: 1 },
       { actionType: 'piggybank_entry', pointsPerUnit: 3, maxAccruals: 100 },
       { actionType: 'piggybank_idea', pointsPerUnit: 5, maxAccruals: 50 },
       { actionType: 'piggybank_thought', pointsPerUnit: 3, maxAccruals: 50 },
@@ -379,6 +380,26 @@ export async function runSeed() {
   const [eveningRate] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, 'evening_complete')).limit(1);
   if (!eveningRate) {
     await db.insert(levelsConfig).values({ actionType: 'evening_complete', pointsPerUnit: 15, maxAccruals: 8 });
+  }
+
+  const ratingFixes: Array<{ actionType: string; pointsPerUnit: number; maxAccruals?: number }> = [
+    { actionType: 'point_a_complete', pointsPerUnit: 20, maxAccruals: 1 },
+    { actionType: 'exchange_question', pointsPerUnit: 3, maxAccruals: 30 },
+    { actionType: 'exchange_answer', pointsPerUnit: 5, maxAccruals: 50 },
+    { actionType: 'attendance', pointsPerUnit: 5, maxAccruals: 40 },
+  ];
+  for (const row of ratingFixes) {
+    const [existing] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, row.actionType)).limit(1);
+    if (!existing) {
+      await db.insert(levelsConfig).values(row);
+    } else if (
+      existing.pointsPerUnit !== row.pointsPerUnit
+      || (row.maxAccruals != null && existing.maxAccruals !== row.maxAccruals)
+    ) {
+      await db.update(levelsConfig)
+        .set({ pointsPerUnit: row.pointsPerUnit, maxAccruals: row.maxAccruals ?? existing.maxAccruals })
+        .where(eq(levelsConfig.id, existing.id));
+    }
   }
 
   const [qrTask] = await db.select().from(tasks).where(eq(tasks.confirmationType, 'qr')).limit(1);
