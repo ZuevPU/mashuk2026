@@ -80,6 +80,13 @@
       "breakpoints": true
     },
     {
+      "idx": 11,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0011_tasks_team_antichit",
+      "breakpoints": true
+    },
+    {
       "idx": 12,
       "version": "7",
       "when": 1792000000000,
@@ -91,6 +98,20 @@
       "version": "7",
       "when": 1793000000000,
       "tag": "0013_questions_s6",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794000000000,
+      "tag": "0014_profile_s7",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1795000000000,
+      "tag": "0015_piggybank_s8",
       "breakpoints": true
     },
     {
