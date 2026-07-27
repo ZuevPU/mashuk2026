@@ -673,7 +673,53 @@ body {
 .rq-tag { display: inline-flex; font-size: 8px; font-weight: 700; text-transform: uppercase; color: var(--m-accent); background: #FFF0E6; border-radius: 5px; padding: 2px 7px; margin-bottom: 4px; }
 .rq-q { font-size: 12px; font-weight: 700; line-height: 1.4; color: var(--m-text-main); }
 .rq-from { font-size: 9px; color: #aaa; margin-top: 2px; }
-.rq-btn { display: inline-block; background: var(--m-accent); color: #fff; font-size: 10px; font-weight: 700; border-radius: 8px; padding: 6px 14px; margin-top: 7px; cursor: pointer; }
+.rq-btn { display: inline-block; background: var(--m-accent); color: #fff; font-size: 10px; font-weight: 700; border-radius: 8px; padding: 6px 14px; margin-top: 7px; cursor: pointer; border: none; font-family: inherit; }
+
+/* Answer / submit success overlay (questions, exchange, tasks) */
+.answer-success-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+.answer-success-shell {
+  width: 100%;
+  max-width: 420px;
+  margin: auto;
+}
+.answer-success-card {
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+}
+.answer-success-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.answer-success-points {
+  font-size: 14px;
+  color: #444;
+}
+.answer-success-medal {
+  font-size: 14px;
+  margin-top: 8px;
+  padding: 10px;
+  background: #FFFAF0;
+  border-radius: 8px;
+  text-align: left;
+}
+.answer-success-next {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  text-align: center;
+  box-sizing: border-box;
+}
 .peer-item { color: var(--m-text-main); }
 .peer-dir { font-size: 9px; color: var(--m-accent); font-weight: 600; }
 .peer-q { font-size: 11px; font-weight: 600; line-height: 1.4; margin-top: 2px; color: var(--m-text-main); }

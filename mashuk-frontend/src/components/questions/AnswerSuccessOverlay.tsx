@@ -29,38 +29,21 @@ export const AnswerSuccessOverlay: React.FC<Props> = ({ payload, onDone }) => {
   const medals = newMedals?.length ? newMedals : [];
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 10000,
-        background: 'rgba(0,0,0,0.45)',
-        display: 'flex',
-        alignItems: 'flex-end',
-        justifyContent: 'center',
-        padding: 16,
-      }}
-      onClick={onDone}
-    >
-      <div style={{ width: '100%', maxWidth: 420 }} onClick={e => e.stopPropagation()}>
-        <div className="m-card" style={{ marginBottom: 8, padding: 16 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>✓ {title}</div>
+    <div className="answer-success-backdrop" onClick={onDone}>
+      <div className="answer-success-shell" onClick={e => e.stopPropagation()}>
+        <div className="m-card answer-success-card">
+          <div className="answer-success-title">✓ {title}</div>
           {showPoints && (
-            <div style={{ fontSize: 14, color: '#444', marginBottom: medals.length ? 8 : 0 }}>
+            <div className="answer-success-points">
               +{xpAwarded} {trackLabel(track)}
             </div>
           )}
           {medals.map(m => (
-            <div key={m.id} style={{ fontSize: 14, marginTop: 8, padding: 10, background: '#FFFAF0', borderRadius: 8 }}>
+            <div key={m.id} className="answer-success-medal">
               🏅 Ты получил медаль: {m.name}
             </div>
           ))}
-          <button
-            type="button"
-            className="rq-btn"
-            style={{ marginTop: 12, width: '100%', textAlign: 'center' }}
-            onClick={onDone}
-          >
+          <button type="button" className="rq-btn answer-success-next" onClick={onDone}>
             Дальше →
           </button>
         </div>

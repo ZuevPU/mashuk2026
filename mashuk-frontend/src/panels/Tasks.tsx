@@ -4,6 +4,17 @@ import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { uploadTaskPhoto } from '../utils/uploadPhoto';
 import { useAppModal } from '../App';
 import { EmptyState } from '../components/EmptyState';
+import {
+  AnswerSuccessOverlay,
+  type SubmitSuccessPayload,
+  type AnswerConfirmationConfig,
+} from '../components/questions/AnswerSuccessOverlay';
+
+const TASK_SUBMIT_CONFIRM: AnswerConfirmationConfig = {
+  enabled: true,
+  showPoints: true,
+  titleTemplate: 'Задание отправлено',
+};
 
 const STATUS_LABEL: Record<string, string> = {
   soon: '⚪ Скоро откроется',
@@ -46,12 +57,14 @@ const TaskSubmitModal = ({
   meta,
   onClose,
   onSuccess,
+  onSubmitSuccess,
   setSnackbar,
 }: {
   taskId: number | null;
   meta: any;
   onClose: () => void;
   onSuccess: () => void;
+  onSubmitSuccess: (p: SubmitSuccessPayload) => void;
   setSnackbar: (msg: string) => void;
 }) => {
   const [answerText, setAnswerText] = useState('');
@@ -124,15 +137,24 @@ const TaskSubmitModal = ({
     }
     try {
       const teamIds = selectedTeam.map(p => p.id);
-      const res = await apiPost<{ xpAwarded?: number }>(`/tasks/${taskId}/submit`, {
+      const res = await apiPost<{ xpAwarded?: number; track?: 'path' | 'experience' }>(`/tasks/${taskId}/submit`, {
         answerText: answerText || (isAuto || isQr ? 'Готово' : undefined),
         photoUrl,
         postUrl: postUrl || undefined,
         teamMemberIds: teamIds.length ? teamIds : undefined,
         qrToken: qrFromHash || undefined,
       });
-      const xp = res.xpAwarded;
-      setSnackbar(xp ? `Задание отправлено · +${xp} Опыт` : 'Задание отправлено');
+      const xp = res.xpAwarded ?? 0;
+      const teamPending = confirmationType === 'team';
+      onSubmitSuccess({
+        confirm: {
+          ...TASK_SUBMIT_CONFIRM,
+          titleTemplate: teamPending ? 'Задание отправлено команде' : TASK_SUBMIT_CONFIRM.titleTemplate,
+          showPoints: xp > 0,
+        },
+        xpAwarded: xp,
+        track: res.track ?? 'experience',
+      });
       onSuccess();
       onClose();
     } catch (err) {
@@ -234,6 +256,7 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
   const [submitTaskId, setSubmitTaskId] = useState<number | null>(null);
   const [submitTaskMeta, setSubmitTaskMeta] = useState<any>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
+  const [successPayload, setSuccessPayload] = useState<SubmitSuccessPayload | null>(null);
 
   const openSubmit = useCallback((task: any) => {
     setSubmitTaskId(task.id);
@@ -279,6 +302,7 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
             meta={submitTaskMeta}
             onClose={() => setSubmitTaskId(null)}
             onSuccess={load}
+            onSubmitSuccess={setSuccessPayload}
             setSnackbar={setSnackbar}
           />
         </ModalRoot>
@@ -407,6 +431,7 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
           {snackbar}
         </Snackbar>
       )}
+      <AnswerSuccessOverlay payload={successPayload} onDone={() => setSuccessPayload(null)} />
     </Panel>
   );
 };
