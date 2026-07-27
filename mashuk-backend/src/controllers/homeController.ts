@@ -7,8 +7,9 @@ import {
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
   getForumSettings, formatTime, getMoscowPhase, isEveningWrapWindow,
-  getTouchpointAccess, resolveEffectiveCurrentDay,
+  getTouchpointAccess, resolveEffectiveCurrentDay, stateCheckTimePointOrder,
 } from '../services/helpers.js';
+import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
 import { awardPoints, getLevelProgress } from '../services/pointsService.js';
 import { loadDayContext } from './dayStateController.js';
 import {
@@ -37,8 +38,9 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       .where(eq(questions.status, 'published'));
 
     const TOUCH_BLOCKS = new Set(['Проверка состояния', 'Точки осмысления', 'Итоги дня']);
+    const templateTitles = new Set(TOUCHPOINT_SLOTS.map(s => s.title));
     const dayQuestions = publishedQuestions.filter(q =>
-      q.dayNumber === currentDay && TOUCH_BLOCKS.has(q.block || ''));
+      q.dayNumber === currentDay && TOUCH_BLOCKS.has(q.block || '') && templateTitles.has(q.title));
     const participantAnswers = await db.select().from(answers)
       .where(eq(answers.participantId, participant.id));
 
@@ -80,11 +82,18 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const ideas = await db.select().from(piggybank)
       .where(and(eq(piggybank.participantId, participant.id), eq(piggybank.tag, 'идея')));
 
-    const priorityQuestion = publishedQuestions.find(q => {
-      if (answeredIds.has(q.id) || q.block !== 'Проверка состояния') return false;
-      const access = getTouchpointAccess(q.dayNumber, currentDay, q.closeTime, now, q.publishTime);
-      return access === 'open' || access === 'overdue';
-    });
+    const stateCheckOrder = stateCheckTimePointOrder(now);
+    let priorityQuestion: typeof publishedQuestions[0] | undefined;
+    for (const tp of stateCheckOrder) {
+      priorityQuestion = publishedQuestions.find(q => {
+        if (answeredIds.has(q.id) || q.block !== 'Проверка состояния') return false;
+        if (q.dayNumber !== currentDay) return false;
+        if ((q.timePoint || '') !== tp) return false;
+        const access = getTouchpointAccess(q.dayNumber, currentDay, q.closeTime, now, q.publishTime);
+        return access === 'open' || access === 'overdue';
+      });
+      if (priorityQuestion) break;
+    }
     const pointB = publishedQuestions.find(q => {
       if (answeredIds.has(q.id)) return false;
       if (!(q.block === 'Точка Б' || q.dayNumber === 8)) return false;
@@ -95,6 +104,9 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const dayEvents = await db.select().from(events)
       .where(and(eq(events.dayNumber, currentDay), eq(events.isPublished, true)))
       .orderBy(asc(events.startTime));
+
+    const SOON_MIN_MS = 15 * 60_000;
+    const SOON_MAX_MS = 30 * 60_000;
 
     const schedule: { kind: string; title: string; time: string; place?: string | null }[] = [];
     const nowEvent = dayEvents.find(e =>
@@ -108,21 +120,29 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       });
     }
     const futureEvents = dayEvents.filter(e => e.startTime && e.startTime > now);
-    if (futureEvents[0]) {
-      const diffMs = futureEvents[0].startTime!.getTime() - now.getTime();
+    const soonEvent = futureEvents.find(e => {
+      const diffMs = e.startTime!.getTime() - now.getTime();
+      return diffMs >= SOON_MIN_MS && diffMs <= SOON_MAX_MS;
+    });
+    if (soonEvent) {
       schedule.push({
-        kind: diffMs < 3600000 ? 'soon' : 'next',
-        title: futureEvents[0].title,
-        time: formatTime(futureEvents[0].startTime),
-        place: futureEvents[0].place,
+        kind: 'soon',
+        title: soonEvent.title,
+        time: formatTime(soonEvent.startTime),
+        place: soonEvent.place,
       });
     }
-    if (futureEvents[1] && schedule.length < 3) {
+    const nextEvent = futureEvents.find(e => {
+      if (soonEvent && e.id === soonEvent.id) return false;
+      if (soonEvent) return e.startTime!.getTime() > soonEvent.startTime!.getTime();
+      return true;
+    });
+    if (nextEvent && schedule.length < 3) {
       schedule.push({
         kind: 'next',
-        title: futureEvents[1].title,
-        time: formatTime(futureEvents[1].startTime),
-        place: futureEvents[1].place,
+        title: nextEvent.title,
+        time: formatTime(nextEvent.startTime),
+        place: nextEvent.place,
       });
     }
 
@@ -138,16 +158,6 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         subtitle: 'Точка Б · финальная рефлексия',
         route: `/questions?q=${pointB.id}`,
       };
-    } else if (eveningWrap && dayContext.eveningQuestionnaire.available && !dayContext.eveningQuestionnaire.completed) {
-      priorityAction = {
-        type: 'evening',
-        id: 'evening',
-        title: '✦ Завершение дня',
-        subtitle: currentDay === 7
-          ? 'Итоговая анкета · Точка Б'
-          : 'Оценки дня · эксперимент · роль на завтра',
-        route: '/?evening=1',
-      };
     } else if (priorityQuestion) {
       priorityAction = {
         type: 'question',
@@ -158,21 +168,27 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
           : 'Ответить сейчас',
         route: `/questions?q=${priorityQuestion.id}`,
       };
-    } else if (timeSlot === 'morning' && activeTasks[0]) {
-      priorityAction = {
-        type: 'task',
-        id: activeTasks[0].id,
-        title: activeTasks[0].title,
-        subtitle: 'Доступное задание',
-        route: `/tasks?task=${activeTasks[0].id}`,
-      };
     }
 
-    const dayTouchpointsTotal = dayQuestions.length || 7;
+    const eveningCard = eveningWrap
+      && dayContext.eveningQuestionnaire.available
+      && !dayContext.eveningQuestionnaire.completed
+      ? {
+        title: '✦ Завершение дня',
+        subtitle: currentDay === 7
+          ? 'Итоговая анкета · без роли на завтра'
+          : 'Оценки дня · эксперимент · роль на завтра',
+      }
+      : null;
+    const dayTouchpointsTotal = TOUCHPOINT_SLOTS.length;
     const dayTouchpointsCompleted = participantAnswers.filter(a =>
       dayQuestions.some(q => q.id === a.questionId)).length;
 
-    const touchpointItems = dayQuestions.map(q => {
+    const touchpointItems = TOUCHPOINT_SLOTS.map(slot => {
+      const q = dayQuestions.find(dq => dq.title === slot.title);
+      if (!q) {
+        return { id: slot.index, title: slot.title, state: 'pending' as const, block: slot.block };
+      }
       const done = answeredIds.has(q.id);
       const access = getTouchpointAccess(q.dayNumber, currentDay, q.closeTime, now, q.publishTime);
       let state: 'done' | 'active' | 'overdue' | 'locked' | 'pending' = 'pending';
@@ -241,10 +257,11 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         items: touchpointItems,
       },
       schedule,
+      eveningCard,
       ui: {
-        showTasksBanner: timeSlot === 'morning',
-        showQuickCapture: timeSlot === 'day' && currentDay !== 8,
-        showEveningCard: eveningWrap,
+        showTasksBanner: false,
+        showQuickCapture: false,
+        showEveningCard: !!eveningCard,
       },
       sectionsVisibility: settings.sectionsVisibility ?? {},
       startDate: settings.startDate ?? null,

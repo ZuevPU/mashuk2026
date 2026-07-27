@@ -21,10 +21,11 @@ export const PriorityAction: React.FC<PriorityActionProps> = ({ tag, title, subt
   );
 };
 
-export const NextEventCard: React.FC<{title: string, time: string, isSoon?: boolean}> = ({ title, time, isSoon }) => {
+export const NextEventCard: React.FC<{title: string, time: string, isSoon?: boolean, isNext?: boolean}> = ({ title, time, isSoon, isNext }) => {
   return (
     <div className="m-card">
       {isSoon && <div className="m-soon-bdg">СКОРО</div>}
+      {isNext && <div className="m-soon-bdg" style={{ background: '#E8E0D4', color: '#5D4B37' }}>ДАЛЕЕ</div>}
       <div className="m-now-t">{title}</div>
       <div className="m-now-tm">{time}</div>
     </div>
@@ -122,9 +123,11 @@ export const StatsRow: React.FC<{
   experienceLevel?: number;
   pathProgress?: number;
   experienceProgress?: number;
+  onIdeasClick?: () => void;
 }> = ({
   path, exp, ideas,
   pathLevel, experienceLevel, pathProgress = 0, experienceProgress = 0,
+  onIdeasClick,
 }) => {
   return (
     <div className="m-stats">
@@ -142,7 +145,19 @@ export const StatsRow: React.FC<{
           <div style={{ width: `${Math.round(experienceProgress * 100)}%`, height: '100%', background: '#B8621A', borderRadius: 4 }} />
         </div>
       </div>
-      <div className="m-st">
+      <div
+        className="m-st"
+        role={onIdeasClick ? 'button' : undefined}
+        tabIndex={onIdeasClick ? 0 : undefined}
+        onClick={onIdeasClick}
+        onKeyDown={onIdeasClick ? (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onIdeasClick();
+          }
+        } : undefined}
+        style={onIdeasClick ? { cursor: 'pointer' } : undefined}
+      >
         <div className="m-sv">✦ {ideas}</div>
         <div className="m-sl">Идей</div>
       </div>

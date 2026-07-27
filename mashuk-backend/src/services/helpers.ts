@@ -46,4 +46,6 @@ export {
   resolveEffectiveCurrentDay,
   toTouchpointUiStatus,
   getCalendarForumDay,
+  getPreferredStateCheckPhase,
+  stateCheckTimePointOrder,
 } from './timePhase.js';

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
-import { getMoscowPhase, getTouchpointAccess, resolveEffectiveCurrentDay } from '../services/timePhase.js';
+import { getMoscowPhase, getTouchpointAccess, resolveEffectiveCurrentDay, getPreferredStateCheckPhase, stateCheckTimePointOrder } from '../services/timePhase.js';
 import { normalizePiggybankTag, normalizePiggybankSource } from '../services/piggybankDict.js';
 
 describe('reflectionDepth v1', () => {
@@ -51,6 +51,29 @@ describe('touchpoint access', () => {
   it('marks soon when publishTime in future', () => {
     const future = new Date(Date.now() + 3600000);
     assert.equal(getTouchpointAccess(3, 3, null, new Date(), future), 'soon');
+  });
+});
+
+describe('state check priority', () => {
+  it('prefers morning before 13:00 MSK', () => {
+    const d = new Date(Date.UTC(2026, 7, 12, 9, 0, 0)); // 12:00 MSK
+    assert.equal(getPreferredStateCheckPhase(d), 'утро');
+    assert.deepEqual(stateCheckTimePointOrder(d), ['утро', 'день', 'вечер']);
+  });
+
+  it('prefers day from 13:00 MSK', () => {
+    const d = new Date(Date.UTC(2026, 7, 12, 10, 30, 0)); // 13:30 MSK
+    assert.equal(getPreferredStateCheckPhase(d), 'день');
+  });
+
+  it('prefers evening from 18:00 MSK', () => {
+    const d = new Date(Date.UTC(2026, 7, 12, 15, 0, 0)); // 18:00 MSK
+    assert.equal(getPreferredStateCheckPhase(d), 'вечер');
+  });
+
+  it('uses night phase from 22:00 MSK', () => {
+    const d = new Date(Date.UTC(2026, 7, 12, 19, 0, 0)); // 22:00 MSK
+    assert.equal(getPreferredStateCheckPhase(d), 'ночь');
   });
 });
 
