@@ -6,6 +6,7 @@ export type QuestionRow = {
   id: number;
   title: string;
   text?: string | null;
+  type?: string;
   status?: string;
   block?: string | null;
   reflectionKind?: string | null;

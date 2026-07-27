@@ -69,6 +69,21 @@ export async function adminLogin(login: string, password: string) {
   return data;
 }
 
+function parseAdminErrorResponse(status: number, text: string): string {
+  if (status === 429) {
+    return 'Слишком много запросов. Подождите минуту и обновите страницу.';
+  }
+  if (!text) return `HTTP ${status}`;
+  try {
+    const body = JSON.parse(text) as { error?: string; message?: string };
+    if (typeof body.error === 'string' && body.error) return body.error;
+    if (typeof body.message === 'string' && body.message) return body.message;
+  } catch {
+    if (text.length <= 300 && !text.trimStart().startsWith('<')) return text;
+  }
+  return `HTTP ${status}`;
+}
+
 export async function adminFetch(path: string, options: RequestInit = {}) {
   const base = getAdminApiBase();
   if (import.meta.env.PROD && !API_BASE) {
@@ -89,7 +104,7 @@ export async function adminFetch(path: string, options: RequestInit = {}) {
     throw new Error('Сессия истекла. Войдите снова.');
   }
   const text = await res.text();
-  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+  if (!res.ok) throw new Error(parseAdminErrorResponse(res.status, text));
   const ct = res.headers.get('content-type') || '';
   if (ct.includes('text/html') || text.trimStart().startsWith('<!')) {
     throw new Error(

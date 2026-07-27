@@ -50,16 +50,16 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
   const [optionForm, setOptionForm] = useState({ questionId: '', label: '', value: '' });
 
   const loadOptionsForQuestions = async (qs: QuestionRow[]) => {
-    const optsEntries = await Promise.all(
-      qs.map(async (q) => {
-        try {
-          const r = await adminFetch(`/questions/${q.id}/options`) as { options: { id: number; label: string }[] };
-          return [q.id, r.options || []] as const;
-        } catch {
-          return [q.id, []] as const;
-        }
-      }),
-    );
+    const needOpts = qs.filter(q => ['choice', 'multi', 'dependent'].includes(q.type || ''));
+    const optsEntries: [number, { id: number; label: string }[]][] = [];
+    for (const q of needOpts) {
+      try {
+        const r = await adminFetch(`/questions/${q.id}/options`) as { options: { id: number; label: string }[] };
+        optsEntries.push([q.id, r.options || []]);
+      } catch {
+        optsEntries.push([q.id, []]);
+      }
+    }
     setQuestionOptionsMap(Object.fromEntries(optsEntries));
   };
 
@@ -98,8 +98,16 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
 
   const createQuestion = () =>
     act(async () => {
+      const title = newQuestion.title.trim();
+      if (!title) {
+        setNotice('⚠ Укажите заголовок вопроса');
+        throw new Error('title required');
+      }
+      const text = (newQuestion.text.trim() || title);
       const body: Record<string, unknown> = {
         ...newQuestion,
+        title,
+        text,
         dayNumber: Number(newQuestion.dayNumber),
       };
       if (newQuestion.publishTime) body.publishTime = new Date(newQuestion.publishTime).toISOString();
@@ -108,7 +116,8 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
       else delete body.closeTime;
       if (!newQuestion.reflectionKind) delete body.reflectionKind;
       await adminFetch('/questions', { method: 'POST', body: JSON.stringify(body) });
-    });
+      setNewQuestion(emptyQuestion());
+    }, 'Вопрос создан');
 
   const addOption = () =>
     act(async () => {

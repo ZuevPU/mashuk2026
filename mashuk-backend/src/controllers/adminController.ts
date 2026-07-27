@@ -518,10 +518,12 @@ export const crudQuestions = {
   create: async (req: AdminRequest, res: Response) => {
     const parsed = parseBody(questionCreateSchema, req.body);
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
+    const textBody = (parsed.data.text?.trim() || parsed.data.title.trim());
     const [q] = await db.insert(questions).values({
       type: 'open',
       status: 'draft',
       ...parsed.data,
+      text: textBody,
     }).returning();
     if (q.pushOnPublish && q.status === 'published') {
       await notifyAllParticipants(`Новый вопрос: ${q.title}`, 'question_publish');
@@ -569,7 +571,9 @@ export const crudQuestions = {
       return;
     }
 
-    const [updated] = await db.update(questions).set(parsed.data).where(eq(questions.id, id)).returning();
+    const patch = { ...parsed.data };
+    if (patch.text === null) delete patch.text;
+    const [updated] = await db.update(questions).set(patch as Partial<typeof questions.$inferInsert>).where(eq(questions.id, id)).returning();
     const wasPublished = before?.status === 'published';
     const isPublished = updated?.status === 'published';
     if (updated?.pushOnPublish && isPublished && !wasPublished) {

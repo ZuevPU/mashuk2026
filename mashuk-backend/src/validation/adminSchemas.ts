@@ -44,7 +44,7 @@ export const taskUpdateSchema = taskCreateSchema.partial();
 
 export const questionCreateSchema = z.object({
   title: z.string().min(1, 'title required'),
-  text: z.string().min(1, 'text required'),
+  text: z.union([z.string(), z.null()]).optional().transform(v => (v == null || v === '' ? undefined : v)),
   type: z.enum(['open', 'checkin', 'choice', 'multi', 'dependent']).optional(),
   block: optionalString,
   reflectionKind: z.enum(['state_check', 'after_event', 'evening_summary', 'point_a', 'point_b']).optional().nullable(),

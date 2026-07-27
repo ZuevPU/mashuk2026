@@ -28,13 +28,14 @@ export function createApp() {
   app.use(express.json({ limit: '6mb' }));
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-  // Global rate limit
+  // Global rate limit (admin API excluded — many parallel reads on Questions tab)
   app.use(rateLimit({
-    windowMs: 1 * 60 * 1000, // 1 minute
-    max: 200, // limit each IP to 200 requests per windowMs
+    windowMs: 1 * 60 * 1000,
+    max: 200,
     message: { error: 'Too many requests, please try again later.' },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => req.path.startsWith('/api/admin'),
   }));
 
   const healthHandler = (_req: Request, res: Response) => {
