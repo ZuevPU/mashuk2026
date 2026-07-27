@@ -4,11 +4,15 @@ import { z } from 'zod';
 import { db } from '../db/index.js';
 import { participants, directions, pedagogicalRoles, forumSettings, participantGroups } from '../db/schema.js';
 import { VkAuthRequest } from '../middlewares/vkAuth.js';
-import { scorePedagogicalRole, getRoleMeta, INTEREST_GROUPS, getDefaultDiagnosticsConfig, normalizeOptionToRole } from '../services/roleService.js';
+import { scorePedagogicalRole, getRoleMeta, normalizeOnboardingConfig, interestTagsFromConfig } from '../services/roleService.js';
 import { getActiveConsentVersions } from './consentsController.js';
 import { generateQrToken } from '../services/qrService.js';
 
-const ALL_INTEREST_TAGS = new Set(INTEREST_GROUPS.flatMap(g => g.tags));
+
+async function getForumOnboardingConfig() {
+  const [settings] = await db.select().from(forumSettings).limit(1);
+  return normalizeOnboardingConfig(settings?.roleDiagnosticsConfig);
+}
 
 const onboardingSchema = z.object({
   firstName: z.string().min(1).max(255),
@@ -72,6 +76,10 @@ export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> =>
       res.json({ status: 'needs_registration', vkUserId });
       return;
     }
+    if (user.selfDeletedAt) {
+      res.json({ status: 'self_deleted', deletedAt: user.selfDeletedAt });
+      return;
+    }
 
     res.json({ status: 'ok', user });
   } catch (error) {
@@ -95,8 +103,10 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
     }
 
     const data = parsed.data;
+    const onboardingConfig = await getForumOnboardingConfig();
+    const allowedTags = interestTagsFromConfig(onboardingConfig);
     for (const tag of data.interests) {
-      if (!ALL_INTEREST_TAGS.has(tag)) {
+      if (!allowedTags.has(tag)) {
         res.status(400).json({ error: `Unknown interest tag: ${tag}` });
         return;
       }
@@ -109,9 +119,7 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
     }
 
     const [settings] = await db.select().from(forumSettings).limit(1);
-    const diagMatrix = normalizeOptionToRole(
-      (settings?.roleDiagnosticsConfig as { optionToRole?: unknown } | null)?.optionToRole,
-    );
+    const diagMatrix = onboardingConfig.optionToRole;
 
     let pedagogicalRole: string;
     try {
@@ -122,6 +130,13 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
     }
 
     const [existing] = await db.select().from(participants).where(eq(participants.vkId, vkUserId)).limit(1);
+    if (existing?.selfDeletedAt) {
+      res.status(403).json({
+        error: 'Вы удалили профиль из программы. Для повторного участия обратитесь к организаторам.',
+        status: 'self_deleted',
+      });
+      return;
+    }
     if (existing?.onboardingCompletedAt) {
       res.json({ status: 'ok', user: existing, role: getRoleMeta(existing.pedagogicalRole || pedagogicalRole) });
       return;
@@ -264,18 +279,17 @@ export const listOnboardingMeta = async (_req: VkAuthRequest, res: Response): Pr
         seatsLeft: g.capacity != null ? Math.max(0, g.capacity - members) : null,
       };
     }));
-    const defaults = getDefaultDiagnosticsConfig();
-    const saved = settings?.roleDiagnosticsConfig as { optionToRole?: unknown; questions?: unknown } | null;
+    const onboardingConfig = normalizeOnboardingConfig(settings?.roleDiagnosticsConfig);
     res.json({
       roles: roles.length ? roles : undefined,
-      catalog: {
-        interestGroups: INTEREST_GROUPS,
-      },
+      goalQuestions: onboardingConfig.goalQuestions,
+      interestGroups: onboardingConfig.interestGroups,
       diagnostics: {
-        optionToRole: normalizeOptionToRole(saved?.optionToRole),
-        questions: Array.isArray(saved?.questions) && saved!.questions!.length === 6
-          ? saved!.questions
-          : defaults.questions,
+        optionToRole: onboardingConfig.optionToRole,
+        questions: onboardingConfig.questions,
+      },
+      catalog: {
+        interestGroups: onboardingConfig.interestGroups,
       },
       groupAssignMode: settings?.groupAssignMode || 'list',
       groups: groupsWithFree.filter(g => g.seatsLeft == null || g.seatsLeft > 0),

@@ -24,7 +24,7 @@ export const forumSettings = pgTable('forum_settings', {
   groupAssignMode: varchar('group_assign_mode', { length: 20 }).default('list'),
   kbUnlockThreshold: integer('kb_unlock_threshold').default(4),
   kbUnlockDisabled: boolean('kb_unlock_disabled').default(false),
-  /** Матрица диагностики: { optionToRole: RoleKey[6][4], questions?: [...] } */
+  /** Онбординг: goalQuestions, interestGroups, questions, optionToRole */
   roleDiagnosticsConfig: jsonb('role_diagnostics_config'),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -166,6 +166,8 @@ export const participants = pgTable('participants', {
   consentPdVersion: integer('consent_pd_version'),
   consentAnalyticsVersion: integer('consent_analytics_version'),
   pushOptOut: jsonb('push_opt_out').default({}),
+  /** Участник удалил себя из программы через настройки профиля; строка и связанные данные сохраняются */
+  selfDeletedAt: timestamp('self_deleted_at'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('participants_direction_id_idx').on(table.directionId),

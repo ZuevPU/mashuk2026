@@ -12,6 +12,7 @@ import { AdminRequest } from '../middlewares/adminAuth.js';
 import { notifyAllParticipants, sendPushNotification } from '../services/pushService.js';
 import { recalculateDailyStats } from '../services/analyticsService.js';
 import { clearCache } from '../services/cache.js';
+import { normalizeOnboardingConfig } from '../services/roleService.js';
 import {
   eventCreateSchema, eventUpdateSchema,
   taskCreateSchema, taskUpdateSchema,
@@ -288,9 +289,19 @@ export const crudThematicTags = {
 
 export const updateForumSettings = async (req: AdminRequest, res: Response): Promise<void> => {
   const [existing] = await db.select().from(forumSettings).limit(1);
+  const body = { ...req.body } as Record<string, unknown>;
+  if (body.roleDiagnosticsConfig != null && existing) {
+    const merged = normalizeOnboardingConfig({
+      ...(existing.roleDiagnosticsConfig as Record<string, unknown> | null),
+      ...(body.roleDiagnosticsConfig as Record<string, unknown>),
+    });
+    body.roleDiagnosticsConfig = merged;
+  } else if (body.roleDiagnosticsConfig != null) {
+    body.roleDiagnosticsConfig = normalizeOnboardingConfig(body.roleDiagnosticsConfig);
+  }
   if (existing) {
     const [updated] = await db.update(forumSettings)
-      .set({ ...req.body, updatedAt: new Date() })
+      .set({ ...body, updatedAt: new Date() })
       .where(eq(forumSettings.id, existing.id)).returning();
     clearCache('forumSettings');
     res.json({ settings: updated });

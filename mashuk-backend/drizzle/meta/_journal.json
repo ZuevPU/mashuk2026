@@ -64,6 +64,13 @@
       "when": 1788000000000,
       "tag": "0008_role_diagnostics_config",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0009_participant_self_delete",
+      "breakpoints": true
     }
   ]
 }

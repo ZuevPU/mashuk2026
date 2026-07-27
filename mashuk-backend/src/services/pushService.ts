@@ -1,4 +1,4 @@
-import { eq, isNotNull } from 'drizzle-orm';
+import { eq, isNotNull, isNull, and } from 'drizzle-orm';
 import { env } from '../config/env.js';
 import { db } from '../db/index.js';
 import { pushLog, participants } from '../db/schema.js';
@@ -81,6 +81,6 @@ export async function sendPushNotification(
 
 export async function notifyAllParticipants(text: string, triggerType: string): Promise<void> {
   const all = await db.select({ id: participants.id }).from(participants)
-    .where(isNotNull(participants.onboardingCompletedAt));
+    .where(and(isNotNull(participants.onboardingCompletedAt), isNull(participants.selfDeletedAt)));
   await sendPushNotification(all.map(p => p.id), text, triggerType);
 }

@@ -16,7 +16,7 @@ import {
   listExchange, createExchangeQuestion, answerExchange, reactExchangeAnswer,
 } from '../controllers/questionsController.js';
 import {
-  getProfile, listPiggybank, createPiggybank, updateProfileSettings, getPublicLeaderboard,
+  getProfile, listPiggybank, createPiggybank, updateProfileSettings, deleteMyProfile, getPublicLeaderboard,
   exportPiggybankText, listMyMedals, synthesizeMyOutcomes,
 } from '../controllers/profileController.js';
 import { uploadPhoto } from '../controllers/uploadController.js';
@@ -70,6 +70,7 @@ router.post('/org/threads/:id/reply', vkAuthMiddleware, requireParticipant, repl
 
 router.get('/profile', vkAuthMiddleware, requireParticipant, getProfile);
 router.patch('/profile/settings', vkAuthMiddleware, requireParticipant, updateProfileSettings);
+router.post('/profile/delete', vkAuthMiddleware, requireParticipant, deleteMyProfile);
 router.post('/profile/outcomes/synthesize', vkAuthMiddleware, requireParticipant, synthesizeMyOutcomes);
 router.get('/profile/medals', vkAuthMiddleware, requireParticipant, listMyMedals);
 router.get('/leaderboard', vkAuthMiddleware, requireParticipant, getPublicLeaderboard);

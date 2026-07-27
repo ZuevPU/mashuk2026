@@ -173,6 +173,9 @@ export const getProfile = async (req: ParticipantRequest, res: Response): Promis
         pedagogicalRole: p.pedagogicalRole,
         pedagogicalRoleName: role?.name ?? null,
         pedagogicalRoleQuadrant: role?.quadrant ?? null,
+        /** Стартовая (ведущая) роль по итогам онбординга — alias для UI */
+        leadingRoleStart: p.pedagogicalRole,
+        leadingRoleStartName: role?.name ?? null,
         strongRole: p.strongRole,
         strongRoleName: strongMeta?.name ?? null,
         growthRole: p.growthRole,
@@ -311,6 +314,20 @@ export function depthForAnswerText(text: string) {
   return inferReflectionDepth(text);
 }
 
+/** Участник удаляет себя из программы: данные в БД сохраняются, выставляется self_deleted_at */
+export const deleteMyProfile = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const [updated] = await db.update(participants)
+      .set({ selfDeletedAt: new Date() })
+      .where(eq(participants.id, req.participant!.id))
+      .returning({ selfDeletedAt: participants.selfDeletedAt });
+    res.json({ status: 'ok', deletedAt: updated?.selfDeletedAt });
+  } catch (error) {
+    console.error('deleteMyProfile:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const updateProfileSettings = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const patch: Partial<typeof participants.$inferInsert> = {};
@@ -360,11 +377,13 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       pathPoints: participants.pathPoints,
       experiencePoints: participants.experiencePoints,
       hideFromLeaderboard: participants.hideFromLeaderboard,
+      selfDeletedAt: participants.selfDeletedAt,
     }).from(participants);
 
     const me = req.participant!.id;
     const directions = [...new Set(list.map(p => p.direction).filter(Boolean))] as string[];
     const rows = list
+      .filter(p => !p.selfDeletedAt)
       .filter(p => !p.hideFromLeaderboard || p.id === me)
       .filter(p => !directionFilter || p.direction === directionFilter)
       .map(p => ({

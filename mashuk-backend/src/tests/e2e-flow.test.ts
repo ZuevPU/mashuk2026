@@ -76,6 +76,34 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
     assert.ok(onboarding.body.user?.pedagogicalRole);
   });
 
+  it('onboarding-meta reflects saved onboarding config', async () => {
+    const before = await request(app).get('/api/admin/forum-settings').set(adminAuth);
+    assert.equal(before.status, 200);
+    const prev = before.body.settings?.roleDiagnosticsConfig;
+
+    const customGoal = `E2E goal ${Date.now()}`;
+    const patch = await request(app)
+      .patch('/api/admin/forum-settings')
+      .set(adminAuth)
+      .send({
+        roleDiagnosticsConfig: {
+          goalQuestions: [customGoal, 'g2', 'g3', 'g4', 'g5'],
+        },
+      });
+    assert.equal(patch.status, 200, JSON.stringify(patch.body));
+
+    const meta = await request(app)
+      .get('/api/auth/onboarding-meta')
+      .set('X-Test-Vk-Id', String(E2E_VK_ID));
+    assert.equal(meta.status, 200);
+    assert.equal(meta.body.goalQuestions?.[0], customGoal);
+
+    await request(app)
+      .patch('/api/admin/forum-settings')
+      .set(adminAuth)
+      .send({ roleDiagnosticsConfig: prev ?? {} });
+  });
+
   it('participant creates activity', async () => {
     const headers = { 'X-Test-Vk-Id': String(E2E_VK_ID) };
 

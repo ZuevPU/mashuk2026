@@ -16,7 +16,11 @@ const PUSH_TYPES = [
   { key: 'exchange', label: 'Общение и ответы' },
 ] as const;
 
-export const ProfilePanel: React.FC<{ id: string; fetchedUser?: UserInfo | null }> = ({ id, fetchedUser }) => {
+export const ProfilePanel: React.FC<{
+  id: string;
+  fetchedUser?: UserInfo | null;
+  onSelfDeleted?: () => void;
+}> = ({ id, fetchedUser, onSelfDeleted }) => {
   const [profile, setProfile] = useState<any>(null);
   const [piggybank, setPiggybank] = useState<any[]>([]);
   const [previewPiggy, setPreviewPiggy] = useState<any[]>([]);
@@ -31,6 +35,7 @@ export const ProfilePanel: React.FC<{ id: string; fetchedUser?: UserInfo | null 
   const [hideLb, setHideLb] = useState(false);
   const [pushOptOut, setPushOptOut] = useState<Record<string, boolean>>({});
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [lbTrack, setLbTrack] = useState<'total' | 'path' | 'experience'>('total');
   const [lbDirection, setLbDirection] = useState('');
   const [lbDirections, setLbDirections] = useState<string[]>([]);
@@ -134,6 +139,23 @@ export const ProfilePanel: React.FC<{ id: string; fetchedUser?: UserInfo | null 
     }
   };
 
+  const deleteFromProgram = async () => {
+    const ok = window.confirm(
+      'Удалить профиль из программы? Вы больше не сможете пользоваться приложением. '
+      + 'Ответы и баллы сохранятся у организаторов для отчётности.',
+    );
+    if (!ok) return;
+    setDeleteLoading(true);
+    try {
+      await apiPost('/profile/delete');
+      onSelfDeleted?.();
+    } catch (err) {
+      setSnackbar(err instanceof ApiError ? err.message : 'Не удалось удалить профиль');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const qrDeepLink = p?.user?.qrToken
     ? buildParticipantVolunteerUrl(p.user.qrToken, p.user.id)
     : null;
@@ -173,9 +195,9 @@ export const ProfilePanel: React.FC<{ id: string; fetchedUser?: UserInfo | null 
                     Группа «{p.user.groupName}»
                   </div>
                 )}
-                {p.user.pedagogicalRoleName && (
+                {(p.user.leadingRoleStartName || p.user.pedagogicalRoleName) && (
                   <div style={{ fontSize: 12, color: '#B8621A', marginTop: 4, fontWeight: 700 }}>
-                    ◆ {p.user.pedagogicalRoleName}
+                    ◆ Стартовая роль: {p.user.leadingRoleStartName || p.user.pedagogicalRoleName}
                   </div>
                 )}
                 {(p.user.workplace || p.user.position) && (
@@ -530,6 +552,22 @@ export const ProfilePanel: React.FC<{ id: string; fetchedUser?: UserInfo | null 
             <Button size="l" stretched loading={settingsSaving} onClick={saveSettings}>
               Сохранить настройки
             </Button>
+            <div className="m-card" style={{ marginTop: 16, borderColor: '#FEB2B2' }}>
+              <div className="pb-lbl">Удаление из программы</div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
+                Вы выйдете из приложения. Данные останутся в системе с пометкой, что вы удалили профиль сами.
+              </div>
+              <Button
+                size="l"
+                stretched
+                mode="secondary"
+                appearance="negative"
+                loading={deleteLoading}
+                onClick={deleteFromProgram}
+              >
+                Удалить мой профиль из программы
+              </Button>
+            </div>
           </>
         ) : (
           <>

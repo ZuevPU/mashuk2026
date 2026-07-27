@@ -33,6 +33,13 @@ export type RoleDiagnosticsConfig = {
   questions?: Array<{ text: string; options: string[] }>;
 };
 
+export type OnboardingConfig = {
+  goalQuestions: string[];
+  interestGroups: Array<{ title: string; tags: string[] }>;
+  questions: Array<{ text: string; options: string[] }>;
+  optionToRole: RoleKey[][];
+};
+
 export function normalizeOptionToRole(raw: unknown): RoleKey[][] {
   if (!Array.isArray(raw) || raw.length !== 6) return DEFAULT_OPTION_TO_ROLE.map(row => [...row]);
   const out: RoleKey[][] = [];
@@ -240,6 +247,72 @@ export const INTEREST_GROUPS: Array<{ title: string; tags: string[] }> = [
     ],
   },
 ];
+
+export function normalizeGoalQuestions(raw: unknown): string[] {
+  const defaults = GOAL_QUESTIONS.map(q => q);
+  if (!Array.isArray(raw) || raw.length !== 5) return defaults;
+  const out = raw.map((q, i) => {
+    const s = String(q ?? '').trim();
+    return s.length > 0 ? s.slice(0, 2000) : defaults[i];
+  });
+  return out.length === 5 ? out : defaults;
+}
+
+export function normalizeInterestGroups(raw: unknown): Array<{ title: string; tags: string[] }> {
+  const defaults = INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] }));
+  if (!Array.isArray(raw) || raw.length === 0) return defaults;
+  const out: Array<{ title: string; tags: string[] }> = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const title = String((item as { title?: unknown }).title ?? '').trim().slice(0, 255);
+    const tagsRaw = (item as { tags?: unknown }).tags;
+    if (!title || !Array.isArray(tagsRaw)) continue;
+    const tags = tagsRaw
+      .map(t => String(t ?? '').trim().slice(0, 100))
+      .filter(t => t.length > 0);
+    if (tags.length === 0) continue;
+    out.push({ title, tags });
+  }
+  return out.length > 0 ? out : defaults;
+}
+
+export function normalizeDiagnosticQuestions(raw: unknown): Array<{ text: string; options: string[] }> {
+  const defaults = DIAGNOSTIC_QUESTIONS.map(q => ({ text: q.text, options: [...q.options] }));
+  if (!Array.isArray(raw) || raw.length !== 6) return defaults;
+  const out: Array<{ text: string; options: string[] }> = [];
+  for (let i = 0; i < 6; i++) {
+    const item = raw[i];
+    const def = defaults[i];
+    if (!item || typeof item !== 'object') return defaults;
+    const text = String((item as { text?: unknown }).text ?? '').trim().slice(0, 2000);
+    const optsRaw = (item as { options?: unknown }).options;
+    if (!text || !Array.isArray(optsRaw) || optsRaw.length !== 4) return defaults;
+    const options = optsRaw.map((o, oi) => {
+      const s = String(o ?? '').trim().slice(0, 500);
+      return s.length > 0 ? s : def.options[oi];
+    });
+    out.push({ text, options });
+  }
+  return out.length === 6 ? out : defaults;
+}
+
+export function normalizeOnboardingConfig(raw: unknown): OnboardingConfig {
+  const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    goalQuestions: normalizeGoalQuestions(obj.goalQuestions),
+    interestGroups: normalizeInterestGroups(obj.interestGroups),
+    questions: normalizeDiagnosticQuestions(obj.questions),
+    optionToRole: normalizeOptionToRole(obj.optionToRole),
+  };
+}
+
+export function interestTagsFromConfig(config: OnboardingConfig): Set<string> {
+  return new Set(config.interestGroups.flatMap(g => g.tags));
+}
+
+export function getDefaultOnboardingConfig(): OnboardingConfig {
+  return normalizeOnboardingConfig({});
+}
 
 export function scorePedagogicalRole(
   roleAnswers: number[],
