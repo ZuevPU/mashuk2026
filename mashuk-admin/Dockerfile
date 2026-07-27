@@ -1,10 +1,32 @@
-# Stage 1: build
-FROM node:22-slim AS builder
+# Stage 1: build (Vite static admin)
+#
+# npm network tuning for restricted build environments (e.g. Timeweb Cloud Apps):
+#   NPM_CONFIG_FETCH_RETRIES          — default 10 (see also .npmrc fetch-retries)
+#   NPM_CONFIG_FETCH_TIMEOUT          — per-request timeout ms (default 300000)
+#   NPM_CONFIG_FETCH_RETRY_MINTIMEOUT / NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT
+#   NPM_CONFIG_REGISTRY               — optional mirror if registry.npmjs.org is blocked
+#
+FROM node:22-alpine AS builder
+
+ENV NPM_CONFIG_FETCH_RETRIES=10 \
+    NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
+    NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \
+    NPM_CONFIG_FETCH_TIMEOUT=300000 \
+    NPM_CONFIG_PREFER_OFFLINE=true \
+    NPM_CONFIG_AUDIT=false \
+    NPM_CONFIG_FUND=false \
+    NPM_CONFIG_MAXSOCKETS=3
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci
+COPY package.json package-lock.json .npmrc ./
+RUN set -e; \
+  for attempt in 1 2 3 4 5; do \
+    npm ci --prefer-offline --no-audit --no-fund && exit 0; \
+    echo "npm ci failed (attempt ${attempt}/5), waiting before retry..."; \
+    sleep $((attempt * 20)); \
+  done; \
+  exit 1
 
 COPY . .
 

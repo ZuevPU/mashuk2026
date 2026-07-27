@@ -80,6 +80,38 @@ export const updateParticipantRole = async (req: AdminRequest, res: Response): P
   res.json({ participant: updated });
 };
 
+/** Снять самоудаление — участник снова получает доступ к приложению */
+export const restoreParticipantAccount = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const [existing] = await db.select().from(participants).where(eq(participants.id, id)).limit(1);
+  if (!existing) {
+    res.status(404).json({ error: 'Participant not found' });
+    return;
+  }
+  if (!existing.selfDeletedAt) {
+    res.status(400).json({ error: 'Participant is not self-deleted' });
+    return;
+  }
+  if (!existing.onboardingCompletedAt) {
+    res.status(400).json({ error: 'Participant has no completed registration' });
+    return;
+  }
+  const [updated] = await db.update(participants)
+    .set({ selfDeletedAt: null })
+    .where(eq(participants.id, id))
+    .returning();
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req,
+    actionType: 'participant_restore',
+    section: 'participants',
+    objectId: id,
+    newValue: { selfDeletedAt: null },
+    isCritical: true,
+  });
+  res.json({ participant: updated });
+};
+
 export const crudRoles = {
   list: async (_req: AdminRequest, res: Response) => {
     const roles = await db.select().from(pedagogicalRoles).orderBy(asc(pedagogicalRoles.sortOrder));
