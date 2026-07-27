@@ -3,7 +3,12 @@ import { eq, and, asc, lte, or, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { events, eventAttendance, materials, questions, answers, scheduleDays } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
-import { getForumSettings, formatTime } from '../services/helpers.js';
+import { getForumSettings, formatTime, resolveEffectiveCurrentDay } from '../services/helpers.js';
+import {
+  getEventLiveStatus,
+  recommendationSubtitle,
+  resolveEventInterval,
+} from '../services/eventSchedule.js';
 import { cache } from '../services/cache.js';
 
 export const getProgramSettings = async (req: ParticipantRequest, res: Response): Promise<void> => {
@@ -70,22 +75,23 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
       .where(eq(eventAttendance.participantId, req.participant!.id));
     const attendedIds = new Set(attendance.map(a => a.eventId));
 
+    const settings = await getForumSettings();
     const now = new Date();
+    const effectiveDay = resolveEffectiveCurrentDay(settings, now);
     const mapEvent = (e: typeof list[0]) => {
-      let status: 'past' | 'now' | 'future' = 'future';
-      if (e.endTime && e.endTime < now) status = 'past';
-      else if (e.startTime && e.startTime <= now && (!e.endTime || e.endTime >= now)) status = 'now';
+      const { start, end } = resolveEventInterval(e, settings);
+      const status = getEventLiveStatus(day, effectiveDay, start, end, now);
 
       return {
         id: e.id,
-        time: formatTime(e.startTime),
-        endTime: formatTime(e.endTime),
+        time: formatTime(start),
+        endTime: formatTime(end),
         title: e.title,
         description: e.description,
         subtitle: e.place || e.description,
         place: e.place,
         tags: (e.tags as string[]) || [],
-        timeSlot: e.timeSlot ?? formatTime(e.startTime),
+        timeSlot: e.timeSlot ?? formatTime(start),
         status,
         attended: attendedIds.has(e.id),
       };
@@ -125,7 +131,11 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
     const threshold = settings.recommendationThreshold ?? 1;
 
     const list = await db.select().from(events)
-      .where(and(eq(events.dayNumber, day), eq(events.isPublished, true)));
+      .where(and(
+        eq(events.dayNumber, day),
+        eq(events.isPublished, true),
+        eq(events.dayPublished, true),
+      ));
 
     const scored = list.map(e => {
       const tags = (e.tags as string[]) || [];
@@ -139,7 +149,7 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
         id: s.event.id,
         eventId: s.event.id,
         title: s.event.title,
-        subtitle: s.score > 1 ? 'высокое совпадение' : 'под твой запрос',
+        subtitle: recommendationSubtitle(s.score, threshold),
         score: s.score,
         tags: s.event.tags,
       })),
@@ -181,7 +191,8 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
     const mats = await db.select().from(materials).where(
       or(eq(materials.dayNumber, day), eq(materials.isGeneral, true)),
     );
-    const currentDay = settings.currentDay ?? 1;
+    const now = new Date();
+    const currentDay = resolveEffectiveCurrentDay(settings, now);
 
     const { completed: touchpointsCompleted, total: touchpointsTotal } =
       await countTouchpointsForDay(req.participant!.id, day);

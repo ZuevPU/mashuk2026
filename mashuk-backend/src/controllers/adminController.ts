@@ -23,6 +23,8 @@ import {
 import { ROLE_KEYS } from '../services/roleService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { TOUCHPOINT_SLOTS, windowsForDay } from '../services/touchpointTemplates.js';
+import { getForumSettings as loadForumSettings } from '../services/helpers.js';
+import { enrichEventTimestamps } from '../services/eventSchedule.js';
 
 export const listParticipants = async (req: AdminRequest, res: Response): Promise<void> => {
   const page = Math.max(1, Number(req.query.page) || 1);
@@ -367,7 +369,9 @@ export const crudEvents = {
   create: async (req: AdminRequest, res: Response) => {
     const parsed = parseBody(eventCreateSchema, req.body);
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
-    const [e] = await db.insert(events).values(parsed.data).returning();
+    const settings = await loadForumSettings();
+    const values = enrichEventTimestamps(parsed.data, settings);
+    const [e] = await db.insert(events).values(values).returning();
     clearCache('events_day_');
     res.json({ event: e });
   },
@@ -375,7 +379,11 @@ export const crudEvents = {
     const id = Number(req.params.id);
     const parsed = parseBody(eventUpdateSchema, req.body);
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
-    const [updated] = await db.update(events).set(parsed.data).where(eq(events.id, id)).returning();
+    const [existing] = await db.select().from(events).where(eq(events.id, id)).limit(1);
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+    const settings = await loadForumSettings();
+    const values = enrichEventTimestamps(parsed.data, settings, existing);
+    const [updated] = await db.update(events).set(values).where(eq(events.id, id)).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
     clearCache('events_day_');
     res.json({ event: updated });

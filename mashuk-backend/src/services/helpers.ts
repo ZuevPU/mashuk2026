@@ -29,7 +29,7 @@ export function countWords(text: string): number {
 
 export function formatTime(date: Date | null | undefined): string {
   if (!date) return '';
-  return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' });
 }
 
 export function isPublished(publishTime: Date | null, closeTime: Date | null, now = new Date()): boolean {

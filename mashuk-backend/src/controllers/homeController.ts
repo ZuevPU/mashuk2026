@@ -9,6 +9,7 @@ import {
   getForumSettings, formatTime, getMoscowPhase, isEveningWrapWindow,
   getTouchpointAccess, resolveEffectiveCurrentDay, stateCheckTimePointOrder,
 } from '../services/helpers.js';
+import { getEventLiveStatus, resolveEventInterval } from '../services/eventSchedule.js';
 import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
 import { awardPoints, getLevelProgress } from '../services/pointsService.js';
 import { loadDayContext } from './dayStateController.js';
@@ -108,41 +109,48 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const SOON_MIN_MS = 15 * 60_000;
     const SOON_MAX_MS = 30 * 60_000;
 
+    const enrichedEvents = dayEvents.map(e => {
+      const { start, end } = resolveEventInterval(e, settings);
+      const status = getEventLiveStatus(currentDay, currentDay, start, end, now);
+      return { event: e, start, end, status };
+    }).filter(x => x.start);
+
     const schedule: { kind: string; title: string; time: string; place?: string | null }[] = [];
-    const nowEvent = dayEvents.find(e =>
-      e.startTime && e.startTime <= now && (!e.endTime || e.endTime >= now));
+    const nowEvent = enrichedEvents.find(x => x.status === 'now');
     if (nowEvent) {
       schedule.push({
         kind: 'now',
-        title: nowEvent.title,
-        time: formatTime(nowEvent.startTime),
-        place: nowEvent.place,
+        title: nowEvent.event.title,
+        time: formatTime(nowEvent.start),
+        place: nowEvent.event.place,
       });
     }
-    const futureEvents = dayEvents.filter(e => e.startTime && e.startTime > now);
+    const futureEvents = enrichedEvents
+      .filter(x => x.status === 'future' && x.start!)
+      .sort((a, b) => a.start!.getTime() - b.start!.getTime());
     const soonEvent = futureEvents.find(e => {
-      const diffMs = e.startTime!.getTime() - now.getTime();
+      const diffMs = e.start!.getTime() - now.getTime();
       return diffMs >= SOON_MIN_MS && diffMs <= SOON_MAX_MS;
     });
     if (soonEvent) {
       schedule.push({
         kind: 'soon',
-        title: soonEvent.title,
-        time: formatTime(soonEvent.startTime),
-        place: soonEvent.place,
+        title: soonEvent.event.title,
+        time: formatTime(soonEvent.start),
+        place: soonEvent.event.place,
       });
     }
     const nextEvent = futureEvents.find(e => {
-      if (soonEvent && e.id === soonEvent.id) return false;
-      if (soonEvent) return e.startTime!.getTime() > soonEvent.startTime!.getTime();
+      if (soonEvent && e.event.id === soonEvent.event.id) return false;
+      if (soonEvent) return e.start!.getTime() > soonEvent.start!.getTime();
       return true;
     });
     if (nextEvent && schedule.length < 3) {
       schedule.push({
         kind: 'next',
-        title: nextEvent.title,
-        time: formatTime(nextEvent.startTime),
-        place: nextEvent.place,
+        title: nextEvent.event.title,
+        time: formatTime(nextEvent.start),
+        place: nextEvent.event.place,
       });
     }
 
