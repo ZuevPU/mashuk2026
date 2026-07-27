@@ -16,7 +16,7 @@ export function filterPiggybankEntries<T extends { source?: string | null; text:
   tagFn: (e: T, tag: string) => boolean,
 ): T[] {
   const q = query.q?.trim().slice(0, 100).toLowerCase();
-  const day = query.day != null && query.day !== '' ? Number(query.day) : undefined;
+  const day = query.day != null ? Number(query.day) : undefined;
   return entries.filter(e => {
     if (query.tag && !tagFn(e, query.tag)) return false;
     if (query.source && e.source !== query.source) return false;

@@ -267,7 +267,7 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
 
     const allowResubmit = existing?.status === 'rejected' && task.allowRetry;
     const elig = await assertTaskSubmissionAllowed(req.participant!.id, task, {
-      allowResubmitRejected: allowResubmit,
+      allowResubmitRejected: !!allowResubmit,
       existingStatus: existing?.status ?? null,
     });
     if (!elig.ok && !allowResubmit) {

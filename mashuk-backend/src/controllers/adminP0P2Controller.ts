@@ -13,6 +13,7 @@ import { deactivateOtherConsents } from './consentsController.js';
 import { evaluateAllMedals } from '../services/medalEvaluator.js';
 import { clubMatchNightly, isGigachatConfigured, synthesizeOutcomes } from '../services/gigachatService.js';
 import { generateQrToken, buildTaskQrUrl, buildEventQrUrl, buildParticipantQrUrl } from '../services/qrService.js';
+import { logAdminAction } from '../services/adminActionsLog.js';
 import { env } from '../config/env.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { EVENING_SCALE_KEYS } from '../services/touchpointTemplates.js';

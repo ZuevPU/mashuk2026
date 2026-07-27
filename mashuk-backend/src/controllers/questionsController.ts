@@ -107,7 +107,12 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       const settings = await getForumSettings();
       const dayEv = await db.select().from(events).where(eq(events.dayNumber, question.dayNumber));
       const published = dayEv.filter(e => e.isPublished !== false && e.dayPublished !== false);
-      dayEvents = filterEventsForLessonSlot(question, published, settings);
+      dayEvents = filterEventsForLessonSlot(question, published, settings).map(e => ({
+        id: e.id,
+        title: e.title,
+        place: e.place ?? null,
+        startTime: e.startTime ?? null,
+      }));
     }
     res.json({
       question: {

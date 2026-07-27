@@ -1216,7 +1216,7 @@ export const listPendingSubmissions = async (_req: AdminRequest, res: Response):
     list.push({
       participantId: c.participantId,
       name: `${p?.firstName ?? ''} ${p?.lastName ?? ''}`.trim() || `#${c.participantId}`,
-      status: c.status,
+      status: c.status ?? 'pending',
     });
     confBySub.set(c.submissionId, list);
   }

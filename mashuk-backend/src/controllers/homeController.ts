@@ -163,7 +163,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       pointBQuestionId: pointB?.id ?? pointBQuestion?.id ?? null,
     });
 
-    let priorityAction: Record<string, unknown> | null = null;
+    let priorityAction: { type: string; title: string; subtitle: string; route: string; id?: number } | null = null;
     if (currentDay === 8 && pointB) {
       priorityAction = {
         type: 'question',

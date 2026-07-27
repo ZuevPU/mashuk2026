@@ -114,9 +114,11 @@ describe('piggybank dict', () => {
 describe('KB material isNew', () => {
   it('marks created within 24h as new', async () => {
     const { materialIsNew } = await import('../controllers/programController.js');
+    const { materials } = await import('../db/schema.js');
+    type MaterialRow = typeof materials.$inferSelect;
     const now = new Date('2026-08-12T12:00:00+03:00');
-    const recent = { isNew: false, createdAt: new Date('2026-08-12T10:00:00+03:00') } as import('../db/schema.js').materials.$inferSelect;
-    const old = { isNew: false, createdAt: new Date('2026-08-10T10:00:00+03:00') } as import('../db/schema.js').materials.$inferSelect;
+    const recent = { isNew: false, createdAt: new Date('2026-08-12T10:00:00+03:00') } as MaterialRow;
+    const old = { isNew: false, createdAt: new Date('2026-08-10T10:00:00+03:00') } as MaterialRow;
     assert.equal(materialIsNew(recent, now), true);
     assert.equal(materialIsNew(old, now), false);
     assert.equal(materialIsNew({ ...recent, isNew: true, createdAt: null } as typeof recent, now), true);

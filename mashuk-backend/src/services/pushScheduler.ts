@@ -160,7 +160,7 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
     const t = ev.blockType || 'session';
     if (pushBlockTypes[t] === true) return true;
     if (pushBlockTypes[t] === false) return false;
-    return ev.isKeyBlock === true || ev.blockType === 'key_block';
+    return false;
   };
 
   let eventCount = 0;
