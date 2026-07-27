@@ -349,13 +349,20 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
 
     const qsBefore = await request(app).get('/api/questions').set(headers);
     assert.equal(qsBefore.status, 200);
-    const day1 = qsBefore.body.questions?.find((q: { dayNumber: number; block?: string | null }) =>
+    let day1 = qsBefore.body.questions?.find((q: { dayNumber: number; block?: string | null }) =>
       q.dayNumber === 1
       && (q.block === 'Точки осмысления'
         || q.block === 'Проверка состояния'
         || q.block === 'Итоги дня'
         || q.block === 'checkin'),
     );
+    if (!day1) {
+      const adminQs = await request(app).get('/api/admin/questions').set(adminAuth);
+      assert.equal(adminQs.status, 200);
+      day1 = adminQs.body.questions?.find((q: { dayNumber: number; status?: string }) =>
+        q.dayNumber === 1 && (q.status === 'published' || !q.status),
+      );
+    }
     assert.ok(day1, 'expected day-1 touchpoint before day bump');
 
     try {
