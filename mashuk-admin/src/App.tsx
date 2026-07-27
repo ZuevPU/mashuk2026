@@ -156,15 +156,20 @@ async function adminDownloadBinary(path: string, filename: string) {
   a.click();
 }
 
-type Tab = 'participants' | 'directions' | 'events' | 'tasks' | 'questions' | 'roles' | 'forum' | 'moderation' | 'data' | 'levels' | 'analytics' | 'exports' | 'push' | 'admins' | 'journal' | 'medals';
+type Tab = 'participants' | 'directions' | 'onboarding' | 'events' | 'tasks' | 'questions' | 'forum' | 'moderation' | 'data' | 'levels' | 'analytics' | 'exports' | 'push' | 'admins' | 'journal' | 'medals';
+
+const TAB_ORDER: Tab[] = [
+  'participants', 'directions', 'onboarding', 'events', 'tasks', 'questions', 'forum',
+  'moderation', 'data', 'levels', 'analytics', 'exports', 'push', 'admins', 'journal', 'medals',
+];
 
 const TAB_LABELS: Record<Tab, string> = {
   participants: 'Участники',
   directions: 'Направления',
+  onboarding: 'Онбординг',
   events: 'События',
   tasks: 'Задания',
   questions: 'Вопросы',
-  roles: 'Роли',
   forum: 'Форум',
   moderation: 'Модерация',
   data: 'Данные',
@@ -176,6 +181,51 @@ const TAB_LABELS: Record<Tab, string> = {
   journal: 'Журнал',
   medals: 'Медали',
 };
+
+const DEFAULT_DIAG_MATRIX: string[][] = [
+  ['meaning_researcher', 'practice_realizer', 'communication_guide', 'process_navigator'],
+  ['meaning_researcher', 'communication_guide', 'environment_keeper', 'content_packer'],
+  ['practice_realizer', 'content_packer', 'process_navigator', 'environment_keeper'],
+  ['meaning_researcher', 'practice_realizer', 'process_navigator', 'communication_guide'],
+  ['content_packer', 'practice_realizer', 'environment_keeper', 'communication_guide'],
+  ['meaning_researcher', 'process_navigator', 'practice_realizer', 'environment_keeper'],
+];
+
+const DEFAULT_GOAL_QUESTIONS = [
+  'С какой целью ты приехал на Машук?',
+  'Что ты хочешь получить от программы?',
+  'Какой запрос ты хочешь принести своему направлению?',
+  'Что для тебя было бы главным результатом этих 8 дней?',
+  'Что ты ожидаешь от других участников?',
+];
+
+const DEFAULT_DIAG_QUESTIONS: Array<{ text: string; options: string[] }> = [
+  {
+    text: 'Когда ты берёшься за новую задачу, что ты делаешь первым делом?',
+    options: [
+      'Разбираю смысл — зачем и почему это нужно',
+      'Ищу похожие задачи, которые я уже делал',
+      'Собираю команду / договариваюсь с людьми',
+      'Составляю план и этапы',
+    ],
+  },
+  { text: 'В сложном разговоре ты обычно…', options: ['Ищешь скрытый смысл и настоящую причину', 'Помогаешь всем высказаться и услышать друг друга', 'Следишь, чтобы атмосфера оставалась безопасной', 'Фиксируешь договорённости и формулировки'] },
+  { text: 'Твой самый сильный вклад в команду — это…', options: ['Быстро запустить и проверить на практике', 'Сделать материал понятным и готовым к использованию', 'Выстроить процесс и не дать сбиться с курса', 'Поддержать людей и удержать рабочую атмосферу'] },
+  { text: 'Когда что-то идёт не так, ты сначала…', options: ['Переосмысливаешь задачу и исходные допущения', 'Пробуешь другой рабочий вариант прямо сейчас', 'Пересобираешь этапы и ближайшие шаги', 'Собираешь людей и проясняешь ожидания'] },
+  { text: 'Коллеги чаще всего приходят к тебе за…', options: ['Готовой структурой, схемой или текстом', 'Практическим приёмом, который уже работает', 'Поддержкой и советом «как быть с людьми»', 'Помощью договориться и снять напряжение'] },
+  { text: 'Идеальный рабочий день для тебя — это…', options: ['Глубоко разобраться в важном вопросе', 'Чётко пройти маршрут от плана к результату', 'Запустить несколько живых проб и увидеть эффект', 'Создать спокойную и поддерживающую среду'] },
+];
+
+const DEFAULT_INTEREST_GROUPS: Array<{ title: string; tags: string[] }> = [
+  { title: 'Как я работаю', tags: ['проектная работа', 'исследовательская деятельность', 'игропрактики', 'воспитательная работа', 'классное руководство', 'детская редакция'] },
+  { title: 'С кем и как', tags: ['подростки', 'младшая школа', 'старшие классы', 'работа с родителями', 'командная работа учителей', 'наставничество'] },
+  { title: 'Про что говорить', tags: ['оценки и мотивация', 'осмысленность обучения', 'выгорание учителя', 'образование будущего', 'школа и семья', 'цифровая среда'] },
+  { title: 'Форматы, которые нравятся', tags: ['открытые уроки', 'лекции и большие форматы', 'клубы обсуждений', 'мастер-классы', 'полевые выезды'] },
+];
+
+function cloneDiagQuestions(src: Array<{ text: string; options: string[] }>) {
+  return src.map(q => ({ text: q.text, options: [...q.options] }));
+}
 
 const SECTIONS = ['home', 'program', 'tasks', 'questions', 'profile'];
 
@@ -280,7 +330,14 @@ export const App = () => {
   const [newConsent, setNewConsent] = useState({ kind: 'pd', version: 1, title: '', body: '', isActive: true });
   const [newPushTemplate, setNewPushTemplate] = useState({ key: '', title: '', body: '', slotKey: '', isActive: true });
   const [orgReplyDraft, setOrgReplyDraft] = useState<Record<number, string>>({});
-  const [diagMatrix, setDiagMatrix] = useState<string[][]>([]);
+  const [diagMatrix, setDiagMatrix] = useState<string[][]>(DEFAULT_DIAG_MATRIX.map(r => [...r]));
+  const [goalQuestions, setGoalQuestions] = useState<string[]>([...DEFAULT_GOAL_QUESTIONS]);
+  const [diagQuestions, setDiagQuestions] = useState<Array<{ text: string; options: string[] }>>(
+    () => cloneDiagQuestions(DEFAULT_DIAG_QUESTIONS),
+  );
+  const [interestGroups, setInterestGroups] = useState<Array<{ title: string; tags: string[] }>>(
+    () => DEFAULT_INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] })),
+  );
   const [participantCard, setParticipantCard] = useState<any>(null);
   const [participantCardTab, setParticipantCardTab] = useState<'profile' | 'answers' | 'tasks' | 'medals' | 'points'>('profile');
   const [rightsMatrix, setRightsMatrix] = useState<any[]>([]);
@@ -399,21 +456,33 @@ export const App = () => {
           setActionsLog((await adminFetch(`/actions-log?critical=${journalCritical ? 1 : 0}`)).actions);
         }
         if (tab === 'medals') setMedals((await adminFetch('/medals')).medals);
-        if (tab === 'roles') {
+        if (tab === 'onboarding') {
           setRoles((await adminFetch('/roles')).roles);
           setDayExperiments((await adminFetch('/day-experiments')).experiments);
           const fs = await adminFetch('/forum-settings');
           setForumSettings(fs.settings);
-          const cfg = fs.settings?.roleDiagnosticsConfig?.optionToRole;
-          if (Array.isArray(cfg) && cfg.length === 6) setDiagMatrix(cfg);
-          else setDiagMatrix([
-            ['meaning_researcher', 'practice_realizer', 'communication_guide', 'process_navigator'],
-            ['meaning_researcher', 'communication_guide', 'environment_keeper', 'content_packer'],
-            ['practice_realizer', 'content_packer', 'process_navigator', 'environment_keeper'],
-            ['meaning_researcher', 'practice_realizer', 'process_navigator', 'communication_guide'],
-            ['content_packer', 'practice_realizer', 'environment_keeper', 'communication_guide'],
-            ['meaning_researcher', 'process_navigator', 'practice_realizer', 'environment_keeper'],
-          ]);
+          const cfg = fs.settings?.roleDiagnosticsConfig || {};
+          const matrix = cfg.optionToRole;
+          if (Array.isArray(matrix) && matrix.length === 6) setDiagMatrix(matrix.map((r: string[]) => [...r]));
+          else setDiagMatrix(DEFAULT_DIAG_MATRIX.map(r => [...r]));
+          if (Array.isArray(cfg.goalQuestions) && cfg.goalQuestions.length === 5) {
+            setGoalQuestions([...cfg.goalQuestions]);
+          } else {
+            setGoalQuestions([...DEFAULT_GOAL_QUESTIONS]);
+          }
+          if (Array.isArray(cfg.questions) && cfg.questions.length === 6) {
+            setDiagQuestions(cloneDiagQuestions(cfg.questions));
+          } else {
+            setDiagQuestions(cloneDiagQuestions(DEFAULT_DIAG_QUESTIONS));
+          }
+          if (Array.isArray(cfg.interestGroups) && cfg.interestGroups.length > 0) {
+            setInterestGroups(cfg.interestGroups.map((g: { title: string; tags: string[] }) => ({
+              title: g.title,
+              tags: [...g.tags],
+            })));
+          } else {
+            setInterestGroups(DEFAULT_INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] })));
+          }
         }
         if (tab === 'directions' || tab === 'participants') {
           setDirections((await adminFetch('/directions')).directions);
@@ -617,7 +686,7 @@ export const App = () => {
         </button>
       </header>
       <nav className="admin-nav">
-        {(Object.keys(TAB_LABELS) as Tab[]).map(t => (
+        {TAB_ORDER.map(t => (
           <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{TAB_LABELS[t]}</button>
         ))}
       </nav>
@@ -637,10 +706,10 @@ export const App = () => {
               <button onClick={createParticipant}>Добавить</button>
             </div>
             <table>
-              <thead><tr><th>№</th><th>VK</th><th>Имя</th><th>Направление</th><th>Роль</th><th>Путь</th><th>Опыт</th><th>Действия</th></tr></thead>
+              <thead><tr><th>№</th><th>VK</th><th>Имя</th><th>Направление</th><th>Стартовая роль</th><th>Путь</th><th>Опыт</th><th>В программе</th><th>Действия</th></tr></thead>
               <tbody>
                 {filteredParticipants.map(p => (
-                  <tr key={p.id}>
+                  <tr key={p.id} style={p.selfDeletedAt ? { opacity: 0.75, background: '#FFF5F5' } : undefined}>
                     <td>{p.id}</td><td>{p.vkId}</td>
                     <td>
                       <button
@@ -680,6 +749,15 @@ export const App = () => {
                       </select>
                     </td>
                     <td>{p.pathPoints}</td><td>{p.experiencePoints}</td>
+                    <td>
+                      {p.selfDeletedAt ? (
+                        <span style={{ color: '#C53030', fontSize: 12, fontWeight: 600 }} title={p.selfDeletedAt}>
+                          Удалил из программы
+                        </span>
+                      ) : (
+                        <span style={{ color: '#276749', fontSize: 12 }}>Активен</span>
+                      )}
+                    </td>
                     <td>
                       <button onClick={() => act(async () => {
                         const r = await adminFetch('/qr/download', {
@@ -733,7 +811,23 @@ export const App = () => {
                     <div>VK: {participantCard.participant?.vkId}</div>
                     <div>Направление: {participantCard.participant?.direction}</div>
                     <div>Группа: {participantCard.participant?.groupName || '—'}</div>
-                    <div>Роль старт: {participantCard.participant?.pedagogicalRole || '—'}</div>
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontWeight: 600, marginBottom: 4 }}>Стартовая (ведущая) роль</div>
+                      <select
+                        value={participantCard.participant?.pedagogicalRole || ''}
+                        onChange={e => act(async () => {
+                          const res = await adminFetch(`/participants/${participantCard.participant.id}/role`, {
+                            method: 'PATCH',
+                            body: JSON.stringify({ pedagogicalRole: e.target.value || null }),
+                          });
+                          setParticipantCard({ ...participantCard, participant: res.participant });
+                          await reload();
+                        }, 'Стартовая роль обновлена')}
+                      >
+                        <option value="">—</option>
+                        {ROLE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
+                      </select>
+                    </div>
                     <div>Сильная / рост: {participantCard.participant?.strongRole || '—'} / {participantCard.participant?.growthRole || '—'}</div>
                     <div>Путь / Опыт: {participantCard.participant?.pathPoints} / {participantCard.participant?.experiencePoints}</div>
                   </div>
@@ -812,9 +906,137 @@ export const App = () => {
           </>
         )}
 
-        {tab === 'roles' && (
+        {tab === 'onboarding' && (
           <>
-            <h3>Матрица ролей (6)</h3>
+            <div className="form-row" style={{ marginBottom: 16 }}>
+              <button
+                type="button"
+                onClick={() => act(() => adminFetch('/forum-settings', {
+                  method: 'PATCH',
+                  body: JSON.stringify({
+                    roleDiagnosticsConfig: {
+                      goalQuestions,
+                      interestGroups,
+                      questions: diagQuestions,
+                      optionToRole: diagMatrix,
+                    },
+                  }),
+                }), 'Настройки онбординга сохранены')}
+              >
+                Сохранить онбординг (цели, интересы, диагностика)
+              </button>
+            </div>
+
+            <h3>Шаг «Цели» — 5 вопросов</h3>
+            {goalQuestions.map((q, i) => (
+              <div key={i} className="card" style={{ marginTop: 8 }}>
+                <label style={{ fontSize: 12, fontWeight: 600 }}>Вопрос {i + 1}</label>
+                <textarea
+                  value={q}
+                  rows={2}
+                  style={{ width: '100%', marginTop: 4 }}
+                  onChange={e => {
+                    const next = [...goalQuestions];
+                    next[i] = e.target.value;
+                    setGoalQuestions(next);
+                  }}
+                />
+              </div>
+            ))}
+
+            <h3 style={{ marginTop: 24 }}>Шаг «Интересы» — группы и теги</h3>
+            <p style={{ fontSize: 12, color: '#666' }}>Участник выбирает 5–8 тегов из этого списка.</p>
+            {interestGroups.map((group, gi) => (
+              <div key={gi} className="card" style={{ marginTop: 8 }}>
+                <input
+                  value={group.title}
+                  style={{ width: '100%', fontWeight: 600, marginBottom: 8 }}
+                  placeholder="Название группы"
+                  onChange={e => {
+                    const next = interestGroups.map((g, idx) => (idx === gi ? { ...g, title: e.target.value } : g));
+                    setInterestGroups(next);
+                  }}
+                />
+                <textarea
+                  value={group.tags.join('\n')}
+                  rows={4}
+                  style={{ width: '100%', fontSize: 12 }}
+                  placeholder="Один тег на строку"
+                  onChange={e => {
+                    const tags = e.target.value.split('\n').map(t => t.trim()).filter(Boolean);
+                    const next = interestGroups.map((g, idx) => (idx === gi ? { ...g, tags } : g));
+                    setInterestGroups(next);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn-danger"
+                  style={{ marginTop: 6 }}
+                  onClick={() => setInterestGroups(interestGroups.filter((_, idx) => idx !== gi))}
+                >
+                  Удалить группу
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              style={{ marginTop: 8 }}
+              onClick={() => setInterestGroups([...interestGroups, { title: 'Новая группа', tags: ['новый тег'] }])}
+            >
+              Добавить группу интересов
+            </button>
+
+            <h3 style={{ marginTop: 24 }}>Диагностика роли — 6 вопросов</h3>
+            <p style={{ fontSize: 12, color: '#666' }}>
+              Тексты вариантов и привязка каждого варианта к роли (веса для скоринга).
+            </p>
+            {diagQuestions.map((q, qi) => (
+              <div key={qi} className="card" style={{ marginTop: 8 }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>Вопрос {qi + 1}</div>
+                <textarea
+                  value={q.text}
+                  rows={2}
+                  style={{ width: '100%', marginBottom: 8 }}
+                  onChange={e => {
+                    const next = diagQuestions.map((item, idx) => (
+                      idx === qi ? { ...item, text: e.target.value } : item
+                    ));
+                    setDiagQuestions(next);
+                  }}
+                />
+                {q.options.map((opt, oi) => (
+                  <div key={oi} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, minWidth: 72 }}>Вариант {oi + 1}</span>
+                    <input
+                      value={opt}
+                      style={{ flex: 1, minWidth: 200 }}
+                      onChange={e => {
+                        const next = diagQuestions.map((item, idx) => {
+                          if (idx !== qi) return item;
+                          const options = [...item.options];
+                          options[oi] = e.target.value;
+                          return { ...item, options };
+                        });
+                        setDiagQuestions(next);
+                      }}
+                    />
+                    <select
+                      value={diagMatrix[qi]?.[oi] || 'practice_realizer'}
+                      onChange={e => {
+                        const next = diagMatrix.map(r => [...r]);
+                        if (!next[qi]) next[qi] = [...DEFAULT_DIAG_MATRIX[qi]];
+                        next[qi][oi] = e.target.value;
+                        setDiagMatrix(next);
+                      }}
+                    >
+                      {ROLE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+            <h3 style={{ marginTop: 24 }}>Описания 6 ролей</h3>
             {roles.map(r => (
               <div key={r.id} className="card">
                 <div style={{ fontWeight: 700 }}>{r.name} · <code>{r.roleKey}</code></div>
@@ -857,41 +1079,7 @@ export const App = () => {
                 </button>
               </div>
             ))}
-            <h3 style={{ marginTop: 24 }}>Веса диагностики (option → роль)</h3>
-            <p style={{ fontSize: 12, color: '#666' }}>
-              6 вопросов × 4 варианта. Меняет скоринг онбординга без деплоя кода.
-            </p>
-            {diagMatrix.map((row, qi) => (
-              <div key={qi} className="card" style={{ marginTop: 8 }}>
-                <div style={{ fontWeight: 700, marginBottom: 6 }}>Вопрос {qi + 1}</div>
-                <div className="form-row" style={{ flexWrap: 'wrap' }}>
-                  {row.map((roleKey, oi) => (
-                    <label key={oi} style={{ fontSize: 12 }}>
-                      Вариант {oi + 1}
-                      <select
-                        value={roleKey}
-                        onChange={e => {
-                          const next = diagMatrix.map(r => [...r]);
-                          next[qi][oi] = e.target.value;
-                          setDiagMatrix(next);
-                        }}
-                      >
-                        {ROLE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
-                      </select>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
-            <button
-              style={{ marginTop: 8 }}
-              onClick={() => act(() => adminFetch('/forum-settings', {
-                method: 'PATCH',
-                body: JSON.stringify({ roleDiagnosticsConfig: { optionToRole: diagMatrix } }),
-              }), 'Матрица диагностики сохранена')}
-            >
-              Сохранить веса диагностики
-            </button>
+
             <h3 style={{ marginTop: 24 }}>Каталог советов (роль × день)</h3>
             <div className="form-row">
               <select value={expForm.dayNumber} onChange={e => setExpForm({ ...expForm, dayNumber: Number(e.target.value) })}>

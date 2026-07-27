@@ -24,6 +24,10 @@ export const requireParticipant = async (
     res.status(403).json({ error: 'Registration required', status: 'needs_registration' });
     return;
   }
+  if (user.selfDeletedAt) {
+    res.status(403).json({ error: 'Account removed from program', status: 'self_deleted' });
+    return;
+  }
 
   req.participant = user;
   next();

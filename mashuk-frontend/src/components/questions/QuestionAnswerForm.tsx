@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Textarea, Button, Checkbox, Radio, Slider, Div, FormItem } from '@vkontakte/vkui';
 import { GOAL_QUESTIONS, ROLE_CATALOG } from '../../data/onboarding';
+import { apiGet } from '../../api/client';
 
 const CHECKIN_EMOTIONS = [
   { id: 'joy', label: 'Радость', icon: '😊' },
@@ -32,6 +33,7 @@ interface QuestionAnswerFormProps {
 }
 
 const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ onSubmit }) => {
+  const [goalQuestions, setGoalQuestions] = useState<string[]>([...GOAL_QUESTIONS]);
   const [answers, setAnswers] = useState<string[]>(GOAL_QUESTIONS.map(() => ''));
   const [strongRole, setStrongRole] = useState('');
   const [growthRole, setGrowthRole] = useState('');
@@ -40,7 +42,18 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState(0);
 
-  const canNextAnswers = answers.every(a => a.trim().length > 0);
+  useEffect(() => {
+    apiGet<{ goalQuestions?: string[] }>('/auth/onboarding-meta')
+      .then(data => {
+        if (data.goalQuestions?.length === 5) {
+          setGoalQuestions(data.goalQuestions);
+          setAnswers(data.goalQuestions.map(() => ''));
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const canNextAnswers = goalQuestions.every((_, i) => (answers[i] || '').trim().length > 0);
   const canSubmit = !!strongRole && !!growthRole && growthWhy.trim().length > 0;
 
   const handleSubmit = async () => {
@@ -71,7 +84,7 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
 
       {step === 0 && (
         <>
-          {GOAL_QUESTIONS.map((q, i) => (
+          {goalQuestions.map((q, i) => (
             <FormItem key={i} top={`${i + 1}. ${q}`}>
               <Textarea
                 value={answers[i]}

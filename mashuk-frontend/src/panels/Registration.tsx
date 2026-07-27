@@ -7,8 +7,17 @@ import { UserInfo } from '@vkontakte/vk-bridge';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { apiGet, apiPost } from '../api/client';
 import {
-  GOAL_QUESTIONS, INTEREST_GROUPS, DIAGNOSTIC_QUESTIONS, ROLE_CATALOG, scoreRoleClient,
+  GOAL_QUESTIONS, INTEREST_GROUPS, DIAGNOSTIC_QUESTIONS, ROLE_CATALOG, scoreRoleClient, RoleKey,
 } from '../data/onboarding';
+
+type ApiRole = {
+  roleKey: string;
+  name: string;
+  quadrant?: string;
+  essence?: string;
+  inClass?: string;
+  keywords?: string;
+};
 
 interface RegistrationPanelProps {
   id: string;
@@ -50,16 +59,59 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   const [diagIndex, setDiagIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [goalQuestions, setGoalQuestions] = useState<string[]>([...GOAL_QUESTIONS]);
+  const [interestGroups, setInterestGroups] = useState<Array<{ title: string; tags: string[] }>>(
+    INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] })),
+  );
+  const [diagQuestions, setDiagQuestions] = useState<Array<{ text: string; options: string[] }>>(
+    DIAGNOSTIC_QUESTIONS.map(q => ({ text: q.text, options: [...q.options] })),
+  );
+  const [diagOptionToRole, setDiagOptionToRole] = useState<RoleKey[][] | null>(null);
+  const [apiRoles, setApiRoles] = useState<ApiRole[] | null>(null);
 
   const firstName = fetchedUser?.first_name || DEV_FIRST_NAME;
   const lastName = fetchedUser?.last_name || DEV_LAST_NAME;
 
   const scoredRole = useMemo(() => {
     if (roleAnswers.some(a => a === null)) return null;
-    return scoreRoleClient(roleAnswers as number[]);
-  }, [roleAnswers]);
+    return scoreRoleClient(roleAnswers as number[], diagOptionToRole ?? undefined);
+  }, [roleAnswers, diagOptionToRole]);
 
-  const roleMeta = scoredRole ? ROLE_CATALOG.find(r => r.roleKey === scoredRole) : null;
+  type RoleDisplay = {
+    roleKey: RoleKey;
+    name: string;
+    quadrant: string;
+    essence: string;
+    inClass: string;
+    keywords: string;
+  };
+
+  const mergeRoleEntry = (catalogEntry: typeof ROLE_CATALOG[number]): RoleDisplay => {
+    const fromApi = apiRoles?.find(r => r.roleKey === catalogEntry.roleKey);
+    if (fromApi) {
+      return {
+        roleKey: fromApi.roleKey as RoleKey,
+        name: fromApi.name || catalogEntry.name,
+        quadrant: fromApi.quadrant || catalogEntry.quadrant,
+        essence: fromApi.essence || catalogEntry.essence,
+        inClass: fromApi.inClass || catalogEntry.inClass,
+        keywords: fromApi.keywords || catalogEntry.keywords,
+      };
+    }
+    return catalogEntry;
+  };
+
+  const roleMeta = useMemo((): RoleDisplay | null => {
+    if (!scoredRole) return null;
+    const catalogEntry = ROLE_CATALOG.find(r => r.roleKey === scoredRole);
+    if (!catalogEntry) return null;
+    return mergeRoleEntry(catalogEntry);
+  }, [scoredRole, apiRoles]);
+
+  const otherRoles = useMemo((): RoleDisplay[] => {
+    if (!roleMeta) return [];
+    return ROLE_CATALOG.filter(r => r.roleKey !== roleMeta.roleKey).map(mergeRoleEntry);
+  }, [roleMeta, apiRoles]);
 
   useEffect(() => {
     if (isRegistered) {
@@ -83,10 +135,34 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
     apiGet<{
       groupAssignMode?: string;
       groups?: { id: number; name: string; seatsLeft: number | null }[];
+      goalQuestions?: string[];
+      interestGroups?: Array<{ title: string; tags: string[] }>;
+      roles?: ApiRole[];
+      diagnostics?: {
+        questions?: Array<{ text: string; options: string[] }>;
+        optionToRole?: RoleKey[][];
+      };
     }>('/auth/onboarding-meta')
       .then(data => {
         setGroupAssignMode((data.groupAssignMode as 'list' | 'auto') || 'list');
         setGroups(data.groups || []);
+        if (data.goalQuestions?.length === 5) {
+          setGoalQuestions(data.goalQuestions);
+          setGoalAnswers(data.goalQuestions.map(() => ''));
+        }
+        if (data.interestGroups?.length) {
+          setInterestGroups(data.interestGroups.map(g => ({ title: g.title, tags: [...g.tags] })));
+        }
+        if (data.diagnostics?.questions?.length === 6) {
+          setDiagQuestions(data.diagnostics.questions.map(q => ({
+            text: q.text,
+            options: [...q.options],
+          })));
+        }
+        if (data.diagnostics?.optionToRole?.length === 6) {
+          setDiagOptionToRole(data.diagnostics.optionToRole);
+        }
+        if (data.roles?.length) setApiRoles(data.roles);
       })
       .catch(() => undefined);
   }, []);
@@ -98,7 +174,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
     && workplace.trim() && position.trim() && consentPd && consentAnalytics
     && (groupAssignMode !== 'list' || groups.length === 0 || groupId),
   );
-  const canGoStep2 = goalAnswers.every(a => a.trim().length > 0);
+  const canGoStep2 = goalQuestions.every((_, i) => (goalAnswers[i] || '').trim().length > 0);
   const canGoStep3 = interests.length >= 5 && interests.length <= 8;
   const canGoStep4 = roleAnswers[diagIndex] !== null;
 
@@ -220,7 +296,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 Эти же вопросы мы зададим на последний день, чтобы ты увидел, как изменился за смену.
               </p>
             </Div>
-            {GOAL_QUESTIONS.map((q, i) => (
+            {goalQuestions.map((q, i) => (
               <FormItem key={i} top={`${i + 1}. ${q}`}>
                 <Textarea
                   value={goalAnswers[i]}
@@ -250,7 +326,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 Выбери 5–8 тегов — по ним бот будет подбирать события и материалы.
               </p>
             </Div>
-            {INTEREST_GROUPS.map(group => (
+            {interestGroups.map(group => (
               <Div key={group.title}>
                 <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>{group.title}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -301,9 +377,9 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
             </Div>
             <Div>
               <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>
-                {DIAGNOSTIC_QUESTIONS[diagIndex].text}
+                {diagQuestions[diagIndex]?.text}
               </div>
-              {DIAGNOSTIC_QUESTIONS[diagIndex].options.map((opt, oi) => {
+              {(diagQuestions[diagIndex]?.options || []).map((opt, oi) => {
                 const selected = roleAnswers[diagIndex] === oi;
                 return (
                   <div
@@ -366,42 +442,72 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         {step === 'result' && roleMeta && (
           <>
             <Div>
-              <div style={{ fontSize: 11, color: '#888', fontWeight: 600 }}>Твоя стартовая роль</div>
-              <div style={{ fontSize: 22, fontWeight: 800, margin: '6px 0' }}>◆ {roleMeta.name}</div>
-              <div style={{ fontSize: 12, color: '#B8621A' }}>{roleMeta.quadrant}</div>
-            </Div>
-            <Div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#888' }}>СУТЬ</div>
-              <p style={{ fontSize: 13, lineHeight: 1.45 }}>{roleMeta.essence}</p>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#888' }}>В КЛАССЕ ЭТО ВЫГЛЯДИТ ТАК</div>
-              <p style={{ fontSize: 13, lineHeight: 1.45 }}>{roleMeta.inClass}</p>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#888' }}>КЛЮЧЕВЫЕ СЛОВА</div>
-              <p style={{ fontSize: 13 }}>{roleMeta.keywords}</p>
-            </Div>
-            <Div>
-              <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>— все 6 ролей матрицы —</div>
-              {ROLE_CATALOG.map(r => (
-                <div
-                  key={r.roleKey}
-                  style={{
-                    padding: 10,
-                    marginBottom: 8,
-                    borderRadius: 10,
-                    border: r.roleKey === roleMeta.roleKey ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
-                    background: r.roleKey === roleMeta.roleKey ? '#D8F3DC' : '#fff',
-                  }}
-                >
-                  <div style={{ fontWeight: 800, fontSize: 13 }}>
-                    {r.roleKey === roleMeta.roleKey ? '◆ ' : ''}{r.name}
+              <h2 style={{ margin: '0 0 12px', fontSize: 20, lineHeight: 1.35 }}>
+                Твоя стартовая роль: {roleMeta.name}
+              </h2>
+              <div
+                className="m-card"
+                style={{
+                  background: 'linear-gradient(135deg,#FFF8E7,#D8F3DC)',
+                  border: '1.5px solid #2D6A4F',
+                }}
+              >
+                {roleMeta.quadrant && (
+                  <div style={{ fontSize: 12, color: '#B8621A', marginBottom: 10, fontWeight: 600 }}>
+                    {roleMeta.quadrant}
                   </div>
-                  <div style={{ fontSize: 11, color: '#B8621A', marginTop: 2 }}>{r.quadrant}</div>
-                  <div style={{ fontSize: 12, color: '#555', marginTop: 4, lineHeight: 1.4 }}>{r.essence}</div>
-                  <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>{r.keywords}</div>
-                </div>
-              ))}
+                )}
+                <div className="pb-lbl">Суть</div>
+                <p style={{ fontSize: 13, lineHeight: 1.45, margin: '0 0 12px' }}>{roleMeta.essence}</p>
+                <div className="pb-lbl">Проявления</div>
+                <p style={{ fontSize: 13, lineHeight: 1.45, margin: '0 0 12px' }}>{roleMeta.inClass}</p>
+                <div className="pb-lbl">Ключевые слова</div>
+                <p style={{ fontSize: 13, margin: 0, color: '#555' }}>{roleMeta.keywords}</p>
+              </div>
             </Div>
+
+            <Div>
+              <div className="pb-lbl" style={{ marginBottom: 8 }}>Другие роли в матрице</div>
+              <p style={{ fontSize: 12, color: '#666', margin: '0 0 10px', lineHeight: 1.4 }}>
+                Листай карточки — так проще увидеть контекст команды.
+              </p>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                  overflowX: 'auto',
+                  paddingBottom: 4,
+                  margin: '0 -4px',
+                  WebkitOverflowScrolling: 'touch',
+                  scrollSnapType: 'x mandatory',
+                }}
+              >
+                {otherRoles.map(r => (
+                  <div
+                    key={r.roleKey}
+                    className="m-card"
+                    style={{
+                      minWidth: 240,
+                      maxWidth: 260,
+                      flexShrink: 0,
+                      scrollSnapAlign: 'start',
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, fontSize: 14, lineHeight: 1.3 }}>{r.name}</div>
+                    {r.quadrant && (
+                      <div style={{ fontSize: 11, color: '#B8621A', marginTop: 4 }}>{r.quadrant}</div>
+                    )}
+                    <p style={{ fontSize: 12, color: '#555', margin: '8px 0 0', lineHeight: 1.4 }}>
+                      {r.essence}
+                    </p>
+                    <p style={{ fontSize: 11, color: '#888', margin: '6px 0 0' }}>{r.keywords}</p>
+                  </div>
+                ))}
+              </div>
+            </Div>
+
             <Button size="l" stretched onClick={() => setStep('confirm')}>
-              Дальше → Проверить данные
+              Дальше
             </Button>
             <Button size="l" stretched mode="secondary" style={{ marginTop: 8 }} onClick={() => { setDiagIndex(0); setStep(4); }}>
               ← Пересмотреть диагностику

@@ -55,6 +55,7 @@ export const App = () => {
   const [initComplete, setInitComplete] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [isRegistered, setIsRegistered] = useState(false);
+  const [selfDeleted, setSelfDeleted] = useState(false);
   const [sectionsVisibility, setSectionsVisibility] = useState(DEFAULT_SECTIONS);
   const [questionsBadge, setQuestionsBadge] = useState(0);
   const [apiErrorToast, setApiErrorToast] = useState<string | null>(null);
@@ -95,7 +96,10 @@ export const App = () => {
       }
 
       const auth = await apiGet<{ status: string }>('/auth/me');
-      if (auth.status === 'needs_registration') {
+      if (auth.status === 'self_deleted') {
+        setSelfDeleted(true);
+        setIsRegistered(false);
+      } else if (auth.status === 'needs_registration') {
         setIsRegistered(false);
         if (!window.location.hash.includes('registration')) {
           routeNavigator.push('/registration');
@@ -153,6 +157,11 @@ export const App = () => {
     refreshTabCounts();
   }, [refreshTabCounts]);
 
+  const handleSelfDeleted = useCallback(() => {
+    setSelfDeleted(true);
+    setIsRegistered(false);
+  }, []);
+
   const showTab = (key: keyof typeof DEFAULT_SECTIONS) =>
     sectionsVisibility[key] !== false;
 
@@ -160,6 +169,20 @@ export const App = () => {
     return (
       <div className="mashuk-root" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
         <Spinner size="l" />
+      </div>
+    );
+  }
+
+  if (selfDeleted) {
+    return (
+      <div className="mashuk-root" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 24, textAlign: 'center' }}>
+        <div className="m-card" style={{ maxWidth: 360 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Профиль удалён</div>
+          <p style={{ fontSize: 14, color: '#555', margin: 0 }}>
+            Вы вышли из программы. Ваши ответы и активность сохранены у организаторов.
+            Чтобы снова участвовать, обратитесь к организаторам форума.
+          </p>
+        </div>
       </div>
     );
   }
@@ -269,7 +292,7 @@ export const App = () => {
         <ProgramPanel id="program" />
         <TasksPanel id="tasks" />
         <QuestionsPanel id="questions" onActivity={refreshTabCounts} />
-        <ProfilePanel id="profile" fetchedUser={fetchedUser} />
+        <ProfilePanel id="profile" fetchedUser={fetchedUser} onSelfDeleted={handleSelfDeleted} />
         <RegistrationPanel id="registration" fetchedUser={fetchedUser} isRegistered={isRegistered} onRegistered={handleRegistered} />
         <VolunteerPanel id="volunteer" />
       </View>

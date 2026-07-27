@@ -193,7 +193,11 @@ export const ROLE_CATALOG: Array<{
   },
 ];
 
-export function scoreRoleClient(roleAnswers: number[]): RoleKey {
+export function scoreRoleClient(
+  roleAnswers: number[],
+  optionToRole: RoleKey[][] = OPTION_TO_ROLE,
+): RoleKey {
+  const matrix = optionToRole.length === 6 ? optionToRole : OPTION_TO_ROLE;
   const scores: Record<RoleKey, number> = {
     meaning_researcher: 0,
     practice_realizer: 0,
@@ -203,7 +207,7 @@ export function scoreRoleClient(roleAnswers: number[]): RoleKey {
     environment_keeper: 0,
   };
   roleAnswers.forEach((optionIndex, qIndex) => {
-    scores[OPTION_TO_ROLE[qIndex][optionIndex]] += 1;
+    scores[matrix[qIndex][optionIndex]] += 1;
   });
   let best = ROLE_PRIORITY[0];
   let bestScore = -1;

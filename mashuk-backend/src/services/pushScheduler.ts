@@ -1,4 +1,4 @@
-import { and, eq, gte, isNotNull, lte, asc } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, isNull, lte, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   answers, events, forumSettings, participants, pushLog, pushQueue, pushTemplates, questions,
@@ -102,7 +102,7 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
         .where(and(eq(questions.status, 'published'), eq(questions.dayNumber, currentDay)));
       if (dayQs.length > 0) {
         const allP = await db.select({ id: participants.id }).from(participants)
-          .where(isNotNull(participants.onboardingCompletedAt));
+          .where(and(isNotNull(participants.onboardingCompletedAt), isNull(participants.selfDeletedAt)));
         const needRemind: number[] = [];
         for (const p of allP) {
           const ansQ = await db.select({ questionId: answers.questionId }).from(answers)
