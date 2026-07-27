@@ -759,6 +759,17 @@ export const App = () => {
                       )}
                     </td>
                     <td>
+                      {p.selfDeletedAt && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!confirm(`Восстановить доступ для ${p.firstName} ${p.lastName}?`)) return;
+                            act(() => adminFetch(`/participants/${p.id}/restore`, { method: 'POST' }), 'Аккаунт восстановлен');
+                          }}
+                        >
+                          Восстановить
+                        </button>
+                      )}
                       <button onClick={() => act(async () => {
                         const r = await adminFetch('/qr/download', {
                           method: 'POST', body: JSON.stringify({ type: 'participant', id: p.id }),
@@ -830,6 +841,21 @@ export const App = () => {
                     </div>
                     <div>Сильная / рост: {participantCard.participant?.strongRole || '—'} / {participantCard.participant?.growthRole || '—'}</div>
                     <div>Путь / Опыт: {participantCard.participant?.pathPoints} / {participantCard.participant?.experiencePoints}</div>
+                    {participantCard.participant?.selfDeletedAt && (
+                      <div style={{ marginTop: 12 }}>
+                        <span style={{ color: '#C53030', fontSize: 12, fontWeight: 600 }}>Участник удалил профиль сам</span>
+                        <button
+                          type="button"
+                          style={{ marginLeft: 12 }}
+                          onClick={() => act(async () => {
+                            const res = await adminFetch(`/participants/${participantCard.participant.id}/restore`, { method: 'POST' });
+                            setParticipantCard({ ...participantCard, participant: res.participant });
+                          }, 'Аккаунт восстановлен')}
+                        >
+                          Восстановить аккаунт
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
                 {participantCardTab === 'answers' && (

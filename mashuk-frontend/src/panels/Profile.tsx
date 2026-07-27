@@ -142,7 +142,7 @@ export const ProfilePanel: React.FC<{
   const deleteFromProgram = async () => {
     const ok = window.confirm(
       'Удалить профиль из программы? Вы больше не сможете пользоваться приложением. '
-      + 'Ответы и баллы сохранятся у организаторов для отчётности.',
+      + 'Для восстановления обратитесь к организаторам.',
     );
     if (!ok) return;
     setDeleteLoading(true);
@@ -555,7 +555,7 @@ export const ProfilePanel: React.FC<{
             <div className="m-card" style={{ marginTop: 16, borderColor: '#FEB2B2' }}>
               <div className="pb-lbl">Удаление из программы</div>
               <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
-                Вы выйдете из приложения. Данные останутся в системе с пометкой, что вы удалили профиль сами.
+                Доступ к приложению будет отключён. Восстановление — через организаторов форума.
               </div>
               <Button
                 size="l"
