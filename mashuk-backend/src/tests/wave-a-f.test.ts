@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { matchPushSlot, matchRetrySlot, PUSH_SLOTS } from '../services/pushScheduler.js';
+import { pushCategoryOf } from '../services/pushService.js';
 import { roleCan } from '../utils/adminToken.js';
 import { generateQrToken } from '../services/qrService.js';
 import { isGigachatConfigured } from '../services/gigachatService.js';
@@ -14,6 +15,17 @@ describe('pushScheduler slots', () => {
 
   it('matches 22:00 finale', () => {
     assert.equal(matchPushSlot(22 * 60)?.key, 'slot_2200');
+  });
+});
+
+describe('pushCategoryOf', () => {
+  it('maps scheduled slot triggers to touchpoints', () => {
+    assert.equal(pushCategoryOf('auto_slot_0800'), 'touchpoints');
+    assert.equal(pushCategoryOf('auto_retry_slot_0800'), 'touchpoints');
+  });
+
+  it('maps question_publish to tasks', () => {
+    assert.equal(pushCategoryOf('question_publish'), 'tasks');
   });
 });
 

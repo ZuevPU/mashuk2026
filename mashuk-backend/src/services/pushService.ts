@@ -13,6 +13,17 @@ async function throttleVk(): Promise<void> {
   lastVkCall = Date.now();
 }
 
+/** Категория push для проверки pushOptOut участника */
+export function pushCategoryOf(triggerType: string): string {
+  if (triggerType === 'question_publish') return 'tasks';
+  if (/^auto_slot_/i.test(triggerType) || /^auto_retry_slot_/i.test(triggerType)) return 'touchpoints';
+  if (/touch|checkin|osmysl|evening|morning|point/i.test(triggerType)) return 'touchpoints';
+  if (/event|program|schedule|remind/i.test(triggerType)) return 'program';
+  if (/task|medal|moderate|volunteer/i.test(triggerType)) return 'tasks';
+  if (/exchange|org|peer|answer/i.test(triggerType)) return 'exchange';
+  return triggerType;
+}
+
 export async function sendPushNotification(
   participantIds: number[],
   text: string,
@@ -25,14 +36,7 @@ export async function sendPushNotification(
     if (!p) continue;
 
     const optOut = (p.pushOptOut as Record<string, boolean> | null) ?? {};
-    const categoryOf = (t: string): string => {
-      if (/touch|checkin|osmysl|evening|morning|point/i.test(t)) return 'touchpoints';
-      if (/event|program|schedule|remind/i.test(t)) return 'program';
-      if (/task|medal|moderate|volunteer/i.test(t)) return 'tasks';
-      if (/exchange|org|peer|answer/i.test(t)) return 'exchange';
-      return t;
-    };
-    const cat = categoryOf(triggerType);
+    const cat = pushCategoryOf(triggerType);
     if (optOut.all === true || optOut[triggerType] === true || optOut[cat] === true) {
       await db.insert(pushLog).values({
         participantId,

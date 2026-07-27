@@ -14,7 +14,7 @@ const LABELS: Record<string, string> = {
 
   // Тип вопроса
   open: 'Открытый',
-  checkin: 'Check-in (настроение)',
+  checkin: 'Проверка состояния (настроение)',
   choice: 'Выбор одного',
   multi: 'Множественный выбор',
   dependent: 'Зависимый',

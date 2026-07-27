@@ -75,7 +75,7 @@ export async function runSeed() {
     ]);
 
     await db.insert(tasks).values([
-      { title: 'Познакомься с участником другого направления', category: 'Нетворкинг', points: 20, dayNumber: 1, publishTime: now, autoConfirm: true, confirmationType: 'auto' },
+      { title: 'Познакомься с участником другого направления', category: 'Полезные знакомства и общение', points: 20, dayNumber: 1, publishTime: now, autoConfirm: true, confirmationType: 'auto' },
       { title: 'Напиши пост о форуме', category: 'Медиа', points: 30, dayNumber: 1, publishTime: now, autoConfirm: false, answerType: 'text_and_photo', confirmationType: 'post_url' },
       { title: 'Зафиксируй идею эксперимента', category: 'Образование', points: 25, dayNumber: 3, publishTime: now, autoConfirm: true, confirmationType: 'text_photo' },
       { title: 'Скан QR на площадке', category: 'Организация', points: 15, dayNumber: 2, publishTime: now, autoConfirm: true, confirmationType: 'qr' },
