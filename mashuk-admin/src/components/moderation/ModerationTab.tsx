@@ -3,7 +3,7 @@ import { label } from '../../labels/ru';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
 
-type Segment = 'exchange' | 'tasks' | 'org' | 'archive';
+type Segment = 'exchange' | 'org' | 'archive';
 
 type ParticipantCardTab = 'profile' | 'answers' | 'tasks' | 'medals' | 'points' | 'piggybank';
 
@@ -11,21 +11,18 @@ export type ModerationTabProps = AdminTabProps & {
   onOpenCard: (id: number, tab?: ParticipantCardTab) => void;
 };
 
-export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: ModerationTabProps) {
+export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard: _onOpenCard }: ModerationTabProps) {
   const [segment, setSegment] = useState<Segment>('exchange');
   const [loading, setLoading] = useState(true);
   const [pendingExchange, setPendingExchange] = useState<any[]>([]);
-  const [pendingTasks, setPendingTasks] = useState<any[]>([]);
   const [exchangeArchive, setExchangeArchive] = useState<any[]>([]);
   const [orgThreads, setOrgThreads] = useState<any[]>([]);
-  const [rejectComment, setRejectComment] = useState<Record<number, string>>({});
   const [orgReplyDraft, setOrgReplyDraft] = useState<Record<number, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       setPendingExchange((await adminFetch('/exchange/pending')).questions || []);
-      setPendingTasks((await adminFetch('/task-submissions/pending')).submissions || []);
       setExchangeArchive((await adminFetch('/exchange?status=approved')).questions || []);
       setOrgThreads((await adminFetch('/org/threads')).threads || []);
     } finally {
@@ -41,7 +38,6 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
 
   const segments: { key: Segment; label: string }[] = [
     { key: 'exchange', label: 'Обмен (ожидает)' },
-    { key: 'tasks', label: 'Задания' },
     { key: 'org', label: 'Организаторы' },
     { key: 'archive', label: 'Архив обмена' },
   ];
@@ -50,7 +46,7 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
 
   return (
     <div className="adm-forum">
-      <AdminPageHero title="Модерация" hint="Обмен опытом, проверка заданий и обращения к организаторам." />
+      <AdminPageHero title="Модерация" hint="Обмен опытом и обращения к организаторам. Ответы на задания — в разделе «Задания», кнопка «Модерация ответов» на карточке." />
 
       <div className="adm-seg" style={{ marginBottom: 12 }}>
         {segments.map(s => (
@@ -72,66 +68,6 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
               </div>
             </div>
           ))}
-        </>
-      )}
-
-      {segment === 'tasks' && (
-        <>
-          {pendingTasks.length === 0 && <p className="adm-muted">Нет заданий на проверке</p>}
-          {pendingTasks.map(s => {
-            const teamBlocked = s.teamConfirmations?.length > 0
-              && !s.teamConfirmations.every((c: { status: string }) => c.status === 'confirmed');
-            return (
-              <div key={s.id} className="card">
-                <p>
-                  <button type="button" className="adm-link" onClick={() => onOpenCard(s.participantId, 'tasks')}>
-                    {s.participantName}
-                  </button>
-                  {' · '}{s.taskTitle}
-                </p>
-                <p>{s.answerText}</p>
-                {s.postUrl && <p style={{ fontSize: 12 }}><a href={s.postUrl} target="_blank" rel="noreferrer">{s.postUrl}</a></p>}
-                {s.photoUrl && <img src={s.photoUrl} alt="" style={{ maxWidth: 200 }} />}
-                {s.teamConfirmations?.length > 0 && (
-                  <p style={{ fontSize: 12 }}>
-                    Команда:{' '}
-                    {s.teamConfirmations.map((c: { participantId: number; name: string; status: string }) => (
-                      <span key={c.participantId} style={{ marginRight: 8 }}>
-                        {c.name} ({label(c.status)})
-                      </span>
-                    ))}
-                  </p>
-                )}
-                <input
-                  className="adm-input"
-                  value={rejectComment[s.id] || ''}
-                  onChange={e => setRejectComment({ ...rejectComment, [s.id]: e.target.value })}
-                  placeholder="Комментарий при отклонении"
-                />
-                <div className="form-row">
-                  <button
-                    type="button"
-                    className="adm-btn"
-                    disabled={teamBlocked}
-                    title={teamBlocked ? 'Дождитесь подтверждения всех членов команды' : undefined}
-                    onClick={() => adminFetch(`/task-submissions/${s.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'approved' }) }).then(reload)}
-                  >
-                    Одобрить
-                  </button>
-                  <button
-                    type="button"
-                    className="adm-btn btn-danger"
-                    onClick={() => adminFetch(`/task-submissions/${s.id}`, {
-                      method: 'PATCH',
-                      body: JSON.stringify({ status: 'rejected', moderatorComment: rejectComment[s.id] || 'Не принято' }),
-                    }).then(reload)}
-                  >
-                    Отклонить
-                  </button>
-                </div>
-              </div>
-            );
-          })}
         </>
       )}
 

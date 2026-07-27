@@ -539,7 +539,7 @@ export function ParticipantCardModal({
 
             <table className="adm-table">
 
-              <thead><tr><th>Задание</th><th>Статус</th><th>XP</th><th>Команда</th></tr></thead>
+              <thead><tr><th>Задание</th><th>Статус</th><th>Ответ</th><th>XP</th><th>Команда</th></tr></thead>
 
               <tbody>
 
@@ -550,6 +550,19 @@ export function ParticipantCardModal({
                     <td>{s.taskTitle}</td>
 
                     <td>{label(s.status)}</td>
+
+                    <td style={{ maxWidth: 280, fontSize: 12 }}>
+                      {s.answerText?.trim() ? <div>{s.answerText}</div> : null}
+                      {s.postUrl ? (
+                        <div><a href={s.postUrl} target="_blank" rel="noreferrer">Ссылка на пост</a></div>
+                      ) : null}
+                      {s.photoUrl ? (
+                        <div>
+                          <a href={s.photoUrl} target="_blank" rel="noreferrer">Фото</a>
+                        </div>
+                      ) : null}
+                      {!s.answerText?.trim() && !s.postUrl && !s.photoUrl ? '—' : null}
+                    </td>
 
                     <td>{s.pointsAwarded ?? 0}</td>
 

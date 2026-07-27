@@ -5,6 +5,7 @@ import { AdminPageHero } from '../admin/AdminPageHero';
 import { EnumOptions } from '../admin/EnumOptions';
 import type { AdminTabProps } from '../admin/types';
 import { TaskCard } from './TaskCard';
+import { TaskSubmissionsModeration } from './TaskSubmissionsModeration';
 import {
   draftFromTask,
   emptyNewTask,
@@ -22,6 +23,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [search, setSearch] = useState('');
   const [newTask, setNewTask] = useState<NewTaskForm>(() => emptyNewTask(1));
   const [drafts, setDrafts] = useState<Record<number, TaskDraft>>({});
+  const [moderatingTask, setModeratingTask] = useState<AdminTask | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -233,9 +235,20 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             onSave={() => saveTask(t)}
             onDelete={() => deleteTask(t.id)}
             onQr={() => qrTask(t.id)}
+            onModerate={() => setModeratingTask(t)}
           />
         );
       })}
+
+      {moderatingTask && (
+        <TaskSubmissionsModeration
+          taskId={moderatingTask.id}
+          taskTitle={moderatingTask.title}
+          adminFetch={adminFetch}
+          act={act}
+          onClose={() => setModeratingTask(null)}
+        />
+      )}
     </div>
   );
 }

@@ -491,6 +491,7 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
       id: r.s.id,
       taskTitle: r.t?.title,
       status: r.s.status,
+      answerText: r.s.answerText,
       pointsAwarded: r.s.pointsAwarded,
       photoUrl: r.s.photoUrl,
       postUrl: r.s.postUrl,

@@ -161,6 +161,13 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 @media (min-width: 640px) {
   .adm-modal-backdrop { align-items: center; }
 }
+.adm-task-moderation-panel {
+  width: 100%;
+  max-width: min(1100px, 96vw);
+  max-height: 90vh;
+  overflow: auto;
+  margin: 0;
+}
 .adm-modal {
   background: #fff;
   border-radius: 20px;

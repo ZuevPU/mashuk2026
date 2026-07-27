@@ -1238,9 +1238,33 @@ export const listPendingSubmissions = async (_req: AdminRequest, res: Response):
 
 export const listAllSubmissions = async (req: AdminRequest, res: Response): Promise<void> => {
   const status = req.query.status as string | undefined;
+  const taskIdRaw = req.query.taskId as string | undefined;
+  const participantIdRaw = req.query.participantId as string | undefined;
+  const taskId = taskIdRaw ? Number(taskIdRaw) : undefined;
+  const participantId = participantIdRaw ? Number(participantIdRaw) : undefined;
   const page = Math.max(1, Number(req.query.page) || 1);
-  const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+  const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 50));
   const offset = (page - 1) * limit;
+  const sortBy = String(req.query.sortBy || 'submittedAt');
+  const sortDirFn = req.query.sortDir === 'asc' ? asc : desc;
+
+  const conditions = [];
+  if (status) conditions.push(eq(taskSubmissions.status, status));
+  if (taskId && !Number.isNaN(taskId)) conditions.push(eq(taskSubmissions.taskId, taskId));
+  if (participantId && !Number.isNaN(participantId)) {
+    conditions.push(eq(taskSubmissions.participantId, participantId));
+  }
+  const where = conditions.length ? and(...conditions) : undefined;
+
+  let countQuery = db.select({ count: count() }).from(taskSubmissions);
+  if (where) countQuery = countQuery.where(where) as typeof countQuery;
+  const [total] = await countQuery;
+
+  let orderExpr;
+  if (sortBy === 'participant') orderExpr = sortDirFn(participants.firstName);
+  else if (sortBy === 'status') orderExpr = sortDirFn(taskSubmissions.status);
+  else if (sortBy === 'points') orderExpr = sortDirFn(taskSubmissions.pointsAwarded);
+  else orderExpr = sortDirFn(taskSubmissions.submittedAt);
 
   let baseQuery = db.select({
     s: taskSubmissions,
@@ -1249,25 +1273,43 @@ export const listAllSubmissions = async (req: AdminRequest, res: Response): Prom
   }).from(taskSubmissions)
     .leftJoin(participants, eq(taskSubmissions.participantId, participants.id))
     .leftJoin(tasks, eq(taskSubmissions.taskId, tasks.id));
+  if (where) baseQuery = baseQuery.where(where) as typeof baseQuery;
 
-  let countQuery = db.select({ count: count() }).from(taskSubmissions);
+  const rows = await baseQuery.orderBy(orderExpr).limit(limit).offset(offset);
 
-  if (status) {
-    baseQuery = baseQuery.where(eq(taskSubmissions.status, status)) as any;
-    countQuery = countQuery.where(eq(taskSubmissions.status, status)) as any;
+  const subIds = rows.map(r => r.s.id);
+  const confRows = subIds.length
+    ? await db.select({
+      c: taskTeamConfirmations,
+      p: participants,
+    }).from(taskTeamConfirmations)
+      .leftJoin(participants, eq(taskTeamConfirmations.participantId, participants.id))
+      .where(inArray(taskTeamConfirmations.submissionId, subIds))
+    : [];
+  const confBySub = new Map<number, { participantId: number; name: string; status: string }[]>();
+  for (const { c, p } of confRows) {
+    const list = confBySub.get(c.submissionId) || [];
+    list.push({
+      participantId: c.participantId,
+      name: `${p?.firstName ?? ''} ${p?.lastName ?? ''}`.trim() || `#${c.participantId}`,
+      status: c.status ?? 'pending',
+    });
+    confBySub.set(c.submissionId, list);
   }
-
-  const [total] = await countQuery;
-  const rows = await baseQuery.orderBy(desc(taskSubmissions.submittedAt)).limit(limit).offset(offset);
 
   res.json({
     submissions: rows.map(r => ({
       ...r.s,
       participantName: `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
+      participantId: r.p?.id ?? r.s.participantId,
       taskTitle: r.t?.title,
       taskDay: r.t?.dayNumber,
+      confirmationType: r.t?.confirmationType,
+      teamConfirmations: confBySub.get(r.s.id) || [],
     })),
     totalCount: total.count,
+    page,
+    limit,
   });
 };
 

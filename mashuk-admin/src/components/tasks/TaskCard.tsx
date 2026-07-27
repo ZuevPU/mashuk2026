@@ -8,10 +8,11 @@ type Props = {
   onSave: () => void;
   onDelete: () => void;
   onQr: () => void;
+  onModerate?: () => void;
   act: (fn: () => Promise<unknown>, msg?: string) => void;
 };
 
-export function TaskCard({ task, draft, onDraftChange, onSave, onDelete, onQr, act: _act }: Props) {
+export function TaskCard({ task, draft, onDraftChange, onSave, onDelete, onQr, onModerate, act: _act }: Props) {
   const dirty = taskDraftDirty(task, draft);
 
   const set = (patch: Partial<TaskDraft>) => onDraftChange(patch);
@@ -87,6 +88,11 @@ export function TaskCard({ task, draft, onDraftChange, onSave, onDelete, onQr, a
         <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={onQr}>
           QR
         </button>
+        {onModerate && (
+          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={onModerate}>
+            Модерация ответов
+          </button>
+        )}
         <button
           type="button"
           className="adm-btn adm-btn-danger adm-btn-sm"
