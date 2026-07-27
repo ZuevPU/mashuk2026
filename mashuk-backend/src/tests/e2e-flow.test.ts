@@ -347,19 +347,23 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
     assert.equal(before.status, 200);
     const prevDay = before.body.settings?.currentDay ?? before.body.currentDay ?? 1;
 
+    const qsBefore = await request(app).get('/api/questions').set(headers);
+    assert.equal(qsBefore.status, 200);
+    const day1 = qsBefore.body.questions?.find((q: { dayNumber: number; block?: string | null }) =>
+      q.dayNumber === 1
+      && (q.block === 'Точки осмысления'
+        || q.block === 'Проверка состояния'
+        || q.block === 'Итоги дня'
+        || q.block === 'checkin'),
+    );
+    assert.ok(day1, 'expected day-1 touchpoint before day bump');
+
     try {
       const bump = await request(app)
         .patch('/api/admin/forum-settings')
         .set(adminAuth)
         .send({ currentDay: 3 });
       assert.equal(bump.status, 200);
-
-      const qs = await request(app).get('/api/questions').set(headers);
-      assert.equal(qs.status, 200);
-      const day1 = qs.body.questions?.find((q: { dayNumber: number; block?: string }) =>
-        q.dayNumber === 1 && (q.block === 'Точки осмысления' || q.block === 'Проверка состояния' || q.block === 'Итоги дня'),
-      );
-      assert.ok(day1, 'expected day-1 touchpoint');
 
       const ans = await request(app)
         .post(`/api/questions/${day1.id}/answer`)

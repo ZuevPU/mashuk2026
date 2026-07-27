@@ -89,7 +89,6 @@ const TaskSubmitModal = ({
   const [teamResults, setTeamResults] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
   const methods = taskMethodsFromMeta(meta);
-  const confirmationType = meta?.confirmationType || 'text_photo';
   const qrFromHash = getHashSearchParams().get('qr');
 
   const needsText = methods.includes('photo') && meta?.answerType !== 'photo';

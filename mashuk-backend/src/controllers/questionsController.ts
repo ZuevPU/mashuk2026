@@ -165,10 +165,6 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
     const now = new Date();
     const settings = await getForumSettings();
     const currentDay = resolveEffectiveCurrentDay(settings, now);
-    if (question.isHidden || !questionVisibleToParticipant(question, req.participant!, currentDay)) {
-      res.status(403).json({ error: 'Question not available' });
-      return;
-    }
     const dayForAccess = resolveQuestionDayForAccess(question, currentDay);
     const access = getTouchpointAccess(dayForAccess, currentDay, question.closeTime, now, question.publishTime);
     if (access === 'locked' || access === 'soon') {
@@ -178,6 +174,10 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
           : 'Question not yet available',
         access,
       });
+      return;
+    }
+    if (question.isHidden || !questionVisibleToParticipant(question, req.participant!, currentDay)) {
+      res.status(403).json({ error: 'Question not available' });
       return;
     }
     // overdue — ещё можно заполнить в текущем дне форума
