@@ -14,6 +14,12 @@ export const thematicTags = pgTable('thematic_tags', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+export const programPlaces = pgTable('program_places', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 255 }).notNull().unique(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 export const forumSettings = pgTable('forum_settings', {
   id: serial('id').primaryKey(),
   currentDay: integer('current_day').default(1),

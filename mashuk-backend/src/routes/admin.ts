@@ -40,6 +40,11 @@ router.patch('/thematic-tags/:id', requireAdminRole('settings'), wrap(admin.crud
 router.delete('/thematic-tags/:id', requireAdminRole('delete'), wrap(admin.crudThematicTags.delete));
 router.post('/thematic-tags/merge', requireAdminRole('settings'), wrap(admin.crudThematicTags.merge));
 
+router.get('/program-places', wrap(admin.crudProgramPlaces.list));
+router.post('/program-places', requireAdminRole('settings'), wrap(admin.crudProgramPlaces.create));
+router.patch('/program-places/:id', requireAdminRole('settings'), wrap(admin.crudProgramPlaces.update));
+router.delete('/program-places/:id', requireAdminRole('delete'), wrap(admin.crudProgramPlaces.delete));
+
 router.get('/forum-settings', wrap(admin.getForumSettings));
 router.patch('/forum-settings', requireAdminRole('settings'), wrap(admin.updateForumSettings));
 router.get('/evening-questionnaire', wrap(admin.getAdminEveningQuestionnaire));

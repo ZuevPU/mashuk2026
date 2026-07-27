@@ -15,6 +15,8 @@ export type ProgramEvent = {
 
 export type ThematicTag = { id: number; name: string };
 
+export type ProgramPlace = { id: number; name: string };
+
 export const BLOCK_TYPE_OPTIONS: { value: string; labelKey: string }[] = [
   { value: 'session', labelKey: 'block_session' },
   { value: 'plenary', labelKey: 'block_plenary' },

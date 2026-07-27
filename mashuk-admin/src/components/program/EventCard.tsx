@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { label } from '../../labels/ru';
+import { PlaceSelect } from './ProgramPlacesBlock';
 import {
   BLOCK_TYPE_OPTIONS,
   buildTimeSlot,
   eventVisibilityLabel,
   parseTimeSlot,
   type ProgramEvent,
+  type ProgramPlace,
   type ThematicTag,
 } from './types';
 
@@ -39,12 +41,14 @@ function draftFromEvent(e: ProgramEvent): Draft {
 export function EventCard({
   event,
   allTags,
+  allPlaces,
   onSaved,
   adminFetch,
   act,
 }: {
   event: ProgramEvent;
   allTags: ThematicTag[];
+  allPlaces: ProgramPlace[];
   onSaved: () => void;
   adminFetch: (path: string, opts?: RequestInit) => Promise<any>;
   act: (fn: () => Promise<void>, msg?: string) => void;
@@ -110,7 +114,12 @@ export function EventCard({
         </label>
         <label className="adm-field">
           <span className="adm-label">Место</span>
-          <input className="adm-input" value={draft.place} onChange={e => { setDirty(true); setDraft({ ...draft, place: e.target.value }); }} />
+          <PlaceSelect
+            places={allPlaces}
+            value={draft.place}
+            legacyPlace={event.place}
+            onChange={name => { setDirty(true); setDraft({ ...draft, place: name }); }}
+          />
         </label>
       </div>
       <div className="adm-forum-grid-2">

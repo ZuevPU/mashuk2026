@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { label } from '../../labels/ru';
 import { EventCard } from './EventCard';
+import { PlaceSelect, ProgramPlacesBlock } from './ProgramPlacesBlock';
 import {
   BLOCK_TYPE_OPTIONS,
   buildTimeSlot,
   eventVisibilityLabel,
   groupEventsBySlot,
   type ProgramEvent,
+  type ProgramPlace,
   type ThematicTag,
 } from './types';
 
@@ -31,10 +33,13 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [forumCurrentDay, setForumCurrentDay] = useState(1);
   const [events, setEvents] = useState<ProgramEvent[]>([]);
   const [tags, setTags] = useState<ThematicTag[]>([]);
+  const [places, setPlaces] = useState<ProgramPlace[]>([]);
   const [scheduleDays, setScheduleDays] = useState<{ dayNumber: number; isPublished?: boolean }[]>([]);
   const [versions, setVersions] = useState<any[]>([]);
   const [newTagName, setNewTagName] = useState('');
+  const [newPlaceName, setNewPlaceName] = useState('');
   const [editingTag, setEditingTag] = useState<{ id: number; name: string } | null>(null);
+  const [editingPlace, setEditingPlace] = useState<{ id: number; name: string } | null>(null);
   const [mergeFrom, setMergeFrom] = useState('');
   const [mergeTo, setMergeTo] = useState('');
   const [copyFromDay, setCopyFromDay] = useState(1);
@@ -50,6 +55,11 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     setTags(res.tags || []);
   }, [adminFetch]);
 
+  const reloadPlaces = useCallback(async () => {
+    const res = await adminFetch('/program-places');
+    setPlaces(res.places || []);
+  }, [adminFetch]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -60,14 +70,14 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       setForumCurrentDay(cd);
       setSelectedDay(cd);
       setForm(emptyForm(cd));
-      await Promise.all([reloadEvents(), reloadTags()]);
+      await Promise.all([reloadEvents(), reloadTags(), reloadPlaces()]);
       const sched = await adminFetch(`/schedule/versions?day=${cd}`);
       setScheduleDays(sched.days || []);
       setVersions(sched.versions || []);
     } finally {
       setLoading(false);
     }
-  }, [adminFetch, reloadEvents, reloadTags]);
+  }, [adminFetch, reloadEvents, reloadTags, reloadPlaces]);
 
   useEffect(() => {
     load().catch(() => setLoading(false));
@@ -327,6 +337,42 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         </details>
       </div>
 
+      <ProgramPlacesBlock
+        places={places}
+        newPlaceName={newPlaceName}
+        onNewPlaceNameChange={setNewPlaceName}
+        editingPlace={editingPlace}
+        onEditingPlaceChange={setEditingPlace}
+        onAdd={() => {
+          if (!newPlaceName.trim()) return;
+          act(async () => {
+            await adminFetch('/program-places', { method: 'POST', body: JSON.stringify({ name: newPlaceName.trim() }) });
+            setNewPlaceName('');
+            await reloadPlaces();
+          }, 'Место добавлено');
+        }}
+        onSaveEdit={() => {
+          if (!editingPlace?.name.trim()) return;
+          act(async () => {
+            await adminFetch(`/program-places/${editingPlace.id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ name: editingPlace.name.trim() }),
+            });
+            setEditingPlace(null);
+            await reloadPlaces();
+            await reloadEvents();
+          }, 'Сохранено');
+        }}
+        onDelete={id => {
+          if (!confirm('Удалить место? У событий с этим местом поле будет очищено.')) return;
+          act(async () => {
+            await adminFetch(`/program-places/${id}`, { method: 'DELETE' });
+            await reloadPlaces();
+            await reloadEvents();
+          });
+        }}
+      />
+
       <div className="card adm-forum-block">
         <h3>Добавить событие в день {selectedDay}</h3>
         <div className="adm-forum-grid-2">
@@ -336,7 +382,7 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           </label>
           <label className="adm-field">
             <span className="adm-label">Место</span>
-            <input className="adm-input" value={form.place} onChange={e => setForm({ ...form, place: e.target.value })} />
+            <PlaceSelect places={places} value={form.place} onChange={name => setForm({ ...form, place: name })} />
           </label>
         </div>
         <div className="adm-forum-grid-2">
@@ -411,6 +457,7 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                   key={e.id}
                   event={e}
                   allTags={tags}
+                  allPlaces={places}
                   adminFetch={adminFetch}
                   act={act}
                   onSaved={reloadEvents}

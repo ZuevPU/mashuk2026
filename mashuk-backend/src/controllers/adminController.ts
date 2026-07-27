@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { eq, desc, and, inArray, count, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  participants, directions, thematicTags, forumSettings, dayFocus,
+  participants, directions, thematicTags, programPlaces, forumSettings, dayFocus,
   events, tasks, questions, questionOptions, taskSubmissions, taskTeamConfirmations, exchangeQuestions,
   exchangeAnswers, eventAttendance, materials, kbDayUnlocks,
   levelsConfig, piggybank, answers, dailyStats, pushLog, pointsLog,
@@ -324,6 +324,53 @@ export const crudThematicTags = {
       eventsUpdated,
       materialsUpdated: matsUpdated,
     });
+  },
+};
+
+export const crudProgramPlaces = {
+  list: async (_req: AdminRequest, res: Response) => {
+    const places = await db.select().from(programPlaces).orderBy(asc(programPlaces.name));
+    res.json({ places });
+  },
+  create: async (req: AdminRequest, res: Response) => {
+    const name = String(req.body.name || '').trim();
+    if (!name) {
+      res.status(400).json({ error: 'name required' });
+      return;
+    }
+    const [place] = await db.insert(programPlaces).values({ name }).returning();
+    res.json({ place });
+  },
+  update: async (req: AdminRequest, res: Response) => {
+    const id = Number(req.params.id);
+    const name = String(req.body.name || '').trim();
+    if (!name) {
+      res.status(400).json({ error: 'name required' });
+      return;
+    }
+    const [prev] = await db.select().from(programPlaces).where(eq(programPlaces.id, id)).limit(1);
+    if (!prev) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    const [updated] = await db.update(programPlaces)
+      .set({ name })
+      .where(eq(programPlaces.id, id))
+      .returning();
+    if (prev.name !== name) {
+      await db.update(events).set({ place: name }).where(eq(events.place, prev.name));
+    }
+    res.json({ place: updated });
+  },
+  delete: async (req: AdminRequest, res: Response) => {
+    const id = Number(req.params.id);
+    const [deleted] = await db.delete(programPlaces).where(eq(programPlaces.id, id)).returning();
+    if (!deleted) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    await db.update(events).set({ place: null }).where(eq(events.place, deleted.name));
+    res.json({ ok: true });
   },
 };
 

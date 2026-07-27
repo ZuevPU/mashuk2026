@@ -1,0 +1,106 @@
+import type { ProgramPlace } from './types';
+
+type Props = {
+  places: ProgramPlace[];
+  newPlaceName: string;
+  onNewPlaceNameChange: (v: string) => void;
+  editingPlace: { id: number; name: string } | null;
+  onEditingPlaceChange: (v: { id: number; name: string } | null) => void;
+  onAdd: () => void;
+  onSaveEdit: () => void;
+  onDelete: (id: number) => void;
+};
+
+export function ProgramPlacesBlock({
+  places,
+  newPlaceName,
+  onNewPlaceNameChange,
+  editingPlace,
+  onEditingPlaceChange,
+  onAdd,
+  onSaveEdit,
+  onDelete,
+}: Props) {
+  return (
+    <div className="card adm-forum-block">
+      <h3>Места проведения</h3>
+      <p className="adm-forum-hint">Справочник площадок. При создании события выбирайте место из списка.</p>
+      {places.length === 0 && <p className="adm-muted">Добавьте хотя бы одно место — иначе в событии поле «Место» будет пустым.</p>}
+      <div className="adm-forum-toolbar">
+        <input
+          className="adm-input"
+          value={newPlaceName}
+          onChange={e => onNewPlaceNameChange(e.target.value)}
+          placeholder="Новое место"
+          style={{ maxWidth: 220 }}
+        />
+        <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={onAdd}>
+          Добавить
+        </button>
+      </div>
+      <div className="adm-program-tag-pick" style={{ marginTop: 10 }}>
+        {places.map(p => (
+          <span key={p.id} className="tag-chip adm-program-tag-chip">
+            {editingPlace?.id === p.id ? (
+              <>
+                <input
+                  className="adm-input adm-input-narrow"
+                  value={editingPlace.name}
+                  onChange={e => onEditingPlaceChange({ id: p.id, name: e.target.value })}
+                />
+                <button type="button" className="adm-btn adm-btn-sm adm-btn-primary" onClick={onSaveEdit}>OK</button>
+                <button type="button" className="adm-btn adm-btn-sm adm-btn-ghost" onClick={() => onEditingPlaceChange(null)}>×</button>
+              </>
+            ) : (
+              <>
+                <span className="adm-program-tag-name">{p.name}</span>
+                <button
+                  type="button"
+                  className="adm-tag-icon-btn"
+                  title="Изменить"
+                  aria-label="Изменить"
+                  onClick={() => onEditingPlaceChange({ id: p.id, name: p.name })}
+                >
+                  ✎
+                </button>
+                <button
+                  type="button"
+                  className="adm-tag-icon-btn adm-tag-icon-btn-delete"
+                  title="Удалить"
+                  aria-label="Удалить"
+                  onClick={() => onDelete(p.id)}
+                >
+                  ×
+                </button>
+              </>
+            )}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function PlaceSelect({
+  places,
+  value,
+  onChange,
+  legacyPlace,
+}: {
+  places: ProgramPlace[];
+  value: string;
+  onChange: (name: string) => void;
+  legacyPlace?: string | null;
+}) {
+  const legacy = legacyPlace?.trim();
+  const legacyOrphan = legacy && !places.some(p => p.name === legacy);
+  return (
+    <select className="adm-input" value={value} onChange={e => onChange(e.target.value)}>
+      <option value="">— не выбрано —</option>
+      {legacyOrphan && <option value={legacy}>{legacy} (не в справочнике)</option>}
+      {places.map(p => (
+        <option key={p.id} value={p.name}>{p.name}</option>
+      ))}
+    </select>
+  );
+}
