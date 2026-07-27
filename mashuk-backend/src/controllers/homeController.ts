@@ -268,7 +268,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       eveningCard,
       ui: {
         showTasksBanner: false,
-        showQuickCapture: false,
+        showQuickCapture: timeSlot === 'day' && currentDay !== 8,
         showEveningCard: !!eveningCard,
       },
       sectionsVisibility: settings.sectionsVisibility ?? {},

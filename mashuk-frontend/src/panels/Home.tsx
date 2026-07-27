@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Panel, PanelHeader, Group, Spinner, Snackbar, Button, FormItem, CustomSelect, Div } from '@vkontakte/vkui';
+import { Panel, PanelHeader, Group, Spinner, ModalRoot, Snackbar, Button, FormItem, CustomSelect, Div } from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
+import { useAppModal } from '../App';
 import { HeaderInfo } from '../components/home/HeaderInfo';
+import { QuickCaptureModal } from '../components/QuickCaptureModal';
+import { QUICK_CAPTURE_ITEMS } from '../data/piggybank';
 import {
   PriorityAction, NextEventCard, TouchpointsCard, StatsRow,
   RoleOfDayCard, ExperimentCard,
@@ -67,6 +70,11 @@ interface HomeData {
     items?: { id: number; title?: string; state: 'done' | 'active' | 'overdue' | 'locked' | 'pending'; block?: string | null }[];
   };
   schedule?: ScheduleItem[];
+  ui?: {
+    showTasksBanner?: boolean;
+    showQuickCapture?: boolean;
+    showEveningCard?: boolean;
+  };
 }
 
 const scheduleKindLabel = (kind: string) => {
@@ -82,8 +90,10 @@ export const HomePanel: React.FC<{
   initComplete?: boolean;
 }> = ({ id, fetchedUser, isRegistered, initComplete = true }) => {
   const routeNavigator = useRouteNavigator();
+  const { setModal } = useAppModal();
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [captureTag, setCaptureTag] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showEvening, setShowEvening] = useState(false);
@@ -128,6 +138,34 @@ export const HomePanel: React.FC<{
     const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
     if (params.get('evening') === '1') setShowEvening(true);
   }, []);
+
+  const handleQuickSave = async (text: string, source: string) => {
+    if (!captureTag) return;
+    await apiPost('/piggybank/quick', { tag: captureTag, text, source });
+    setSnackbar('Сохранено в копилку');
+    setCaptureTag(null);
+    reload();
+  };
+
+  useEffect(() => {
+    if (captureTag) {
+      setModal(
+        <ModalRoot activeModal="quick-capture" onClose={() => setCaptureTag(null)}>
+          <QuickCaptureModal
+            tag={captureTag}
+            onClose={() => setCaptureTag(null)}
+            onSave={(text, source) => handleQuickSave(text, source)}
+          />
+        </ModalRoot>,
+      );
+    } else {
+      setModal(null);
+    }
+  }, [captureTag, setModal]);
+
+  useEffect(() => {
+    return () => setModal(null);
+  }, [setModal]);
 
   const handleExperimentStatus = async (status: 'in_progress' | 'done') => {
     await apiPost('/day-state/experiment', { status });
@@ -187,6 +225,7 @@ export const HomePanel: React.FC<{
   const schedule = d.schedule ?? [];
   const askTomorrowRole = d.eveningQuestionnaire?.askTomorrowRole !== false && d.currentDay <= 6;
   const showEveningCard = !!d.eveningCard;
+  const showQuick = !!d.ui?.showQuickCapture;
 
   const eveningQuestionnaireBlock = showEvening && d.eveningQuestionnaire?.available ? (
     <div className="m-card">
@@ -419,6 +458,20 @@ export const HomePanel: React.FC<{
                 />
               </div>
             ))}
+          </div>
+        )}
+
+        {showQuick && (
+          <div className="m-card">
+            <div className="m-now-t">Быстрая фиксация</div>
+            <div className="cap-row">
+              {QUICK_CAPTURE_ITEMS.map(item => (
+                <div key={item.tag} className="cap" onClick={() => setCaptureTag(item.tag)}>
+                  <span className="ci">{item.icon}</span>
+                  <span className="cl">{item.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
