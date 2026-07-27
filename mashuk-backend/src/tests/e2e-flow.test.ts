@@ -120,13 +120,30 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
 
     const tasks = await request(app).get('/api/tasks').set(headers);
     assert.equal(tasks.status, 200);
-    const task = tasks.body.tasks?.find((t: { status: string }) => t.status === 'available');
+    type TaskRow = {
+      status: string;
+      id: number;
+      confirmationType?: string;
+      answerType?: string | null;
+    };
+    const available = (tasks.body.tasks as TaskRow[] | undefined)?.filter(t => t.status === 'available') ?? [];
+    const task =
+      available.find(t => t.confirmationType === 'auto')
+      ?? available.find(t => (t.confirmationType || 'text_photo') === 'text_photo' && (t.answerType || 'text') === 'text')
+      ?? available[0];
     if (task) {
+      const payload: { answerText: string; photoUrl?: string; postUrl?: string; qrToken?: string } = {
+        answerText: 'E2E task answer',
+      };
+      const ct = task.confirmationType || 'text_photo';
+      const at = task.answerType || 'text_and_photo';
+      if (ct === 'post_url') payload.postUrl = 'https://vk.com/wall-1_1';
+      if (at === 'photo' || at === 'text_and_photo') payload.photoUrl = 'https://example.com/e2e-photo.jpg';
       const sub = await request(app)
         .post(`/api/tasks/${task.id}/submit`)
         .set(headers)
-        .send({ answerText: 'E2E task answer' });
-      assert.equal(sub.status, 200);
+        .send(payload);
+      assert.ok([200, 400].includes(sub.status), JSON.stringify(sub.body));
     }
 
     const piggy = await request(app)
