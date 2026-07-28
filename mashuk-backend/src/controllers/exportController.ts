@@ -45,7 +45,18 @@ export async function exportDayStatsHandler(req: AdminRequest, res: Response): P
 
 export async function exportParticipantsFullHandler(req: AdminRequest, res: Response): Promise<void> {
   const format = String(req.query.format || 'xlsx').toLowerCase();
-  await writeParticipantsFullExport(res, format === 'csv' ? 'csv' : 'xlsx');
+  const { parseParticipantListQuery } = await import('../services/participantsList.js');
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const parsed = parseParticipantListQuery(req);
+  parsed.page = 1;
+  const rawLimit = req.query.limit != null && req.query.limit !== ''
+    ? Number(req.query.limit)
+    : 5000;
+  parsed.limit = Math.max(1, Math.min(5000, Number.isFinite(rawLimit) ? rawLimit : 5000));
+  if (parsed.shiftId == null || Number.isNaN(parsed.shiftId)) {
+    parsed.shiftId = await resolveAdminShiftId(req);
+  }
+  await writeParticipantsFullExport(res, format === 'csv' ? 'csv' : 'xlsx', parsed);
 }
 
 export async function exportAnswersHandler(req: AdminRequest, res: Response): Promise<void> {

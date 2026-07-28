@@ -1,4 +1,5 @@
 import type { Response } from 'express';
+import type { ParticipantListQuery } from '../participantsList.js';
 import { loadEnrichedParticipants } from './participantEnrichment.js';
 import { addReadmeSheet } from './exportCommon.js';
 import { createWorkbook, sendWorkbook, sendCsv } from './workbook.js';
@@ -12,8 +13,12 @@ const HEADERS = [
   'interests', 'role_answers',
 ];
 
-export async function writeParticipantsFullExport(res: Response, format: string): Promise<void> {
-  const rows = await loadEnrichedParticipants();
+export async function writeParticipantsFullExport(
+  res: Response,
+  format: string,
+  query: ParticipantListQuery = {},
+): Promise<void> {
+  const rows = await loadEnrichedParticipants(query);
   if (format === 'xlsx') {
     const wb = await createWorkbook();
     addReadmeSheet(wb, [

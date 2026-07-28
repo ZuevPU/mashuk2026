@@ -10,9 +10,12 @@ export async function sendWorkbook(
   wb: Awaited<ReturnType<typeof createWorkbook>>,
   filename: string,
 ): Promise<void> {
+  // Buffer first so CORS/proxy get a complete response (streaming write can look like a network/CORS failure).
+  const buf = Buffer.from(await wb.xlsx.writeBuffer());
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
-  await wb.xlsx.write(res);
+  res.setHeader('Content-Length', String(buf.length));
+  res.status(200).end(buf);
 }
 
 export function sendCsv(res: Response, filename: string, header: string, rows: unknown[][]): void {

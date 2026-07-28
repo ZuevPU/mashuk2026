@@ -23,6 +23,7 @@ export function createApp() {
         : true,
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Shift-Id'],
+    exposedHeaders: ['Content-Disposition', 'Content-Type', 'Content-Length'],
   }));
 
   app.use(express.json({ limit: '6mb' }));

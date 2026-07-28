@@ -1,7 +1,11 @@
-import { eq, isNull } from 'drizzle-orm';
+import { desc, eq, inArray } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { piggybank, participants } from '../../db/schema.js';
-import { getLevel } from '../pointsService.js';
+import { getLevelSync, getLevelThresholds } from '../pointsService.js';
+import {
+  buildParticipantWhere,
+  type ParticipantListQuery,
+} from '../participantsList.js';
 import { fullName, formatTs } from './exportCommon.js';
 
 export async function countIdeasForParticipant(participantId: number): Promise<number> {
@@ -10,19 +14,42 @@ export async function countIdeasForParticipant(participantId: number): Promise<n
     .where(eq(piggybank.participantId, participantId));
   let n = 0;
   for (const r of rows) {
-    const tags = r.tags;
-    const arr = Array.isArray(tags) ? tags : typeof tags === 'string' ? [tags] : [];
-    if (arr.some(t => String(t).toLowerCase().includes('иде'))) n += 1;
+    n += ideaCountFromTags(r.tags);
   }
   return n;
 }
 
-export async function enrichParticipantRow(p: typeof participants.$inferSelect) {
-  const [pathLevel, expLevel, ideas] = await Promise.all([
-    getLevel(p.pathPoints ?? 0, 'path'),
-    getLevel(p.experiencePoints ?? 0, 'experience'),
-    countIdeasForParticipant(p.id),
-  ]);
+function ideaCountFromTags(tags: unknown): number {
+  const arr = Array.isArray(tags) ? tags : typeof tags === 'string' ? [tags] : [];
+  return arr.some(t => String(t).toLowerCase().includes('иде')) ? 1 : 0;
+}
+
+async function loadIdeaCounts(participantIds: number[]): Promise<Map<number, number>> {
+  const map = new Map<number, number>();
+  if (participantIds.length === 0) return map;
+  const rows = await db.select({
+    participantId: piggybank.participantId,
+    tags: piggybank.tags,
+  }).from(piggybank).where(inArray(piggybank.participantId, participantIds));
+  for (const r of rows) {
+    if (r.participantId == null) continue;
+    const add = ideaCountFromTags(r.tags);
+    if (!add) continue;
+    map.set(r.participantId, (map.get(r.participantId) || 0) + add);
+  }
+  return map;
+}
+
+export function enrichParticipantRowSync(
+  p: typeof participants.$inferSelect,
+  opts: {
+    pathThresholds: number[];
+    expThresholds: number[];
+    ideasCount: number;
+  },
+) {
+  const pathLevel = getLevelSync(p.pathPoints ?? 0, opts.pathThresholds);
+  const expLevel = getLevelSync(p.experiencePoints ?? 0, opts.expThresholds);
   const total = (p.pathPoints ?? 0) + (p.experiencePoints ?? 0) + (p.bonusPoints ?? 0);
   const goal = p.goalAnswers as Record<string, unknown> | null;
   const pointB = p.pointBAnswers as Record<string, unknown> | null;
@@ -43,7 +70,7 @@ export async function enrichParticipantRow(p: typeof participants.$inferSelect) 
     totalRating: total,
     pathLevel,
     experienceLevel: expLevel,
-    ideasCount: ideas,
+    ideasCount: opts.ideasCount,
     consentPd: p.consentPd ? 'да' : 'нет',
     consentAnalytics: p.consentAnalytics ? 'да' : 'нет',
     consentPdVersion: p.consentPdVersion,
@@ -60,13 +87,33 @@ export async function enrichParticipantRow(p: typeof participants.$inferSelect) 
   };
 }
 
-export async function loadEnrichedParticipants(limit = 5000) {
-  const list = await db.select().from(participants)
-    .where(isNull(participants.selfDeletedAt))
+export async function enrichParticipantRow(p: typeof participants.$inferSelect) {
+  const [pathThresholds, expThresholds, ideasCount] = await Promise.all([
+    getLevelThresholds('path'),
+    getLevelThresholds('experience'),
+    countIdeasForParticipant(p.id),
+  ]);
+  return enrichParticipantRowSync(p, { pathThresholds, expThresholds, ideasCount });
+}
+
+export async function loadEnrichedParticipants(query: ParticipantListQuery = {}) {
+  const limit = Math.max(1, Math.min(5000, query.limit || 5000));
+  const where = buildParticipantWhere(query);
+  let listQuery = db.select().from(participants)
+    .orderBy(desc(participants.createdAt))
     .limit(limit);
-  const out = [];
-  for (const p of list) {
-    out.push(await enrichParticipantRow(p));
-  }
-  return out;
+  if (where) listQuery = listQuery.where(where) as typeof listQuery;
+  const list = await listQuery;
+
+  const [pathThresholds, expThresholds, ideaCounts] = await Promise.all([
+    getLevelThresholds('path'),
+    getLevelThresholds('experience'),
+    loadIdeaCounts(list.map(p => p.id)),
+  ]);
+
+  return list.map(p => enrichParticipantRowSync(p, {
+    pathThresholds,
+    expThresholds,
+    ideasCount: ideaCounts.get(p.id) || 0,
+  }));
 }
