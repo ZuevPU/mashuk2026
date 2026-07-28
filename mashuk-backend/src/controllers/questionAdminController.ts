@@ -161,23 +161,25 @@ export const crudQuestions = {
     const q = (req.query.q as string | undefined)?.trim();
     const includeHidden = req.query.includeHidden === 'true';
     const includeArchived = req.query.includeArchived === 'true';
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
 
-    const conditions = [];
+    const conditions: ReturnType<typeof eq>[] = [eq(questions.shiftId, shiftId)];
     if (!includeArchived) conditions.push(ne(questions.status, 'archived'));
     if (status) conditions.push(eq(questions.status, status));
     if (audienceType) conditions.push(eq(questions.audienceType, audienceType));
     if (questionKind) conditions.push(eq(questions.questionKind, questionKind));
-    if (!includeHidden) conditions.push(or(eq(questions.isHidden, false), isNull(questions.isHidden)));
+    if (!includeHidden) conditions.push(or(eq(questions.isHidden, false), isNull(questions.isHidden))!);
     if (q) {
       conditions.push(or(
         ilike(questions.title, `%${q}%`),
         ilike(questions.text, `%${q}%`),
         ilike(questions.subtitle, `%${q}%`),
-      ));
+      )!);
     }
 
     let rows = await db.select().from(questions)
-      .where(conditions.length ? and(...conditions) : undefined)
+      .where(and(...conditions))
       .orderBy(asc(questions.sortOrder), asc(questions.id));
 
     if (day && !Number.isNaN(day)) {
@@ -185,7 +187,7 @@ export const crudQuestions = {
     }
 
     const [{ totalCount }] = await db.select({ totalCount: count() }).from(questions)
-      .where(ne(questions.status, 'archived'));
+      .where(and(eq(questions.shiftId, shiftId), ne(questions.status, 'archived')));
 
     const ids = rows.map(r => r.id);
     const counts = await answerCountsForQuestionIds(ids);
@@ -219,10 +221,12 @@ export const crudQuestions = {
   create: async (req: AdminRequest, res: Response) => {
     const parsed = parseBody(questionCreateSchema, req.body);
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
     const values = buildQuestionValues(parsed.data as Record<string, unknown>, parsed.data.title.trim());
     if (!values.type) values.type = 'open';
     if (!values.status) values.status = 'draft';
-    const [q] = await db.insert(questions).values(values).returning();
+    const [q] = await db.insert(questions).values({ ...values, shiftId }).returning();
     if (q.pushOnPublish && q.status === 'published') {
       const msg = q.pushTemplate?.trim() || `Новый вопрос: ${q.title}`;
       await notifyAllParticipants(msg, 'question_publish');
@@ -246,6 +250,7 @@ export const crudQuestions = {
     if (answerCount > 0 && textChanging) {
       await db.update(questions).set({ status: 'archived' }).where(eq(questions.id, id));
       const copyFields = {
+        shiftId: before.shiftId,
         title: newTitle,
         text: newText,
         type: (enriched.type as string) ?? before.type,

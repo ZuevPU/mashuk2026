@@ -18,6 +18,7 @@ import {
   touchpointCompletionRatio,
 } from '../services/touchpointProgress.js';
 import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
+import { resolveActiveShiftId } from '../services/shiftService.js';
 
 export const getProgramSettings = async (req: ParticipantRequest, res: Response): Promise<void> => {
   const settings = await getForumSettings();
@@ -36,8 +37,10 @@ export async function countTouchpointsForDay(participantId: number, dayNumber: n
   total: number;
 }> {
   const now = new Date();
+  const shiftId = await resolveActiveShiftId();
   const published = await db.select().from(questions)
     .where(and(
+      eq(questions.shiftId, shiftId),
       eq(questions.status, 'published'),
       or(isNull(questions.publishTime), lte(questions.publishTime, now)),
     ));
@@ -195,16 +198,21 @@ export const getKnowledgeBaseDays = async (req: ParticipantRequest, res: Respons
 export const getProgram = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const day = Number(req.query.day) || (await getForumSettings()).currentDay || 1;
+    const shiftId = await resolveActiveShiftId();
 
-    const [dayMeta] = await db.select().from(scheduleDays).where(eq(scheduleDays.dayNumber, day)).limit(1);
+    const [dayMeta] = await db.select().from(scheduleDays).where(and(
+      eq(scheduleDays.dayNumber, day),
+      eq(scheduleDays.shiftId, shiftId),
+    )).limit(1);
 
-    const cacheKey = `events_day_${day}_pub`;
+    const cacheKey = `events_day_${shiftId}_${day}_pub`;
     let list = cache.get(cacheKey) as typeof events.$inferSelect[] | undefined;
 
     if (!list) {
       // Participant sees events only after schedule day publish (day_published) + isPublished
       list = await db.select().from(events)
         .where(and(
+          eq(events.shiftId, shiftId),
           eq(events.dayNumber, day),
           eq(events.isPublished, true),
           eq(events.dayPublished, true),
@@ -213,7 +221,11 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
       // Fallback: if schedule_days row missing (pre-publish workflow), show classic isPublished events
       if (list.length === 0 && !dayMeta) {
         list = await db.select().from(events)
-          .where(and(eq(events.dayNumber, day), eq(events.isPublished, true)))
+          .where(and(
+            eq(events.shiftId, shiftId),
+            eq(events.dayNumber, day),
+            eq(events.isPublished, true),
+          ))
           .orderBy(asc(events.startTime));
       }
       cache.set(cacheKey, list);
@@ -315,8 +327,10 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
     const norm = (s: string) => s.trim().toLowerCase();
     const interestSet = new Set(interests.map(norm));
 
+    const shiftId = await resolveActiveShiftId();
     const list = await db.select().from(events)
       .where(and(
+        eq(events.shiftId, shiftId),
         eq(events.dayNumber, day),
         eq(events.isPublished, true),
         eq(events.dayPublished, true),
@@ -324,10 +338,17 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
 
     let eventList = list;
     if (eventList.length === 0) {
-      const [dayMeta] = await db.select().from(scheduleDays).where(eq(scheduleDays.dayNumber, day)).limit(1);
+      const [dayMeta] = await db.select().from(scheduleDays).where(and(
+        eq(scheduleDays.dayNumber, day),
+        eq(scheduleDays.shiftId, shiftId),
+      )).limit(1);
       if (!dayMeta) {
         eventList = await db.select().from(events)
-          .where(and(eq(events.dayNumber, day), eq(events.isPublished, true)))
+          .where(and(
+            eq(events.shiftId, shiftId),
+            eq(events.dayNumber, day),
+            eq(events.isPublished, true),
+          ))
           .orderBy(asc(events.startTime));
       }
     }
@@ -398,13 +419,20 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
   try {
     const settings = await getForumSettings();
     const day = Number(req.query.day) || settings.currentDay || 1;
-    const dayEventRows = await db.select({ id: events.id }).from(events).where(eq(events.dayNumber, day));
+    const shiftId = await resolveActiveShiftId();
+    const dayEventRows = await db.select({ id: events.id }).from(events).where(and(
+      eq(events.dayNumber, day),
+      eq(events.shiftId, shiftId),
+    ));
     const dayEventIdList = dayEventRows.map(e => e.id);
     const dayEventIds = new Set(dayEventIdList);
     const interests = (req.participant!.interests as string[]) || [];
     const direction = req.participant!.direction;
 
-    const dayOrGeneral = or(eq(materials.dayNumber, day), eq(materials.isGeneral, true));
+    const dayOrGeneral = and(
+      eq(materials.shiftId, shiftId),
+      or(eq(materials.dayNumber, day), eq(materials.isGeneral, true)),
+    );
     const mats = dayEventIdList.length > 0
       ? await db.select().from(materials).where(or(dayOrGeneral, inArray(materials.eventId, dayEventIdList)))
       : await db.select().from(materials).where(dayOrGeneral);

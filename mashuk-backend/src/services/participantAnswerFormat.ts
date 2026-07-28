@@ -29,12 +29,29 @@ export function participantAnswerSummary(data: unknown, type?: string | null): s
     return o.answers.map(String).filter(s => s.trim()).join(' · ');
   }
 
-  for (const key of ['mainThesis', 'freeNote', 'understandingChange', 'likedMost']) {
+  if (Array.isArray(o.interests)) {
+    const items = o.interests.map(String).filter(s => s.trim());
+    if (items.length) return items.join(', ');
+  }
+
+  for (const key of ['mainThesis', 'freeNote', 'understandingChange', 'likedMost', 'goal', 'value', 'label']) {
     const v = o[key];
     if (typeof v === 'string' && v.trim()) return v.trim();
   }
 
+  const stringVals = Object.values(o)
+    .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+    .map(v => v.trim());
+  if (stringVals.length === 1) return stringVals[0];
+  if (stringVals.length > 1 && stringVals.length <= 4) return stringVals.join(' · ');
+
   const raw = answerText(data);
-  if (raw.startsWith('{')) return raw.slice(0, 200);
+  if (raw.startsWith('{')) {
+    try {
+      return participantAnswerSummary(JSON.parse(raw), type) || '—';
+    } catch {
+      return raw.slice(0, 200);
+    }
+  }
   return raw.trim();
 }

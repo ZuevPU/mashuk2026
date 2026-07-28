@@ -1,11 +1,18 @@
-import { eq, and, lte, gte, or, isNull, sql, desc, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { forumSettings } from '../db/schema.js';
 import { cache } from './cache.js';
+import { resolveActiveShift, shiftOpsToForumShape } from './shiftService.js';
 
 export async function getForumSettings() {
   const cached = cache.get('forumSettings');
   if (cached) return cached;
+
+  const active = await resolveActiveShift();
+  if (active) {
+    const result = shiftOpsToForumShape(active);
+    cache.set('forumSettings', result);
+    return result;
+  }
 
   const [settings] = await db.select().from(forumSettings).limit(1);
   const result = settings ?? {
@@ -18,7 +25,7 @@ export async function getForumSettings() {
     kbUnlockThreshold: 4,
     kbUnlockDisabled: false,
   };
-  
+
   cache.set('forumSettings', result);
   return result;
 }

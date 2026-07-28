@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   directions, thematicTags, forumSettings, dayFocus,
@@ -8,13 +8,32 @@ import {
   exchangeQuestions, exchangeAnswers, eventAttendance,
   pedagogicalRoles, dayExperiments,
   consentTexts, participantGroups, medals, pushTemplates, programPlaces,
+  shifts,
 } from './schema.js';
 import { recalculateDailyStats } from '../services/analyticsService.js';
 import { ROLE_CATALOG } from '../services/roleService.js';
 import { TOUCHPOINT_SLOTS, windowsForDay } from '../services/touchpointTemplates.js';
 
+async function ensureSeedShiftId(): Promise<number> {
+  const [active] = await db.select().from(shifts).where(eq(shifts.status, 'active')).limit(1);
+  if (active) return active.id;
+  const [any] = await db.select().from(shifts).limit(1);
+  if (any) return any.id;
+  const [created] = await db.insert(shifts).values({
+    code: 'sandbox',
+    name: 'Смена 0 · песочница',
+    status: 'active',
+    isSandbox: true,
+    totalDays: 8,
+    currentDay: 1,
+    shiftLabel: 'Песочница',
+  }).returning();
+  return created.id;
+}
+
 export async function runSeed() {
   console.log('Seeding database...');
+  const shiftId = await ensureSeedShiftId();
 
   const existingSettings = await db.select().from(forumSettings).limit(1);
   if (existingSettings.length === 0) {
@@ -60,6 +79,7 @@ export async function runSeed() {
     ];
     for (let d = 1; d <= 8; d++) {
       await db.insert(dayFocus).values({
+        shiftId,
         dayNumber: d,
         title: dayTitles[d - 1],
         text: d === 8
@@ -74,12 +94,12 @@ export async function runSeed() {
     day1Start.setHours(9, 0, 0, 0);
 
     await db.insert(events).values([
-      { title: 'Открытие форума', place: 'Главная сцена', dayNumber: 1, startTime: day1Start, tags: ['управление'] },
-      { title: 'Работа по направлению', place: 'Шатёр «Учителя»', dayNumber: 1, startTime: new Date(day1Start.getTime() + 2 * 3600000), tags: ['команда'] },
-      { title: 'Уроки о важном', place: 'Конференц-зал', dayNumber: 1, startTime: new Date(day1Start.getTime() + 5 * 3600000), tags: ['коммуникация'] },
-      { title: 'Утренний круг', place: 'Площадка у озера', dayNumber: 2, startTime: new Date(day1Start.getTime() + 86400000), tags: ['коммуникация'] },
-      { title: 'Мастерская направления', place: 'Шатёр', dayNumber: 3, startTime: new Date(day1Start.getTime() + 2 * 86400000), tags: ['команда'] },
-      { title: 'Вечерняя рефлексия', place: 'В боте', dayNumber: 3, startTime: new Date(day1Start.getTime() + 2 * 86400000 + 12 * 3600000), tags: ['аналитика'] },
+      { shiftId, title: 'Открытие форума', place: 'Главная сцена', dayNumber: 1, startTime: day1Start, tags: ['управление'] },
+      { shiftId, title: 'Работа по направлению', place: 'Шатёр «Учителя»', dayNumber: 1, startTime: new Date(day1Start.getTime() + 2 * 3600000), tags: ['команда'] },
+      { shiftId, title: 'Уроки о важном', place: 'Конференц-зал', dayNumber: 1, startTime: new Date(day1Start.getTime() + 5 * 3600000), tags: ['коммуникация'] },
+      { shiftId, title: 'Утренний круг', place: 'Площадка у озера', dayNumber: 2, startTime: new Date(day1Start.getTime() + 86400000), tags: ['коммуникация'] },
+      { shiftId, title: 'Мастерская направления', place: 'Шатёр', dayNumber: 3, startTime: new Date(day1Start.getTime() + 2 * 86400000), tags: ['команда'] },
+      { shiftId, title: 'Вечерняя рефлексия', place: 'В боте', dayNumber: 3, startTime: new Date(day1Start.getTime() + 2 * 86400000 + 12 * 3600000), tags: ['аналитика'] },
     ]);
 
     await db.insert(taskCategories).values([
@@ -105,6 +125,7 @@ export async function runSeed() {
 
     await db.insert(tasks).values([
       {
+        shiftId,
         title: 'Познакомься с участником другого направления',
         category: 'Полезные знакомства/общение',
         categoryId: networkingCat,
@@ -118,6 +139,7 @@ export async function runSeed() {
         confirmationMethods: [],
       },
       {
+        shiftId,
         title: 'Напиши пост о форуме',
         category: 'Медиа',
         categoryId: mediaCat,
@@ -132,6 +154,7 @@ export async function runSeed() {
         confirmationMethods: ['link', 'moderator'],
       },
       {
+        shiftId,
         title: 'Зафиксируй идею эксперимента',
         category: 'Образование',
         categoryId: eduCat,
@@ -145,6 +168,7 @@ export async function runSeed() {
         confirmationMethods: ['photo'],
       },
       {
+        shiftId,
         title: 'Скан QR на площадке',
         category: 'Организация',
         categoryId: orgCat,
@@ -164,6 +188,7 @@ export async function runSeed() {
       for (const slot of TOUCHPOINT_SLOTS) {
         const { publishTime, closeTime } = windowsForDay(startDate, day, slot);
         await db.insert(questions).values({
+          shiftId,
           title: slot.title,
           text: slot.text,
           type: slot.type,
@@ -180,6 +205,7 @@ export async function runSeed() {
 
     await db.insert(questions).values([
       {
+        shiftId,
         title: 'Цель на форум',
         text: 'Какую цель вы ставите перед собой на форуме?',
         type: 'open',
@@ -190,6 +216,7 @@ export async function runSeed() {
         dayNumber: 1,
       },
       {
+        shiftId,
         title: 'Точка Б',
         text: 'Финальная рефлексия: ответь на те же 5 вопросов, что на входе, и выбери сильную роль и роль роста.',
         type: 'open',
@@ -219,9 +246,9 @@ export async function runSeed() {
     ]);
 
     await db.insert(materials).values([
-      { dayNumber: 1, speakerName: 'Алексей Кравцов', speakerInitials: 'АК', eventTitle: 'Открытие форума', type: 'pdf', title: 'Конспект лекции', description: '3 стр.', url: 'https://example.com/conspect.pdf', isNew: true },
-      { dayNumber: 2, speakerName: 'Мария Орлова', speakerInitials: 'МО', eventTitle: 'Утренний круг', type: 'link', title: 'Материалы круга', description: 'Ссылка', url: 'https://example.com/circle', isNew: true },
-      { dayNumber: 3, speakerName: 'Игорь Семёнов', speakerInitials: 'ИС', eventTitle: 'Мастерская направления', type: 'pdf', title: 'Рабочая тетрадь', description: '5 стр.', url: 'https://example.com/workbook.pdf', isNew: true },
+      { shiftId, dayNumber: 1, speakerName: 'Алексей Кравцов', speakerInitials: 'АК', eventTitle: 'Открытие форума', type: 'pdf', title: 'Конспект лекции', description: '3 стр.', url: 'https://example.com/conspect.pdf', isNew: true },
+      { shiftId, dayNumber: 2, speakerName: 'Мария Орлова', speakerInitials: 'МО', eventTitle: 'Утренний круг', type: 'link', title: 'Материалы круга', description: 'Ссылка', url: 'https://example.com/circle', isNew: true },
+      { shiftId, dayNumber: 3, speakerName: 'Игорь Семёнов', speakerInitials: 'ИС', eventTitle: 'Мастерская направления', type: 'pdf', title: 'Рабочая тетрадь', description: '5 стр.', url: 'https://example.com/workbook.pdf', isNew: true },
     ]);
 
     console.log('Base data seeded.');
@@ -236,9 +263,13 @@ export async function runSeed() {
 
   // Ensure day_focus rows for days 1–8 exist
   for (let d = 1; d <= 8; d++) {
-    const [exists] = await db.select().from(dayFocus).where(eq(dayFocus.dayNumber, d)).limit(1);
+    const [exists] = await db.select().from(dayFocus).where(and(
+      eq(dayFocus.dayNumber, d),
+      eq(dayFocus.shiftId, shiftId),
+    )).limit(1);
     if (!exists) {
       await db.insert(dayFocus).values({
+        shiftId,
         dayNumber: d,
         title: d === 8 ? 'Точка Б · Отъезд' : `Фокус дня ${d}`,
         text: d === 8 ? 'Финальная рефлексия смены.' : `Краткое описание фокуса для дня ${d}`,
@@ -264,6 +295,7 @@ export async function runSeed() {
     for (let day = 2; day <= 7; day++) {
       for (const role of ROLE_CATALOG) {
         rows.push({
+          shiftId,
           dayNumber: day,
           roleKey: role.roleKey,
           title: `Эксперимент: ${role.name}`,
@@ -293,6 +325,7 @@ export async function runSeed() {
         if (already) continue;
         const { publishTime, closeTime } = windowsForDay(startForWindows, day, slot);
         await db.insert(questions).values({
+          shiftId,
           title: slot.title,
           text: slot.text,
           type: slot.type,
@@ -309,12 +342,16 @@ export async function runSeed() {
     console.log('Touchpoint template 7×7 seeded (idempotent).');
   }
 
-  const [testParticipant] = await db.select().from(participants).where(eq(participants.vkId, 1)).limit(1);
+  const [testParticipant] = await db.select().from(participants).where(and(
+    eq(participants.vkId, 1),
+    eq(participants.shiftId, shiftId),
+  )).limit(1);
   let participantId: number;
   if (!testParticipant) {
     const [dir] = await db.select().from(directions).where(eq(directions.name, 'Учителя')).limit(1);
     const [created] = await db.insert(participants).values({
       vkId: 1,
+      shiftId,
       firstName: 'Тест',
       lastName: 'Пользователь',
       age: 34,
@@ -413,9 +450,9 @@ export async function runSeed() {
   const existingGroups = await db.select().from(participantGroups).limit(1);
   if (existingGroups.length === 0) {
     await db.insert(participantGroups).values([
-      { name: 'Группа А', capacity: 30 },
-      { name: 'Группа Б', capacity: 30 },
-      { name: 'Группа В', capacity: 30 },
+      { shiftId, name: 'Группа А', capacity: 30 },
+      { shiftId, name: 'Группа Б', capacity: 30 },
+      { shiftId, name: 'Группа В', capacity: 30 },
     ]);
     console.log('Participant groups seeded.');
   }
@@ -539,9 +576,13 @@ export async function runSeed() {
     }
   }
 
-  const [qrTask] = await db.select().from(tasks).where(eq(tasks.confirmationType, 'qr')).limit(1);
+  const [qrTask] = await db.select().from(tasks).where(and(
+    eq(tasks.confirmationType, 'qr'),
+    eq(tasks.shiftId, shiftId),
+  )).limit(1);
   if (!qrTask) {
     await db.insert(tasks).values({
+      shiftId,
       title: 'Скан QR на площадке',
       category: 'Организация',
       points: 15,
@@ -551,6 +592,11 @@ export async function runSeed() {
       confirmationType: 'qr',
     });
     console.log('QR confirmation task seeded.');
+  }
+
+  if (settingsRow && settingsRow.activeShiftId == null) {
+    await db.update(forumSettings).set({ activeShiftId: shiftId, updatedAt: new Date() })
+      .where(eq(forumSettings.id, settingsRow.id));
   }
 
   await recalculateDailyStats();

@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  ADMIN_SHIFT_CHANGED_EVENT,
   adminFetch,
   adminLogin,
+  getAdminEditingShiftId,
   getAdminToken,
+  setAdminEditingShiftId,
   setAdminToken,
 } from './admin/client';
 import { translateApiError } from './admin/errors';
@@ -29,6 +32,7 @@ import { SpeakersTab } from './components/speakers/SpeakersTab';
 import { PushTab } from './components/push/PushTab';
 import { RecommendationTagsTab } from './components/tags/RecommendationTagsTab';
 import { QuestionsTab } from './components/questions/QuestionsTab';
+import { ShiftsTab } from './components/shifts/ShiftsTab';
 import { TasksTab } from './components/tasks/TasksTab';
 import { LeaderboardScreen, RatingTab } from './components/rating/RatingTab';
 import { TAB_LABELS, TAB_ORDER, type Tab } from './tabs';
@@ -77,6 +81,9 @@ export const App = () => {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [shiftOptions, setShiftOptions] = useState<{ id: number; name: string; code: string }[]>([]);
+  const [editingShiftId, setEditingShiftId] = useState<number | null>(() => getAdminEditingShiftId());
+  const [activeShiftId, setActiveShiftId] = useState<number | null>(null);
   /** Не сбрасывать вкладку на defaultTab после каждого act()/reloadKey */
   const appliedDefaultTabRef = useRef(false);
 
@@ -108,11 +115,40 @@ export const App = () => {
   }, [isAuthenticated, reloadKey]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+    adminFetch('/shifts')
+      .then((res: { shifts?: { id: number; name: string; code: string }[]; activeShiftId?: number | null }) => {
+        const list = res.shifts || [];
+        setShiftOptions(list);
+        const activeId = res.activeShiftId ?? null;
+        setActiveShiftId(activeId);
+        const stored = getAdminEditingShiftId();
+        const storedOk = stored != null && list.some(s => s.id === stored);
+        const next = storedOk ? stored : (activeId ?? list[0]?.id ?? null);
+        if (next !== stored) setAdminEditingShiftId(next);
+        setEditingShiftId(next);
+      })
+      .catch(() => {
+        setShiftOptions([]);
+      });
+  }, [isAuthenticated, reloadKey]);
+
+  useEffect(() => {
     const handleApiError = (e: Event) => {
       setToast((e as CustomEvent<string>).detail);
     };
     window.addEventListener('api-error', handleApiError);
     return () => window.removeEventListener('api-error', handleApiError);
+  }, []);
+
+  useEffect(() => {
+    const onShiftChanged = (e: Event) => {
+      const id = (e as CustomEvent<number | null>).detail ?? getAdminEditingShiftId();
+      setEditingShiftId(id);
+      reload();
+    };
+    window.addEventListener(ADMIN_SHIFT_CHANGED_EVENT, onShiftChanged);
+    return () => window.removeEventListener(ADMIN_SHIFT_CHANGED_EVENT, onShiftChanged);
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -175,6 +211,28 @@ export const App = () => {
           Выйти
         </button>
       </header>
+      {shiftOptions.length > 0 && (
+        <div className="adm-forum-toolbar" style={{ padding: '8px 16px', flexWrap: 'wrap', gap: 8, borderBottom: '1px solid var(--m-border)', background: '#FAFAF8' }}>
+          <label className="adm-forum-inline" style={{ fontSize: 13 }}>
+            Редактируем смену
+            <select
+              className="adm-input"
+              style={{ minWidth: 200, marginLeft: 8 }}
+              value={editingShiftId ?? ''}
+              onChange={e => {
+                const id = e.target.value ? Number(e.target.value) : null;
+                setAdminEditingShiftId(id);
+              }}
+            >
+              {shiftOptions.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.code}){s.id === activeShiftId ? ' · для участников' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
       <nav className="admin-nav">
         {allowedTabs.map(t => (
           <button key={t} type="button" className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
@@ -192,6 +250,7 @@ export const App = () => {
           <OnboardingTab {...tabProps} onOpenProgram={() => setTab('events')} />
         )}
         {tab === 'forum' && <ForumTab {...tabProps} />}
+        {tab === 'shifts' && <ShiftsTab {...tabProps} />}
         {tab === 'events' && <ProgramTab {...tabProps} />}
         {tab === 'speakers' && <SpeakersTab {...tabProps} />}
         {tab === 'knowledge' && <KnowledgeTab {...tabProps} onOpenCard={openParticipantCard} />}

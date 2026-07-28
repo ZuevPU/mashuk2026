@@ -83,8 +83,14 @@ export function filterAdviceList<T extends { dayNumber: number; roleKey: string;
 }
 
 export async function upsertDayAdvice(data: DayAdviceRow) {
+  const { resolveActiveShiftId } = await import('./shiftService.js');
+  const shiftId = await resolveActiveShiftId();
   const [existing] = await db.select().from(dayExperiments)
-    .where(and(eq(dayExperiments.dayNumber, data.dayNumber), eq(dayExperiments.roleKey, data.roleKey)))
+    .where(and(
+      eq(dayExperiments.dayNumber, data.dayNumber),
+      eq(dayExperiments.roleKey, data.roleKey),
+      eq(dayExperiments.shiftId, shiftId),
+    ))
     .limit(1);
   if (existing) {
     const [updated] = await db.update(dayExperiments)
@@ -99,6 +105,7 @@ export async function upsertDayAdvice(data: DayAdviceRow) {
     return { row: updated!, created: false };
   }
   const [created] = await db.insert(dayExperiments).values({
+    shiftId,
     dayNumber: data.dayNumber,
     roleKey: data.roleKey,
     title: data.title,

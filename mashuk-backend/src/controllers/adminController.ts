@@ -52,12 +52,23 @@ import { enrichEventTimestamps } from '../services/eventSchedule.js';
 import { resolveDayPublishedForEvent } from '../services/eventPublishFlags.js';
 import { parseParticipantListQuery, queryParticipants } from '../services/participantsList.js';
 import { enrichParticipantsWithAvatarUrls } from '../services/participantAvatarSync.js';
+import {
+  getShiftById,
+  pickShiftOpPatch,
+  resolveAdminShiftId,
+  shiftOpsToForumShape,
+  updateShift,
+  clearShiftCaches,
+} from '../services/shiftService.js';
 
 export const listParticipants = async (req: AdminRequest, res: Response): Promise<void> => {
   const parsed = parseParticipantListQuery(req);
+  if (parsed.shiftId == null || Number.isNaN(parsed.shiftId)) {
+    parsed.shiftId = await resolveAdminShiftId(req);
+  }
   const result = await queryParticipants(parsed);
   const participants = await enrichParticipantsWithAvatarUrls(result.participants);
-  res.json({ ...result, participants });
+  res.json({ ...result, participants, shiftId: parsed.shiftId });
 };
 
 export const listParticipantGroups = async (_req: AdminRequest, res: Response): Promise<void> => {
@@ -457,8 +468,10 @@ export const createParticipant = async (req: AdminRequest, res: Response): Promi
     const [dir] = await db.select().from(directions).where(eq(directions.id, directionId)).limit(1);
     directionName = dir?.name;
   }
+  const shiftId = await resolveAdminShiftId(req);
   const [created] = await db.insert(participants).values({
     vkId: Number(vkId),
+    shiftId,
     firstName: firstName || 'Участник',
     lastName: lastName || '',
     directionId: directionId || null,
@@ -822,28 +835,26 @@ export const crudProgramSpeakers = {
 };
 
 export const updateForumSettings = async (req: AdminRequest, res: Response): Promise<void> => {
-  const [existing] = await db.select().from(forumSettings).limit(1);
   const body = { ...req.body } as Record<string, unknown>;
-  if (body.roleDiagnosticsConfig != null && existing) {
-    const merged = normalizeOnboardingConfig({
-      ...(existing.roleDiagnosticsConfig as Record<string, unknown> | null),
+  const shiftId = await resolveAdminShiftId(req);
+  const current = await getShiftById(shiftId);
+  if (!current) {
+    res.status(404).json({ error: 'Shift not found' });
+    return;
+  }
+  if (body.roleDiagnosticsConfig != null) {
+    body.roleDiagnosticsConfig = normalizeOnboardingConfig({
+      ...(current.roleDiagnosticsConfig as Record<string, unknown> | null),
       ...(body.roleDiagnosticsConfig as Record<string, unknown>),
     });
-    body.roleDiagnosticsConfig = merged;
-  } else if (body.roleDiagnosticsConfig != null) {
-    body.roleDiagnosticsConfig = normalizeOnboardingConfig(body.roleDiagnosticsConfig);
   }
-  if (existing) {
-    const [updated] = await db.update(forumSettings)
-      .set({ ...body, updatedAt: new Date() })
-      .where(eq(forumSettings.id, existing.id)).returning();
-    clearCache('forumSettings');
-    res.json({ settings: updated });
-  } else {
-    const [created] = await db.insert(forumSettings).values(req.body).returning();
-    clearCache('forumSettings');
-    res.json({ settings: created });
-  }
+  const shiftPatch = pickShiftOpPatch(body);
+  const updated = Object.keys(shiftPatch).length
+    ? await updateShift(shiftId, shiftPatch)
+    : current;
+  clearShiftCaches();
+  const settings = updated ? shiftOpsToForumShape(updated) : shiftOpsToForumShape(current);
+  res.json({ settings: { ...settings, shiftId } });
 };
 
 export const getAdminEveningQuestionnaire = async (req: AdminRequest, res: Response): Promise<void> => {
@@ -922,26 +933,34 @@ export const resetAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
 
 export const upsertDayFocus = async (req: AdminRequest, res: Response): Promise<void> => {
   const { dayNumber, title, text, keyQuestion } = req.body;
-  const [existing] = await db.select().from(dayFocus).where(eq(dayFocus.dayNumber, dayNumber)).limit(1);
+  const shiftId = await resolveAdminShiftId(req);
+  const [existing] = await db.select().from(dayFocus).where(and(
+    eq(dayFocus.dayNumber, dayNumber),
+    eq(dayFocus.shiftId, shiftId),
+  )).limit(1);
   if (existing) {
     const [updated] = await db.update(dayFocus)
       .set({ title, text, keyQuestion }).where(eq(dayFocus.id, existing.id)).returning();
     res.json({ focus: updated });
   } else {
-    const [created] = await db.insert(dayFocus).values({ dayNumber, title, text, keyQuestion }).returning();
+    const [created] = await db.insert(dayFocus).values({ dayNumber, title, text, keyQuestion, shiftId }).returning();
     res.json({ focus: created });
   }
 };
 
-export const listDayFocus = async (_req: AdminRequest, res: Response): Promise<void> => {
-  const list = await db.select().from(dayFocus).orderBy(dayFocus.dayNumber);
+export const listDayFocus = async (req: AdminRequest, res: Response): Promise<void> => {
+  const shiftId = await resolveAdminShiftId(req);
+  const list = await db.select().from(dayFocus)
+    .where(eq(dayFocus.shiftId, shiftId))
+    .orderBy(dayFocus.dayNumber);
   res.json({ focus: list });
 };
 
 export const crudEvents = {
   list: async (req: AdminRequest, res: Response) => {
+    const shiftId = await resolveAdminShiftId(req);
     const day = req.query.day ? Number(req.query.day) : null;
-    let rows = await db.select().from(events);
+    let rows = await db.select().from(events).where(eq(events.shiftId, shiftId));
     if (day && !Number.isNaN(day)) {
       rows = rows.filter(e => e.dayNumber === day);
     }
@@ -959,6 +978,7 @@ export const crudEvents = {
   create: async (req: AdminRequest, res: Response) => {
     const parsed = parseBody(eventCreateSchema, req.body);
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
+    const shiftId = await resolveAdminShiftId(req);
     const settings = await loadForumSettings();
     const values = enrichEventTimestamps(parsed.data, settings);
     const dayNum = parsed.data.dayNumber ?? values.dayNumber ?? null;
@@ -969,6 +989,7 @@ export const crudEvents = {
     );
     const [e] = await db.insert(events).values({
       ...values,
+      shiftId,
       ...(dayPublished !== undefined ? { dayPublished } : {}),
       speakerIds: parsed.data.speakerIds ?? [],
       parentEventId: parsed.data.parentEventId ?? null,
@@ -1160,26 +1181,27 @@ export const crudTasks = {
     const confirmationMethod = req.query.confirmationMethod as string | undefined;
     const q = (req.query.q as string | undefined)?.trim();
     const includeHidden = req.query.includeHidden === 'true';
+    const shiftId = await resolveAdminShiftId(req);
 
-    const conditions = [];
+    const conditions: ReturnType<typeof eq>[] = [eq(tasks.shiftId, shiftId)];
     if (status) conditions.push(eq(tasks.status, status));
     if (categoryId && !Number.isNaN(categoryId)) conditions.push(eq(tasks.categoryId, categoryId));
     if (day && !Number.isNaN(day)) {
       conditions.push(or(
         eq(tasks.dayNumber, day),
         sql`${tasks.dayNumbers} @> ${JSON.stringify([day])}::jsonb`,
-      ));
+      )!);
     }
     if (confirmationMethod) {
       conditions.push(sql`${tasks.confirmationMethods} @> ${JSON.stringify([confirmationMethod])}::jsonb`);
     }
-    if (!includeHidden) conditions.push(or(eq(tasks.isHidden, false), isNull(tasks.isHidden)));
+    if (!includeHidden) conditions.push(or(eq(tasks.isHidden, false), isNull(tasks.isHidden))!);
     if (q) {
       conditions.push(or(
         ilike(tasks.title, `%${q}%`),
         ilike(tasks.category, `%${q}%`),
         ilike(tasks.description, `%${q}%`),
-      ));
+      )!);
     }
 
     const where = conditions.length ? and(...conditions) : undefined;
@@ -1230,11 +1252,12 @@ export const crudTasks = {
   create: async (req: AdminRequest, res: Response) => {
     const parsed = parseBody(taskCreateSchema, req.body);
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
+    const shiftId = await resolveAdminShiftId(req);
     const values = await buildTaskInsertValues(parsed.data as Record<string, unknown>);
     if (values.status === 'published' && !values.qrToken && (values.confirmationMethods as string[] | undefined)?.includes('qr')) {
       values.qrToken = generateQrToken();
     }
-    const [t] = await db.insert(tasks).values(values).returning();
+    const [t] = await db.insert(tasks).values({ ...values, shiftId }).returning();
     res.json({ task: t });
   },
   update: async (req: AdminRequest, res: Response) => {
@@ -1317,11 +1340,18 @@ export const copyQuestionsDay = async (req: AdminRequest, res: Response): Promis
   const { fromDay, toDay, overwrite } = parsed.data;
   if (fromDay === toDay) { res.status(400).json({ error: 'fromDay and toDay must differ' }); return; }
 
-  const source = await db.select().from(questions).where(eq(questions.dayNumber, fromDay));
+  const shiftId = await resolveAdminShiftId(req);
+  const source = await db.select().from(questions).where(and(
+    eq(questions.dayNumber, fromDay),
+    eq(questions.shiftId, shiftId),
+  ));
   if (source.length === 0) { res.status(404).json({ error: 'No questions on fromDay' }); return; }
 
   if (overwrite) {
-    const targets = await db.select().from(questions).where(eq(questions.dayNumber, toDay));
+    const targets = await db.select().from(questions).where(and(
+      eq(questions.dayNumber, toDay),
+      eq(questions.shiftId, shiftId),
+    ));
     for (const t of targets) {
       await db.delete(answers).where(eq(answers.questionId, t.id));
       await db.delete(questionOptions).where(eq(questionOptions.questionId, t.id));
@@ -1329,7 +1359,7 @@ export const copyQuestionsDay = async (req: AdminRequest, res: Response): Promis
     }
   }
 
-  const [settings] = await db.select().from(forumSettings).limit(1);
+  const settings = await loadForumSettings();
   const startDate = settings?.startDate || new Date();
   const created = [];
   for (const q of source) {
@@ -1346,6 +1376,7 @@ export const copyQuestionsDay = async (req: AdminRequest, res: Response): Promis
       closeTime = new Date(q.closeTime.getTime() + delta);
     }
     const [row] = await db.insert(questions).values({
+      shiftId,
       title: q.title,
       text: q.text,
       type: q.type,
@@ -1390,14 +1421,18 @@ export const seedTouchpointsTemplate = async (req: AdminRequest, res: Response):
   if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
   const days = parsed.data.days ?? [1, 2, 3, 4, 5, 6, 7];
   const overwrite = parsed.data.overwrite;
+  const shiftId = await resolveAdminShiftId(req);
 
-  const [settings] = await db.select().from(forumSettings).limit(1);
+  const settings = await loadForumSettings();
   const startDate = settings?.startDate || new Date('2026-08-12T00:00:00');
   let created = 0;
 
   for (const day of days) {
     if (overwrite) {
-      const existing = await db.select().from(questions).where(eq(questions.dayNumber, day));
+      const existing = await db.select().from(questions).where(and(
+        eq(questions.dayNumber, day),
+        eq(questions.shiftId, shiftId),
+      ));
       for (const q of existing) {
         if (!TOUCHPOINT_SLOTS.some(s => s.title === q.title)) continue;
         await db.delete(answers).where(eq(answers.questionId, q.id));
@@ -1405,11 +1440,15 @@ export const seedTouchpointsTemplate = async (req: AdminRequest, res: Response):
         await db.delete(questions).where(eq(questions.id, q.id));
       }
     }
-    const existing = await db.select().from(questions).where(eq(questions.dayNumber, day));
+    const existing = await db.select().from(questions).where(and(
+      eq(questions.dayNumber, day),
+      eq(questions.shiftId, shiftId),
+    ));
     for (const slot of TOUCHPOINT_SLOTS) {
       if (existing.some(q => q.title === slot.title) && !overwrite) continue;
       const { publishTime, closeTime } = windowsForDay(startDate, day, slot);
       await db.insert(questions).values({
+        shiftId,
         title: slot.title,
         text: slot.text,
         type: slot.type,
@@ -1795,16 +1834,19 @@ function normalizeMaterialKbUnlock(body: Record<string, unknown>): {
 
 export const crudMaterials = {
   list: async (req: AdminRequest, res: Response) => {
+    const shiftId = await resolveAdminShiftId(req);
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
-    let rows = await db.select().from(materials);
+    let rows = await db.select().from(materials).where(eq(materials.shiftId, shiftId));
     if (status) rows = rows.filter(m => (m.status || 'published') === status);
     res.json({ materials: rows, totalCount: rows.length });
   },
   create: async (req: AdminRequest, res: Response) => {
+    const shiftId = await resolveAdminShiftId(req);
     const kb = normalizeMaterialKbUnlock(req.body as Record<string, unknown>);
     const [m] = await db.insert(materials).values({
       ...req.body,
       ...kb,
+      shiftId,
       isNew: req.body.isNew !== false,
       status: req.body.status || 'draft',
     }).returning();
@@ -2379,9 +2421,11 @@ export const listEventAttendance = async (req: AdminRequest, res: Response): Pro
   });
 };
 
-export const getForumSettings = async (_req: AdminRequest, res: Response): Promise<void> => {
-  const [settings] = await db.select().from(forumSettings).limit(1);
-  res.json({ settings: settings ?? null });
+export const getForumSettings = async (req: AdminRequest, res: Response): Promise<void> => {
+  const shiftId = await resolveAdminShiftId(req);
+  const shift = await getShiftById(shiftId);
+  const settings = shift ? shiftOpsToForumShape(shift) : await loadForumSettings();
+  res.json({ settings: { ...settings, shiftId }, editingShiftId: shiftId });
 };
 
 export const listKbDayUnlocks = async (_req: AdminRequest, res: Response): Promise<void> => {
