@@ -283,7 +283,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
   return (
     <div className="adm-forum">
       <AdminPageHero
-        title={`Вопросы · ${totalAll} всего`}
+        title={`Вопросы · ${questions.length} в списке · ${totalAll} всего`}
         hint="Touchpoints рефлексии в одном разделе. Обмен и дирекция — просмотр и модерация."
       />
 
@@ -329,7 +329,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
             <input type="number" className="adm-input" style={{ width: 70 }} value={copyDayForm.toDay} onChange={e => setCopyDayForm({ ...copyDayForm, toDay: Number(e.target.value) })} />
             <label className="adm-forum-check">
               <input type="checkbox" checked={copyDayForm.overwrite} onChange={e => setCopyDayForm({ ...copyDayForm, overwrite: e.target.checked })} />
-              overwrite
+              Заменить существующие на целевом дне
             </label>
             <button
               type="button"
@@ -349,6 +349,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
           draft={draft}
           totalDays={totalDays}
           isNew={!editingId}
+          currentQuestionId={editingId}
           answerCount={answerCount}
           versionNotice={versionNotice}
           formTab={formTab}
@@ -425,6 +426,52 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
               <option value="draft">Черновик</option>
             </select>
           </div>
+
+          {!readOnly && (
+            <div className="form-row card" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <span>Скопировать день</span>
+              <input
+                type="number"
+                className="adm-input"
+                style={{ width: 70 }}
+                min={1}
+                max={8}
+                value={copyDayForm.fromDay}
+                onChange={e => setCopyDayForm({ ...copyDayForm, fromDay: Number(e.target.value) })}
+              />
+              <span>→</span>
+              <input
+                type="number"
+                className="adm-input"
+                style={{ width: 70 }}
+                min={1}
+                max={8}
+                value={copyDayForm.toDay}
+                onChange={e => setCopyDayForm({ ...copyDayForm, toDay: Number(e.target.value) })}
+              />
+              <label className="adm-forum-check">
+                <input
+                  type="checkbox"
+                  checked={copyDayForm.overwrite}
+                  onChange={e => setCopyDayForm({ ...copyDayForm, overwrite: e.target.checked })}
+                />
+                Заменить на целевом дне
+              </label>
+              <button
+                type="button"
+                className="adm-btn adm-btn-secondary adm-btn-sm"
+                onClick={() => act(() => adminFetch('/questions/copy-day', {
+                  method: 'POST',
+                  body: JSON.stringify(copyDayForm),
+                }).then(() => loadQuestions()), 'Скопировано (вопросы + анкета вечера на «Форуме», если дни 1–7)')}
+              >
+                Скопировать
+              </button>
+              <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => setView('tools')}>
+                Ещё инструменты…
+              </button>
+            </div>
+          )}
 
           {!readOnly && selectedIds.size > 0 && (
             <div className="form-row card" style={{ marginBottom: 12, alignItems: 'center' }}>
