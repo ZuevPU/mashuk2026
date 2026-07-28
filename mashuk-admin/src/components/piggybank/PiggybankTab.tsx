@@ -7,6 +7,7 @@ import { RowActionsMenu } from '../participants/RowActionsMenu';
 
 const PIGGY_TAGS = ['идея', 'мысль', 'вопрос', 'контакт', 'на будущее', 'в работу'];
 const PIGGY_SOURCES = ['Направление', 'Урок о важном', 'Открытый урок', 'Клуб', 'Разговор с участником', 'Своя мысль'];
+const PAGE_SIZE = 100;
 
 type Entry = {
   id: number;
@@ -43,8 +44,10 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
   const [loading, setLoading] = useState(true);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [participantId, setParticipantId] = useState('');
+  const [participantSearch, setParticipantSearch] = useState('');
   const [directionId, setDirectionId] = useState('');
   const [groupId, setGroupId] = useState('');
   const [forumDay, setForumDay] = useState('');
@@ -56,6 +59,10 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
   const [openEntry, setOpenEntry] = useState<Entry | null>(null);
   const [participantOptions, setParticipantOptions] = useState<{ id: number; label: string }[]>([]);
 
+  const hasFilters = Boolean(
+    search.trim() || participantId || directionId || groupId || forumDay || tag || source,
+  );
+
   const filters = useMemo(() => ({
     q: search.trim(),
     participantId: participantId ? Number(participantId) : undefined,
@@ -64,8 +71,9 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
     forumDay: forumDay ? Number(forumDay) : undefined,
     tag,
     source,
-    limit: 100,
-  }), [search, participantId, directionId, groupId, forumDay, tag, source]);
+    page,
+    limit: PAGE_SIZE,
+  }), [search, participantId, directionId, groupId, forumDay, tag, source, page]);
 
   const loadMeta = useCallback(async () => {
     const [dirs, gr, fs] = await Promise.all([
@@ -97,21 +105,28 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
     load().catch(() => setLoading(false));
   }, [load, reloadKey]);
 
-  const searchParticipants = (q: string) => {
-    if (!q.trim()) {
+  useEffect(() => {
+    setPage(1);
+  }, [search, participantId, directionId, groupId, forumDay, tag, source]);
+
+  useEffect(() => {
+    if (participantSearch.trim().length < 2) {
       setParticipantOptions([]);
       return;
     }
-    adminFetch(`/participants?q=${encodeURIComponent(q.trim())}&limit=15`)
-      .then(res => {
-        const list = res.participants || [];
-        setParticipantOptions(list.map((p: { id: number; firstName?: string; lastName?: string; vkId?: string }) => ({
-          id: p.id,
-          label: [p.firstName, p.lastName].filter(Boolean).join(' ') || String(p.vkId),
-        })));
-      })
-      .catch(() => setParticipantOptions([]));
-  };
+    const t = setTimeout(() => {
+      adminFetch(`/participants?q=${encodeURIComponent(participantSearch.trim())}&limit=15`)
+        .then(res => {
+          const list = res.participants || [];
+          setParticipantOptions(list.map((p: { id: number; firstName?: string; lastName?: string; vkId?: string }) => ({
+            id: p.id,
+            label: [p.firstName, p.lastName].filter(Boolean).join(' ') || String(p.vkId),
+          })));
+        })
+        .catch(() => setParticipantOptions([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [participantSearch, adminFetch]);
 
   const patchEntry = (id: number, body: Record<string, boolean>) =>
     act(async () => {
@@ -129,13 +144,22 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
   };
 
   const exportXlsx = () => {
-    const sp = buildQuery({ ...filters, format: 'xlsx' });
-    act(() => adminDownloadBinary(`/exports/piggybank?${sp}`, 'piggybank.xlsx'), 'Экспорт');
+    const { page: _p, limit: _l, ...rest } = filters;
+    const sp = buildQuery({ ...rest, format: 'xlsx' });
+    act(() => adminDownloadBinary(`/piggybank-entries/export?${sp}`, 'piggybank.xlsx'), 'Экспорт');
   };
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const listLabel = hasFilters || page > 1
+    ? `${entries.length} в списке · ${totalCount} всего`
+    : `${totalCount} всего`;
+  const heroHint = entries.length === PAGE_SIZE && totalCount > PAGE_SIZE
+    ? `Показано до ${PAGE_SIZE} на странице. Модерация записей участников.`
+    : 'Модерация записей участников. Удаление логируется в журнале.';
 
   return (
     <div className="adm-forum">
-      <AdminPageHero title={`Записи копилки · ${totalCount} всего`} hint="Модерация записей участников. Удаление логируется в журнале.">
+      <AdminPageHero title={`Записи копилки · ${listLabel}`} hint={heroHint}>
         <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
           <input
             className="adm-input"
@@ -146,18 +170,22 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
           />
           <input
             className="adm-input"
-            placeholder="Участник (поиск)"
-            onChange={e => searchParticipants(e.target.value)}
-            list="piggy-participants"
+            placeholder="Участник (поиск ФИО)"
+            value={participantSearch}
+            onChange={e => setParticipantSearch(e.target.value)}
             style={{ minWidth: 140 }}
           />
-          <datalist id="piggy-participants">
-            {participantOptions.map(p => (
-              <option key={p.id} value={p.label} onClick={() => setParticipantId(String(p.id))} />
-            ))}
-          </datalist>
-          <select className="adm-input" value={participantId} onChange={e => setParticipantId(e.target.value)}>
-            <option value="">Участник ID</option>
+          <select
+            className="adm-input"
+            value={participantId}
+            onChange={e => {
+              setParticipantId(e.target.value);
+              const hit = participantOptions.find(p => String(p.id) === e.target.value);
+              if (hit) setParticipantSearch(hit.label);
+            }}
+            style={{ minWidth: 160 }}
+          >
+            <option value="">Все участники</option>
             {participantOptions.map(p => (
               <option key={p.id} value={p.id}>{p.label}</option>
             ))}
@@ -192,9 +220,6 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
-          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => load()}>
-            Применить
-          </button>
           <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={exportXlsx}>
             Экспорт в XLSX
           </button>
@@ -208,6 +233,7 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
           {entries.length === 0 ? (
             <p className="adm-muted">Записей не найдено</p>
           ) : (
+            <>
             <table className="adm-table">
               <thead>
                 <tr>
@@ -255,6 +281,30 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
                 ))}
               </tbody>
             </table>
+            {totalPages > 1 && (
+              <div className="adm-forum-toolbar" style={{ marginTop: 12 }}>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-secondary adm-btn-sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                >
+                  ← Назад
+                </button>
+                <span className="adm-muted" style={{ fontSize: 12 }}>
+                  Страница {page} из {totalPages}
+                </span>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-secondary adm-btn-sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                >
+                  Вперёд →
+                </button>
+              </div>
+            )}
+            </>
           )}
         </div>
       )}

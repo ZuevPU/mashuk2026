@@ -169,3 +169,51 @@ export async function queryPiggybankForExport(req: AdminRequest): Promise<Piggyb
     isViolation: r.e.isViolation,
   }));
 }
+
+export async function exportPiggybankEntries(req: AdminRequest, res: Response): Promise<void> {
+  const format = String(req.query.format || 'xlsx').toLowerCase();
+  const rows = await queryPiggybankForExport(req);
+
+  if (format === 'xlsx') {
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Копилка');
+    ws.columns = [
+      { header: 'Дата', key: 'createdAt', width: 20 },
+      { header: 'Участник', key: 'participantName', width: 24 },
+      { header: 'Направление', key: 'directionName', width: 18 },
+      { header: 'Текст', key: 'text', width: 50 },
+      { header: 'Теги', key: 'tags', width: 20 },
+      { header: 'Источник', key: 'source', width: 18 },
+      { header: 'Скрыто', key: 'isHidden', width: 8 },
+      { header: 'Нарушение', key: 'isViolation', width: 10 },
+    ];
+    for (const r of rows) {
+      ws.addRow({
+        ...r,
+        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : '',
+        isHidden: r.isHidden ? 'да' : '',
+        isViolation: r.isViolation ? 'да' : '',
+      });
+    }
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=piggybank.xlsx');
+    await wb.xlsx.write(res);
+    return;
+  }
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename=piggybank.csv');
+  const header = 'created_at,participant,direction,tags,source,text,is_hidden,is_violation\n';
+  const csv = rows.map(r => [
+    r.createdAt,
+    JSON.stringify(r.participantName),
+    JSON.stringify(r.directionName ?? ''),
+    JSON.stringify(r.tags),
+    JSON.stringify(r.source ?? ''),
+    JSON.stringify(r.text),
+    r.isHidden ? '1' : '0',
+    r.isViolation ? '1' : '0',
+  ].join(',')).join('\n');
+  res.send('\uFEFF' + header + csv);
+}
