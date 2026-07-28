@@ -18,6 +18,7 @@ import {
 } from '../services/piggybankDict.js';
 import { createPiggybankEntry, filterPiggybankEntries } from '../services/piggybankService.js';
 import { gatherProfileBundle, streamProfilePdf } from '../services/profilePdfBuilder.js';
+import { answerText } from '../services/exports/exportCommon.js';
 
 export const getProfile = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
@@ -457,7 +458,11 @@ export const synthesizeMyOutcomes = async (req: ParticipantRequest, res: Respons
     if (llmProfileV2Enabled()) {
       const { gigachatComplete, isGigachatConfigured } = await import('../services/gigachatService.js');
       if (isGigachatConfigured()) {
-        const sample = bundle.userAnswers.map(a => a.answerText).filter(Boolean).slice(0, 8).join('\n---\n');
+        const sample = bundle.userAnswers
+          .map(a => answerText(a.answerData))
+          .filter(Boolean)
+          .slice(0, 8)
+          .join('\n---\n');
         const llm = await gigachatComplete(
           `Сформируй 3–5 коротких итогов смены для участника форума по его ответам:\n${sample.slice(0, 2000)}`,
           'Ты наставник. Буллеты по-русски, без markdown.',
