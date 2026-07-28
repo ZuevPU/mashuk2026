@@ -277,7 +277,7 @@ export function ParticipantCardModal({
     }
 
     if (tab === 'medals') {
-      adminFetch('/medals?tab=active')
+      adminFetch('/medals?status=active&awardType=manual')
         .then((r: { medals?: { id: number; name: string; level?: string }[] }) => setMedalCatalog(r.medals || []))
         .catch(() => setMedalCatalog([]));
     }
@@ -1195,10 +1195,10 @@ export function ParticipantCardModal({
 
                   <option value="">— выберите медаль —</option>
 
-                  {medalCatalog.map(m => (
-
+                  {medalCatalog
+                    .filter(m => !(card.medals || []).some((um: { medalId?: number }) => um.medalId === m.id))
+                    .map(m => (
                     <option key={m.id} value={m.id}>{m.name}</option>
-
                   ))}
 
                 </select>
@@ -1229,10 +1229,20 @@ export function ParticipantCardModal({
 
                 <ul className="adm-list">
 
-                  {(card.medalProgress || []).filter((m: any) => !m.earned).map((m: any) => (
-
-                    <li key={m.id} className="adm-muted">{m.name} ({label(m.level)})</li>
-
+                  {(card.medalProgress || []).filter((m: { earned?: boolean }) => !m.earned).map((m: {
+                    id: number;
+                    name: string;
+                    level?: string;
+                    current?: number;
+                    target?: number;
+                    conditionLabel?: string;
+                  }) => (
+                    <li key={m.id} className="adm-muted">
+                      {m.name} ({label(m.level ?? '')})
+                      {m.target != null && m.current != null
+                        ? ` · ${m.current} / ${m.target}${m.conditionLabel ? ` (${m.conditionLabel})` : ''}`
+                        : ''}
+                    </li>
                   ))}
 
                 </ul>
