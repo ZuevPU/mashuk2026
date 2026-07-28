@@ -49,11 +49,13 @@ import { TOUCHPOINT_SLOTS, windowsForDay } from '../services/touchpointTemplates
 import { getForumSettings as loadForumSettings } from '../services/helpers.js';
 import { enrichEventTimestamps } from '../services/eventSchedule.js';
 import { parseParticipantListQuery, queryParticipants } from '../services/participantsList.js';
+import { enrichParticipantsWithAvatarUrls } from '../services/participantAvatarSync.js';
 
 export const listParticipants = async (req: AdminRequest, res: Response): Promise<void> => {
   const parsed = parseParticipantListQuery(req);
   const result = await queryParticipants(parsed);
-  res.json(result);
+  const participants = await enrichParticipantsWithAvatarUrls(result.participants);
+  res.json({ ...result, participants });
 };
 
 export const listParticipantGroups = async (_req: AdminRequest, res: Response): Promise<void> => {

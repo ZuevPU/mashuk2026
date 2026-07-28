@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { participants } from '../db/schema.js';
-import { fetchVkAvatarUrl } from './vkUserProfile.js';
+import { fetchVkAvatarUrl, batchFetchVkAvatarUrls } from './vkUserProfile.js';
 import { saveImageBuffer } from '../utils/uploadImageStorage.js';
 
 const MAX_AVATAR_BYTES = 512 * 1024;
@@ -42,17 +42,46 @@ async function mirrorUrlToParticipant(participantId: number, sourceUrl: string):
   return url;
 }
 
-/** Public URL for UI: DB mirror first, optional live VK fallback. */
+/** Public URL for UI: VK photo for admin; mirrored file for mini-app fallback. */
 export async function resolveParticipantAvatarUrl(
   p: { id: number; vkId: number | null; avatarUrl?: string | null; selfDeletedAt?: Date | null },
-  opts?: { liveFallback?: boolean },
+  opts?: { liveFallback?: boolean; preferVkPhoto?: boolean },
 ): Promise<string | null> {
   if (p.selfDeletedAt) return null;
-  if (p.avatarUrl) return p.avatarUrl;
+
+  let vkUrl: string | null = null;
   if (opts?.liveFallback !== false && p.vkId) {
-    return fetchVkAvatarUrl(p.vkId);
+    vkUrl = await fetchVkAvatarUrl(p.vkId);
   }
-  return null;
+
+  if (opts?.preferVkPhoto !== false && vkUrl) return vkUrl;
+  if (p.avatarUrl) return p.avatarUrl;
+  return vkUrl;
+}
+
+type ParticipantAvatarRow = {
+  id: number;
+  vkId: number | null;
+  avatarUrl?: string | null;
+  selfDeletedAt?: Date | null;
+};
+
+/** Admin list: batch VK photos, fallback to stored mirror URL. */
+export async function enrichParticipantsWithAvatarUrls<T extends ParticipantAvatarRow>(
+  rows: T[],
+): Promise<(T & { avatarUrl: string | null })[]> {
+  const active = rows.filter(r => !r.selfDeletedAt && r.vkId);
+  const vkMap = await batchFetchVkAvatarUrls(active.map(r => r.vkId!));
+
+  return rows.map(r => {
+    if (r.selfDeletedAt) return { ...r, avatarUrl: null };
+    const vk = r.vkId ? vkMap.get(r.vkId) ?? null : null;
+    const avatarUrl = vk || r.avatarUrl || null;
+    if (r.vkId && !r.avatarUrl && vk) {
+      scheduleParticipantAvatarSync(r.id);
+    }
+    return { ...r, avatarUrl };
+  });
 }
 
 export async function syncParticipantAvatar(

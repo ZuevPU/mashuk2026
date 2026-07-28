@@ -479,10 +479,10 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
     confBySub.get(c.submissionId)!.push(c);
   }
 
-  const avatarUrl = await resolveParticipantAvatarUrl(p);
+  const avatarUrl = await resolveParticipantAvatarUrl(p, { preferVkPhoto: true });
 
   res.json({
-    participant: p,
+    participant: { ...p, avatarUrl },
     avatarUrl,
     answers: filteredAnswers.map(r => ({
       id: r.a.id,

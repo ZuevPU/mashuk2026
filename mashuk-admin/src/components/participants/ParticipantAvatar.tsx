@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 type Size = 'sm' | 'md';
 
@@ -16,6 +16,9 @@ export function ParticipantAvatar({
   size?: Size;
 }) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [avatarUrl]);
   const px = SIZE[size];
   const initials = `${(firstName || '?')[0]}${(lastName || '?')[0]}`.toUpperCase();
   const src = !failed && avatarUrl ? avatarUrl : null;
