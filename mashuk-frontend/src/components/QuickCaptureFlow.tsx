@@ -1,8 +1,11 @@
-import { ReactNode, useState } from 'react';
-import { ModalCard, Button, Title } from '@vkontakte/vkui';
+import { ReactElement, ReactNode, useState } from 'react';
+import { ModalCard, ModalRoot, Button, Title } from '@vkontakte/vkui';
 import { QuickCaptureModal } from './QuickCaptureModal';
 import { QUICK_CAPTURE_ITEMS, PIGGYBANK_TAGS } from '../data/piggybank';
 import { apiPost } from '../api/client';
+
+const MODAL_CAPTURE = 'quick-capture';
+const MODAL_PICK = 'quick-capture-pick';
 
 export function openQuickCapture(
   setModal: (modal: ReactNode | null) => void,
@@ -11,8 +14,17 @@ export function openQuickCapture(
     initialTags?: string[];
     prefillText?: string;
     onSaved?: () => void;
+    onError?: (message: string) => void;
   },
 ) {
+  const closeModal = () => setModal(null);
+
+  const wrapModal = (activeId: string, children: ReactElement) => (
+    <ModalRoot activeModal={activeId} onClose={closeModal}>
+      {children}
+    </ModalRoot>
+  );
+
   const save = async (text: string, source: string, tags: string[]) => {
     await apiPost('/piggybank/quick', { tags, text, source });
     opts?.onSaved?.();
@@ -20,12 +32,16 @@ export function openQuickCapture(
 
   const openCaptureModal = (tags: string[], prefillText?: string) => {
     setModal(
-      <QuickCaptureModal
-        tags={tags}
-        initialText={prefillText}
-        onClose={() => setModal(null)}
-        onSave={save}
-      />,
+      wrapModal(
+        MODAL_CAPTURE,
+        <QuickCaptureModal
+          tags={tags}
+          initialText={prefillText}
+          onClose={closeModal}
+          onSave={save}
+          onError={opts?.onError}
+        />,
+      ),
     );
   };
 
@@ -52,7 +68,7 @@ export function openQuickCapture(
       });
     };
     return (
-      <ModalCard id="quick-capture-pick" onClose={() => setModal(null)}>
+      <ModalCard id={MODAL_PICK} onClose={closeModal}>
         <Title level="2" style={{ marginBottom: 12 }}>Копилка</Title>
         <div style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>Выберите тип записи (можно несколько)</div>
         <div className="cap-row">
@@ -88,7 +104,7 @@ export function openQuickCapture(
           >
             Далее
           </Button>
-          <Button size="m" stretched mode="secondary" style={{ marginTop: 8 }} onClick={() => setModal(null)}>
+          <Button size="m" stretched mode="secondary" style={{ marginTop: 8 }} onClick={closeModal}>
             Отмена
           </Button>
         </div>
@@ -96,5 +112,5 @@ export function openQuickCapture(
     );
   };
 
-  setModal(<TagPicker />);
+  setModal(wrapModal(MODAL_PICK, <TagPicker />));
 }

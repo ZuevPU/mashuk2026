@@ -297,7 +297,10 @@ export const App = () => {
             {showPiggyFab && (
               <TabbarItem
                 selected={false}
-                onClick={() => openQuickCapture(setModal, { onSaved: () => void refreshTabCounts() })}
+                onClick={() => openQuickCapture(setModal, {
+                  onSaved: () => void refreshTabCounts(),
+                  onError: (message) => setApiErrorToast(message),
+                })}
                 aria-label="Добавить в копилку"
               >
                 <span className="tab-item-inner tab-item-inner--fab">

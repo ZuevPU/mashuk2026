@@ -26,7 +26,7 @@ export function questionVisibleToParticipant(
   currentDay: number,
 ): boolean {
   if (q.isHidden) return false;
-  const block = (q as { block?: string | null }).block;
+  const block = q.block;
   const dayNum = q.dayNumber ?? 8;
   if (block === 'Точка Б' && currentDay >= dayNum) {
     const aud = q.audienceType || 'all';

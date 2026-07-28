@@ -1071,6 +1071,7 @@ export const ProfilePanel: React.FC<{
                   loadProfile();
                   setSnackbar('Запись добавлена в копилку');
                 },
+                onError: (message) => setSnackbar(message),
               })}
             >
               Создать запись

@@ -148,7 +148,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   return (
     <div className="adm-forum">
       <AdminPageHero
-        title={`База знаний · ${materials.length} материалов`}
+        title={`База знаний · ${filtered.length}${filtered.length !== materials.length ? ` из ${materials.length}` : ''} материалов`}
         hint="В аналитику и приложение участника попадают только материалы со статусом «Опубликован»."
       >
         {setTab && (

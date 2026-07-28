@@ -326,7 +326,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       ui: {
         showTasksBanner: false,
         showQuickCapture: currentDay !== 8,
-        showPiggybankFab: false,
+        showPiggybankFab: currentDay !== 8,
         showEveningCard: !!eveningCard,
       },
       sectionsVisibility: settings.sectionsVisibility ?? {},

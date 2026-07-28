@@ -179,9 +179,26 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
           <ModalPage id="event-detail" onClose={() => setSelectedEvent(null)}>
             <ModalPageHeader>{selectedEvent.title}</ModalPageHeader>
             <Group>
-              <div style={{ fontSize: 12 }}>{selectedEvent.time}{selectedEvent.endTime ? ` — ${selectedEvent.endTime}` : ''}</div>
-              <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>{selectedEvent.place || selectedEvent.subtitle}</div>
-              {selectedEvent.description && <div style={{ fontSize: 12, marginTop: 8 }}>{selectedEvent.description}</div>}
+              <div style={{ fontSize: 12, fontWeight: 600 }}>
+                Время: {selectedEvent.time}{selectedEvent.endTime ? ` — ${selectedEvent.endTime}` : ''}
+              </div>
+              {(selectedEvent.place || selectedEvent.subtitle) && (
+                <div style={{ fontSize: 12, marginTop: 8 }}>
+                  <span style={{ color: '#888' }}>Место: </span>
+                  {selectedEvent.place || selectedEvent.subtitle}
+                </div>
+              )}
+              {selectedEvent.description && (
+                <div style={{ fontSize: 12, marginTop: 10, lineHeight: 1.45 }}>
+                  <div style={{ color: '#888', marginBottom: 4 }}>Описание</div>
+                  {selectedEvent.description}
+                </div>
+              )}
+              {selectedEvent.tags && selectedEvent.tags.length > 0 && (
+                <div style={{ fontSize: 11, color: '#666', marginTop: 10 }}>
+                  {selectedEvent.tags.join(' · ')}
+                </div>
+              )}
             </Group>
           </ModalPage>
         </ModalRoot>

@@ -262,7 +262,29 @@ export function ProgramView({ data }: { data: any }) {
           <li key={d.eventId}>{d.title} · посещ. {d.attendance}{d.mentionScore != null ? ` · упом. ${d.mentionScore}` : ''}</li>
         ))}</ul>
       </div>
-      <p className="adm-muted">{data.nps?.note}</p>
+      {data.nps?.available && (data.nps?.byPractice ?? []).length > 0 ? (
+        <div className="card">
+          <h3>NPS по педагогическим практикам</h3>
+          <p className="adm-muted" style={{ fontSize: 12 }}>{data.nps.note}</p>
+          <table className="adm-table">
+            <thead>
+              <tr><th>Практика</th><th>Ответов</th><th>Средняя 1–10</th><th>NPS</th></tr>
+            </thead>
+            <tbody>
+              {(data.nps.byPractice as { practice: string; responses: number; avgScore: number; nps: number }[]).map(row => (
+                <tr key={row.practice}>
+                  <td>{row.practice}</td>
+                  <td>{row.responses}</td>
+                  <td>{row.avgScore}</td>
+                  <td>{row.nps}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="adm-muted">{data.nps?.note}</p>
+      )}
     </>
   );
 }

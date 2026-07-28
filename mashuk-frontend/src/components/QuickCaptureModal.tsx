@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { ModalCard, Textarea, Button, Title, FormItem, CustomSelect, Checkbox } from '@vkontakte/vkui';
 import { PIGGYBANK_SOURCES, PIGGYBANK_TAGS } from '../data/piggybank';
+import { ApiError } from '../api/client';
 
 interface QuickCaptureModalProps {
   tags: string[];
   initialText?: string;
   onClose: () => void;
   onSave: (text: string, source: string, tags: string[]) => Promise<void>;
+  onError?: (message: string) => void;
 }
 
 function tagsNeedSource(selectedTags: string[]): boolean {
@@ -18,6 +20,7 @@ export const QuickCaptureModal: React.FC<QuickCaptureModalProps> = ({
   initialText = '',
   onClose,
   onSave,
+  onError,
 }) => {
   const [selectedTags, setSelectedTags] = useState<string[]>(initialTags);
   const [text, setText] = useState(initialText);
@@ -58,8 +61,8 @@ export const QuickCaptureModal: React.FC<QuickCaptureModalProps> = ({
     try {
       await onSave(text.trim(), src, selectedTags);
       onClose();
-    } catch {
-      // keep modal open; parent may show snackbar via onSave
+    } catch (err) {
+      onError?.(err instanceof ApiError ? err.message : 'Не удалось сохранить в копилку');
     } finally {
       setSaving(false);
     }

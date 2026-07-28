@@ -139,9 +139,10 @@ export const HomePanel: React.FC<{
     if (params.get('evening') === '1') setShowEvening(true);
   }, []);
 
-  useEffect(() => {
-    return () => setModal(null);
-  }, [setModal]);
+  const piggyCaptureOpts = (onSaved?: () => void) => ({
+    onSaved,
+    onError: (message: string) => setSnackbar(message),
+  });
 
   if (loading) {
     return (
@@ -258,7 +259,7 @@ export const HomePanel: React.FC<{
             onSaveExperimentFixation={d.experiment ? () => openQuickCapture(setModal, {
               initialTags: ['мысль'],
               prefillText: [d.experiment!.title, d.experiment!.body].filter(Boolean).join('\n\n'),
-              onSaved: () => setSnackbar('Фиксация сохранена в копилку'),
+              ...piggyCaptureOpts(() => setSnackbar('Фиксация сохранена в копилку')),
             }) : undefined}
           />
         )}
@@ -272,7 +273,7 @@ export const HomePanel: React.FC<{
             onSaveFixation={() => openQuickCapture(setModal, {
               initialTags: ['мысль'],
               prefillText: [d.experiment!.title, d.experiment!.body].filter(Boolean).join('\n\n'),
-              onSaved: () => setSnackbar('Фиксация сохранена в копилку'),
+              ...piggyCaptureOpts(() => setSnackbar('Фиксация сохранена в копилку')),
             })}
           />
         )}
@@ -300,7 +301,7 @@ export const HomePanel: React.FC<{
               {QUICK_CAPTURE_ITEMS.map(item => (
                 <div key={item.tag} className="cap" onClick={() => openQuickCapture(setModal, {
                   initialTag: item.tag,
-                  onSaved: () => { setSnackbar('Сохранено в копилку'); reload(); },
+                  ...piggyCaptureOpts(() => { setSnackbar('Сохранено в копилку'); reload(); }),
                 })}>
                   <span className="ci">{item.icon}</span>
                   <span className="cl">{item.label}</span>
