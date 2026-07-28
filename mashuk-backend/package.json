@@ -26,6 +26,7 @@
     "@types/archiver": "^8.0.0",
     "archiver": "^8.0.0",
     "cors": "^2.8.6",
+    "dejavu-fonts-ttf": "^2.37.3",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",

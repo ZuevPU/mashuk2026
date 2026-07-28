@@ -65,8 +65,10 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
     const filter = (req.query.filter as string) || 'all';
     const settings = await getForumSettings();
     const now = new Date();
+    const { resolveActiveShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveActiveShiftId();
 
-    const allTasksRaw = await db.select().from(tasks);
+    const allTasksRaw = await db.select().from(tasks).where(eq(tasks.shiftId, shiftId));
     const allTasks = allTasksRaw.filter(t =>
       isTaskPublishedVisible(t, now) && isTaskOnForumDay(t, settings.currentDay ?? 1),
     );

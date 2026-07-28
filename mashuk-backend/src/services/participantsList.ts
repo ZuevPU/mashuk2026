@@ -17,6 +17,8 @@ export type ParticipantListQuery = {
   /** Только участники с self_deleted_at (удалили профиль / исключены) */
   onlySelfDeleted?: boolean;
   ids?: number[];
+  /** Фильтр по смене; по умолчанию задаётся в listParticipants */
+  shiftId?: number;
 };
 
 function startOfTodayUtc(): Date {
@@ -28,6 +30,9 @@ function startOfTodayUtc(): Date {
 export function buildParticipantWhere(query: ParticipantListQuery): SQL | undefined {
   const conditions: SQL[] = [];
 
+  if (query.shiftId != null && !Number.isNaN(query.shiftId)) {
+    conditions.push(eq(participants.shiftId, query.shiftId));
+  }
   if (query.onlySelfDeleted) {
     conditions.push(isNotNull(participants.selfDeletedAt));
   } else if (!query.includeDeleted) {
@@ -151,5 +156,8 @@ export function parseParticipantListQuery(req: { query: Record<string, unknown> 
     onlySelfDeleted: req.query.onlySelfDeleted === 'true' || req.query.onlySelfDeleted === '1'
       || req.query.list === 'hidden',
     ids,
+    shiftId: req.query.shiftId != null && req.query.shiftId !== ''
+      ? Number(req.query.shiftId)
+      : undefined,
   };
 }

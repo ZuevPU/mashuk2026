@@ -61,10 +61,17 @@ export const crudConsents = {
 // ─── Groups CRUD ─────────────────────────────────────────────
 
 export const crudGroups = {
-  list: async (_req: AdminRequest, res: Response) => {
-    const groups = await db.select().from(participantGroups).orderBy(asc(participantGroups.id));
+  list: async (req: AdminRequest, res: Response) => {
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
+    const groups = await db.select().from(participantGroups)
+      .where(eq(participantGroups.shiftId, shiftId))
+      .orderBy(asc(participantGroups.id));
     const withCounts = await Promise.all(groups.map(async (g) => {
-      const [c] = await db.select({ c: count() }).from(participants).where(eq(participants.groupId, g.id));
+      const [c] = await db.select({ c: count() }).from(participants).where(and(
+        eq(participants.groupId, g.id),
+        eq(participants.shiftId, shiftId),
+      ));
       return { ...g, membersCount: Number(c?.c ?? 0) };
     }));
     res.json({ groups: withCounts });
@@ -72,10 +79,13 @@ export const crudGroups = {
   create: async (req: AdminRequest, res: Response) => {
     const { name, directionId, capacity } = req.body;
     if (!name?.trim()) { res.status(400).json({ error: 'name required' }); return; }
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
     const [g] = await db.insert(participantGroups).values({
       name: name.trim(),
       directionId: directionId ? Number(directionId) : null,
       capacity: capacity != null ? Number(capacity) : 30,
+      shiftId,
     }).returning();
     res.json({ group: g });
   },
@@ -101,8 +111,13 @@ export const crudGroups = {
 export const publishScheduleDay = async (req: AdminRequest, res: Response): Promise<void> => {
   const dayNumber = Number(req.body.dayNumber ?? req.params.dayNumber);
   if (!dayNumber) { res.status(400).json({ error: 'dayNumber required' }); return; }
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
 
-  const dayEvents = await db.select().from(events).where(eq(events.dayNumber, dayNumber));
+  const dayEvents = await db.select().from(events).where(and(
+    eq(events.dayNumber, dayNumber),
+    eq(events.shiftId, shiftId),
+  ));
   const versions = await db.select().from(scheduleDayVersions)
     .where(eq(scheduleDayVersions.dayNumber, dayNumber))
     .orderBy(desc(scheduleDayVersions.version));
@@ -115,19 +130,22 @@ export const publishScheduleDay = async (req: AdminRequest, res: Response): Prom
     publishedByAdminId: req.adminId ?? null,
   }).returning();
 
-  const [existingDay] = await db.select().from(scheduleDays).where(eq(scheduleDays.dayNumber, dayNumber)).limit(1);
+  const [existingDay] = await db.select().from(scheduleDays).where(and(
+    eq(scheduleDays.dayNumber, dayNumber),
+    eq(scheduleDays.shiftId, shiftId),
+  )).limit(1);
   if (existingDay) {
     await db.update(scheduleDays).set({ isPublished: true, publishedAt: new Date() })
       .where(eq(scheduleDays.id, existingDay.id));
   } else {
-    await db.insert(scheduleDays).values({ dayNumber, isPublished: true, publishedAt: new Date() });
+    await db.insert(scheduleDays).values({ dayNumber, shiftId, isPublished: true, publishedAt: new Date() });
   }
 
   await db.update(events).set({ dayPublished: true, isPublished: true })
-    .where(eq(events.dayNumber, dayNumber));
+    .where(and(eq(events.dayNumber, dayNumber), eq(events.shiftId, shiftId)));
 
   const { clearCache } = await import('../services/cache.js');
-  clearCache(`events_day_${dayNumber}`);
+  clearCache(`events_day_${shiftId}_${dayNumber}`);
 
   await logAdminAction({
     req, actionType: 'schedule_publish', section: 'events', objectId: dayNumber,
@@ -146,18 +164,28 @@ export const listScheduleVersions = async (req: AdminRequest, res: Response): Pr
 };
 
 export const crudScheduleDays = {
-  list: async (_req: AdminRequest, res: Response) => {
-    const days = await db.select().from(scheduleDays).orderBy(asc(scheduleDays.dayNumber));
+  list: async (req: AdminRequest, res: Response) => {
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
+    const days = await db.select().from(scheduleDays)
+      .where(eq(scheduleDays.shiftId, shiftId))
+      .orderBy(asc(scheduleDays.dayNumber));
     res.json({ days });
   },
   create: async (req: AdminRequest, res: Response) => {
     const dayNumber = Number(req.body.dayNumber);
     if (!dayNumber) { res.status(400).json({ error: 'dayNumber required' }); return; }
-    const [existing] = await db.select().from(scheduleDays).where(eq(scheduleDays.dayNumber, dayNumber)).limit(1);
+    const { resolveAdminShiftId, updateShift } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
+    const [existing] = await db.select().from(scheduleDays).where(and(
+      eq(scheduleDays.dayNumber, dayNumber),
+      eq(scheduleDays.shiftId, shiftId),
+    )).limit(1);
     if (existing) { res.status(400).json({ error: 'Day already exists' }); return; }
     const calendarDate = req.body.calendarDate ? new Date(req.body.calendarDate) : null;
     const [day] = await db.insert(scheduleDays).values({
       dayNumber,
+      shiftId,
       displayLabel: req.body.displayLabel ? String(req.body.displayLabel) : `День ${dayNumber}`,
       shiftNumber: req.body.shiftNumber != null ? Number(req.body.shiftNumber) : null,
       calendarDate,
@@ -165,10 +193,7 @@ export const crudScheduleDays = {
     }).returning();
     const settings = await getForumSettings();
     if (dayNumber > (settings.totalDays ?? 8)) {
-      const [fs] = await db.select().from(forumSettings).limit(1);
-      if (fs) {
-        await db.update(forumSettings).set({ totalDays: dayNumber }).where(eq(forumSettings.id, fs.id));
-      }
+      await updateShift(shiftId, { totalDays: dayNumber });
     }
     res.json({ day });
   },

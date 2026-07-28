@@ -1,17 +1,19 @@
 import { Response } from 'express';
-import { eq, asc, count } from 'drizzle-orm';
+import { and, eq, asc, count } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db/index.js';
-import { participants, directions, pedagogicalRoles, forumSettings, participantGroups } from '../db/schema.js';
+import { participants, directions, pedagogicalRoles, participantGroups } from '../db/schema.js';
 import { VkAuthRequest } from '../middlewares/vkAuth.js';
 import { scorePedagogicalRole, getRoleMeta, normalizeOnboardingConfig, interestTagsFromConfig } from '../services/roleService.js';
 import { getActiveConsentVersions } from './consentsController.js';
 import { generateQrToken } from '../services/qrService.js';
 import { awardPoints } from '../services/pointsService.js';
 import { scheduleParticipantAvatarSync } from '../services/participantAvatarSync.js';
+import { getForumSettings } from '../services/helpers.js';
+import { findParticipantByVkInActiveShift, resolveActiveShiftId } from '../services/shiftService.js';
 
 async function getForumOnboardingConfig() {
-  const [settings] = await db.select().from(forumSettings).limit(1);
+  const settings = await getForumSettings();
   return normalizeOnboardingConfig(settings?.roleDiagnosticsConfig);
 }
 
@@ -38,25 +40,37 @@ async function assignGroup(
   mode: string,
   groupId: number | null | undefined,
   directionId: number,
+  shiftId: number,
 ): Promise<{ groupId: number | null; groupName: string | null }> {
   if (mode === 'list') {
     if (!groupId) return { groupId: null, groupName: null };
-    const [g] = await db.select().from(participantGroups).where(eq(participantGroups.id, groupId)).limit(1);
+    const [g] = await db.select().from(participantGroups).where(and(
+      eq(participantGroups.id, groupId),
+      eq(participantGroups.shiftId, shiftId),
+    )).limit(1);
     if (!g) return { groupId: null, groupName: null };
-    const [c] = await db.select({ c: count() }).from(participants).where(eq(participants.groupId, g.id));
+    const [c] = await db.select({ c: count() }).from(participants).where(and(
+      eq(participants.groupId, g.id),
+      eq(participants.shiftId, shiftId),
+    ));
     if (g.capacity != null && Number(c?.c ?? 0) >= g.capacity) {
       throw new Error('Группа заполнена');
     }
     return { groupId: g.id, groupName: g.name };
   }
 
-  const groups = await db.select().from(participantGroups).orderBy(asc(participantGroups.id));
+  const groups = await db.select().from(participantGroups)
+    .where(eq(participantGroups.shiftId, shiftId))
+    .orderBy(asc(participantGroups.id));
   const candidates = groups.filter(g => !g.directionId || g.directionId === directionId);
   const pool = candidates.length ? candidates : groups;
   let best: typeof pool[0] | null = null;
   let bestCount = Infinity;
   for (const g of pool) {
-    const [c] = await db.select({ c: count() }).from(participants).where(eq(participants.groupId, g.id));
+    const [c] = await db.select({ c: count() }).from(participants).where(and(
+      eq(participants.groupId, g.id),
+      eq(participants.shiftId, shiftId),
+    ));
     const n = Number(c?.c ?? 0);
     if (g.capacity != null && n >= g.capacity) continue;
     if (n < bestCount) { best = g; bestCount = n; }
@@ -73,7 +87,7 @@ export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> =>
       return;
     }
 
-    const [user] = await db.select().from(participants).where(eq(participants.vkId, vkUserId)).limit(1);
+    const user = await findParticipantByVkInActiveShift(vkUserId);
 
     if (!user || !user.onboardingCompletedAt) {
       res.json({ status: 'needs_registration', vkUserId });
@@ -133,7 +147,8 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       return;
     }
 
-    const [settings] = await db.select().from(forumSettings).limit(1);
+    const settings = await getForumSettings();
+    const shiftId = await resolveActiveShiftId();
     const diagMatrix = onboardingConfig.optionToRole;
 
     let pedagogicalRole: string;
@@ -144,7 +159,7 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       return;
     }
 
-    const [existing] = await db.select().from(participants).where(eq(participants.vkId, vkUserId)).limit(1);
+    const existing = await findParticipantByVkInActiveShift(vkUserId);
     if (existing?.selfDeletedAt) {
       res.status(403).json({
         error: 'Вы удалили профиль из программы. Для повторного участия обратитесь к организаторам.',
@@ -167,12 +182,13 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
     const mode = settings?.groupAssignMode || 'list';
     let groupAssign: { groupId: number | null; groupName: string | null };
     try {
-      groupAssign = await assignGroup(mode, data.groupId, dir.id);
+      groupAssign = await assignGroup(mode, data.groupId, dir.id, shiftId);
     } catch (e) {
       res.status(400).json({ error: e instanceof Error ? e.message : 'Group assign failed' });
       return;
     }
-    if (mode === 'list' && !groupAssign.groupId && (await db.select().from(participantGroups)).length > 0) {
+    if (mode === 'list' && !groupAssign.groupId
+      && (await db.select().from(participantGroups).where(eq(participantGroups.shiftId, shiftId))).length > 0) {
       res.status(400).json({ error: 'Выберите группу' });
       return;
     }
@@ -189,6 +205,7 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
 
     const values = {
       vkId: vkUserId,
+      shiftId,
       firstName: data.firstName,
       lastName: data.lastName,
       age: data.age,
@@ -250,15 +267,17 @@ export const register = async (req: VkAuthRequest, res: Response): Promise<void>
       return;
     }
 
-    const [existing] = await db.select().from(participants).where(eq(participants.vkId, vkUserId)).limit(1);
+    const existing = await findParticipantByVkInActiveShift(vkUserId);
     if (existing?.onboardingCompletedAt) {
       res.json({ status: 'ok', user: existing });
       return;
     }
 
     const consentVersions = await getActiveConsentVersions();
+    const shiftId = await resolveActiveShiftId();
     const values = {
       vkId: vkUserId,
+      shiftId,
       firstName: firstName || null,
       lastName: lastName || null,
       directionId: dir.id,
@@ -297,10 +316,16 @@ export const register = async (req: VkAuthRequest, res: Response): Promise<void>
 export const listOnboardingMeta = async (_req: VkAuthRequest, res: Response): Promise<void> => {
   try {
     const roles = await db.select().from(pedagogicalRoles);
-    const [settings] = await db.select().from(forumSettings).limit(1);
-    const groups = await db.select().from(participantGroups).orderBy(asc(participantGroups.id));
+    const settings = await getForumSettings();
+    const shiftId = await resolveActiveShiftId();
+    const groups = await db.select().from(participantGroups)
+      .where(eq(participantGroups.shiftId, shiftId))
+      .orderBy(asc(participantGroups.id));
     const groupsWithFree = await Promise.all(groups.map(async (g) => {
-      const [c] = await db.select({ c: count() }).from(participants).where(eq(participants.groupId, g.id));
+      const [c] = await db.select({ c: count() }).from(participants).where(and(
+        eq(participants.groupId, g.id),
+        eq(participants.shiftId, shiftId),
+      ));
       const members = Number(c?.c ?? 0);
       return {
         ...g,
@@ -322,6 +347,7 @@ export const listOnboardingMeta = async (_req: VkAuthRequest, res: Response): Pr
       },
       groupAssignMode: settings?.groupAssignMode || 'list',
       groups: groupsWithFree.filter(g => g.seatsLeft == null || g.seatsLeft > 0),
+      activeShiftId: shiftId,
     });
   } catch (error) {
     console.error('listOnboardingMeta:', error);

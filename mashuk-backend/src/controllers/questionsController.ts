@@ -88,8 +88,11 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
     const now = new Date();
     const settings = await getForumSettings();
     const currentDay = resolveEffectiveCurrentDay(settings, now);
+    const { resolveActiveShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveActiveShiftId();
     const list = await db.select().from(questions)
       .where(and(
+        eq(questions.shiftId, shiftId),
         eq(questions.status, 'published'),
       ));
 

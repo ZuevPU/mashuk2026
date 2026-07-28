@@ -281,14 +281,28 @@ export async function gatherProfileBundle(participantId: number) {
   const [pdfDraft] = await db.select().from(participantPdfDrafts)
     .where(eq(participantPdfDrafts.participantId, p.id)).limit(1);
 
+  const humanize = (x: unknown) => {
+    if (x == null || x === '') return '';
+    if (typeof x === 'string') {
+      const t = x.trim();
+      if (t.startsWith('{') || t.startsWith('[')) {
+        try { return participantAnswerSummary(JSON.parse(t)) || t; } catch { return t; }
+      }
+      return t;
+    }
+    return participantAnswerSummary(x) || '—';
+  };
   const pointBList = Array.isArray(pointBAnswers)
-    ? pointBAnswers.map(x => (typeof x === 'string' ? x : JSON.stringify(x)))
-    : [];
-  const pointAList = goals;
-  const comparison = pointAList.map((a, i) => ({
+    ? pointBAnswers.map(humanize).filter(Boolean)
+    : pointBAnswers && typeof pointBAnswers === 'object'
+      ? [humanize(pointBAnswers)].filter(Boolean)
+      : [];
+  const pointAList = goals.map(humanize).filter(Boolean);
+  const pairCount = Math.max(pointAList.length, pointBList.length, 1);
+  const comparison = Array.from({ length: pairCount }, (_, i) => ({
     index: i + 1,
-    pointA: a,
-    pointB: pointBList[i] ?? null,
+    pointA: pointAList[i] || '—',
+    pointB: pointBList[i] || '—',
   }));
 
   const todayState = roleByDay.find(r => r.dayNumber === Math.min(currentDay, 7));
@@ -404,58 +418,128 @@ export async function streamProfilePdf(
 ): Promise<void> {
   const p = bundle.participant;
   const overrides = blockOverrides ?? (bundle.pdf.draftBlocks as Record<string, unknown>) ?? {};
-  const outcomesText = (overrides.outcomes as string)
-    ?? bundle.outcomes.bullets.join('\n• ');
-  const nextStepsText = (overrides.nextSteps as string)
-    ?? bundle.nextSteps.join('\n• ');
+  const outcomesLines = (typeof overrides.outcomes === 'string' && overrides.outcomes.trim())
+    ? overrides.outcomes.split(/\n+/).map(s => s.replace(/^[•\-\s]+/, '').trim()).filter(Boolean)
+    : bundle.outcomes.bullets;
+  const nextStepLines = (typeof overrides.nextSteps === 'string' && overrides.nextSteps.trim())
+    ? overrides.nextSteps.split(/\n+/).map(s => s.replace(/^[•\-\s]+/, '').trim()).filter(Boolean)
+    : bundle.nextSteps;
 
+  const {
+    resolvePdfFonts, paintPageBackground, drawHeroHeader, drawContinuedHeader,
+    ensureSpace, drawProgressBar, sectionTitle, mutedLine, bodyText, bullet, comparisonCard, COLORS,
+  } = await import('./profilePdfLayout.js');
+
+  const fonts = resolvePdfFonts();
   const PDFDocument = (await import('pdfkit')).default;
   if ('setHeader' in res && typeof res.setHeader === 'function') {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=profile_${p.id}.pdf`);
   }
-  const doc = new PDFDocument({ margin: 50 });
+
+  const doc = new PDFDocument({ margin: 40, size: 'A4', autoFirstPage: true });
+  doc.registerFont('Mashuk', fonts.regular);
+  doc.registerFont('Mashuk-Bold', fonts.bold);
   doc.pipe(res);
 
-  doc.fontSize(18).text('Машук — итоговый профиль', { underline: true });
-  doc.moveDown(0.5);
-  doc.fontSize(11).text(`${p.firstName} ${p.lastName} · ${p.direction || '—'} · ${bundle.shiftLabel}`);
-  doc.text(`Группа: ${p.groupName || '—'}`);
-  doc.text(`Прогресс A→B: ${bundle.abProgress}% (${bundle.trajectory.fromDate} — ${bundle.trajectory.toDate})`);
-  doc.moveDown();
+  paintPageBackground(doc);
+  drawHeroHeader(doc, 'Итоговый профиль участника');
+  doc.on('pageAdded', () => {
+    paintPageBackground(doc);
+    drawContinuedHeader(doc);
+  });
 
-  doc.fontSize(13).text('Точка А → Точка Б', { underline: true });
-  doc.fontSize(10);
+  const fullName = [p.firstName, p.lastName].filter(Boolean).join(' ') || `Участник #${p.id}`;
+  doc.font('Mashuk-Bold').fontSize(18).fillColor(COLORS.text);
+  doc.text(fullName, 40, doc.y, { width: doc.page.width - 80 });
+  mutedLine(doc, [
+    p.direction || 'Без направления',
+    bundle.shiftLabel,
+    p.groupName ? `Группа: ${p.groupName}` : null,
+  ].filter(Boolean).join('  ·  '));
+  doc.moveDown(0.6);
+
+  drawProgressBar(
+    doc,
+    bundle.abProgress,
+    'Прогресс «Точка А → Точка Б»',
+    `${bundle.trajectory.fromDate} — ${bundle.trajectory.toDate}`,
+  );
+
+  sectionTitle(doc, 'Точка А → Точка Б');
   for (const row of bundle.finalCard.comparison) {
-    doc.text(`Вопрос ${row.index}`);
-    doc.text(`Было: ${row.pointA || '—'}`);
-    doc.text(`Стало: ${row.pointB || '—'}`);
-    doc.moveDown(0.3);
+    comparisonCard(doc, row.index, String(row.pointA || '—'), String(row.pointB || '—'));
   }
 
-  doc.moveDown().fontSize(13).text('Кривая состояния (энергия по дням)', { underline: true });
-  doc.fontSize(10);
-  for (const pt of bundle.dailyTracker.stateCurve) {
-    doc.text(`Д${pt.dayNumber}: ${pt.energy ?? '—'}`);
+  sectionTitle(doc, 'Кривая состояния');
+  mutedLine(doc, 'Энергия по дням смены');
+  doc.moveDown(0.3);
+  const curve = bundle.dailyTracker.stateCurve;
+  const maxEnergy = Math.max(10, ...curve.map(pt => Number(pt.energy) || 0));
+  const barMaxW = doc.page.width - 120;
+  for (const pt of curve) {
+    ensureSpace(doc, 18);
+    const energy = pt.energy == null ? null : Number(pt.energy);
+    const y = doc.y;
+    doc.font('Mashuk').fontSize(9).fillColor(COLORS.muted);
+    doc.text(`День ${pt.dayNumber}`, 40, y, { width: 48 });
+    const trackX = 92;
+    doc.save();
+    doc.roundedRect(trackX, y + 2, barMaxW, 8, 3).fill(COLORS.border);
+    if (energy != null && !Number.isNaN(energy)) {
+      const fw = Math.max(4, (barMaxW * Math.min(maxEnergy, Math.max(0, energy))) / maxEnergy);
+      doc.roundedRect(trackX, y + 2, fw, 8, 3).fill(COLORS.accent);
+      doc.restore();
+      doc.font('Mashuk-Bold').fontSize(9).fillColor(COLORS.text);
+      doc.text(String(energy), trackX + barMaxW + 6, y, { width: 28 });
+    } else {
+      doc.restore();
+      doc.font('Mashuk').fontSize(9).fillColor(COLORS.muted);
+      doc.text('—', trackX + barMaxW + 6, y, { width: 28 });
+    }
+    doc.y = y + 16;
+  }
+  doc.moveDown(0.4);
+
+  sectionTitle(doc, 'Твой способ действия');
+  bodyText(doc, bundle.actionStyle.route || 'Маршрут ролей появится по ходу смены');
+  doc.moveDown(0.25);
+  if (bundle.actionStyle.strongRole) bullet(doc, `Сильная роль: ${bundle.actionStyle.strongRole.name}`);
+  if (bundle.actionStyle.growthRole) bullet(doc, `Роль роста: ${bundle.actionStyle.growthRole.name}`);
+  if (p.nextExperiment) bullet(doc, `Следующий эксперимент: ${p.nextExperiment}`);
+  doc.moveDown(0.3);
+
+  sectionTitle(doc, 'Что получилось');
+  if (outcomesLines.length === 0) bodyText(doc, '—');
+  else for (const line of outcomesLines) bullet(doc, line);
+  doc.moveDown(0.3);
+
+  sectionTitle(doc, 'Следующие шаги');
+  if (nextStepLines.length === 0) bodyText(doc, '—');
+  else for (const line of nextStepLines) bullet(doc, line);
+  doc.moveDown(0.3);
+
+  sectionTitle(doc, 'Копилка');
+  const piggy = bundle.allPiggy.slice(0, 25);
+  if (piggy.length === 0) {
+    bodyText(doc, 'Записей пока нет');
+  } else {
+    mutedLine(doc, `${bundle.allPiggy.length} записей · показаны первые ${piggy.length}`);
+    doc.moveDown(0.25);
+    for (const e of piggy) {
+      ensureSpace(doc, 28);
+      const tags = formatTagsForExport(e) || 'без тега';
+      const src = e.source || 'источник не указан';
+      doc.font('Mashuk-Bold').fontSize(8).fillColor(COLORS.accent);
+      doc.text(`${tags}  ·  ${src}`, 40, doc.y, { width: doc.page.width - 80 });
+      doc.font('Mashuk').fontSize(9).fillColor(COLORS.text);
+      doc.text((e.text || '—').slice(0, 160), 40, doc.y, { width: doc.page.width - 80 });
+      doc.moveDown(0.35);
+    }
   }
 
-  doc.moveDown().fontSize(13).text('Твой способ действия', { underline: true });
-  doc.fontSize(10).text(bundle.actionStyle.route);
-  if (bundle.actionStyle.strongRole) doc.text(`Сильная роль: ${bundle.actionStyle.strongRole.name}`);
-  if (bundle.actionStyle.growthRole) doc.text(`Роль роста: ${bundle.actionStyle.growthRole.name}`);
-  if (p.nextExperiment) doc.text(`Следующий эксперимент: ${p.nextExperiment}`);
-
-  doc.moveDown().fontSize(13).text('Что получилось', { underline: true });
-  doc.fontSize(10).text(outcomesText || '—');
-
-  doc.moveDown().fontSize(13).text('Следующие шаги', { underline: true });
-  doc.fontSize(10).text(nextStepsText || '—');
-
-  doc.moveDown().fontSize(13).text('Копилка', { underline: true });
-  doc.fontSize(9);
-  for (const e of bundle.allPiggy.slice(0, 25)) {
-    doc.text(`#${formatTagsForExport(e)} · ${e.source}: ${(e.text || '').slice(0, 100)}`);
-  }
+  doc.moveDown(0.8);
+  mutedLine(doc, 'Сформировано в мини-приложении форума «Машук»');
 
   doc.end();
 }

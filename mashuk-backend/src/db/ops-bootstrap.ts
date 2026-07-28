@@ -11,11 +11,28 @@ import { db } from './index.js';
 import {
   forumSettings, questions, consentTexts, participantGroups,
   pushTemplates, medals, scheduleDays, scheduleDayVersions, events,
-  dayFocus, pedagogicalRoles, dayExperiments, tasks,
+  dayFocus, pedagogicalRoles, dayExperiments, tasks, shifts,
 } from './schema.js';
 import { TOUCHPOINT_SLOTS, windowsForDay } from '../services/touchpointTemplates.js';
 import { ROLE_CATALOG } from '../services/roleService.js';
 import { FORUM_MEDALS_CATALOG } from '../services/forumMedalsCatalog.js';
+
+async function ensureShiftId(): Promise<number> {
+  const [active] = await db.select().from(shifts).where(eq(shifts.status, 'active')).limit(1);
+  if (active) return active.id;
+  const [any] = await db.select().from(shifts).limit(1);
+  if (any) return any.id;
+  const [created] = await db.insert(shifts).values({
+    code: 'sandbox',
+    name: 'Смена 0 · песочница',
+    status: 'active',
+    isSandbox: true,
+    totalDays: 8,
+    currentDay: 1,
+    shiftLabel: 'Песочница',
+  }).returning();
+  return created.id;
+}
 
 async function ensureForumSettings() {
   const [settings] = await db.select().from(forumSettings).limit(1);
@@ -47,8 +64,8 @@ async function ensureForumSettings() {
   return (patch.startDate as Date) || settings.startDate || startDate;
 }
 
-async function ensureTouchpoints7x7(startDate: Date) {
-  const existing = await db.select().from(questions);
+async function ensureTouchpoints7x7(startDate: Date, shiftId: number) {
+  const existing = await db.select().from(questions).where(eq(questions.shiftId, shiftId));
   const hasD1Morning = existing.some(
     q => q.dayNumber === 1 && q.title === 'Утренняя проверка состояния',
   );
@@ -66,6 +83,7 @@ async function ensureTouchpoints7x7(startDate: Date) {
       if (existing.some(q => q.dayNumber === day && q.title === slot.title)) continue;
       const { publishTime, closeTime } = windowsForDay(startDate, day, slot);
       await db.insert(questions).values({
+        shiftId,
         title: slot.title,
         text: slot.text,
         type: slot.type,
@@ -83,15 +101,20 @@ async function ensureTouchpoints7x7(startDate: Date) {
   console.log(`Touchpoint template 7×7 created: ${created} questions.`);
 }
 
-async function ensurePointB() {
+async function ensurePointB(shiftId: number) {
   const [pb] = await db.select().from(questions)
-    .where(and(eq(questions.block, 'Точка Б'), eq(questions.status, 'published')))
+    .where(and(
+      eq(questions.block, 'Точка Б'),
+      eq(questions.status, 'published'),
+      eq(questions.shiftId, shiftId),
+    ))
     .limit(1);
   if (pb) {
     console.log(`Точка Б ok: id=${pb.id}, day=${pb.dayNumber}`);
     return;
   }
   await db.insert(questions).values({
+    shiftId,
     title: 'Точка Б',
     text: 'Финальная рефлексия: ответь на те же 5 вопросов, что на входе, и выбери сильную роль и роль роста.',
     type: 'open',
@@ -104,7 +127,7 @@ async function ensurePointB() {
   console.log('Точка Б question created for day 8.');
 }
 
-async function ensureContent() {
+async function ensureContent(shiftId: number) {
   if ((await db.select().from(consentTexts).limit(1)).length === 0) {
     await db.insert(consentTexts).values([
       {
@@ -123,11 +146,11 @@ async function ensureContent() {
     console.log('Consent texts ok.');
   }
 
-  if ((await db.select().from(participantGroups).limit(1)).length === 0) {
+  if ((await db.select().from(participantGroups).where(eq(participantGroups.shiftId, shiftId)).limit(1)).length === 0) {
     await db.insert(participantGroups).values([
-      { name: 'Группа А', capacity: 30 },
-      { name: 'Группа Б', capacity: 30 },
-      { name: 'Группа В', capacity: 30 },
+      { shiftId, name: 'Группа А', capacity: 30 },
+      { shiftId, name: 'Группа Б', capacity: 30 },
+      { shiftId, name: 'Группа В', capacity: 30 },
     ]);
     console.log('Groups seeded.');
   } else {
@@ -167,11 +190,12 @@ async function ensureContent() {
     }
   }
 
-  if ((await db.select().from(dayExperiments).limit(1)).length === 0) {
+  if ((await db.select().from(dayExperiments).where(eq(dayExperiments.shiftId, shiftId)).limit(1)).length === 0) {
     const rows = [];
     for (let day = 2; day <= 7; day++) {
       for (const role of ROLE_CATALOG) {
         rows.push({
+          shiftId,
           dayNumber: day,
           roleKey: role.roleKey,
           title: `Эксперимент: ${role.name}`,
@@ -186,9 +210,13 @@ async function ensureContent() {
   }
 
   for (let d = 1; d <= 8; d++) {
-    const [exists] = await db.select().from(dayFocus).where(eq(dayFocus.dayNumber, d)).limit(1);
+    const [exists] = await db.select().from(dayFocus).where(and(
+      eq(dayFocus.dayNumber, d),
+      eq(dayFocus.shiftId, shiftId),
+    )).limit(1);
     if (!exists) {
       await db.insert(dayFocus).values({
+        shiftId,
         dayNumber: d,
         title: d === 8 ? 'Точка Б · Отъезд' : `Фокус дня ${d}`,
         text: d === 8 ? 'Финальная рефлексия смены.' : `Краткое описание фокуса для дня ${d}`,
@@ -199,8 +227,8 @@ async function ensureContent() {
 }
 
 /** Опубликовать дни 1–3 расписания (снимок событий) */
-async function ensureDemoEvents() {
-  const existing = await db.select().from(events);
+async function ensureDemoEvents(shiftId: number) {
+  const existing = await db.select().from(events).where(eq(events.shiftId, shiftId));
   const need: { dayNumber: number; title: string; place: string; hour: number }[] = [
     { dayNumber: 2, title: 'Утренний круг', place: 'Площадка у озера', hour: 9 },
     { dayNumber: 2, title: 'Работа по направлению', place: 'Шатёр', hour: 11 },
@@ -215,6 +243,7 @@ async function ensureDemoEvents() {
     const start = new Date(`2026-08-${11 + e.dayNumber}T${String(e.hour).padStart(2, '0')}:00:00+03:00`);
     const end = new Date(start.getTime() + 90 * 60_000);
     await db.insert(events).values({
+      shiftId,
       title: e.title,
       place: e.place,
       dayNumber: e.dayNumber,
@@ -231,8 +260,8 @@ async function ensureDemoEvents() {
   else console.log('Demo events ok.');
 }
 
-async function ensureDemoTasks() {
-  const existing = await db.select().from(tasks);
+async function ensureDemoTasks(shiftId: number) {
+  const existing = await db.select().from(tasks).where(eq(tasks.shiftId, shiftId));
   const need = [
     { title: 'Познакомься с участником другого направления', category: 'Полезные знакомства', points: 20, dayNumber: 1, confirmationType: 'auto', autoConfirm: true },
     { title: 'Напиши пост о форуме', category: 'Медиа', points: 30, dayNumber: 1, confirmationType: 'post_url', autoConfirm: false, answerType: 'text' },
@@ -244,6 +273,7 @@ async function ensureDemoTasks() {
     if (existing.some(x => x.title === t.title)) continue;
     await db.insert(tasks).values({
       ...t,
+      shiftId,
       publishTime: new Date(),
       description: t.title,
     });
@@ -254,10 +284,16 @@ async function ensureDemoTasks() {
 }
 
 /** Опубликовать дни 1–3 расписания (снимок событий) */
-async function publishScheduleDays(days: number[]) {
+async function publishScheduleDays(days: number[], shiftId: number) {
   for (const dayNumber of days) {
-    const [existing] = await db.select().from(scheduleDays).where(eq(scheduleDays.dayNumber, dayNumber)).limit(1);
-    const dayEvents = await db.select().from(events).where(eq(events.dayNumber, dayNumber));
+    const [existing] = await db.select().from(scheduleDays).where(and(
+      eq(scheduleDays.dayNumber, dayNumber),
+      eq(scheduleDays.shiftId, shiftId),
+    )).limit(1);
+    const dayEvents = await db.select().from(events).where(and(
+      eq(events.dayNumber, dayNumber),
+      eq(events.shiftId, shiftId),
+    ));
     if (existing?.isPublished) {
       console.log(`Schedule day ${dayNumber} already published (${dayEvents.length} events).`);
       continue;
@@ -267,9 +303,12 @@ async function publishScheduleDays(days: number[]) {
         .set({ isPublished: true, publishedAt: new Date() })
         .where(eq(scheduleDays.id, existing.id));
     } else {
-      await db.insert(scheduleDays).values({ dayNumber, isPublished: true, publishedAt: new Date() });
+      await db.insert(scheduleDays).values({ dayNumber, shiftId, isPublished: true, publishedAt: new Date() });
     }
-    await db.update(events).set({ dayPublished: true, isPublished: true }).where(eq(events.dayNumber, dayNumber));
+    await db.update(events).set({ dayPublished: true, isPublished: true }).where(and(
+      eq(events.dayNumber, dayNumber),
+      eq(events.shiftId, shiftId),
+    ));
     const versions = await db.select().from(scheduleDayVersions).where(eq(scheduleDayVersions.dayNumber, dayNumber));
     const nextVersion = versions.length + 1;
     await db.insert(scheduleDayVersions).values({
@@ -300,13 +339,14 @@ async function printSummary() {
 
 async function main() {
   console.log('Ops bootstrap starting...');
+  const shiftId = await ensureShiftId();
   const startDate = await ensureForumSettings();
-  await ensureTouchpoints7x7(startDate);
-  await ensurePointB();
-  await ensureContent();
-  await ensureDemoEvents();
-  await ensureDemoTasks();
-  await publishScheduleDays([1, 2, 3]);
+  await ensureTouchpoints7x7(startDate, shiftId);
+  await ensurePointB(shiftId);
+  await ensureContent(shiftId);
+  await ensureDemoEvents(shiftId);
+  await ensureDemoTasks(shiftId);
+  await publishScheduleDays([1, 2, 3], shiftId);
   await printSummary();
   console.log('Ops bootstrap complete.');
 }

@@ -15,6 +15,7 @@ import { uploadAdminFile } from '../controllers/uploadController.js';
 import * as analyticsCtrl from '../controllers/analyticsController.js';
 import * as exportsCtrl from '../controllers/exportController.js';
 import * as exportCustomCtrl from '../controllers/exportCustomController.js';
+import * as shiftsCtrl from '../controllers/adminShiftController.js';
 
 const router = Router();
 const P = requireAdminPermission;
@@ -82,6 +83,16 @@ router.get('/schedule/days', wrap(p0.crudScheduleDays.list));
 router.post('/schedule/days', requireAdminRole('settings'), wrap(p0.crudScheduleDays.create));
 router.patch('/schedule/days/:id', requireAdminRole('settings'), wrap(p0.crudScheduleDays.update));
 router.post('/schedule/draft', requireAdminRole('settings'), wrap(p0.draftScheduleDay));
+
+router.get('/shifts', P('forum', 'read'), wrap(shiftsCtrl.listAdminShifts));
+router.get('/shifts/:id', P('forum', 'read'), wrap(shiftsCtrl.getAdminShift));
+router.post('/shifts', requireAdminRole('settings'), wrap(shiftsCtrl.createAdminShift));
+router.patch('/shifts/:id', requireAdminRole('settings'), wrap(shiftsCtrl.updateAdminShift));
+router.post('/shifts/:id/activate', requireAdminRole('settings'), wrap(shiftsCtrl.activateAdminShift));
+router.post('/shifts/:id/archive', requireAdminRole('settings'), wrap(shiftsCtrl.archiveAdminShift));
+router.get('/shifts/:id/copy-preview', P('forum', 'read'), wrap(shiftsCtrl.previewCopyAdminShift));
+router.post('/shifts/:id/copy', requireAdminRole('settings'), wrap(shiftsCtrl.copyAdminShift));
+router.post('/shifts/:id/clear-sandbox', requireAdminRole('delete'), wrap(shiftsCtrl.clearSandboxAdminShift));
 
 router.get('/forum-settings', wrap(admin.getForumSettings));
 router.patch('/forum-settings', requireAdminRole('settings'), wrap(admin.updateForumSettings));

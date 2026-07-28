@@ -34,6 +34,37 @@ export const taskCategories = pgTable('task_categories', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+export const shifts = pgTable('shifts', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 64 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  status: varchar('status', { length: 32 }).default('draft').notNull(),
+  isSandbox: boolean('is_sandbox').default(false).notNull(),
+  startDate: timestamp('start_date'),
+  totalDays: integer('total_days').default(8),
+  currentDay: integer('current_day').default(1),
+  recommendationThreshold: integer('recommendation_threshold').default(1),
+  sectionsVisibility: jsonb('sections_visibility').default({}),
+  groupAssignMode: varchar('group_assign_mode', { length: 20 }).default('list'),
+  kbUnlockThreshold: integer('kb_unlock_threshold').default(4),
+  kbUnlockDisabled: boolean('kb_unlock_disabled').default(false),
+  kbPastDaysPolicy: varchar('kb_past_days_policy', { length: 20 }).default('locked'),
+  pushBlockTypes: jsonb('push_block_types').default({}),
+  pushNightSlotEnabled: boolean('push_night_slot_enabled').default(false),
+  teamConfirmHoursDefault: integer('team_confirm_hours_default').default(24),
+  eveningQuestionnaireConfig: jsonb('evening_questionnaire_config'),
+  eveningQuestionnaireByDay: jsonb('evening_questionnaire_by_day'),
+  answerConfirmation: jsonb('answer_confirmation'),
+  profileProgressWeights: jsonb('profile_progress_weights'),
+  shiftLabel: varchar('shift_label', { length: 100 }),
+  pdfTemplate: jsonb('pdf_template'),
+  recommendationTemplates: jsonb('recommendation_templates'),
+  roleDiagnosticsConfig: jsonb('role_diagnostics_config'),
+  leaderboardScopes: jsonb('leaderboard_scopes'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 export const forumSettings = pgTable('forum_settings', {
   id: serial('id').primaryKey(),
   currentDay: integer('current_day').default(1),
@@ -64,6 +95,7 @@ export const forumSettings = pgTable('forum_settings', {
     day: true,
     shift: true,
   }),
+  activeShiftId: integer('active_shift_id'),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
@@ -72,8 +104,11 @@ export const participantGroups = pgTable('participant_groups', {
   name: varchar('name', { length: 255 }).notNull(),
   directionId: integer('direction_id'),
   capacity: integer('capacity').default(30),
+  shiftId: integer('shift_id').notNull(),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('participant_groups_shift_id_idx').on(table.shiftId),
+]);
 
 export const consentTexts = pgTable('consent_texts', {
   id: serial('id').primaryKey(),
@@ -112,13 +147,16 @@ export const orgMessages = pgTable('org_messages', {
 
 export const scheduleDays = pgTable('schedule_days', {
   id: serial('id').primaryKey(),
-  dayNumber: integer('day_number').notNull().unique(),
+  dayNumber: integer('day_number').notNull(),
+  shiftId: integer('shift_id').notNull(),
   isPublished: boolean('is_published').default(false),
   publishedAt: timestamp('published_at'),
   calendarDate: timestamp('calendar_date'),
   displayLabel: varchar('display_label', { length: 255 }),
   shiftNumber: integer('shift_number'),
-});
+}, (table) => [
+  uniqueIndex('schedule_days_shift_day_unique').on(table.shiftId, table.dayNumber),
+]);
 
 export const programBlockTypes = pgTable('program_block_types', {
   id: serial('id').primaryKey(),
@@ -182,6 +220,7 @@ export const pushTemplates = pgTable('push_templates', {
 
 export const adminPushNotifications = pgTable('admin_push_notifications', {
   id: serial('id').primaryKey(),
+  shiftId: integer('shift_id'),
   internalName: varchar('internal_name', { length: 255 }),
   pushTitle: varchar('push_title', { length: 255 }),
   body: text('body').notNull(),
@@ -206,6 +245,7 @@ export const adminPushNotifications = pgTable('admin_push_notifications', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
+  index('admin_push_notifications_shift_id_idx').on(table.shiftId),
   index('admin_push_notifications_status_idx').on(table.status),
   index('admin_push_notifications_publish_at_idx').on(table.publishAt),
 ]);
@@ -254,11 +294,14 @@ export const pushQueue = pgTable('push_queue', {
 
 export const dayFocus = pgTable('day_focus', {
   id: serial('id').primaryKey(),
-  dayNumber: integer('day_number').notNull().unique(),
+  dayNumber: integer('day_number').notNull(),
+  shiftId: integer('shift_id').notNull(),
   title: varchar('title', { length: 255 }).notNull(),
   text: text('text'),
   keyQuestion: text('key_question'),
-});
+}, (table) => [
+  uniqueIndex('day_focus_shift_day_unique').on(table.shiftId, table.dayNumber),
+]);
 
 export const adminUsers = pgTable('admin_users', {
   id: serial('id').primaryKey(),
@@ -290,7 +333,8 @@ export const adminRolePermissions = pgTable('admin_role_permissions', {
 
 export const participants = pgTable('participants', {
   id: serial('id').primaryKey(),
-  vkId: integer('vk_id').unique().notNull(),
+  vkId: integer('vk_id').notNull(),
+  shiftId: integer('shift_id').notNull(),
   firstName: varchar('first_name', { length: 255 }),
   lastName: varchar('last_name', { length: 255 }),
   age: integer('age'),
@@ -334,6 +378,8 @@ export const participants = pgTable('participants', {
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('participants_direction_id_idx').on(table.directionId),
+  index('participants_shift_id_idx').on(table.shiftId),
+  uniqueIndex('participants_vk_id_shift_id_unique').on(table.vkId, table.shiftId),
 ]);
 
 export const pedagogicalRoles = pgTable('pedagogical_roles', {
@@ -350,6 +396,7 @@ export const pedagogicalRoles = pgTable('pedagogical_roles', {
 
 export const dayExperiments = pgTable('day_experiments', {
   id: serial('id').primaryKey(),
+  shiftId: integer('shift_id').notNull(),
   dayNumber: integer('day_number').notNull(),
   roleKey: varchar('role_key', { length: 100 }).notNull(),
   title: varchar('title', { length: 255 }).notNull(),
@@ -358,7 +405,7 @@ export const dayExperiments = pgTable('day_experiments', {
   status: varchar('status', { length: 32 }).default('published').notNull(),
 }, (table) => [
   index('day_experiments_day_role_idx').on(table.dayNumber, table.roleKey),
-  uniqueIndex('day_experiments_day_role_unique_idx').on(table.dayNumber, table.roleKey),
+  uniqueIndex('day_experiments_shift_day_role_unique').on(table.shiftId, table.dayNumber, table.roleKey),
 ]);
 
 export const participantDayState = pgTable('participant_day_state', {
@@ -379,6 +426,7 @@ export const participantDayState = pgTable('participant_day_state', {
 
 export const questions = pgTable('questions', {
   id: serial('id').primaryKey(),
+  shiftId: integer('shift_id').notNull(),
   title: varchar('title', { length: 255 }).notNull(),
   text: text('text').notNull(),
   type: varchar('type', { length: 50 }).notNull(),
@@ -408,6 +456,7 @@ export const questions = pgTable('questions', {
   parentQuestionId: integer('parent_question_id'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
+  index('questions_shift_id_idx').on(table.shiftId),
   index('questions_day_number_idx').on(table.dayNumber),
   index('questions_status_idx').on(table.status),
   index('questions_question_kind_idx').on(table.questionKind),
@@ -440,6 +489,7 @@ export const answers = pgTable('answers', {
 
 export const events = pgTable('events', {
   id: serial('id').primaryKey(),
+  shiftId: integer('shift_id').notNull(),
   title: varchar('title', { length: 255 }).notNull(),
   description: text('description'),
   descriptionHtml: text('description_html'),
@@ -463,6 +513,7 @@ export const events = pgTable('events', {
   speakerIds: jsonb('speaker_ids').default([]),
   sortOrder: integer('sort_order').default(0),
 }, (table) => [
+  index('events_shift_id_idx').on(table.shiftId),
   index('events_day_number_idx').on(table.dayNumber),
   index('events_is_published_idx').on(table.isPublished),
   index('events_parent_event_id_idx').on(table.parentEventId),
@@ -470,6 +521,7 @@ export const events = pgTable('events', {
 
 export const materials = pgTable('materials', {
   id: serial('id').primaryKey(),
+  shiftId: integer('shift_id').notNull(),
   eventId: integer('event_id').references(() => events.id),
   dayNumber: integer('day_number'),
   speakerName: varchar('speaker_name', { length: 255 }),
@@ -491,6 +543,7 @@ export const materials = pgTable('materials', {
   kbUnlockMode: varchar('kb_unlock_mode', { length: 32 }).default('touchpoints').notNull(),
   kbUnlockMinTouchpoints: integer('kb_unlock_min_touchpoints'),
 }, (table) => [
+  index('materials_shift_id_idx').on(table.shiftId),
   index('materials_event_id_idx').on(table.eventId),
   index('materials_day_number_idx').on(table.dayNumber),
 ]);
@@ -507,6 +560,7 @@ export const eventAttendance = pgTable('event_attendance', {
 
 export const tasks = pgTable('tasks', {
   id: serial('id').primaryKey(),
+  shiftId: integer('shift_id').notNull(),
   title: varchar('title', { length: 255 }).notNull(),
   description: text('description'),
   descriptionHtml: text('description_html'),
@@ -543,6 +597,7 @@ export const tasks = pgTable('tasks', {
   teamConfirmHours: integer('team_confirm_hours').default(24),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
+  index('tasks_shift_id_idx').on(table.shiftId),
   index('tasks_day_number_idx').on(table.dayNumber),
   index('tasks_status_idx').on(table.status),
   index('tasks_category_id_idx').on(table.categoryId),

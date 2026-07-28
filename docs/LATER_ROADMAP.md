@@ -2,6 +2,16 @@
 
 Краткий указатель; детали — [`admin-wave2-backlog.md`](admin-wave2-backlog.md), трекеры `scripts/spec-tracker-*.tsv`.
 
+## Multi-shift
+
+См. [`MULTI_SHIFT.md`](MULTI_SHIFT.md). Сделано: таблица `shifts`, resolve active, admin «Смены», copy/activate/sandbox clear, participant `(vkId, shiftId)`.
+
+Later (не в этом треке):
+
+- Авторотация смен по календарю без кнопки Activate.
+- Мульти-тенант нескольких форумов.
+- Каталог медалей / levels_config per-shift (сейчас глобальные).
+
 ## Admin wave 4
 
 - Очередь push, preview шаблонов.

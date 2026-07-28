@@ -267,6 +267,13 @@
       "when": 1817000000000,
       "tag": "0037_program_speakers_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1818000000000,
+      "tag": "0038_forum_shifts",
+      "breakpoints": true
     }
   ]
 }

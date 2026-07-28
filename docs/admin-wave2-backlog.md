@@ -87,6 +87,10 @@
 - `[admin-w4] Admin permissions matrix UI`
 - `[admin-w4] Unified publish status (drop includeInAnalytics)`
 
+## Multi-shift
+
+См. [`MULTI_SHIFT.md`](MULTI_SHIFT.md) и вкладку **Смены** в админке. Контент и участники scoped по `shiftId`; ротация — только кнопкой Activate (без автокалендаря).
+
 ## Зависимости
 
 - Волна 2 может идти параллельно backend/frontend по разделам.

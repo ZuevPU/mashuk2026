@@ -1,4 +1,5 @@
 const ADMIN_TOKEN_KEY = 'mashuk_admin_token';
+const ADMIN_SHIFT_ID_KEY = 'mashuk_admin_shift_id';
 
 export function getAdminToken(): string | null {
   return sessionStorage.getItem(ADMIN_TOKEN_KEY);
@@ -7,6 +8,42 @@ export function getAdminToken(): string | null {
 export function setAdminToken(token: string | null): void {
   if (token) sessionStorage.setItem(ADMIN_TOKEN_KEY, token);
   else sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+}
+
+export const ADMIN_SHIFT_CHANGED_EVENT = 'mashuk-admin-shift-changed';
+
+export function getAdminEditingShiftId(): number | null {
+  const raw = sessionStorage.getItem(ADMIN_SHIFT_ID_KEY);
+  if (!raw) return null;
+  const id = Number(raw);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+export function setAdminEditingShiftId(id: number | null): void {
+  const prev = getAdminEditingShiftId();
+  const next = id != null && Number.isFinite(id) && id > 0 ? id : null;
+  if (prev === next) return;
+  if (next != null) sessionStorage.setItem(ADMIN_SHIFT_ID_KEY, String(next));
+  else sessionStorage.removeItem(ADMIN_SHIFT_ID_KEY);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(ADMIN_SHIFT_CHANGED_EVENT, { detail: next }));
+  }
+}
+
+function adminAuthHeaders(extra?: HeadersInit): Record<string, string> {
+  const token = getAdminToken();
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token || ''}`,
+  };
+  const shiftId = getAdminEditingShiftId();
+  if (shiftId != null) headers['X-Admin-Shift-Id'] = String(shiftId);
+  if (extra) {
+    const h = new Headers(extra);
+    h.forEach((value, key) => {
+      headers[key] = value;
+    });
+  }
+  return headers;
 }
 
 function normalizeApiUrl(url: string): string {
@@ -93,11 +130,10 @@ export async function adminFetch(path: string, options: RequestInit = {}) {
   if (!token) throw new Error('Не авторизован');
   const res = await fetchWithRetry(`${base}${path}`, {
     ...options,
-    headers: {
+    headers: adminAuthHeaders({
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
       ...(options.headers || {}),
-    },
+    }),
   });
   if (res.status === 401) {
     setAdminToken(null);
@@ -130,7 +166,7 @@ export async function adminDownloadBinary(path: string, filename: string) {
   const token = getAdminToken();
   if (!token) throw new Error('Не авторизован');
   const res = await fetch(`${base}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: adminAuthHeaders(),
   });
   if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
   const blob = await res.blob();
@@ -145,7 +181,7 @@ export async function adminFetchHtml(path: string): Promise<string> {
   const token = getAdminToken();
   if (!token) throw new Error('Не авторизован');
   const res = await fetch(`${base}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: adminAuthHeaders(),
   });
   const text = await res.text();
   if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
