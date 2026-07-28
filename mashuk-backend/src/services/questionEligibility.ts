@@ -9,6 +9,7 @@ type ParticipantLike = {
 };
 
 type QuestionLike = {
+  block?: string | null;
   dayNumber?: number | null;
   dayNumbers?: number[] | null;
   isHidden?: boolean | null;
@@ -25,6 +26,12 @@ export function questionVisibleToParticipant(
   currentDay: number,
 ): boolean {
   if (q.isHidden) return false;
+  const block = (q as { block?: string | null }).block;
+  const dayNum = q.dayNumber ?? 8;
+  if (block === 'Точка Б' && currentDay >= dayNum) {
+    const aud = q.audienceType || 'all';
+    if (aud === 'all') return true;
+  }
   if (!questionMatchesDay(q, currentDay)) return false;
   const aud = q.audienceType || 'all';
   if (aud === 'all') return true;

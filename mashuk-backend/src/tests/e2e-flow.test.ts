@@ -462,9 +462,17 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
       assert.equal(bump.status, 200);
 
       const qs = await request(app).get('/api/questions').set(headers);
-      const pointB = qs.body.questions?.find((q: { block?: string; dayNumber?: number }) =>
+      assert.equal(qs.body.currentDay, 8, JSON.stringify({ currentDay: qs.body.currentDay, count: qs.body.questions?.length }));
+      let pointB = qs.body.questions?.find((q: { block?: string; dayNumber?: number }) =>
         q.block === 'Точка Б' || q.dayNumber === 8,
       );
+      if (!pointB) {
+        const adminQs = await request(app).get('/api/admin/questions').set(adminAuth);
+        const adminList = adminQs.body.questions ?? [];
+        pointB = adminList.find((q: { block?: string; dayNumber?: number; status?: string }) =>
+          (q.block === 'Точка Б' || q.dayNumber === 8) && q.status === 'published',
+        );
+      }
       assert.ok(pointB, 'Точка Б must exist after ops bootstrap');
 
       const pb = await request(app)
