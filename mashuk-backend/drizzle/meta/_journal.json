@@ -234,6 +234,13 @@
       "breakpoints": true
     },
     {
+      "idx": 33,
+      "version": "7",
+      "when": 1813000000000,
+      "tag": "0033_analytics_region_clubs",
+      "breakpoints": true
+    },
+    {
       "idx": 34,
       "version": "7",
       "when": 1814000000000,
