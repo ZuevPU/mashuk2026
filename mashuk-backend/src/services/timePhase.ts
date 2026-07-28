@@ -2,6 +2,9 @@
 
 const MSK_OFFSET_MS = 3 * 60 * 60 * 1000;
 
+/** До 02:00 МСК считаем «операционным» предыдущий календарный день (догон точек). */
+export const FORUM_DAY_ROLLOVER_HOUR_MSK = 2;
+
 /** Часы/минуты в Europe/Moscow без зависимости от TZ сервера */
 export function getMoscowParts(now = new Date()): { hours: number; minutes: number; totalMinutes: number; dateKey: string } {
   const msk = new Date(now.getTime() + MSK_OFFSET_MS);
@@ -16,6 +19,18 @@ export function getMoscowParts(now = new Date()): { hours: number; minutes: numb
     totalMinutes: hours * 60 + minutes,
     dateKey: `${y}-${mo}-${d}`,
   };
+}
+
+/** Календарный ключ для номера дня форума (сдвиг до 02:00 МСК). */
+export function getForumOperationalDateKey(now = new Date()): string {
+  const parts = getMoscowParts(now);
+  if (parts.hours >= FORUM_DAY_ROLLOVER_HOUR_MSK) return parts.dateKey;
+  const msk = new Date(now.getTime() + MSK_OFFSET_MS);
+  msk.setUTCDate(msk.getUTCDate() - 1);
+  const y = msk.getUTCFullYear();
+  const mo = String(msk.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(msk.getUTCDate()).padStart(2, '0');
+  return `${y}-${mo}-${d}`;
 }
 
 /** утро < 09:30 · день 09:30–20:00 · вечер ≥ 20:00 */
@@ -66,9 +81,9 @@ export function getCalendarForumDay(
 ): number | null {
   if (!startDate) return null;
   const startParts = getMoscowParts(startDate);
-  const nowParts = getMoscowParts(now);
+  const nowKey = getForumOperationalDateKey(now);
   const startUtc = Date.parse(`${startParts.dateKey}T00:00:00+03:00`);
-  const nowUtc = Date.parse(`${nowParts.dateKey}T00:00:00+03:00`);
+  const nowUtc = Date.parse(`${nowKey}T00:00:00+03:00`);
   if (Number.isNaN(startUtc) || Number.isNaN(nowUtc)) return null;
   const diff = Math.floor((nowUtc - startUtc) / 86_400_000) + 1;
   if (diff < 1) return 1;

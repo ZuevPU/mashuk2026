@@ -311,18 +311,23 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         missedToday,
         missedTodayCount,
         ctaQuestionId: ctaQuestionId ?? null,
-        message: dayMissedCount > 0
-          ? (missedToday.some(m => m.state === 'overdue')
-            ? `${missedToday.filter(m => m.state === 'overdue').length} пропущено — ещё можно заполнить`
-            : `${dayMissedCount} точек пропущено`)
-          : 'Начни с утренней проверки состояния',
+        message: (() => {
+          if (dayMissedCount === 0) {
+            const openCount = touchpointItems.filter(i => i.state === 'active').length;
+            if (openCount > 0) return `${openCount} открыто сегодня`;
+            return 'Все точки дня закрыты';
+          }
+          const overdueN = missedToday.filter(m => m.state === 'overdue').length;
+          if (overdueN > 0) return `${overdueN} пропущено — ещё можно заполнить`;
+          return `${dayMissedCount} точек пропущено`;
+        })(),
         items: touchpointItems,
       },
       schedule,
       eveningCard,
       ui: {
         showTasksBanner: false,
-        showQuickCapture: timeSlot === 'day' && currentDay !== 8,
+        showQuickCapture: false,
         showPiggybankFab: currentDay !== 8,
         showEveningCard: !!eveningCard,
       },

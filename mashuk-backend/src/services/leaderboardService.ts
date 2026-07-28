@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { participants, pointsLog, userMedals } from '../db/schema.js';
+import { participants, pointsLog, userMedals, tasks, taskSubmissions } from '../db/schema.js';
 import { pointsTrackForAction, totalRatingScore } from './pointsService.js';
 
 export type LeaderboardScope = 'total' | 'day' | 'shift';
@@ -119,6 +119,57 @@ export async function computeLeaderboardScores(
   }
   return map;
 }
+
+export async function computeNominationLeaderboard(
+  nominationKey: string,
+  participantIds: number[],
+): Promise<Map<number, number>> {
+  const map = new Map<number, number>();
+  if (!nominationKey || participantIds.length === 0) return map;
+  const allTasks = await db.select({ id: tasks.id, points: tasks.points })
+    .from(tasks)
+    .where(eq(tasks.nomination, nominationKey));
+  const taskIds = new Set(allTasks.map(t => t.id));
+  if (taskIds.size === 0) {
+    for (const id of participantIds) map.set(id, 0);
+    return map;
+  }
+  const subs = await db.select({
+    participantId: taskSubmissions.participantId,
+    pointsAwarded: taskSubmissions.pointsAwarded,
+    taskId: taskSubmissions.taskId,
+    status: taskSubmissions.status,
+  }).from(taskSubmissions)
+    .where(and(
+      inArray(taskSubmissions.participantId, participantIds),
+      eq(taskSubmissions.status, 'approved'),
+    ));
+  for (const s of subs) {
+    if (!s.taskId || !taskIds.has(s.taskId)) continue;
+    const task = allTasks.find(t => t.id === s.taskId);
+    const add = s.pointsAwarded ?? task?.points ?? 0;
+    map.set(s.participantId, (map.get(s.participantId) ?? 0) + add);
+  }
+  for (const id of participantIds) {
+    if (!map.has(id)) map.set(id, 0);
+  }
+  return map;
+}
+
+export const NOMINATION_LEADERBOARD_KEYS = [
+  'sport', 'creative', 'media', 'education', 'culture', 'volunteer', 'team', 'general',
+] as const;
+
+export const NOMINATION_LABELS: Record<string, string> = {
+  sport: 'Спорт',
+  creative: 'Креатив',
+  media: 'Медиа',
+  education: 'Образование',
+  culture: 'Культура',
+  volunteer: 'Волонтёрство',
+  team: 'Командность',
+  general: 'Общий зачёт',
+};
 
 export async function participantIdsWithMedal(medalId: number): Promise<Set<number>> {
   const rows = await db.select({ participantId: userMedals.participantId })

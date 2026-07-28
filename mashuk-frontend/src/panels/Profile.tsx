@@ -20,6 +20,18 @@ const PUSH_TYPES = [
   { key: 'org', label: 'Организационные сообщения' },
 ] as const;
 
+const NOMINATION_OPTIONS: { key: string; label: string }[] = [
+  { key: '', label: 'Без номинации' },
+  { key: 'sport', label: 'Спорт' },
+  { key: 'creative', label: 'Креатив' },
+  { key: 'media', label: 'Медиа' },
+  { key: 'education', label: 'Образование' },
+  { key: 'culture', label: 'Культура' },
+  { key: 'volunteer', label: 'Волонтёрство' },
+  { key: 'team', label: 'Командность' },
+  { key: 'general', label: 'Общий зачёт' },
+];
+
 export const ProfilePanel: React.FC<{
   id: string;
   fetchedUser?: UserInfo | null;
@@ -30,7 +42,7 @@ export const ProfilePanel: React.FC<{
   const [piggybank, setPiggybank] = useState<any[]>([]);
   const [previewPiggy, setPreviewPiggy] = useState<any[]>([]);
   const [medals, setMedals] = useState<any[]>([]);
-  const [section, setSection] = useState<'overview' | 'piggybank' | 'final' | 'settings' | 'rating' | 'medals'>('overview');
+  const [section, setSection] = useState<'overview' | 'results' | 'piggybank' | 'final' | 'settings' | 'rating' | 'medals'>('overview');
   const [tagFilter, setTagFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
   const [dayFilter, setDayFilter] = useState('');
@@ -46,6 +58,7 @@ export const ProfilePanel: React.FC<{
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [medalsCatalog, setMedalsCatalog] = useState<any[]>([]);
   const [lbTrack, setLbTrack] = useState<'total' | 'path' | 'experience'>('total');
+  const [lbNomination, setLbNomination] = useState('');
   const [lbScope, setLbScope] = useState<'total' | 'day' | 'shift'>('total');
   const [lbDay, setLbDay] = useState('1');
   const [lbDirection, setLbDirection] = useState('');
@@ -87,7 +100,7 @@ export const ProfilePanel: React.FC<{
     if (qIndex === -1) return;
     const params = new URLSearchParams(hash.slice(qIndex + 1));
     const section = params.get('section');
-    if (section === 'piggybank' || section === 'final' || section === 'settings' || section === 'rating' || section === 'medals') {
+    if (section === 'piggybank' || section === 'final' || section === 'settings' || section === 'rating' || section === 'medals' || section === 'results') {
       setSection(section);
     }
   }, []);
@@ -113,9 +126,15 @@ export const ProfilePanel: React.FC<{
   useEffect(() => {
     if (section !== 'rating') return;
     setLbLoading(true);
-    const params = new URLSearchParams({ track: lbTrack, scope: lbScope });
-    if (lbDirection) params.set('direction', lbDirection);
-    if (lbScope === 'day') params.set('day', lbDay);
+    const params = new URLSearchParams();
+    if (lbNomination) {
+      params.set('nomination', lbNomination);
+    } else {
+      params.set('track', lbTrack);
+      params.set('scope', lbScope);
+      if (lbDirection) params.set('direction', lbDirection);
+      if (lbScope === 'day') params.set('day', lbDay);
+    }
     apiGet<any>(`/leaderboard?${params}`)
       .then((res) => {
         setLeaders(res.leaders || []);
@@ -124,7 +143,7 @@ export const ProfilePanel: React.FC<{
       })
       .catch((err) => setSnackbar(err instanceof ApiError ? err.message : 'Не удалось загрузить рейтинг'))
       .finally(() => setLbLoading(false));
-  }, [section, lbTrack, lbDirection, lbScope, lbDay]);
+  }, [section, lbTrack, lbDirection, lbScope, lbDay, lbNomination]);
 
   useEffect(() => {
     if (section !== 'medals') return;
@@ -260,6 +279,7 @@ export const ProfilePanel: React.FC<{
 
   const sectionOptions = [
     { label: 'Обзор', value: 'overview' },
+    { label: 'Мои результаты', value: 'results' },
     { label: 'Рейтинг', value: 'rating' },
     { label: 'Медали', value: 'medals' },
     { label: `Копилка (${p.piggybankCount ?? 0})`, value: 'piggybank' },
@@ -592,6 +612,47 @@ export const ProfilePanel: React.FC<{
               </div>
             )}
           </>
+        ) : section === 'results' ? (
+          <>
+            <div className="m-card">
+              <div className="pb-lbl">Мои результаты</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+                <div className="m-st"><div className="m-sv">{p.points?.path ?? 0}</div><div className="m-sl">Путь</div></div>
+                <div className="m-st"><div className="m-sv">{p.points?.experience ?? 0}</div><div className="m-sl">Опыт</div></div>
+                <div className="m-st"><div className="m-sv">{p.points?.bonus ?? 0}</div><div className="m-sl">Бонус</div></div>
+                <div className="m-st"><div className="m-sv">✦ {p.points?.total ?? 0}</div><div className="m-sl">Общий рейтинг</div></div>
+              </div>
+              {p.points?.pathLevel && (
+                <div style={{ fontSize: 12, marginTop: 12, color: '#666' }}>
+                  Уровень Пути: {p.points.pathLevel.level} · Опыт: {p.points.experienceLevel?.level ?? 1}
+                </div>
+              )}
+              <div style={{ fontSize: 12, marginTop: 8 }}>
+                Заданий выполнено: {p.stats?.tasksDone ?? 0} · Ответов: {p.stats?.answers ?? 0} · Идей в копилке: {p.stats?.ideas ?? 0}
+              </div>
+            </div>
+            <div className="m-card">
+              <div className="pb-lbl">Медали ({medals.length})</div>
+              {medals.length === 0 ? (
+                <div style={{ fontSize: 12, color: '#888' }}>Пока нет медалей — выполняй задания и отвечай на точки.</div>
+              ) : (
+                medals.slice(0, 12).map((med: any) => (
+                  <div key={med.id ?? med.medalId} style={{ fontSize: 13, padding: '6px 0', borderBottom: '1px solid #f0f0f0' }}>
+                    🏅 {med.name ?? med.medalName ?? 'Медаль'}
+                  </div>
+                ))
+              )}
+              <div className="pb-link" style={{ marginTop: 8 }} onClick={() => setSection('medals')}>Все медали →</div>
+            </div>
+            <Button size="l" stretched mode="secondary" onClick={() => setSection('rating')}>
+              Смотреть таблицы лидеров
+            </Button>
+            {finalCard?.available && (
+              <Button size="l" stretched style={{ marginTop: 8 }} loading={pdfLoading} onClick={downloadPdf}>
+                Скачать итог (PDF)
+              </Button>
+            )}
+          </>
         ) : section === 'rating' ? (
           <>
             <div className="m-card">
@@ -601,6 +662,14 @@ export const ProfilePanel: React.FC<{
                   Ваше место: #{myRank}
                 </div>
               )}
+              <Select
+                style={{ marginTop: 10 }}
+                value={lbNomination}
+                onChange={(e) => setLbNomination(e.target.value)}
+                options={NOMINATION_OPTIONS.map(o => ({ label: o.label, value: o.key }))}
+              />
+              {!lbNomination && (
+              <>
               <div className="time-sw" style={{ marginTop: 10 }}>
                 {([
                   { key: 'total', label: 'Общий' },
@@ -650,6 +719,8 @@ export const ProfilePanel: React.FC<{
                   ...lbDirections.map((d) => ({ label: d, value: d })),
                 ]}
               />
+              </>
+              )}
             </div>
             {lbLoading ? (
               <Spinner />
@@ -815,7 +886,8 @@ export const ProfilePanel: React.FC<{
                   })
                   .map((e: { id: number; tag: string; source: string; text: string }) => (
                     <div key={e.id} style={{ fontSize: 12, marginTop: 8, borderTop: '1px solid #eee', paddingTop: 6 }}>
-                      <span style={{ color: '#B8621A', fontWeight: 700 }}>#{e.tag}</span> · {e.source}
+                      <span style={{ color: '#B8621A', fontWeight: 700 }}>#{e.tag}</span>
+                      {e.source ? ` · ${e.source}` : ' · без источника'}
                       <div>{e.text}</div>
                     </div>
                   ))}
@@ -875,6 +947,19 @@ export const ProfilePanel: React.FC<{
                   }}
                 >
                   Скопировать ссылку для волонтёра
+                </Button>
+                <Button
+                  size="s"
+                  mode="secondary"
+                  style={{ marginTop: 8 }}
+                  onClick={() => {
+                    void apiPost('/profile/regenerate-qr', {}).then(() => {
+                      setSnackbar('QR обновлён');
+                      loadProfile();
+                    }).catch((err) => setSnackbar(err instanceof ApiError ? err.message : 'Не удалось обновить QR'));
+                  }}
+                >
+                  Обновить QR (при утечке)
                 </Button>
               </div>
             )}
@@ -948,7 +1033,8 @@ export const ProfilePanel: React.FC<{
               return (
               <div key={entry.id} className="m-card" style={{ marginBottom: 8 }}>
                 <div style={{ fontSize: 10, color: '#888', fontWeight: 600 }}>
-                  {tags.map((t: string) => `#${t}`).join(' ')} · {entry.source}
+                  {tags.map((t: string) => `#${t}`).join(' ')}
+                  {entry.source ? ` · ${entry.source}` : ' · без источника'}
                   {entry.forumDay ? ` · Д${entry.forumDay}` : ''}
                 </div>
                 <div style={{ fontSize: 12, marginTop: 4 }}>{entry.text}</div>

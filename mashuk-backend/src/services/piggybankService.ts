@@ -45,8 +45,13 @@ export async function createPiggybankEntry(input: {
   if (tags.length === 0) throw new Error('tags required');
 
   let source = normalizePiggybankSource(input.source != null ? String(input.source) : null);
+  const contactOnly = tags.length === 1 && tags[0] === 'контакт';
   if (tags.includes(ORG_TAG)) {
     source = source || 'Своя мысль';
+  } else if (contactOnly) {
+    if (source != null && !isAllowedPiggybankSource(source)) {
+      throw new Error('source required');
+    }
   } else if (!source || !isAllowedPiggybankSource(source)) {
     throw new Error('source required');
   }

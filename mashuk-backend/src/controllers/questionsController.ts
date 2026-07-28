@@ -284,12 +284,19 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
         forumDay,
       );
 
+    let reflectionBonus = 0;
+    const { llmReflectionBonusEnabled } = await import('../services/analytics/refreshScheduler.js');
+    if (llmReflectionBonusEnabled() && depthLabel === 'Личный инсайт') {
+      const bonus = await awardPoints(req.participant!.id, 'question_answer', 3, forumDay);
+      reflectionBonus = bonus?.awarded ?? 0;
+    }
+
     const { newMedals, confirm } = await answerSubmitExtras(req.participant!.id, settings);
 
     res.json({
       answer,
       reflectionDepth: depthLabel,
-      xpAwarded: pointsResult?.awarded ?? 0,
+      xpAwarded: (pointsResult?.awarded ?? 0) + reflectionBonus,
       track: pointsResult?.track ?? 'path',
       newMedals,
       confirm,

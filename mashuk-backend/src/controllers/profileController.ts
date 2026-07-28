@@ -7,7 +7,7 @@ import {
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { getRoleMeta } from '../services/roleService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
-import { gatherProfileBundle, streamProfilePdf } from '../services/profilePdfBuilder.js';
+import { generateQrToken } from '../services/qrService.js';
 import { getLevel } from '../services/pointsService.js';
 import { buildOutcomesHeuristic } from '../services/profileOutcomes.js';
 import {
@@ -17,6 +17,7 @@ import {
   formatTagsForExport,
 } from '../services/piggybankDict.js';
 import { createPiggybankEntry, filterPiggybankEntries } from '../services/piggybankService.js';
+import { gatherProfileBundle, streamProfilePdf } from '../services/profilePdfBuilder.js';
 
 export const getProfile = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
@@ -231,6 +232,7 @@ export const updateProfileSettings = async (req: ParticipantRequest, res: Respon
 export const getPublicLeaderboard = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const track = (req.query.track as string) || 'total';
+    const nomination = (req.query.nomination as string) || '';
     const directionFilter = (req.query.direction as string) || '';
     const scopeRaw = (req.query.scope as string) || 'total';
     const scope = (scopeRaw === 'day' || scopeRaw === 'shift') ? scopeRaw : 'total';
@@ -244,7 +246,13 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
     } = await import('../services/leaderboardService.js');
     const settings = await getForumSettings();
     const scopes = normalizeLeaderboardScopes(settings?.leaderboardScopes);
-    if (!isLeaderboardScopeEnabled(scopes, scope, track)) {
+    if (nomination) {
+      const { computeNominationLeaderboard, NOMINATION_LEADERBOARD_KEYS } = await import('../services/leaderboardService.js');
+      if (!NOMINATION_LEADERBOARD_KEYS.includes(nomination as typeof NOMINATION_LEADERBOARD_KEYS[number])) {
+        res.status(400).json({ error: 'Invalid nomination' });
+        return;
+      }
+    } else if (!isLeaderboardScopeEnabled(scopes, scope, track)) {
       res.status(400).json({ error: 'Leaderboard scope disabled' });
       return;
     }
@@ -275,15 +283,17 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       .filter(p => !directionFilter || p.direction === directionFilter)
       .filter(p => !medalSet || medalSet.has(p.id));
 
-    const { computeLeaderboardScores } = await import('../services/leaderboardService.js');
-    const scoreMap = await computeLeaderboardScores(
-      eligible.map(p => p.id),
-      {
-        scope,
-        day: scope === 'day' ? dayNum : undefined,
-        track,
-      },
-    );
+    const { computeLeaderboardScores, computeNominationLeaderboard } = await import('../services/leaderboardService.js');
+    const scoreMap = nomination
+      ? await computeNominationLeaderboard(nomination, eligible.map(p => p.id))
+      : await computeLeaderboardScores(
+        eligible.map(p => p.id),
+        {
+          scope,
+          day: scope === 'day' ? dayNum : undefined,
+          track,
+        },
+      );
 
     const rows = eligible
       .map(p => ({
@@ -298,8 +308,9 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
 
     const myRank = rows.find(r => r.isMe)?.rank ?? null;
     res.json({
-      track,
-      scope,
+      track: nomination ? 'nomination' : track,
+      scope: nomination ? 'nomination' : scope,
+      nomination: nomination || null,
       day: scope === 'day' ? (dayNum ?? null) : null,
       direction: directionFilter || null,
       medalId: medalId && !Number.isNaN(medalId) ? medalId : null,
@@ -421,12 +432,47 @@ export const listMedalsCatalog = async (req: ParticipantRequest, res: Response):
   }
 };
 
+export const regenerateMyQr = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const token = generateQrToken();
+    const [updated] = await db.update(participants)
+      .set({ qrToken: token })
+      .where(eq(participants.id, req.participant!.id))
+      .returning({ qrToken: participants.qrToken, id: participants.id });
+    res.json({ qrToken: updated.qrToken, participantId: updated.id });
+  } catch (error) {
+    console.error('regenerateMyQr:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const synthesizeMyOutcomes = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const bundle = await gatherProfileBundle(req.participant!.id);
     if (!bundle) {
       res.status(404).json({ error: 'Not found' });
       return;
+    }
+    const { llmProfileV2Enabled } = await import('../services/analytics/refreshScheduler.js');
+    if (llmProfileV2Enabled()) {
+      const { gigachatComplete, isGigachatConfigured } = await import('../services/gigachatService.js');
+      if (isGigachatConfigured()) {
+        const sample = bundle.userAnswers.map(a => a.answerText).filter(Boolean).slice(0, 8).join('\n---\n');
+        const llm = await gigachatComplete(
+          `Сформируй 3–5 коротких итогов смены для участника форума по его ответам:\n${sample.slice(0, 2000)}`,
+          'Ты наставник. Буллеты по-русски, без markdown.',
+        );
+        if (llm) {
+          const bullets = llm.split(/\n+/).map(s => s.replace(/^[-*•\d.)]+\s*/, '').trim()).filter(Boolean).slice(0, 5);
+          if (bullets.length) {
+            await db.update(participants)
+              .set({ outcomesEdited: { bullets, generatedAt: new Date().toISOString(), source: 'llm' } })
+              .where(eq(participants.id, req.participant!.id));
+            res.json({ bullets, source: 'llm', configured: true });
+            return;
+          }
+        }
+      }
     }
     const bullets = buildOutcomesHeuristic({
       answersCount: bundle.userAnswers.length,

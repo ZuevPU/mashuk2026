@@ -7,7 +7,10 @@ interface QuickCaptureModalProps {
   initialText?: string;
   onClose: () => void;
   onSave: (text: string, source: string, tags: string[]) => Promise<void>;
-  requireSource?: boolean;
+}
+
+function tagsNeedSource(selectedTags: string[]): boolean {
+  return !(selectedTags.length === 1 && selectedTags[0] === 'контакт');
 }
 
 export const QuickCaptureModal: React.FC<QuickCaptureModalProps> = ({
@@ -15,13 +18,14 @@ export const QuickCaptureModal: React.FC<QuickCaptureModalProps> = ({
   initialText = '',
   onClose,
   onSave,
-  requireSource = true,
 }) => {
   const [selectedTags, setSelectedTags] = useState<string[]>(initialTags);
   const [text, setText] = useState(initialText);
   const [source, setSource] = useState('');
   const [step, setStep] = useState<'tags' | 'text' | 'source'>(initialTags.length > 0 ? 'text' : 'tags');
   const [saving, setSaving] = useState(false);
+
+  const requireSource = tagsNeedSource(selectedTags);
 
   const labels: Record<string, string> = {
     идея: '💡 Идея', мысль: '💭 Мысль', вопрос: '❓ Вопрос',
@@ -43,12 +47,13 @@ export const QuickCaptureModal: React.FC<QuickCaptureModalProps> = ({
 
   const handleNext = () => {
     if (!text.trim() || selectedTags.length === 0) return;
-    if (requireSource) setStep('source');
-    else void handleSave('Своя мысль');
+    if (tagsNeedSource(selectedTags)) setStep('source');
+    else void handleSave('');
   };
 
   const handleSave = async (src: string) => {
-    if (!text.trim() || selectedTags.length === 0 || (requireSource && !src)) return;
+    const needSrc = tagsNeedSource(selectedTags);
+    if (!text.trim() || selectedTags.length === 0 || (needSrc && !src)) return;
     setSaving(true);
     try {
       await onSave(text.trim(), src, selectedTags);
@@ -59,6 +64,7 @@ export const QuickCaptureModal: React.FC<QuickCaptureModalProps> = ({
   };
 
   const titleTags = selectedTags.map(t => labels[t] || t).join(' · ') || 'Копилка';
+  const showChangeTags = step === 'text' && selectedTags.length > 0;
 
   return (
     <ModalCard id="quick-capture" onClose={onClose}>
@@ -91,10 +97,10 @@ export const QuickCaptureModal: React.FC<QuickCaptureModalProps> = ({
             style={{ minHeight: 80 }}
           />
           <div style={{ paddingBottom: 'env(safe-area-inset-bottom, 24px)', marginBottom: 24 }}>
-            <Button size="l" stretched disabled={!text.trim()} onClick={handleNext} style={{ marginTop: 12 }}>
+            <Button size="l" stretched disabled={!text.trim() || saving} onClick={handleNext} style={{ marginTop: 12 }}>
               {requireSource ? 'Далее · источник' : 'Сохранить в копилку'}
             </Button>
-            {selectedTags.length > 1 && (
+            {showChangeTags && (
               <Button size="m" stretched mode="secondary" style={{ marginTop: 8 }} onClick={() => setStep('tags')}>
                 Изменить теги
               </Button>

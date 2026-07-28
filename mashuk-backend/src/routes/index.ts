@@ -18,6 +18,7 @@ import {
 import {
   getProfile, listPiggybank, createPiggybank, updateProfileSettings, deleteMyProfile, getPublicLeaderboard,
   exportPiggybankText, listMyMedals, listMedalsCatalog, synthesizeMyOutcomes, downloadMyProfilePdf,
+  regenerateMyQr,
 } from '../controllers/profileController.js';
 import { uploadPhoto } from '../controllers/uploadController.js';
 import { dismissPushBanner, openPushBanner, pushWebhookTrigger } from '../controllers/pushBannerController.js';
@@ -77,6 +78,7 @@ router.post('/org/threads/:id/reply', vkAuthMiddleware, requireParticipant, repl
 router.get('/profile', vkAuthMiddleware, requireParticipant, getProfile);
 router.get('/profile/pdf', vkAuthMiddleware, requireParticipant, downloadMyProfilePdf);
 router.patch('/profile/settings', vkAuthMiddleware, requireParticipant, updateProfileSettings);
+router.post('/profile/regenerate-qr', vkAuthMiddleware, requireParticipant, regenerateMyQr);
 router.post('/profile/delete', vkAuthMiddleware, requireParticipant, deleteMyProfile);
 router.post('/profile/outcomes/synthesize', vkAuthMiddleware, requireParticipant, synthesizeMyOutcomes);
 router.get('/profile/medals', vkAuthMiddleware, requireParticipant, listMyMedals);

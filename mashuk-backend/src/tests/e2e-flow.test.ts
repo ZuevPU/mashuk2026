@@ -166,6 +166,19 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
       .send({ tag: 'идея', text: 'no source' });
     assert.equal(piggyBad.status, 400);
 
+    const piggyContact = await request(app)
+      .post('/api/piggybank/quick')
+      .set(headers)
+      .send({ tags: ['контакт'], text: 'E2E contact only' });
+    assert.equal(piggyContact.status, 200, JSON.stringify(piggyContact.body));
+    assert.equal(piggyContact.body.entry?.source, null);
+
+    const piggyContactMix = await request(app)
+      .post('/api/piggybank/quick')
+      .set(headers)
+      .send({ tags: ['контакт', 'идея'], text: 'E2E contact mix no source' });
+    assert.equal(piggyContactMix.status, 400);
+
     const ex = await request(app)
       .post('/api/exchange')
       .set(headers)

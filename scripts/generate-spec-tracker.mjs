@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { syncAdminImplementationStatus } from './sync-admin-implementation-status.mjs';
 import { syncDashboardImplementationStatus } from './sync-dashboard-implementation-status.mjs';
+import { syncUserImplementationStatusFromRows } from './sync-user-implementation-status.mjs';
 
 function R(
   sectionId,
@@ -161,7 +162,7 @@ function deriveAudit(row) {
   }
 
   const productStatuses = new Set(['Надо обсудить', 'Проверить позже']);
-  if (productStatuses.has(statusUser) && sectionId <= 2) {
+  if (productStatuses.has(statusUser) && sectionId === 1) {
     return { statusAudit: statusUser, llmDeferred, auditNote };
   }
 
@@ -198,6 +199,12 @@ function auditOverride(row) {
     if (t.includes('веса ответов')) {
       return { statusAudit: 'Частично', auditNote: 'админка ролей' };
     }
+    if (t.includes('Согласие на обработку ПД') || t.includes('обезличенную аналитику')) {
+      return {
+        statusAudit: 'Частично',
+        auditNote: 'GET /consents + onboarding; финальные тексты — с форума (ops-bootstrap placeholder)',
+      };
+    }
     if (statusUser === 'Да') return { statusAudit: 'Да', auditNote: '' };
   }
 
@@ -207,8 +214,8 @@ function auditOverride(row) {
     }
     if (t.includes('Нужно сейчас')) return { statusAudit: 'Да', auditNote: '' };
     if (t.includes('СЕЙЧАС')) return { statusAudit: 'Да', auditNote: '' };
-    if (t.includes('СКОРО')) return { statusAudit: 'Частично', auditNote: 'fb41edc/e72d92a' };
-    if (t.includes('Завершение дня')) return { statusAudit: 'Частично', auditNote: '' };
+    if (t.includes('СКОРО')) return { statusAudit: 'Да', auditNote: 'homeActiveCard soon card' };
+    if (t.includes('Завершение дня')) return { statusAudit: 'Да', auditNote: 'DAY_COMPLETE card' };
     if (
       t.includes('Точки осмысления · N из 7') ||
       t.includes('Семь кружков') ||
@@ -240,8 +247,14 @@ function auditOverride(row) {
     if (t.includes('Раздел «Копилка» доступен')) {
       return { statusAudit: 'Да', auditNote: 'Tabbar +, Profile, quick capture' };
     }
-    if (t.includes('карточка «Роль дня»') || t.includes('Каталог экспериментов')) {
-      return { statusAudit: 'Частично', auditNote: '' };
+    if (t.includes('карточка «Роль дня»')) {
+      return { statusAudit: 'Да', auditNote: 'homeActiveCard + pedagogicalRole/dayState' };
+    }
+    if (t.includes('выбор роли на завтра') || t.includes('Логика роли:')) {
+      return { statusAudit: 'Да', auditNote: 'evening questionnaire + participantDayState' };
+    }
+    if (t.includes('Каталог экспериментов')) {
+      return { statusAudit: 'Да', auditNote: 'day_experiments admin + random pick' };
     }
     if (t.includes('role_experiments')) return { statusAudit: 'Частично', auditNote: '' };
     if (t.includes('пропущенные точки')) return { statusAudit: 'Да', auditNote: 'missedToday + MissedTouchpointsCard' };
@@ -661,6 +674,10 @@ function auditOverride(row) {
   }
 
   if (sectionId === 9) {
+    const catalogMedal = ['Первый шаг', 'Коммуникатор', 'Копилка идей', 'Путь 100', 'Командный игрок'];
+    if (catalogMedal.some((n) => t.includes(n))) {
+      return { statusAudit: 'Частично', auditNote: 'FORUM_MEDALS_CATALOG + medalEvaluator partial metrics' };
+    }
     if (t.includes('БАЛЛЫ ПУТИ') && t.includes('источники')) {
       return { statusAudit: 'Частично', auditNote: '§9: рефлексия/обмен→Path; фото/командные через модерацию' };
     }
@@ -669,8 +686,8 @@ function auditOverride(row) {
     }
     if (t.includes('Разрезы рейтинга')) {
       return {
-        statusAudit: 'Частично',
-        auditNote: 'total/path/exp + direction + day/shift scope; номинации — вне scope',
+        statusAudit: 'Да',
+        auditNote: 'total/path/exp + direction + day/shift + nomination + medalId',
       };
     }
     if (t.includes('Отдельные таблицы лидеров')) {
@@ -730,10 +747,10 @@ function auditOverride(row) {
         return { statusAudit: 'Да', auditNote: 'GET /leaderboard?medalId=' };
       }
       if (t.includes('номинациям')) {
-        return { statusAudit: 'Нет', auditNote: 'вне scope §9 (номинации)' };
+        return { statusAudit: 'Да', auditNote: 'GET /leaderboard?nomination=' };
       }
       if (t.includes('доступен из меню')) {
-        return { statusAudit: 'Частично', auditNote: 'Profile→Рейтинг, не отдельный root-раздел' };
+        return { statusAudit: 'Да', auditNote: 'Profile→Рейтинг + Мои результаты' };
       }
     }
     if (subsection.includes('Личный итог')) {
@@ -744,7 +761,7 @@ function auditOverride(row) {
         return { statusAudit: 'Да', auditNote: 'bundle.pdf.available gating' };
       }
       if (t.includes('Мои результаты')) {
-        return { statusAudit: 'Частично', auditNote: 'Profile overview, не отдельный экран бота' };
+        return { statusAudit: 'Да', auditNote: 'Profile tab «Мои результаты»' };
       }
     }
     if (subsection.includes('Пути') && subsection.includes('рефлексию')) {
@@ -859,21 +876,32 @@ function enrichNote(note, llmDeferred) {
 }
 
 const parsed = parseUserTable(SPEC_TABLE_TSV);
-const ROWS = parsed.map((p) => {
-  const { statusAudit, llmDeferred, auditNote } = deriveAudit(p);
-  return R(
-    p.sectionId,
-    p.sectionTitle,
-    p.pointCount,
-    p.subsection,
-    p.task,
-    p.statusUser,
-    statusAudit,
-    enrichNote(p.note, llmDeferred),
-    llmDeferred,
-    auditNote,
-  );
-});
+function buildRowsFromTsv(tsv) {
+  const p = parseUserTable(tsv);
+  return p.map((row) => {
+    const { statusAudit, llmDeferred, auditNote } = deriveAudit(row);
+    return R(
+      row.sectionId,
+      row.sectionTitle,
+      row.pointCount,
+      row.subsection,
+      row.task,
+      row.statusUser,
+      statusAudit,
+      enrichNote(row.note, llmDeferred),
+      llmDeferred,
+      auditNote,
+    );
+  });
+}
+
+let ROWS = buildRowsFromTsv(SPEC_TABLE_TSV);
+const sourceTsvPath = path.join(__dirname, 'spec-tracker-source.tsv');
+const { updated: userSyncUpdated } = syncUserImplementationStatusFromRows(ROWS, sourceTsvPath);
+if (userSyncUpdated > 0) {
+  ROWS = buildRowsFromTsv(loadSpecTableTsv());
+  console.log('Synced user status in source TSV:', userSyncUpdated, 'rows');
+}
 
 const DASHBOARD_EXPECTED = { 11: 54, 12: 84, 13: 87 };
 const dashboardParsed = parseUserTable(loadDashboardTsv());

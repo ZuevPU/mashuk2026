@@ -21,6 +21,8 @@ const RULES = [
   { match: /^База участников \(сквозная\)\tID, ФИО/, status: 'Да', noteAppend: 'GET /exports/participants full XLSX/CSV' },
   { match: /Общий Путь, общий Опыт, количество Идей/, status: 'Да', noteAppend: 'participantEnrichment' },
   { match: /Согласия \(ПД \+ аналитика\)/, status: 'Да', noteAppend: 'consent fields + README семантика' },
+  { match: /Тексты согласий на обработку персональных данных/, status: 'Частично', noteAppend: 'consent_versions; финальный текст с форума' },
+  { match: /Согласие на обезличенную аналитику/, status: 'Частично', noteAppend: 'analyticsConsent + onboarding checkbox' },
   { match: /Точка А \(3–5 ответов/, status: 'Да', noteAppend: 'point A/B JSON в participants export' },
   { match: /Ведущая роль на входе/, status: 'Да', noteAppend: 'roles в enrichment + roles-experiments' },
   { match: /Педагогический архетип/, status: 'Да', noteAppend: 'roleAnswers / D7 state' },
@@ -158,7 +160,6 @@ export function syncDashboardImplementationStatus(tsvPath = TSV_PATH) {
 
   const task = (parts[1] ?? '').trim();
   if (!task) return line;
-  if (currentSection === 12) return line;
 
   let rule = null;
     for (const r of RULES) {

@@ -112,6 +112,32 @@ export function resolveHomeActiveCard(input: ResolveHomeActiveCardInput): HomeAc
     };
   }
 
+  const nextEvent = schedule.find(s => s.kind === 'next');
+  if (nextEvent && currentDay !== 8 && phase !== 'evening' && !soonEvent) {
+    return {
+      kind: 'program_soon',
+      phase,
+      tag: 'ДАЛЕЕ · программа',
+      title: nextEvent.title,
+      subtitle: `${nextEvent.time}${nextEvent.place ? ` · ${nextEvent.place}` : ''}`,
+      route: '/program',
+      cta: 'Расписание →',
+    };
+  }
+
+  const softTp = touchpointItems.find(t => t.state === 'active' && t.title);
+  if (softTp && phase === 'day' && !priorityAction) {
+    return {
+      kind: 'touchpoint',
+      phase,
+      tag: 'ДОСТУПНО · точки',
+      title: softTp.title || 'Точка осмысления',
+      subtitle: 'Можно ответить в своё время',
+      route: `/questions?q=${softTp.id}`,
+      cta: 'Ответить →',
+    };
+  }
+
   const activeTp = touchpointItems.find(t => t.state === 'active' || t.state === 'overdue');
   if (activeTp && phase === 'morning') {
     return {

@@ -12,6 +12,14 @@ export function semanticV2Enabled(): boolean {
   return process.env.SEMANTIC_ANALYTICS_V2 === 'true';
 }
 
+export function llmProfileV2Enabled(): boolean {
+  return process.env.LLM_PROFILE_V2 === 'true';
+}
+
+export function llmReflectionBonusEnabled(): boolean {
+  return process.env.LLM_REFLECTION_BONUS_V2 === 'true';
+}
+
 export async function refreshAllAnalytics(): Promise<void> {
   await recalculateDailyStats();
 }
@@ -22,5 +30,15 @@ export function startAnalyticsRefreshScheduler(): void {
   setInterval(() => {
     refreshAllAnalytics().catch(err => console.error('[analytics] scheduled refresh', err));
   }, ms);
-  console.log(`[analytics] refresh every ${ms / 60000} min`);
+  if (semanticV2Enabled()) {
+    void import('../gigachatService.js').then(({ clubMatchNightly }) =>
+      clubMatchNightly().catch(err => console.error('[analytics] club match', err)),
+    );
+    setInterval(() => {
+      void import('../gigachatService.js').then(({ clubMatchNightly }) =>
+        clubMatchNightly().catch(err => console.error('[analytics] club match', err)),
+      );
+    }, 24 * 60 * 60 * 1000);
+  }
+  console.log(`[analytics] refresh every ${ms / 60000} min; semanticV2=${semanticV2Enabled()}`);
 }

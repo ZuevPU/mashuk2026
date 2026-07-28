@@ -15,6 +15,7 @@ import {
 } from './schema.js';
 import { TOUCHPOINT_SLOTS, windowsForDay } from '../services/touchpointTemplates.js';
 import { ROLE_CATALOG } from '../services/roleService.js';
+import { FORUM_MEDALS_CATALOG } from '../services/forumMedalsCatalog.js';
 
 async function ensureForumSettings() {
   const [settings] = await db.select().from(forumSettings).limit(1);
@@ -109,12 +110,12 @@ async function ensureContent() {
       {
         kind: 'pd', version: 1, isActive: true,
         title: 'Согласие на обработку персональных данных',
-        body: 'Я согласен(на) на обработку персональных данных в целях участия в форуме «Машук».',
+        body: 'Я согласен(на) на обработку персональных данных в целях участия в форуме «Машук». Окончательный текст согласия предоставляется организаторами форума; при обновлении версии потребуется повторное подтверждение в приложении.',
       },
       {
         kind: 'analytics', version: 1, isActive: true,
         title: 'Согласие на аналитику',
-        body: 'Я согласен(на) на обезличенную аналитику ответов для улучшения программы форума.',
+        body: 'Я согласен(на) на обезличенную аналитику ответов для улучшения программы форума. Окончательный текст согласия предоставляется организаторами форума.',
       },
     ]);
     console.log('Consent texts seeded.');
@@ -148,15 +149,14 @@ async function ensureContent() {
   }
 
   if ((await db.select().from(medals).limit(1)).length === 0) {
-    await db.insert(medals).values([
-      { name: 'Первый шаг', description: 'Выполнено ≥1 задание', conditionRule: 'tasks_completed>=1', awardType: 'auto', level: 'bronze', category: 'tasks' },
-      { name: 'Копилка идей', description: '≥20 записей в копилке', conditionRule: 'piggybank_count>=20', awardType: 'auto', level: 'silver', category: 'piggybank' },
-      { name: 'Рефлексивный', description: '≥10 ответов на вопросы', conditionRule: 'answers_count>=10', awardType: 'auto', level: 'bronze', category: 'reflection' },
-      { name: 'Путь 100', description: '≥100 баллов Пути', conditionRule: 'path_points>=100', awardType: 'auto', level: 'gold', category: 'points' },
-    ]);
+    await db.insert(medals).values([...FORUM_MEDALS_CATALOG]);
     console.log('Medals seeded.');
   } else {
-    console.log('Medals ok.');
+    for (const m of FORUM_MEDALS_CATALOG) {
+      const [ex] = await db.select().from(medals).where(eq(medals.name, m.name)).limit(1);
+      if (!ex) await db.insert(medals).values({ ...m });
+    }
+    console.log('Medals ok (catalog upsert).');
   }
 
   for (const role of ROLE_CATALOG) {
