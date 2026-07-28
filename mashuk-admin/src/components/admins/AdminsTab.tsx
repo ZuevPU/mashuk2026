@@ -20,7 +20,19 @@ type AdminUser = {
 
 type Direction = { id: number; name: string };
 
-const ROLE_FILTER = ['', 'admin', 'director', 'analyst', 'curator', 'moderator', 'volunteer', 'organizer', 'gamification'];
+const ROLE_FILTER = ['', 'admin', 'director', 'analyst', 'curator', 'moderator', 'volunteer', 'organizer', 'gamification'] as const;
+
+const ROLE_FILTER_LABELS: Record<string, string> = {
+  '': 'Все роли',
+  admin: 'администратор',
+  director: 'дирекция',
+  analyst: 'аналитик',
+  curator: 'куратор',
+  moderator: 'модератор',
+  volunteer: 'волонтёр',
+  organizer: 'организатор',
+  gamification: 'игропатика',
+};
 
 export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -31,7 +43,13 @@ export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [directions, setDirections] = useState<Direction[]>([]);
   const [view, setView] = useState<'list' | 'form'>('list');
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
-  const [tempPasswordModal, setTempPasswordModal] = useState<{ password: string; login?: string } | null>(null);
+  const [tempPasswordModal, setTempPasswordModal] = useState<{
+    password?: string;
+    login?: string;
+    manualOnly?: boolean;
+    message?: string;
+  } | null>(null);
+  const [resetPwdModal, setResetPwdModal] = useState<{ user: AdminUser; password: string } | null>(null);
   const [logsModal, setLogsModal] = useState<{ user: AdminUser; actions: unknown[] } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -73,17 +91,31 @@ export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           reloadKey={reloadKey}
           initial={editUser ? {
             id: editUser.id,
-            login: editUser.login,
+            login: editUser.login ?? '',
             fullName: editUser.fullName ?? '',
             email: editUser.email ?? '',
             role: editUser.role ?? 'moderator',
-            directionId: (editUser as { directionId?: number | null }).directionId ?? '',
+            directionId: editUser.directionId ?? '',
           } : undefined}
           onCancel={() => { setView('list'); setEditUser(null); }}
           onSaved={info => {
             setView('list');
             setEditUser(null);
-            if (info?.temporaryPassword) setTempPasswordModal({ password: info.temporaryPassword, login: info.login });
+            if (info?.temporaryPassword) {
+              setTempPasswordModal({
+                password: info.temporaryPassword,
+                login: info.login,
+                message: 'Сгенерированный пароль — передайте пользователю один раз:',
+              });
+            } else if (info?.login) {
+              setTempPasswordModal({
+                login: info.login,
+                manualOnly: true,
+                message: info.manualPasswordSet
+                  ? 'Пароль сохранён в базе. Передайте его пользователю по защищённому каналу.'
+                  : 'Пользователь создан. Логин для входа:',
+              });
+            }
             load();
           }}
         />
@@ -110,8 +142,8 @@ export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           />
           <select className="adm-input" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
             <option value="">Все роли</option>
-            {ROLE_FILTER.filter(Boolean).map(r => (
-              <option key={r} value={r}>{r}</option>
+            {ROLE_FILTER.map(r => (
+              <option key={r || 'all'} value={r}>{ROLE_FILTER_LABELS[r] ?? r}</option>
             ))}
           </select>
           <select className="adm-input" value={directionFilter} onChange={e => setDirectionFilter(e.target.value)}>
@@ -137,6 +169,7 @@ export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             <thead>
               <tr>
                 <th>ФИО</th>
+                <th>Логин</th>
                 <th>Email</th>
                 <th>Роль</th>
                 <th>Направление</th>
@@ -148,9 +181,10 @@ export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             <tbody>
               {users.map(u => (
                 <tr key={u.id}>
-                  <td>{u.fullName || u.login || '—'}</td>
+                  <td>{u.fullName || '—'}</td>
+                  <td><code>{u.login || '—'}</code></td>
                   <td>{u.email || '—'}</td>
-                  <td>{u.role}</td>
+                  <td>{ROLE_FILTER_LABELS[u.role ?? ''] ?? u.role}</td>
                   <td>{u.directionName || '—'}</td>
                   <td>{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('ru-RU') : '—'}</td>
                   <td>{u.isActive === false ? 'заблокирован' : 'активен'}</td>
@@ -162,10 +196,18 @@ export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                           onClick: () => { setEditUser(u); setView('form'); },
                         },
                         {
-                          label: 'Сбросить пароль',
+                          label: 'Сменить пароль',
+                          onClick: () => setResetPwdModal({ user: u, password: '' }),
+                        },
+                        {
+                          label: 'Сгенерировать пароль',
                           onClick: () => act(async () => {
                             const r = await adminFetch(`/admin-users/${u.id}/reset-password`, { method: 'POST', body: '{}' });
-                            setTempPasswordModal({ password: r.temporaryPassword, login: u.login });
+                            setTempPasswordModal({
+                              password: r.temporaryPassword,
+                              login: u.login,
+                              message: 'Сгенерированный пароль — передайте пользователю один раз:',
+                            });
                           }, 'Пароль сброшен'),
                         },
                         {
@@ -198,12 +240,55 @@ export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         <div className="adm-modal-backdrop" onClick={() => setTempPasswordModal(null)}>
           <div className="adm-modal" onClick={e => e.stopPropagation()}>
             <h3>Данные для входа</h3>
+            {tempPasswordModal.message && <p>{tempPasswordModal.message}</p>}
             {tempPasswordModal.login && (
               <p>Логин: <code>{tempPasswordModal.login}</code></p>
             )}
-            <p>Сохраните и передайте пользователю один раз:</p>
-            <code style={{ fontSize: 18 }}>{tempPasswordModal.password}</code>
+            {tempPasswordModal.password && (
+              <p>Пароль: <code style={{ fontSize: 18 }}>{tempPasswordModal.password}</code></p>
+            )}
             <button type="button" className="adm-btn adm-btn-primary" style={{ marginTop: 12 }} onClick={() => setTempPasswordModal(null)}>Закрыть</button>
+          </div>
+        </div>
+      )}
+
+      {resetPwdModal && (
+        <div className="adm-modal-backdrop" onClick={() => setResetPwdModal(null)}>
+          <div className="adm-modal" onClick={e => e.stopPropagation()}>
+            <h3>Сменить пароль</h3>
+            <p className="adm-muted">{resetPwdModal.user.fullName || resetPwdModal.user.login}</p>
+            <label className="adm-field">
+              <span className="adm-label">Новый пароль (мин. 6 символов)</span>
+              <input
+                className="adm-input"
+                type="password"
+                value={resetPwdModal.password}
+                onChange={e => setResetPwdModal({ ...resetPwdModal, password: e.target.value })}
+                autoComplete="new-password"
+              />
+            </label>
+            <div className="adm-forum-toolbar" style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                className="adm-btn adm-btn-primary"
+                disabled={resetPwdModal.password.length < 6}
+                onClick={() => act(async () => {
+                  await adminFetch(`/admin-users/${resetPwdModal.user.id}/reset-password`, {
+                    method: 'POST',
+                    body: JSON.stringify({ password: resetPwdModal.password }),
+                  });
+                  setResetPwdModal(null);
+                  setTempPasswordModal({
+                    login: resetPwdModal.user.login,
+                    manualOnly: true,
+                    message: 'Пароль сохранён в базе.',
+                  });
+                }, 'Пароль сохранён')}
+              >
+                Сохранить в базу
+              </button>
+              <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setResetPwdModal(null)}>Отмена</button>
+            </div>
           </div>
         </div>
       )}
