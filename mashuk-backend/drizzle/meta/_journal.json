@@ -248,6 +248,13 @@
       "breakpoints": true
     },
     {
+      "idx": 35,
+      "version": "7",
+      "when": 1815000000000,
+      "tag": "0035_participant_avatar_url",
+      "breakpoints": true
+    },
+    {
       "idx": 36,
       "version": "7",
       "when": 1816000000000,
