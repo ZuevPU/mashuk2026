@@ -2,20 +2,33 @@ import {
   Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import type { AnalyticsTabProps } from './AnalyticsTab';
+import { roleName } from '../onboarding/roleOptions';
+import {
+  ChartTooltipRu,
+  formatForumDay,
+  formatTouchpointKey,
+  formatZoneName,
+  PHASE_LABELS,
+  ZONE_COLORS,
+  ZONE_ORDER,
+  zonesByDayRows,
+  zonesToBarRows,
+} from './chartRu';
 
-function ZoneBarChart({ title, zones }: { title: string; zones: Record<string, number> }) {
-  const data = Object.entries(zones ?? {}).map(([name, value]) => ({ name, value }));
+function ZoneBarChart({ title, zones, hint }: { title: string; zones: Record<string, number>; hint?: string }) {
+  const data = zonesToBarRows(zones);
   if (!data.length) return null;
   return (
     <div className="card chart-card">
       <h3>{title}</h3>
+      {hint && <p className="adm-muted" style={{ fontSize: 12, marginTop: -4 }}>{hint}</p>}
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-          <YAxis domain={[0, 100]} />
-          <Tooltip />
-          <Bar dataKey="value" fill="#805AD5" />
+          <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={56} />
+          <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} label={{ value: 'Доля ответов, %', angle: -90, position: 'insideLeft', style: { fontSize: 10 } }} />
+          <Tooltip content={<ChartTooltipRu />} />
+          <Bar dataKey="value" fill="#805AD5" name="value" />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -24,46 +37,69 @@ function ZoneBarChart({ title, zones }: { title: string; zones: Record<string, n
 
 export function PulseView({ data }: { data: any }) {
   const zones = data.emotionalPulse?.zonesPercent ?? {};
-  const zoneChart = Object.entries(zones).map(([name, value]) => ({ name, value }));
-  const series = data.activity?.activitySeries ?? [];
+  const zoneChart = zonesToBarRows(zones);
+  const series = (data.activity?.activitySeries ?? []).map((row: { day: number; answers: number; touchpoints: number }) => ({
+    ...row,
+    dayLabel: formatForumDay(row.day),
+  }));
   const tp = data.activity?.touchpoints ?? {};
+  const stateChecks = data.activity?.stateChecks ?? {};
+  const zoneDayRows = zonesByDayRows(data.emotionalPulse?.byDay ?? data.emotionalPulse?.compareZones);
   return (
     <>
       <div className="card">
         <h3>Активность</h3>
         <p>Зарегистрировано: {data.activity?.registered} · Активны сегодня: {data.activity?.activeToday}</p>
         <p style={{ fontSize: 12 }}>
-          Итоги дня: {data.activity?.eveningCompleted} · Проверки состояния: {JSON.stringify(data.activity?.stateChecks)}
+          Итоги дня: {data.activity?.eveningCompleted} · Проверки состояния:{' '}
+          {Object.keys(stateChecks).length > 0
+            ? Object.entries(stateChecks).map(([k, v]) => `${PHASE_LABELS[k] ?? k}: ${String(v)}`).join(' · ')
+            : '—'}
         </p>
         {Object.keys(tp).length > 0 && (
           <ul style={{ fontSize: 12 }}>
-            {Object.entries(tp).map(([k, v]) => <li key={k}>{k}: {String(v)}</li>)}
+            {Object.entries(tp).map(([k, v]) => <li key={k}>{formatTouchpointKey(k)}: {String(v)}</li>)}
           </ul>
         )}
       </div>
-      {zoneChart.length > 0 && <ZoneBarChart title="5 зон — форум (%, не среднее)" zones={zones} />}
-      <ZoneBarChart title="Утро" zones={data.emotionalPulse?.byPhase?.morning} />
-      <ZoneBarChart title="День" zones={data.emotionalPulse?.byPhase?.day} />
-      <ZoneBarChart title="Вечер" zones={data.emotionalPulse?.byPhase?.evening} />
+      {zoneChart.length > 0 && (
+        <ZoneBarChart
+          title="5 эмоциональных зон — вся смена"
+          hint="Процент ответов на проверки состояния (не среднее по людям)."
+          zones={zones}
+        />
+      )}
+      <ZoneBarChart title="Зоны · утро" zones={data.emotionalPulse?.byPhase?.morning} />
+      <ZoneBarChart title="Зоны · день" zones={data.emotionalPulse?.byPhase?.day} />
+      <ZoneBarChart title="Зоны · вечер" zones={data.emotionalPulse?.byPhase?.evening} />
       {(data.emotionalPulse?.byDirection ?? []).map((row: { direction: string; zones: Record<string, number> }) => (
         <ZoneBarChart key={row.direction} title={`Направление: ${row.direction}`} zones={row.zones} />
       ))}
       {(data.emotionalPulse?.byGroup ?? []).slice(0, 12).map((row: { direction: string; group: string; zones: Record<string, number> }) => (
         <ZoneBarChart key={`${row.direction}-${row.group}`} title={`${row.direction} / ${row.group}`} zones={row.zones} />
       ))}
-      {(data.emotionalPulse?.byDay ?? data.emotionalPulse?.compareZones ?? []).length > 0 && (
+      {zoneDayRows.length > 0 && (
         <div className="card chart-card">
-          <h3>Зоны по дням (compare/shift)</h3>
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={(data.emotionalPulse?.byDay ?? data.emotionalPulse?.compareZones ?? []).flatMap((d: { day: number; zones: Record<string, number> }) =>
-              Object.entries(d.zones).map(([name, value]) => ({ day: `D${d.day}`, name, value })),
-            )}>
+          <h3>Зоны по дням</h3>
+          <p className="adm-muted" style={{ fontSize: 12 }}>Каждая линия — одна эмоциональная зона, ось Y — доля ответов в %.</p>
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={zoneDayRows}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="day" />
-              <YAxis domain={[0, 100]} />
-              <Tooltip />
+              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} />
+              <Tooltip content={<ChartTooltipRu />} />
               <Legend />
-              <Line type="monotone" dataKey="value" stroke="#805AD5" dot={false} />
+              {ZONE_ORDER.map(key => (
+                <Line
+                  key={key}
+                  type="monotone"
+                  dataKey={key}
+                  name={formatZoneName(key)}
+                  stroke={ZONE_COLORS[key]}
+                  dot={false}
+                  strokeWidth={2}
+                />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -74,12 +110,12 @@ export function PulseView({ data }: { data: any }) {
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={series}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" />
-              <YAxis />
-              <Tooltip />
+              <XAxis dataKey="dayLabel" />
+              <YAxis allowDecimals={false} label={{ value: 'Количество', angle: -90, position: 'insideLeft', style: { fontSize: 10 } }} />
+              <Tooltip content={<ChartTooltipRu />} />
               <Legend />
-              <Line type="monotone" dataKey="answers" stroke="#3182CE" name="Ответы" />
-              <Line type="monotone" dataKey="touchpoints" stroke="#38A169" name="Touchpoints" />
+              <Line type="monotone" dataKey="answers" stroke="#3182CE" name="Ответы" dot />
+              <Line type="monotone" dataKey="touchpoints" stroke="#38A169" name="Точки осмысления" dot />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -89,7 +125,7 @@ export function PulseView({ data }: { data: any }) {
           <h3>Причины состояния</h3>
           <ul>{data.stateReasons.topTokens.map((t: { token: string; count: number }) => <li key={t.token}>{t.token}: {t.count}</li>)}</ul>
           {(data.stateReasons.byDay ?? []).map((d: { day: number; topTokens: { token: string; count: number }[] }) => (
-            <div key={d.day}><strong>D{d.day}</strong>: {d.topTokens.map(t => t.token).join(', ')}</div>
+            <div key={d.day}><strong>{formatForumDay(d.day)}</strong>: {d.topTokens.map(t => t.token).join(', ')}</div>
           ))}
           <p className="adm-muted">{data.stateReasons.llmDeferred}</p>
         </div>
@@ -99,7 +135,10 @@ export function PulseView({ data }: { data: any }) {
 }
 
 export function PortraitView({ data, onOpenCard }: { data: any; onOpenCard: AnalyticsTabProps['onOpenCard'] }) {
-  const roles = data.preStart?.roleDistribution ?? [];
+  const roles = (data.preStart?.roleDistribution ?? []).map((r: { key: string; count: number }) => ({
+    ...r,
+    label: roleName(r.key),
+  }));
   return (
     <>
       <div className="card chart-card">
@@ -107,10 +146,10 @@ export function PortraitView({ data, onOpenCard }: { data: any; onOpenCard: Anal
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={roles}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="key" />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="count" fill="#805AD5" />
+            <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={0} angle={-25} textAnchor="end" height={70} />
+            <YAxis allowDecimals={false} label={{ value: 'Участников', angle: -90, position: 'insideLeft', style: { fontSize: 10 } }} />
+            <Tooltip content={<ChartTooltipRu />} />
+            <Bar dataKey="count" fill="#805AD5" name="count" />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -137,7 +176,7 @@ export function PortraitView({ data, onOpenCard }: { data: any; onOpenCard: Anal
           <thead><tr><th>День</th><th>Роль</th><th>Выборов</th></tr></thead>
           <tbody>
             {(data.roleDynamics?.experimentDaySeries ?? []).slice(0, 40).map((r: { day: number; label: string; count: number }, i: number) => (
-              <tr key={i}><td>D{r.day}</td><td>{r.label}</td><td>{r.count}</td></tr>
+              <tr key={i}><td>{formatForumDay(r.day)}</td><td>{r.label}</td><td>{r.count}</td></tr>
             ))}
           </tbody>
         </table>
@@ -213,7 +252,7 @@ export function ProgramView({ data }: { data: any }) {
       </div>
       {(data.practicesByDay ?? []).map((d: { day: number; top: { title: string; attendance: number }[] }) => (
         <div className="card" key={d.day}>
-          <h4>Топ практик D{d.day}</h4>
+          <h4>Топ практик · {formatForumDay(d.day)}</h4>
           <ul>{d.top.map(e => <li key={e.title}>{e.title} · {e.attendance}</li>)}</ul>
         </div>
       ))}
@@ -343,7 +382,7 @@ export function SemanticView({ data }: { data: any }) {
       <div className="card">
         <h3>Языковой трекер</h3>
         {(data.languageTracker?.byDay ?? []).map((d: { day: number; terms: { token: string }[] }) => (
-          <p key={d.day}>D{d.day}: {d.terms.map(t => t.token).join(', ')}</p>
+          <p key={d.day}>{formatForumDay(d.day)}: {d.terms.map(t => t.token).join(', ')}</p>
         ))}
       </div>
       <div className="card">

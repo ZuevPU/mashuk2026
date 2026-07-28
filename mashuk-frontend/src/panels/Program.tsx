@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Panel, PanelHeader, Group, Div, Spinner, Button, ModalRoot, ModalPage, ModalPageHeader } from '@vkontakte/vkui';
+import { useActiveVkuiLocation } from '@vkontakte/vk-mini-apps-router';
 import { ProgramTabs } from '../components/program/ProgramTabs';
 import { useAppModal } from '../App';
 import { DaySwitcher } from '../components/program/DaySwitcher';
@@ -31,12 +32,14 @@ interface ProgramSlot {
 
 export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   const { setModal } = useAppModal();
+  const { panel: activePanel } = useActiveVkuiLocation();
   const [activeTab, setActiveTab] = useState<'sched' | 'kb'>('sched');
   const [activeDay, setActiveDay] = useState(1);
   const [totalDays, setTotalDays] = useState(8);
   const [currentDay, setCurrentDay] = useState(1);
   const [slots, setSlots] = useState<ProgramSlot[]>([]);
   const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [recMeta, setRecMeta] = useState<{ interests: string[]; publishedEventsCount: number } | null>(null);
   const [kb, setKb] = useState<any>(null);
   const [kbDays, setKbDays] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,12 +57,16 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
     setError(null);
     Promise.all([
       apiGet<{ slots: ProgramSlot[]; dayPublished?: boolean }>(`/program?day=${activeDay}`),
-      apiGet<{ recommendations: any[] }>(`/program/recommendations?day=${activeDay}`),
+      apiGet<{ recommendations: any[]; interests?: string[]; publishedEventsCount?: number }>(`/program/recommendations?day=${activeDay}`),
       apiGet<any>(`/program/knowledge-base?day=${activeDay}`),
     ]).then(([prog, rec, knowledge]) => {
       setSlots(prog.slots || []);
       setDayPublished(prog.dayPublished !== false);
-      setRecommendations(rec.recommendations);
+      setRecommendations(rec.recommendations || []);
+      setRecMeta({
+        interests: rec.interests || [],
+        publishedEventsCount: rec.publishedEventsCount ?? 0,
+      });
       setKb(knowledge);
     }).catch((err) => {
       setError(err instanceof ApiError ? err.message : 'Не удалось загрузить программу');
@@ -165,6 +172,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   };
 
   useEffect(() => {
+    if (activePanel !== id) return;
     if (selectedEvent) {
       setModal(
         <ModalRoot activeModal="event-detail" onClose={() => setSelectedEvent(null)}>
@@ -181,7 +189,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
     } else {
       setModal(null);
     }
-  }, [selectedEvent, setModal]);
+  }, [selectedEvent, setModal, activePanel, id]);
 
   useEffect(() => {
     return () => setModal(null);
@@ -189,7 +197,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
 
   return (
     <Panel id={id}>
-      <PanelHeader>Программа</PanelHeader>
+      <PanelHeader fixed>Программа</PanelHeader>
       <Group>
         <Div>
           <ProgramTabs activeTab={activeTab} onTabChange={setActiveTab} />
@@ -224,6 +232,19 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
                       <div className="m-rec-arr">›</div>
                     </div>
                   ))}
+                </div>
+              )}
+              {recommendations.length === 0 && recMeta && recMeta.interests.length > 0 && activeDay !== 8 && (
+                <div className="m-card" style={{ marginBottom: 12, fontSize: 12, color: '#5D4B37', lineHeight: 1.45 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Персональные рекомендации</div>
+                  {recMeta.publishedEventsCount === 0 ? (
+                    <span>На этот день ещё нет опубликованных событий — блок появится, когда расписание выйдет.</span>
+                  ) : (
+                    <span>
+                      Совпадений с вашими интересами пока нет: у событий дня должны быть тематические теги из онбординга
+                      (их проставляет организатор в программе). Ваши темы — в профиле, блок «Мои интересы».
+                    </span>
+                  )}
                 </div>
               )}
               <div className="m-tl-wrap">

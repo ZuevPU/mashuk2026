@@ -260,6 +260,13 @@
       "when": 1816000000000,
       "tag": "0036_forum_points_unified_rating",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1817000000000,
+      "tag": "0037_program_speakers_credentials",
+      "breakpoints": true
     }
   ]
 }

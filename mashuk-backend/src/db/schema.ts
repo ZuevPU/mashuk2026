@@ -138,6 +138,7 @@ export const materialTypes = pgTable('material_types', {
 export const programSpeakers = pgTable('program_speakers', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
+  credentials: text('credentials'),
   initials: varchar('initials', { length: 10 }),
   createdAt: timestamp('created_at').defaultNow(),
 });

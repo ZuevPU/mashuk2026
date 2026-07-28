@@ -43,11 +43,13 @@ import { generateQrToken } from '../services/qrService.js';
 import {
   DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
   resolveEveningConfigForDay,
+  stripPointBFromEveningConfig,
   type EveningQuestionnaireConfig,
 } from '../services/eveningQuestionnaireConfig.js';
 import { TOUCHPOINT_SLOTS, windowsForDay } from '../services/touchpointTemplates.js';
 import { getForumSettings as loadForumSettings } from '../services/helpers.js';
 import { enrichEventTimestamps } from '../services/eventSchedule.js';
+import { resolveDayPublishedForEvent } from '../services/eventPublishFlags.js';
 import { parseParticipantListQuery, queryParticipants } from '../services/participantsList.js';
 import { enrichParticipantsWithAvatarUrls } from '../services/participantAvatarSync.js';
 
@@ -787,18 +789,27 @@ export const crudProgramSpeakers = {
   create: async (req: AdminRequest, res: Response) => {
     const name = String(req.body.name || '').trim();
     if (!name) { res.status(400).json({ error: 'name required' }); return; }
+    const credentials = req.body.credentials != null ? String(req.body.credentials).trim() || null : null;
+    const initialsRaw = req.body.initials ? String(req.body.initials).slice(0, 10) : null;
+    const initials = initialsRaw || name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 3).toUpperCase() || null;
     const [row] = await db.insert(programSpeakers).values({
       name,
-      initials: req.body.initials ? String(req.body.initials).slice(0, 10) : null,
+      credentials,
+      initials,
     }).returning();
     res.json({ speaker: row });
   },
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
-    const [updated] = await db.update(programSpeakers).set({
-      name: req.body.name != null ? String(req.body.name).trim() : undefined,
-      initials: req.body.initials != null ? String(req.body.initials).slice(0, 10) : undefined,
-    }).where(eq(programSpeakers.id, id)).returning();
+    const patch: { name?: string; credentials?: string | null; initials?: string | null } = {};
+    if (req.body.name != null) patch.name = String(req.body.name).trim();
+    if (req.body.credentials !== undefined) {
+      patch.credentials = String(req.body.credentials || '').trim() || null;
+    }
+    if (req.body.initials !== undefined) {
+      patch.initials = req.body.initials ? String(req.body.initials).slice(0, 10) : null;
+    }
+    const [updated] = await db.update(programSpeakers).set(patch).where(eq(programSpeakers.id, id)).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ speaker: updated });
   },
@@ -852,13 +863,16 @@ export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
     res.status(400).json({ error: 'config.steps required' });
     return;
   }
+  const toSave = day >= 1 && day <= 7
+    ? stripPointBFromEveningConfig(config)
+    : config;
   const [settings] = await db.select().from(forumSettings).limit(1);
   if (!settings) {
     res.status(404).json({ error: 'forum_settings missing' });
     return;
   }
   const byDay = (settings.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {};
-  byDay[String(day)] = config;
+  byDay[String(day)] = toSave;
   const [updated] = await db.update(forumSettings)
     .set({ eveningQuestionnaireByDay: byDay, updatedAt: new Date() })
     .where(eq(forumSettings.id, settings.id))
@@ -947,8 +961,15 @@ export const crudEvents = {
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
     const settings = await loadForumSettings();
     const values = enrichEventTimestamps(parsed.data, settings);
+    const dayNum = parsed.data.dayNumber ?? values.dayNumber ?? null;
+    const dayPublished = await resolveDayPublishedForEvent(
+      dayNum,
+      parsed.data.isPublished,
+      parsed.data.dayPublished,
+    );
     const [e] = await db.insert(events).values({
       ...values,
+      ...(dayPublished !== undefined ? { dayPublished } : {}),
       speakerIds: parsed.data.speakerIds ?? [],
       parentEventId: parsed.data.parentEventId ?? null,
       hasSubSessions: parsed.data.hasSubSessions ?? false,
@@ -967,8 +988,15 @@ export const crudEvents = {
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
     const settings = await loadForumSettings();
     const values = enrichEventTimestamps(parsed.data, settings, existing);
+    const dayNum = parsed.data.dayNumber ?? existing.dayNumber ?? null;
+    const dayPublished = await resolveDayPublishedForEvent(
+      dayNum,
+      parsed.data.isPublished,
+      parsed.data.dayPublished,
+    );
     const [updated] = await db.update(events).set({
       ...values,
+      ...(dayPublished !== undefined ? { dayPublished } : {}),
       ...(parsed.data.speakerIds !== undefined ? { speakerIds: parsed.data.speakerIds } : {}),
       ...(parsed.data.parentEventId !== undefined ? { parentEventId: parsed.data.parentEventId } : {}),
       ...(parsed.data.hasSubSessions !== undefined ? { hasSubSessions: parsed.data.hasSubSessions } : {}),
@@ -1344,7 +1372,16 @@ export const copyQuestionsDay = async (req: AdminRequest, res: Response): Promis
       });
     }
   }
-  res.json({ ok: true, created: created.length, questions: created });
+  if (settings && fromDay >= 1 && fromDay <= 7 && toDay >= 1 && toDay <= 7) {
+    const srcEvening = resolveEveningConfigForDay(settings, fromDay);
+    const byDay = (settings.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {};
+    byDay[String(toDay)] = srcEvening;
+    await db.update(forumSettings)
+      .set({ eveningQuestionnaireByDay: byDay, updatedAt: new Date() })
+      .where(eq(forumSettings.id, settings.id));
+    clearCache('forumSettings');
+  }
+  res.json({ ok: true, created: created.length, questions: created, eveningQuestionnaireCopied: fromDay <= 7 && toDay <= 7 });
 };
 
 /** Развернуть шаблон 7 точек на выбранные дни */

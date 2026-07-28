@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Panel, PanelHeader, Group, Spinner, Snackbar, Div } from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
-import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
+import { useRouteNavigator, useActiveVkuiLocation } from '@vkontakte/vk-mini-apps-router';
 import { useAppModal } from '../App';
 import { HeaderInfo } from '../components/home/HeaderInfo';
 import { openQuickCapture } from '../components/QuickCaptureFlow';
@@ -12,7 +12,7 @@ import {
 } from '../components/home/DashboardCards';
 import { PushBanner, type PushBannerItem } from '../components/home/PushBanner';
 import { EveningQuestionnaire, type EveningQuestionnaireProps } from '../components/home/EveningQuestionnaire';
-import { apiGet, apiPost, ApiError } from '../api/client';
+import { apiGet, ApiError } from '../api/client';
 
 interface ScheduleItem {
   kind: string;
@@ -98,6 +98,7 @@ export const HomePanel: React.FC<{
   initComplete?: boolean;
 }> = ({ id, fetchedUser, isRegistered, initComplete = true }) => {
   const routeNavigator = useRouteNavigator();
+  const { panel: activePanel } = useActiveVkuiLocation();
   const { setModal } = useAppModal();
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -129,8 +130,9 @@ export const HomePanel: React.FC<{
       routeNavigator.push('/registration');
       return;
     }
+    if (activePanel !== id) return;
     reload();
-  }, [isRegistered, initComplete, routeNavigator]);
+  }, [isRegistered, initComplete, activePanel, id, routeNavigator]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
@@ -141,16 +143,10 @@ export const HomePanel: React.FC<{
     return () => setModal(null);
   }, [setModal]);
 
-  const handleExperimentStatus = async (status: 'in_progress' | 'done') => {
-    await apiPost('/day-state/experiment', { status });
-    setSnackbar(status === 'done' ? 'Эксперимент отмечен' : 'Эксперимент в процессе');
-    reload();
-  };
-
   if (loading) {
     return (
       <Panel id={id}>
-        <PanelHeader>Главная</PanelHeader>
+        <PanelHeader fixed>Главная</PanelHeader>
         <Group><Spinner size="l" /></Group>
       </Panel>
     );
@@ -159,7 +155,7 @@ export const HomePanel: React.FC<{
   if (error || !data) {
     return (
       <Panel id={id}>
-        <PanelHeader>Главная</PanelHeader>
+        <PanelHeader fixed>Главная</PanelHeader>
         <Group>
           <div className="m-card" style={{ color: '#C53030' }}>{error || 'Нет данных'}</div>
           <ButtonLike onClick={() => reload()}>Повторить</ButtonLike>
@@ -173,7 +169,7 @@ export const HomePanel: React.FC<{
   const lastName = d.user?.lastName || fetchedUser?.last_name || '';
   const schedule = d.schedule ?? [];
   const showEveningCard = !!d.eveningCard && (d.timeSlot === 'evening' || d.eveningWrap);
-  const showQuick = !!d.ui?.showQuickCapture;
+  const showQuick = d.currentDay !== 8 && (d.ui?.showQuickCapture ?? true);
   const card = d.activeCard;
   const hidePriorityDup = card && d.priorityAction && card.route === d.priorityAction.route;
   const hideEveningDup = card?.kind === 'evening_survey';
@@ -203,7 +199,7 @@ export const HomePanel: React.FC<{
 
   return (
     <Panel id={id}>
-      <PanelHeader>Главная</PanelHeader>
+      <PanelHeader fixed>Главная</PanelHeader>
       <Group>
         <div className="home-feed">
         <HeaderInfo
@@ -253,17 +249,26 @@ export const HomePanel: React.FC<{
             name={d.roleOfDay.name}
             quadrant={d.roleOfDay.quadrant}
             essence={d.roleOfDay.essence}
+            experiment={d.experiment && d.currentDay !== 8 ? {
+              title: d.experiment.title,
+              body: d.experiment.body,
+              hint: d.experiment.hint,
+              roleName: d.experiment.roleName,
+            } : null}
+            onSaveExperimentFixation={d.experiment ? () => openQuickCapture(setModal, {
+              initialTags: ['мысль'],
+              prefillText: [d.experiment!.title, d.experiment!.body].filter(Boolean).join('\n\n'),
+              onSaved: () => setSnackbar('Фиксация сохранена в копилку'),
+            }) : undefined}
           />
         )}
 
-        {d.experiment && d.currentDay !== 8 && (
+        {d.experiment && d.currentDay !== 8 && !d.roleOfDay && (
           <ExperimentCard
             title={d.experiment.title}
             body={d.experiment.body}
             hint={d.experiment.hint}
             roleName={d.experiment.roleName}
-            status={d.experiment.status}
-            onStatusChange={handleExperimentStatus}
             onSaveFixation={() => openQuickCapture(setModal, {
               initialTags: ['мысль'],
               prefillText: [d.experiment!.title, d.experiment!.body].filter(Boolean).join('\n\n'),
@@ -290,7 +295,7 @@ export const HomePanel: React.FC<{
 
         {showQuick && (
           <div className="m-card">
-            <div className="m-now-t">Быстрая фиксация</div>
+            <div className="m-now-t">Копилка</div>
             <div className="cap-row">
               {QUICK_CAPTURE_ITEMS.map(item => (
                 <div key={item.tag} className="cap" onClick={() => openQuickCapture(setModal, {

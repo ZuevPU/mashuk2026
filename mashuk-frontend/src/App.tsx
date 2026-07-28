@@ -32,7 +32,7 @@ const TAB_LABELS = {
   home: 'Главная',
   program: 'Программа',
   tasks: 'Задания',
-  questions: 'Общение',
+  questions: 'Вопросы',
   profile: 'Профиль',
 } as const;
 
@@ -78,7 +78,7 @@ export const App = () => {
     try {
       const home = await apiGet<{ counts?: { availableQuestions?: number }; currentDay?: number; ui?: { showPiggybankFab?: boolean } }>('/home');
       setQuestionsBadge(home.counts?.availableQuestions ?? 0);
-      setShowPiggyFab(home.ui?.showPiggybankFab === true || (home.currentDay != null && home.currentDay !== 8));
+      setShowPiggyFab(home.ui?.showPiggybankFab === true);
     } catch {
       // ignore background refresh errors
     }

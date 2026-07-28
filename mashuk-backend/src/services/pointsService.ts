@@ -94,7 +94,11 @@ export async function awardPoints(
     actionType,
   });
 
-  await syncForumPoints(participantId);
+  try {
+    await syncForumPoints(participantId);
+  } catch (err) {
+    console.warn('syncForumPoints failed:', err);
+  }
 
   return { awarded: points, track };
 }

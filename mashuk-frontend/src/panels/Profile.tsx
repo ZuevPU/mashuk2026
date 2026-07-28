@@ -8,6 +8,7 @@ import { EmptyState } from '../components/EmptyState';
 import { PIGGYBANK_TAGS, PIGGYBANK_SOURCES } from '../data/piggybank';
 import { buildParticipantVolunteerUrl } from '../utils/qrDeepLink';
 import { requestVkPushPermission } from '../utils/pushNotifications';
+import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { ParticipantAvatarCircle } from '../components/ParticipantAvatarCircle';
 
 const TAGS = ['', ...PIGGYBANK_TAGS];
@@ -38,6 +39,7 @@ export const ProfilePanel: React.FC<{
   fetchedUser?: UserInfo | null;
   onSelfDeleted?: () => void;
 }> = ({ id, fetchedUser, onSelfDeleted }) => {
+  const routeNavigator = useRouteNavigator();
   const { setModal } = useAppModal();
   const [profile, setProfile] = useState<any>(null);
   const [piggybank, setPiggybank] = useState<any[]>([]);
@@ -156,7 +158,7 @@ export const ProfilePanel: React.FC<{
   if (loading) {
     return (
       <Panel id={id}>
-        <PanelHeader>Профиль</PanelHeader>
+        <PanelHeader fixed>Профиль</PanelHeader>
         <Group><Spinner /></Group>
       </Panel>
     );
@@ -165,7 +167,7 @@ export const ProfilePanel: React.FC<{
   if (error || !profile) {
     return (
       <Panel id={id}>
-        <PanelHeader>Профиль</PanelHeader>
+        <PanelHeader fixed>Профиль</PanelHeader>
         <Group>
           <div className="m-card" style={{ color: '#C53030' }}>{error || 'Нет данных'}</div>
           <Button onClick={loadProfile}>Повторить</Button>
@@ -184,8 +186,9 @@ export const ProfilePanel: React.FC<{
   const tracker = p.dailyTracker;
   const outcomeBullets: string[] = p.outcomes?.bullets ?? [];
   const showOutcomes = p.outcomes?.visible ?? (p.currentDay >= 3);
+  const recentReflections: { title?: string; preview?: string; answeredAt?: string }[] = p.recentReflections ?? [];
   const tagCounts = (p.piggybankTags ?? {}) as Record<string, number>;
-  const sourceCounts = (tracker?.piggybankSources ?? {}) as Record<string, number>;
+  const sourceCounts = (p.piggybankSources ?? tracker?.piggybankSources ?? {}) as Record<string, number>;
   const shiftLine = [p.user.direction, p.user.groupName ? `Группа «${p.user.groupName}»` : null, p.user.shiftLabel]
     .filter(Boolean).join(' · ');
 
@@ -289,7 +292,7 @@ export const ProfilePanel: React.FC<{
 
   return (
     <Panel id={id}>
-      <PanelHeader>Профиль</PanelHeader>
+      <PanelHeader fixed>Профиль</PanelHeader>
       <Group>
         <SegmentedControl
           value={section}
@@ -321,6 +324,32 @@ export const ProfilePanel: React.FC<{
                 )}
               </div>
             </div>
+
+            {Array.isArray(p.interests) && p.interests.length > 0 && (
+              <div className="m-card">
+                <div className="pb-lbl">Мои интересы</div>
+                <div style={{ fontSize: 11, color: '#888', marginTop: 4, lineHeight: 1.4 }}>
+                  Вы выбрали их при регистрации. В «Программе» сверху показываются события дня с теми же тематическими тегами.
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                  {p.interests.map((tag: string) => (
+                    <span
+                      key={tag}
+                      style={{
+                        border: '1.5px solid #FF5500',
+                        background: '#FFF3E0',
+                        color: '#B8621A',
+                        borderRadius: 20,
+                        padding: '6px 12px',
+                        fontSize: 12,
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {p.trajectory && (
               <div className="ab-card">
@@ -428,6 +457,9 @@ export const ProfilePanel: React.FC<{
 
             <div className="pb m-card" style={{ opacity: showOutcomes ? 1 : 0.85 }}>
               <div className="pb-lbl">📋 Что получилось</div>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 8, lineHeight: 1.4 }}>
+                Краткий итог по смене (не дословные ответы). Тексты рефлексий — ниже и в «Вопросы».
+              </div>
               {!showOutcomes ? (
                 <div style={{ fontSize: 12, color: '#888' }}>Блок откроется с 3-го дня форума.</div>
               ) : outcomeBullets.length > 0 ? (
@@ -460,6 +492,19 @@ export const ProfilePanel: React.FC<{
               )}
             </div>
 
+            {recentReflections.length > 0 && (
+              <div className="pb m-card">
+                <div className="pb-lbl">💬 Мои ответы на вопросы</div>
+                {recentReflections.slice(0, 5).map((r, i) => (
+                  <div key={i} style={{ marginTop: 10, paddingTop: i ? 10 : 0, borderTop: i ? '1px solid #eee' : undefined }}>
+                    <div style={{ fontSize: 12, fontWeight: 700 }}>{r.title}</div>
+                    <div style={{ fontSize: 12, color: '#555', marginTop: 4, lineHeight: 1.4 }}>{r.preview}</div>
+                  </div>
+                ))}
+                <div className="pb-link" onClick={() => routeNavigator.push('/questions')}>Все ответы в «Вопросы» →</div>
+              </div>
+            )}
+
             {medals.length > 0 && (
               <div className="m-card">
                 <div className="pb-lbl">Медали</div>
@@ -490,111 +535,124 @@ export const ProfilePanel: React.FC<{
               </div>
             )}
 
-            <div className="m-card">
-              <div className="pb-lbl">📁 Моя копилка</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                {PIGGYBANK_TAGS.map(tag => (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() => goPiggybank(tag, '')}
-                    style={{
-                      fontSize: 11, background: '#FFF3E0', color: '#B8621A',
-                      borderRadius: 12, padding: '4px 10px', fontWeight: 600, border: 'none', cursor: 'pointer',
-                    }}
+            <div className="profile-stack">
+              {tracker && (
+                <div className="m-card m-card--tracker">
+                  <div
+                    className="pb-lbl"
+                    style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', marginBottom: trackerOpen ? 7 : 0 }}
+                    onClick={() => setTrackerOpen(v => !v)}
                   >
-                    #{tag}{tagCounts[tag] ? ` · ${tagCounts[tag]}` : ''}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                {PIGGYBANK_SOURCES.map(src => (
-                  <button
-                    key={src}
-                    type="button"
-                    onClick={() => goPiggybank('', src)}
-                    style={{
-                      fontSize: 10, background: '#f5f5f5', color: '#555',
-                      borderRadius: 12, padding: '4px 10px', border: 'none', cursor: 'pointer',
-                    }}
-                  >
-                    {src}{sourceCounts[src] ? ` · ${sourceCounts[src]}` : ''}
-                  </button>
-                ))}
-              </div>
-              <div className="pb-link" onClick={() => setSection('piggybank')}>
-                {p.piggybankCount ?? 0} идей и инструментов →
-              </div>
-            </div>
-
-            {tracker && (
-              <div className="m-card">
-                <div
-                  className="pb-lbl"
-                  style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}
-                  onClick={() => setTrackerOpen(v => !v)}
-                >
-                  <span>📊 Мой трекер</span>
-                  <span>{trackerOpen ? '▲' : '▼'}</span>
-                </div>
-                {trackerOpen && (
-                  <div style={{ marginTop: 10, fontSize: 12 }}>
-                    {tracker.stateCurve?.length > 0 && (
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontWeight: 700, marginBottom: 6 }}>Кривая состояния</div>
-                        {tracker.stateCurve.map((d: { day: number; energy?: number; emotion?: number; delta?: number }) => (
-                          <div key={d.day} style={{ color: '#666' }}>
-                            Д{d.day}: энергия {d.energy ?? '—'}, эмоция {d.emotion ?? '—'}
-                            {d.delta != null && d.delta !== 0 && (
-                              <span style={{ color: d.delta > 0 ? '#2F855A' : '#C53030' }}>
-                                {' '}({d.delta > 0 ? '+' : ''}{d.delta})
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div style={{ marginBottom: 8 }}>
-                      Задания: {tracker.tasksDone}/{tracker.tasksTotal} · Опыт: {tracker.experiencePoints}
+                    <span>📊 Мой трекер</span>
+                    <span>{trackerOpen ? '▲' : '▼'}</span>
+                  </div>
+                  {!trackerOpen && (
+                    <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                      Задания {tracker.tasksDone}/{tracker.tasksTotal} · 7 точек · состояние за смену
                     </div>
-                    {tracker.myExchangeQuestions?.length > 0 && (
+                  )}
+                  {trackerOpen && (
+                    <div style={{ marginTop: 10, fontSize: 12 }}>
+                      {tracker.stateCurve?.length > 0 && (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontWeight: 700, marginBottom: 6 }}>Кривая состояния</div>
+                          {tracker.stateCurve.map((d: { day: number; energy?: number; emotion?: number; delta?: number }) => (
+                            <div key={d.day} style={{ color: '#666' }}>
+                              Д{d.day}: энергия {d.energy ?? '—'}, эмоция {d.emotion ?? '—'}
+                              {d.delta != null && d.delta !== 0 && (
+                                <span style={{ color: d.delta > 0 ? '#2F855A' : '#C53030' }}>
+                                  {' '}({d.delta > 0 ? '+' : ''}{d.delta})
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div style={{ marginBottom: 8 }}>
-                        <div style={{ fontWeight: 700 }}>Мои вопросы</div>
-                        {tracker.myExchangeQuestions.slice(0, 5).map((q: { id: number; text: string }) => (
-                          <div key={q.id} style={{ color: '#666' }}>· {q.text?.slice(0, 80)}</div>
-                        ))}
+                        Задания: {tracker.tasksDone}/{tracker.tasksTotal} · Опыт: {tracker.experiencePoints}
                       </div>
-                    )}
-                    {tracker.touchpointsToday?.length > 0 && (
-                      <div style={{ marginBottom: 8 }}>
-                        <div style={{ fontWeight: 700 }}>7 точек сегодня</div>
-                        {tracker.touchpointsToday.map((tp: { title?: string; done?: boolean }, i: number) => (
-                          <div key={i}>{tp.done ? '✓' : '○'} {tp.title || `Точка ${i + 1}`}</div>
-                        ))}
+                      {tracker.myExchangeQuestions?.length > 0 && (
+                        <div style={{ marginBottom: 8 }}>
+                          <div style={{ fontWeight: 700 }}>Мои вопросы</div>
+                          {tracker.myExchangeQuestions.slice(0, 5).map((q: { id: number; text: string }) => (
+                            <div key={q.id} style={{ color: '#666' }}>· {q.text?.slice(0, 80)}</div>
+                          ))}
+                        </div>
+                      )}
+                      {tracker.touchpointsToday?.length > 0 && (
+                        <div style={{ marginBottom: 8 }}>
+                          <div style={{ fontWeight: 700 }}>7 точек · день {p.currentDay ?? '—'}</div>
+                          {tracker.touchpointsToday.map((tp: { title?: string; done?: boolean; state?: string }, i: number) => {
+                            const ok = tp.done === true || tp.state === 'done';
+                            return (
+                              <div key={i}>{ok ? '✓' : '○'} {tp.title || `Точка ${i + 1}`}</div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {tracker.roleOfDay && (
+                        <div>
+                          Роль дня: {tracker.roleOfDay.activeRoleName || '—'}
+                          {tracker.roleOfDay.experimentStatus ? ` · ${tracker.roleOfDay.experimentStatus}` : ''}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="m-card m-card--piggybank">
+                <div className="pb-lbl">📁 Моя копилка</div>
+                <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
+                  Идеи и заметки по тегам — отдельно от трекера дня
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                  {PIGGYBANK_TAGS.map(tag => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => goPiggybank(tag, '')}
+                      style={{
+                        fontSize: 11, background: '#FFF3E0', color: '#B8621A',
+                        borderRadius: 12, padding: '4px 10px', fontWeight: 600, border: 'none', cursor: 'pointer',
+                      }}
+                    >
+                      #{tag}{tagCounts[tag] ? ` · ${tagCounts[tag]}` : ''}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                  {PIGGYBANK_SOURCES.map(src => (
+                    <button
+                      key={src}
+                      type="button"
+                      onClick={() => goPiggybank('', src)}
+                      style={{
+                        fontSize: 10, background: '#f5f5f5', color: '#555',
+                        borderRadius: 12, padding: '4px 10px', border: 'none', cursor: 'pointer',
+                      }}
+                    >
+                      {src}{sourceCounts[src] ? ` · ${sourceCounts[src]}` : ''}
+                    </button>
+                  ))}
+                </div>
+                {previewPiggy.length > 0 && (
+                  <div className="profile-piggy-preview">
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                      Последние записи
+                    </div>
+                    {previewPiggy.map(entry => (
+                      <div key={entry.id} style={{ fontSize: 11, marginTop: 6, color: '#666' }}>
+                        {entry.tag}: {entry.text?.slice(0, 60)}
                       </div>
-                    )}
-                    {tracker.roleOfDay && (
-                      <div>
-                        Роль дня: {tracker.roleOfDay.activeRoleName || '—'}
-                        {tracker.roleOfDay.experimentStatus ? ` · ${tracker.roleOfDay.experimentStatus}` : ''}
-                      </div>
-                    )}
+                    ))}
                   </div>
                 )}
+                <div className="pb-link" style={{ marginTop: 10 }} onClick={() => setSection('piggybank')}>
+                  {p.piggybankCount ?? 0} идей и инструментов →
+                </div>
               </div>
-            )}
-
-            {previewPiggy.length > 0 && (
-              <div className="m-card">
-                <div className="pb-lbl">Копилка · последние записи</div>
-                {previewPiggy.map(entry => (
-                  <div key={entry.id} style={{ fontSize: 11, marginTop: 6, color: '#666' }}>
-                    {entry.tag}: {entry.text?.slice(0, 60)}
-                  </div>
-                ))}
-                <div className="pb-link" onClick={() => setSection('piggybank')}>Все записи →</div>
-              </div>
-            )}
+            </div>
 
             <div className="ai-rec">
               <div className="ai-rec-t">💡 Рекомендация</div>
@@ -1001,7 +1059,7 @@ export const ProfilePanel: React.FC<{
               </Button>
             </div>
           </>
-        ) : (
+        ) : section === 'piggybank' ? (
           <>
             <Button
               size="m"
@@ -1010,11 +1068,12 @@ export const ProfilePanel: React.FC<{
               onClick={() => openQuickCapture(setModal, {
                 onSaved: () => {
                   loadPiggybank();
+                  loadProfile();
                   setSnackbar('Запись добавлена в копилку');
                 },
               })}
             >
-              + Новая запись
+              Создать запись
             </Button>
             <Button
               size="m"
@@ -1062,7 +1121,7 @@ export const ProfilePanel: React.FC<{
               <EmptyState icon="📝" title="Копилка пуста" subtitle="Фиксируйте идеи и мысли на главной или в программе" />
             )}
           </>
-        )}
+        ) : null}
       </Group>
       {snackbar && <Snackbar onClose={() => setSnackbar(null)} onClosed={() => setSnackbar(null)}>{snackbar}</Snackbar>}
     </Panel>

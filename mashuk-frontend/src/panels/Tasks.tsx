@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Panel, PanelHeader, Group, Spinner, Button, Textarea, ModalRoot, ModalPage, ModalPageHeader, Snackbar, Input } from '@vkontakte/vkui';
+import { useActiveVkuiLocation } from '@vkontakte/vk-mini-apps-router';
 import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { uploadTaskPhoto } from '../utils/uploadPhoto';
 import { useAppModal } from '../App';
@@ -262,6 +263,7 @@ const TaskSubmitModal = ({
 
 export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
   const { setModal } = useAppModal();
+  const { panel: activePanel } = useActiveVkuiLocation();
   const [categoryFilter, setCategoryFilter] = useState('');
   const [filter, setFilter] = useState('all');
   const [data, setData] = useState<any>(null);
@@ -308,6 +310,7 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
   }, [data, openSubmit]);
 
   useEffect(() => {
+    if (activePanel !== id) return;
     if (submitTaskId) {
       setModal(
         <ModalRoot activeModal="task-submit" onClose={() => setSubmitTaskId(null)}>
@@ -324,7 +327,7 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
     } else {
       setModal(null);
     }
-  }, [submitTaskId, submitTaskMeta, load, setModal]);
+  }, [submitTaskId, submitTaskMeta, load, setModal, activePanel, id]);
 
   useEffect(() => {
     return () => setModal(null);
@@ -340,7 +343,7 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
 
   return (
     <Panel id={id}>
-      <PanelHeader>Задания</PanelHeader>
+      <PanelHeader fixed>Задания</PanelHeader>
       <Group>
         {loading ? <Spinner /> : error ? (
           <>

@@ -13,6 +13,8 @@ import {
   PulseView,
   SemanticView,
 } from './analyticsDashboardViews';
+import { CHART_HELP_RU, formatForumDay } from './chartRu';
+import { roleName } from '../onboarding/roleOptions';
 
 type ViewMode = 'today' | 'day' | 'shift' | 'compare';
 
@@ -57,6 +59,7 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
   const [clubFilter, setClubFilter] = useState('');
   const [clubEditDraft, setClubEditDraft] = useState<Record<string, string>>({});
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [chartHelpOpen, setChartHelpOpen] = useState(false);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
@@ -167,10 +170,18 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
               Скачать XLSX
             </button>
           )}
+          <button type="button" className="adm-btn adm-btn-ghost" onClick={() => setChartHelpOpen(v => !v)}>
+            {chartHelpOpen ? 'Скрыть подсказку' : 'Как читать диаграммы'}
+          </button>
           <button type="button" className="adm-btn adm-btn-ghost" onClick={() => setAdvancedOpen(v => !v)}>
             {advancedOpen ? 'Скрыть расширенные' : 'Расширенные фильтры'}
           </button>
         </div>
+        {chartHelpOpen && dash !== 'roles' && (
+          <p className="adm-muted" style={{ fontSize: 12, marginTop: 10, lineHeight: 1.55, whiteSpace: 'pre-line' }}>
+            {CHART_HELP_RU}
+          </p>
+        )}
         {advancedOpen && (
           <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', marginTop: 8 }}>
             <select className="adm-input" value={mode} onChange={e => setMode(e.target.value as ViewMode)}>
@@ -185,7 +196,7 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
             <select className="adm-input" value={roleKey} onChange={e => setRoleKey(e.target.value)}>
               <option value="">Все роли</option>
               {(meta?.filters?.roles ?? []).map(r => (
-                <option key={r} value={r}>{r}</option>
+                <option key={r} value={r}>{roleName(r)}</option>
               ))}
             </select>
           </div>
@@ -205,7 +216,7 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
         )}
         {showEarlyWarning && (
           <p className="adm-insights-warn-banner">
-            Данные по этому дашборду полнее с {catalogEntry?.availabilityTier}. Сейчас день форума D{meta?.currentForumDay}.
+            Данные по этому дашборду полнее с {catalogEntry?.availabilityTier}. Сейчас {formatForumDay(meta?.currentForumDay ?? 1)}.
           </p>
         )}
       </div>

@@ -1,4 +1,6 @@
+import { useMemo, useState } from 'react';
 import type { ProgramBlockType, ProgramSpeaker } from './types';
+import { speakerFullLabel, speakerSearchHaystack, speakerShortLabel } from '../speakers/speakerFormat';
 
 type ChipProps = {
   title: string;
@@ -80,41 +82,6 @@ export function ProgramBlockTypesBlock({
   );
 }
 
-export function ProgramSpeakersBlock({
-  speakers,
-  newName,
-  onNewNameChange,
-  editing,
-  onEditingChange,
-  onAdd,
-  onSaveEdit,
-  onDelete,
-}: {
-  speakers: ProgramSpeaker[];
-  newName: string;
-  onNewNameChange: (v: string) => void;
-  editing: { id: number; name: string } | null;
-  onEditingChange: (v: { id: number; name: string } | null) => void;
-  onAdd: () => void;
-  onSaveEdit: () => void;
-  onDelete: (id: number) => void;
-}) {
-  return (
-    <CatalogChipBlock
-      title="Спикеры"
-      hint="Выбирайте спикеров при создании события и под-тем."
-      items={speakers.map(s => ({ id: s.id, label: s.name }))}
-      newName={newName}
-      onNewNameChange={onNewNameChange}
-      onAdd={onAdd}
-      editing={editing}
-      onEditingChange={onEditingChange}
-      onSaveEdit={onSaveEdit}
-      onDelete={onDelete}
-    />
-  );
-}
-
 export function SpeakerMultiPick({
   speakers,
   selectedIds,
@@ -124,18 +91,70 @@ export function SpeakerMultiPick({
   selectedIds: number[];
   onChange: (ids: number[]) => void;
 }) {
+  const [q, setQ] = useState('');
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return speakers;
+    return speakers.filter(s => speakerSearchHaystack(s).includes(needle));
+  }, [speakers, q]);
+
   const toggle = (id: number) => {
     onChange(selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id]);
   };
-  if (speakers.length === 0) return <span className="adm-muted">Добавьте спикеров в справочник</span>;
+
+  if (speakers.length === 0) {
+    return (
+      <span className="adm-muted">
+        Справочник пуст. Добавьте спикеров во вкладке «Спикеры».
+      </span>
+    );
+  }
+
+  const selected = speakers.filter(s => selectedIds.includes(s.id));
+
   return (
-    <div className="adm-program-tag-pick">
-      {speakers.map(s => (
-        <label key={s.id} className={`adm-chip-btn ${selectedIds.includes(s.id) ? 'on' : ''}`} style={{ cursor: 'pointer' }}>
-          <input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => toggle(s.id)} style={{ display: 'none' }} />
-          {s.name}
-        </label>
-      ))}
+    <div className="adm-speaker-pick">
+      {selected.length > 0 && (
+        <div className="adm-speaker-pick-selected">
+          {selected.map(s => (
+            <span key={s.id} className="adm-speaker-pick-chip" title={speakerFullLabel(s)}>
+              {speakerShortLabel(s)}
+              <button type="button" className="adm-speaker-pick-chip-x" aria-label="Убрать" onClick={() => toggle(s.id)}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      <input
+        className="adm-input adm-input-sm"
+        value={q}
+        onChange={e => setQ(e.target.value)}
+        placeholder={`Поиск среди ${speakers.length} спикеров…`}
+      />
+      <div className="adm-speaker-pick-list" role="listbox" aria-multiselectable>
+        {filtered.map(s => {
+          const on = selectedIds.includes(s.id);
+          return (
+            <button
+              key={s.id}
+              type="button"
+              role="option"
+              aria-selected={on}
+              className={`adm-speaker-pick-row ${on ? 'on' : ''}`}
+              onClick={() => toggle(s.id)}
+            >
+              <span className="adm-speaker-pick-check">{on ? '✓' : ''}</span>
+              <span className="adm-speaker-pick-main">
+                <span className="adm-speaker-pick-name">{s.name}</span>
+                {s.credentials?.trim() && (
+                  <span className="adm-speaker-pick-cred">{s.credentials.trim()}</span>
+                )}
+              </span>
+            </button>
+          );
+        })}
+        {filtered.length === 0 && <div className="adm-muted adm-speaker-pick-empty">Никого не найдено</div>}
+      </div>
     </div>
   );
 }

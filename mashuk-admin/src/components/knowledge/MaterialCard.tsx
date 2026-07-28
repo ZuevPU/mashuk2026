@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { SpeakerMultiPick } from '../program/ProgramCatalogs';
 import type { ProgramSpeaker } from '../program/types';
+import { speakerFullLabel } from '../speakers/speakerFormat';
 import { confirmDelete } from '../../admin/confirmDelete';
 import { RowActionsMenu } from '../participants/RowActionsMenu';
 
@@ -54,7 +55,7 @@ type Props = {
 
 function speakerLabel(ids: number[], speakers: ProgramSpeaker[], fallback?: string | null): string {
   if (ids.length) {
-    return speakers.filter(s => ids.includes(s.id)).map(s => s.name).join(', ') || '—';
+    return speakers.filter(s => ids.includes(s.id)).map(speakerFullLabel).join('; ') || '—';
   }
   return fallback || '—';
 }

@@ -61,32 +61,44 @@ export type EventTimeFields = {
 
 export type ForumScheduleSettings = {
   startDate?: Date | null;
+  /** MSK calendar date (YYYY-MM-DD) for this forum day from schedule_days.calendar_date */
+  dayCalendarDateKey?: string | null;
 };
+
+export function calendarDateKeyFromTimestamp(d: Date | null | undefined): string | null {
+  if (!d) return null;
+  return getMoscowParts(d).dateKey;
+}
 
 /** Resolve absolute start/end for status display and home «сейчас». */
 export function resolveEventInterval(
   event: EventTimeFields,
   settings: ForumScheduleSettings,
 ): { start: Date | null; end: Date | null } {
-  let start = event.startTime ?? null;
-  let end = event.endTime ?? null;
-
   const dayNumber = event.dayNumber ?? null;
-  const dateKey = dayNumber ? forumDayDateKey(settings.startDate ?? null, dayNumber) : null;
+  const dateKey = dayNumber
+    ? (settings.dayCalendarDateKey ?? forumDayDateKey(settings.startDate ?? null, dayNumber))
+    : null;
   const clocks = parseClockPair(event.timeSlot);
 
-  if (!start && dateKey && clocks) {
-    start = mskInstant(dateKey, clocks.startH, clocks.startM);
-  }
-  if (!start && event.eventDate) {
-    start = event.eventDate;
+  if (dateKey && clocks) {
+    const start = mskInstant(dateKey, clocks.startH, clocks.startM);
+    let end: Date | null = null;
+    if (clocks.endH != null && clocks.endM != null) {
+      end = mskInstant(dateKey, clocks.endH, clocks.endM);
+      if (end.getTime() <= start.getTime()) {
+        end = new Date(end.getTime() + 86_400_000);
+      }
+    } else {
+      end = new Date(start.getTime() + DEFAULT_EVENT_DURATION_MS);
+    }
+    return { start, end };
   }
 
-  if (!end && dateKey && clocks?.endH != null && clocks.endM != null) {
-    end = mskInstant(dateKey, clocks.endH, clocks.endM);
-    if (start && end.getTime() <= start.getTime()) {
-      end = new Date(end.getTime() + 86_400_000);
-    }
+  let start = event.startTime ?? null;
+  let end = event.endTime ?? null;
+  if (!start && event.eventDate) {
+    start = event.eventDate;
   }
   if (!end && start) {
     end = new Date(start.getTime() + DEFAULT_EVENT_DURATION_MS);
@@ -97,17 +109,17 @@ export function resolveEventInterval(
 
 /**
  * Live status for schedule UI (MSK wall clock on the viewed forum day).
- * Past/future forum days force all blocks past/future regardless of clock.
+ * `liveScheduleDay` — календарный день форума «сегодня» (resolveLiveScheduleDay), не admin currentDay.
  */
 export function getEventLiveStatus(
   viewedDay: number,
-  effectiveCurrentDay: number,
+  liveScheduleDay: number,
   start: Date | null,
   end: Date | null,
   now = new Date(),
 ): EventLiveStatus {
-  if (viewedDay < effectiveCurrentDay) return 'past';
-  if (viewedDay > effectiveCurrentDay) return 'future';
+  if (viewedDay < liveScheduleDay) return 'past';
+  if (viewedDay > liveScheduleDay) return 'future';
   if (!start) return 'future';
   const endBound = end ?? new Date(start.getTime() + DEFAULT_EVENT_DURATION_MS);
   if (endBound.getTime() < now.getTime()) return 'past';

@@ -32,6 +32,17 @@ describe('eventSchedule', () => {
     assert.equal(status, 'past');
   });
 
+  it('prefers timeSlot over stale DB startTime for live status', () => {
+    const settings = { startDate: START };
+    const staleStart = new Date('2026-08-12T14:00:00.000Z'); // 17:00 MSK
+    const { start, end } = resolveEventInterval(
+      { dayNumber: 1, timeSlot: '19:00–21:00', startTime: staleStart },
+      settings,
+    );
+    const now = new Date('2026-08-12T17:05:00.000Z'); // 20:05 MSK
+    assert.equal(getEventLiveStatus(1, 1, start, end, now), 'now');
+  });
+
   it('marks only one block as now on current day', () => {
     const settings = { startDate: START };
     const morning = resolveEventInterval({ dayNumber: 3, timeSlot: '09:00–10:00' }, settings);
@@ -53,5 +64,13 @@ describe('eventSchedule', () => {
     const end = new Date('2026-08-14T11:00:00+03:00');
     const now = new Date('2026-08-14T10:30:00+03:00');
     assert.equal(getEventLiveStatus(4, 3, start, end, now), 'future');
+  });
+
+  it('uses clock on calendar day when admin currentDay is ahead', () => {
+    const settings = { startDate: START };
+    const { start, end } = resolveEventInterval({ dayNumber: 3, timeSlot: '19:00–21:00' }, settings);
+    const now = new Date('2026-08-14T17:05:00.000Z'); // 20:05 MSK on forum day 3
+    assert.equal(getEventLiveStatus(3, 3, start, end, now), 'now');
+    assert.equal(getEventLiveStatus(3, 5, start, end, now), 'past');
   });
 });

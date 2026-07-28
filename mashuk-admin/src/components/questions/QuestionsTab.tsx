@@ -305,6 +305,12 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
         <div className="card adm-forum-block">
           <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" style={{ marginBottom: 8 }} onClick={() => setView('list')}>← К списку</button>
           <h3>Инструменты</h3>
+          <p className="adm-muted" style={{ fontSize: 13, marginBottom: 12, lineHeight: 1.45 }}>
+            Здесь копируются <strong>7 точек осмысления / проверки состояния</strong> в разделе «Общение».
+            Большая <strong>итоговая анкета вечера</strong> (оценки 1–5, выводы, роль на завтра) настраивается отдельно:
+            вкладка «Форум» → блок «Итоговая анкета вечера». Слот «Итоговая анкета по дню» в списке вопросов — одно короткое
+            текстовое поле-напоминание; основная форма открывается на главной после 22:00 МСК.
+          </p>
           <div className="form-row" style={{ marginBottom: 12 }}>
             <button
               type="button"
@@ -330,7 +336,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
               className="adm-btn"
               onClick={() => act(() => adminFetch('/questions/copy-day', {
                 method: 'POST', body: JSON.stringify(copyDayForm),
-              }).then(() => loadQuestions()), 'Скопировано')}
+              }).then(() => loadQuestions()), 'Скопировано (вопросы + анкета вечера на «Форуме», если дни 1–7)')}
             >
               Скопировать
             </button>

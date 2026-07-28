@@ -3,15 +3,21 @@ import { eq, and, asc, lte, or, isNull, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { events, eventAttendance, materials, questions, answers, scheduleDays, dayFocus, kbDayUnlocks } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
-import { getForumSettings, formatTime, resolveEffectiveCurrentDay } from '../services/helpers.js';
+import { getForumSettings, formatTime, resolveEffectiveCurrentDay, resolveLiveScheduleDay } from '../services/helpers.js';
 import { isPublishedStatus } from '../services/publishStatus.js';
 import { getForumDayDateLabel } from '../services/timePhase.js';
 import {
   getEventLiveStatus,
+  calendarDateKeyFromTimestamp,
   recommendationSubtitle,
   resolveEventInterval,
 } from '../services/eventSchedule.js';
 import { cache } from '../services/cache.js';
+import {
+  isTouchpointQuestionForForumDay,
+  touchpointCompletionRatio,
+} from '../services/touchpointProgress.js';
+import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
 
 export const getProgramSettings = async (req: ParticipantRequest, res: Response): Promise<void> => {
   const settings = await getForumSettings();
@@ -24,26 +30,23 @@ export const getProgramSettings = async (req: ParticipantRequest, res: Response)
   });
 };
 
-/** Count answered published questions for a specific day (touchpoints). */
+/** Count answered touchpoint slots for a forum day (7-slot template). */
 export async function countTouchpointsForDay(participantId: number, dayNumber: number): Promise<{
   completed: number;
   total: number;
 }> {
   const now = new Date();
-  const dayQuestions = await db.select().from(questions)
+  const published = await db.select().from(questions)
     .where(and(
       eq(questions.status, 'published'),
-      eq(questions.dayNumber, dayNumber),
       or(isNull(questions.publishTime), lte(questions.publishTime, now)),
     ));
-  if (dayQuestions.length === 0) {
-    return { completed: 0, total: 7 };
-  }
+  const dayQuestions = published.filter(q => isTouchpointQuestionForForumDay(q, dayNumber));
   const participantAnswers = await db.select().from(answers)
     .where(eq(answers.participantId, participantId));
   const answeredIds = new Set(participantAnswers.map(a => a.questionId));
-  const completed = dayQuestions.filter(q => answeredIds.has(q.id)).length;
-  return { completed, total: dayQuestions.length };
+  const { completed, expected } = touchpointCompletionRatio(dayQuestions, answeredIds, dayNumber);
+  return { completed, total: expected || TOUCHPOINT_SLOTS.length };
 }
 
 export function materialIsNew(m: typeof materials.$inferSelect, now: Date): boolean {
@@ -222,10 +225,14 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
 
     const settings = await getForumSettings();
     const now = new Date();
-    const effectiveDay = resolveEffectiveCurrentDay(settings, now);
+    const liveScheduleDay = resolveLiveScheduleDay(settings, now);
+    const scheduleContext = {
+      startDate: settings.startDate ?? null,
+      dayCalendarDateKey: calendarDateKeyFromTimestamp(dayMeta?.calendarDate ?? null),
+    };
     const mapEvent = (e: typeof list[0], children: typeof list = []) => {
-      const { start, end } = resolveEventInterval(e, settings);
-      const status = getEventLiveStatus(day, effectiveDay, start, end, now);
+      const { start, end } = resolveEventInterval(e, scheduleContext);
+      const status = getEventLiveStatus(day, liveScheduleDay, start, end, now);
       const childMapped = children.map(c => {
         const iv = resolveEventInterval(c, settings);
         return {
@@ -301,8 +308,12 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
   try {
     const day = Number(req.query.day) || (await getForumSettings()).currentDay || 1;
     const settings = await getForumSettings();
-    const interests = (req.participant!.interests as string[]) || [];
+    const interests = Array.isArray(req.participant!.interests)
+      ? (req.participant!.interests as string[])
+      : [];
     const threshold = settings.recommendationThreshold ?? 1;
+    const norm = (s: string) => s.trim().toLowerCase();
+    const interestSet = new Set(interests.map(norm));
 
     const list = await db.select().from(events)
       .where(and(
@@ -323,7 +334,7 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
 
     const scored = eventList.map(e => {
       const tags = (e.tags as string[]) || [];
-      const overlap = tags.filter(t => interests.includes(t)).length;
+      const overlap = tags.filter(t => interestSet.has(norm(t))).length;
       return { event: e, score: overlap };
     }).filter(x => x.score >= threshold)
       .sort((a, b) => {
@@ -342,6 +353,8 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
         score: s.score,
         tags: s.event.tags,
       })),
+      interests,
+      publishedEventsCount: eventList.length,
     });
   } catch (error) {
     console.error('getRecommendations:', error);

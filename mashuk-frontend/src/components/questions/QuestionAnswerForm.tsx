@@ -26,9 +26,11 @@ interface QuestionAnswerFormProps {
     timePoint?: string;
     block?: string;
     requiresLessonPick?: boolean;
+    allowRetry?: boolean;
   };
   options: { id: number; label: string; value: string; parentOptionId?: number | null }[];
   dayEvents?: { id: number; title: string; place?: string | null; startTime?: string | null }[];
+  myAnswer?: { preview?: string; createdAt?: string | null } | null;
   onSubmit: (answerData: unknown) => Promise<void>;
 }
 
@@ -256,12 +258,15 @@ const LessonReflectionForm: React.FC<{
   );
 };
 
-export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({ question, options, dayEvents = [], onSubmit }) => {
+export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
+  question, options, dayEvents = [], myAnswer, onSubmit,
+}) => {
   const [text, setText] = useState('');
   const [choice, setChoice] = useState('');
   const [multi, setMulti] = useState<string[]>([]);
   const [emotion, setEmotion] = useState('');
   const [energy, setEnergy] = useState(5);
+  const [stateReason, setStateReason] = useState('');
   const [interests, setInterests] = useState('');
   const [masterChoice, setMasterChoice] = useState('');
   const [dependentText, setDependentText] = useState('');
@@ -269,6 +274,22 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({ question
 
   if (question.block === 'Точка Б') {
     return <PointBForm onSubmit={onSubmit} />;
+  }
+
+  const readOnly = !!myAnswer?.preview && !question.allowRetry;
+
+  if (readOnly) {
+    const when = myAnswer?.createdAt
+      ? new Date(myAnswer.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+      : null;
+    return (
+      <Div>
+        <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
+          Ваш ответ сохранён{when ? ` · ${when}` : ''}
+        </div>
+        <div style={{ fontSize: 14, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{myAnswer!.preview}</div>
+      </Div>
+    );
   }
 
   const needsLesson = question.requiresLessonPick
@@ -283,9 +304,16 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({ question
     try {
       let answerData: unknown;
       switch (question.type) {
-        case 'checkin':
-          answerData = { emotion, energy, timePoint: question.timePoint || 'утро' };
+        case 'checkin': {
+          const reason = stateReason.trim().slice(0, 500);
+          answerData = {
+            emotion,
+            energy,
+            timePoint: question.timePoint || 'утро',
+            ...(reason ? { reason } : {}),
+          };
           break;
+        }
         case 'choice':
           answerData = { choice };
           break;
@@ -337,6 +365,14 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({ question
           </div>
           <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Энергия: {energy}/10</div>
           <Slider min={0} max={10} step={1} value={energy} onChange={setEnergy} />
+          <FormItem top="С чем связано состояние" style={{ marginTop: 12, paddingLeft: 0, paddingRight: 0 }}>
+            <Textarea
+              value={stateReason}
+              onChange={e => setStateReason(e.target.value.slice(0, 500))}
+              placeholder="Короткий комментарий (необязательно): урок, общение, усталость…"
+              rows={3}
+            />
+          </FormItem>
         </>
       )}
 
@@ -371,7 +407,7 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({ question
         </>
       )}
 
-      <Button size="l" stretched disabled={saving} onClick={handleSubmit} style={{ marginTop: 16 }}>
+      <Button size="l" stretched disabled={saving || (question.type === 'checkin' && !emotion)} onClick={handleSubmit} style={{ marginTop: 16 }}>
         Отправить ответ
       </Button>
     </Div>

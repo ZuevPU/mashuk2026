@@ -1,5 +1,5 @@
 import type { Response } from 'express';
-import { eq, asc, and, lte, or, isNull } from 'drizzle-orm';
+import { eq, asc, and, lte, or, isNull, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   participants, answers, taskSubmissions, tasks, questions, participantDayState,
@@ -26,6 +26,7 @@ import {
   resolveRecommendationTemplates,
 } from './profileRecommendations.js';
 import { PIGGYBANK_TAGS, PIGGYBANK_SOURCES, entryHasTag, entryTags, formatTagsForExport, primaryTag } from './piggybankDict.js';
+import { participantAnswerSummary } from './participantAnswerFormat.js';
 
 function buildRoleRoute(startKey: string | null, dayRoles: string[], growthKey: string | null): string {
   const start = startKey ? getRoleMeta(startKey)?.name : null;
@@ -78,7 +79,7 @@ function stateCurve(dayStates: typeof participantDayState.$inferSelect[]) {
     .map(s => {
       const r = s.eveningRatings as { energy?: number; morningHealth?: number } | null;
       const energy = r?.energy ?? r?.morningHealth ?? null;
-      return { dayNumber: s.dayNumber, energy };
+      return { day: s.dayNumber, dayNumber: s.dayNumber, energy, emotion: energy };
     });
 }
 
@@ -92,15 +93,67 @@ export async function gatherProfileBundle(participantId: number) {
   const shiftLabel = (settings as { shiftLabel?: string }).shiftLabel || 'Смена 1';
 
   const userAnswers = await db.select().from(answers).where(eq(answers.participantId, p.id));
+  const answerQuestionIds = [...new Set(userAnswers.map(a => a.questionId))];
+  const answerQuestions = answerQuestionIds.length
+    ? await db.select().from(questions).where(inArray(questions.id, answerQuestionIds))
+    : [];
+  const questionById = new Map(answerQuestions.map(q => [q.id, q]));
+  const recentReflections = [...userAnswers]
+    .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
+    .slice(0, 10)
+    .map(a => {
+      const q = questionById.get(a.questionId);
+      const preview = participantAnswerSummary(a.answerData, q?.type);
+      return {
+        questionId: a.questionId,
+        title: q?.title ?? 'Вопрос',
+        block: q?.block ?? null,
+        answeredAt: a.createdAt,
+        preview,
+      };
+    })
+    .filter(r => r.preview.length > 0);
   const userTasks = await db.select().from(taskSubmissions).where(eq(taskSubmissions.participantId, p.id));
   const allPiggy = await db.select().from(piggybank).where(eq(piggybank.participantId, p.id));
   const dayStates = await db.select().from(participantDayState)
     .where(eq(participantDayState.participantId, p.id))
     .orderBy(asc(participantDayState.dayNumber));
+
+  for (const s of dayStates) {
+    const r = s.eveningRatings as Record<string, unknown> | null;
+    if (!r) continue;
+    const labels: Record<string, string> = {
+      mainThesis: 'Главный тезис дня',
+      likedMost: 'Что понравилось',
+      freeNote: 'Заметка',
+      experimentResult: 'Эксперимент с ролью',
+    };
+    for (const [key, label] of Object.entries(labels)) {
+      const v = r[key];
+      if (typeof v === 'string' && v.trim()) {
+        recentReflections.push({
+          questionId: 0,
+          title: `Итоговая анкета · день ${s.dayNumber} · ${label}`,
+          block: 'Итоги дня',
+          answeredAt: s.updatedAt ?? s.createdAt,
+          preview: v.trim().slice(0, 320),
+        });
+      }
+    }
+  }
+  recentReflections.sort((a, b) =>
+    new Date(b.answeredAt ?? 0).getTime() - new Date(a.answeredAt ?? 0).getTime());
+  const recentReflectionsForClient = recentReflections.slice(0, 12);
+
   const answeredIds = new Set(userAnswers.map(a => a.questionId));
 
   const touchpointQuestions = await loadPublishedTouchpointQuestions(currentDay);
-  const { completed: tpDone, expected: tpExpected } = touchpointCompletionRatio(touchpointQuestions, answeredIds);
+  const dayForTp = Math.min(currentDay, 7);
+  const { completed: tpDone, expected: tpExpected } = touchpointCompletionRatio(
+    touchpointQuestions,
+    answeredIds,
+    dayForTp,
+  );
   const tpRatio = tpDone / tpExpected;
 
   const publishedTasks = await db.select().from(tasks).where(
@@ -186,6 +239,7 @@ export async function gatherProfileBundle(participantId: number) {
     piggyTotal: allPiggy.length,
     piggyInWork,
     eveningNotes,
+    recentAnswerTexts: recentReflectionsForClient.map(r => r.preview),
   });
   const outcomeBullets = parseOutcomesForDisplay(p.outcomesEdited, heuristicOutcomes);
 
@@ -283,18 +337,22 @@ export async function gatherProfileBundle(participantId: number) {
       showFromDay: 3,
       visible: currentDay >= 3,
     },
+    recentReflections: recentReflectionsForClient,
     nextSteps: visibleNextSteps,
     showNextSteps,
     recommendation,
+    piggybankSources: sourceCounts,
     dailyTracker: {
       stateCurve: stateCurve(dayStates),
-      piggybankTags: tagCounts,
-      piggybankSources: sourceCounts,
       tasksDone: tasksApproved,
       tasksTotal: publishedTasks.length,
       experiencePoints: p.experiencePoints ?? 0,
       myExchangeQuestions: myExchange.map(q => ({ id: q.id, text: q.text, moderationStatus: q.moderationStatus })),
-      touchpointsToday: touchpointItems,
+      touchpointsToday: touchpointItems.map(i => ({
+        title: i.title,
+        done: i.state === 'done',
+        state: i.state,
+      })),
       roleOfDay: todayState ?? null,
     },
     piggybankTags: tagCounts,

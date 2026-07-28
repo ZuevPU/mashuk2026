@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   adminFetch,
   adminLogin,
@@ -25,6 +25,7 @@ import { ROLE_OPTIONS } from './components/onboarding/roleOptions';
 import { ParticipantCardModal } from './components/ParticipantCard';
 import { ParticipantsTab } from './components/participants/ParticipantsTab';
 import { ProgramTab } from './components/program/ProgramTab';
+import { SpeakersTab } from './components/speakers/SpeakersTab';
 import { PushTab } from './components/push/PushTab';
 import { RecommendationTagsTab } from './components/tags/RecommendationTagsTab';
 import { QuestionsTab } from './components/questions/QuestionsTab';
@@ -76,20 +77,28 @@ export const App = () => {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  /** Не сбрасывать вкладку на defaultTab после каждого act()/reloadKey */
+  const appliedDefaultTabRef = useRef(false);
 
   useEffect(() => {
     if (getAdminToken()) setIsAuthenticated(true);
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) {
+      appliedDefaultTabRef.current = false;
+      return;
+    }
     adminFetch('/auth/me')
       .then((me: AdminMe) => {
         setAdminRole(me.role ?? 'admin');
         const tabs = (me.allowedTabs ?? TAB_ORDER) as Tab[];
         setAllowedTabs(tabs.length ? tabs : [...TAB_ORDER]);
-        if (me.defaultTab && tabs.includes(me.defaultTab as Tab)) {
-          setTab(me.defaultTab as Tab);
+        if (!appliedDefaultTabRef.current) {
+          if (me.defaultTab && tabs.includes(me.defaultTab as Tab)) {
+            setTab(me.defaultTab as Tab);
+          }
+          appliedDefaultTabRef.current = true;
         }
         setAnalyticsDashboardAllowlist(me.analyticsDashboards ?? null);
       })
@@ -184,6 +193,7 @@ export const App = () => {
         )}
         {tab === 'forum' && <ForumTab {...tabProps} />}
         {tab === 'events' && <ProgramTab {...tabProps} />}
+        {tab === 'speakers' && <SpeakersTab {...tabProps} />}
         {tab === 'knowledge' && <KnowledgeTab {...tabProps} onOpenCard={openParticipantCard} />}
         {tab === 'tasks' && <TasksTab {...tabProps} />}
         {tab === 'questions' && (

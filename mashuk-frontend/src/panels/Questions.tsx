@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Panel, PanelHeader, Group, Spinner, Textarea, Button, ModalRoot, ModalPage, ModalPageHeader } from '@vkontakte/vkui';
+import { useActiveVkuiLocation } from '@vkontakte/vk-mini-apps-router';
 import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { useAppModal } from '../App';
 import { QuestionAnswerForm } from '../components/questions/QuestionAnswerForm';
@@ -13,6 +14,42 @@ const DEFAULT_CONFIRM: AnswerConfirmationConfig = {
   showPoints: true,
   titleTemplate: 'Ответ отправлен',
 };
+
+type ExchangeAnswerRow = {
+  id: number;
+  participantId?: number;
+  text: string;
+  parentAnswerId?: number | null;
+  authorName?: string;
+  reactions?: { likes?: number; discuss?: number; likedBy?: number[]; discussBy?: number[] };
+};
+
+function exchangeTopLevelAnswers(answers: ExchangeAnswerRow[] | undefined): ExchangeAnswerRow[] {
+  return (answers || []).filter(a => !a.parentAnswerId);
+}
+
+function exchangeRepliesTo(parentId: number, answers: ExchangeAnswerRow[] | undefined): ExchangeAnswerRow[] {
+  return (answers || []).filter(a => a.parentAnswerId === parentId);
+}
+
+function exchangeAnswerCountLabel(q: { answerCount?: number; answers?: ExchangeAnswerRow[] }): string {
+  const top = q.answerCount ?? exchangeTopLevelAnswers(q.answers).length;
+  const replies = (q.answers || []).filter(a => a.parentAnswerId).length;
+  if (top === 0 && replies === 0) return '0 ответов';
+  let s = `${top} ${top === 1 ? 'ответ' : top < 5 ? 'ответа' : 'ответов'}`;
+  if (replies > 0) s += ` · ${replies} в обсуждении`;
+  return s;
+}
+
+function userLiked(reactions: ExchangeAnswerRow['reactions'], myId: number | null): boolean {
+  if (!myId || !reactions?.likedBy) return false;
+  return reactions.likedBy.includes(myId);
+}
+
+function userDiscussed(reactions: ExchangeAnswerRow['reactions'], myId: number | null): boolean {
+  if (!myId || !reactions?.discussBy) return false;
+  return reactions.discussBy.includes(myId);
+}
 
 const ExchangeReplyModal = ({
   replyTo,
@@ -168,6 +205,7 @@ const OrgComposeModal = ({
 
 export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> = ({ id, onActivity }) => {
   const { setModal } = useAppModal();
+  const { panel: activePanel } = useActiveVkuiLocation();
   const [tab, setTab] = useState<ChatTab>('reflect');
   const [questions, setQuestions] = useState<any[]>([]);
   const [exchange, setExchange] = useState<any[]>([]);
@@ -181,11 +219,13 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const [activeQuestion, setActiveQuestion] = useState<any>(null);
   const [questionOptions, setQuestionOptions] = useState<any[]>([]);
   const [dayEvents, setDayEvents] = useState<any[]>([]);
+  const [myAnswer, setMyAnswer] = useState<{ preview?: string; createdAt?: string | null } | null>(null);
   const [replyTo, setReplyTo] = useState<number | null>(null);
   const [replyParentId, setReplyParentId] = useState<number | null>(null);
   const [successPayload, setSuccessPayload] = useState<SubmitSuccessPayload | null>(null);
   const [orgThreadId, setOrgThreadId] = useState<number | null>(null);
   const [orgComposeOpen, setOrgComposeOpen] = useState(false);
+  const [myParticipantId, setMyParticipantId] = useState<number | null>(null);
 
   const loadAll = useCallback(() => {
     setLoading(true);
@@ -199,6 +239,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
         setQuestions(q.questions || []);
         if (q.answerConfirm) setAnswerConfirmDefaults(q.answerConfirm);
         setExchange(ex.questions || []);
+        if (typeof ex.myParticipantId === 'number') setMyParticipantId(ex.myParticipantId);
         setMyQuestions((ex.questions || []).filter((item: any) => item.isMine));
         setOrgThreads(org.threads || []);
       })
@@ -217,6 +258,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
       setActiveQuestion(detail.question);
       setQuestionOptions(detail.options || []);
       setDayEvents(detail.dayEvents || []);
+      setMyAnswer(detail.myAnswer ?? null);
     } catch (err) {
       setSuccessPayload({
         confirm: { ...DEFAULT_CONFIRM, titleTemplate: err instanceof ApiError ? err.message : 'Не удалось открыть вопрос' },
@@ -268,6 +310,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   };
 
   useEffect(() => {
+    if (activePanel !== id) return;
     if (orgComposeOpen) {
       setModal(
         <ModalRoot activeModal="org-compose" onClose={() => setOrgComposeOpen(false)}>
@@ -297,6 +340,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
               question={activeQuestion}
               options={questionOptions}
               dayEvents={dayEvents}
+              myAnswer={myAnswer}
               onSubmit={submitAnswer}
             />
           </ModalPage>
@@ -317,19 +361,20 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
     } else {
       setModal(null);
     }
-  }, [activeQuestion, replyTo, replyParentId, questionOptions, setModal, loadAll, orgThreadId, orgComposeOpen, dayEvents]);
+  }, [activeQuestion, replyTo, replyParentId, questionOptions, myAnswer, setModal, loadAll, orgThreadId, orgComposeOpen, dayEvents, activePanel, id]);
 
   useEffect(() => {
     return () => setModal(null);
   }, [setModal]);
 
   const unanswered = questions.filter(q =>
-    q.status === 'active' || q.status === 'pending' || q.status === 'overdue',
+    q.status === 'active' || q.status === 'overdue',
   );
   const canAnswer = (status: string) => status === 'active' || status === 'overdue';
   const answeredToday = questions.filter(q => q.status === 'done' && q.answeredToday);
+  const answeredEarlier = questions.filter(q => q.status === 'done' && !q.answeredToday);
   const locked = questions.filter(q => q.status === 'locked');
-  const peerApproved = exchange.filter(q => q.moderationStatus === 'approved' || !q.moderationStatus);
+  const peerApproved = exchange.filter(q => (q.moderationStatus || '').toLowerCase() === 'approved');
 
   const orgStatusLabel = (status: string) => {
     if (status === 'answered') return 'Отвечено';
@@ -338,7 +383,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
 
   return (
     <Panel id={id}>
-      <PanelHeader>Общение</PanelHeader>
+      <PanelHeader fixed>Вопросы</PanelHeader>
       <Group>
         <div className="time-sw" style={{ marginBottom: 12 }}>
           <button type="button" className={`time-btn ${tab === 'reflect' ? 'on' : ''}`} onClick={() => setTab('reflect')}>
@@ -402,22 +447,68 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
               <>
                 <div className="rq-hdr" style={{ marginTop: 12 }}><span className="rq-hdr-t">Отвечено сегодня · {answeredToday.length}</span></div>
                 {answeredToday.map(q => (
-                  <div key={q.id} className="rq-item m-card rq-done" style={{ marginBottom: 8, opacity: 0.55 }}>
+                  <div
+                    key={q.id}
+                    className="rq-item m-card rq-done"
+                    style={{ marginBottom: 8, cursor: 'pointer' }}
+                    onClick={() => openQuestion(q.id)}
+                  >
                     <div className="rq-tag">{q.reflectionLabel || q.block || q.type}</div>
                     <div className="rq-q">{q.title}</div>
+                    {q.answerPreview && (
+                      <div style={{ fontSize: 12, color: '#555', marginTop: 6, lineHeight: 1.4 }}>{q.answerPreview}</div>
+                    )}
                   </div>
                 ))}
               </>
             )}
-            {questions.length === 0 && (
+            {answeredEarlier.length > 0 && (
+              <>
+                <div className="rq-hdr" style={{ marginTop: 12 }}><span className="rq-hdr-t">Мои ответы · {answeredEarlier.length}</span></div>
+                {answeredEarlier.map(q => (
+                  <div
+                    key={q.id}
+                    className="rq-item m-card rq-done"
+                    style={{ marginBottom: 8, cursor: 'pointer' }}
+                    onClick={() => openQuestion(q.id)}
+                  >
+                    <div className="rq-tag">{q.reflectionLabel || q.block || q.type}</div>
+                    <div className="rq-q">{q.title}</div>
+                    {q.answerPreview && (
+                      <div style={{ fontSize: 12, color: '#555', marginTop: 6, lineHeight: 1.4 }}>{q.answerPreview}</div>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
+            {questions.filter(q => q.status === 'done').length === 0 && unanswered.length === 0 && locked.length === 0 && (
               <EmptyState icon="💬" title="Нет активных вопросов" subtitle="Рефлексивные вопросы появятся по расписанию форума" />
             )}
           </>
         ) : tab === 'peer' ? (
           <>
             <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-              Обмен опытом между участниками. Отвечай на вопросы других и задавай свои.
+              Обмен опытом между участниками. 👍 и «Интересно обсудить» — это реакции, не новые ответы. Текстовый ответ — кнопка «Ответить».
             </div>
+            {myQuestions.length > 0 && (
+              <>
+                <div className="rq-hdr">
+                  <span className="rq-hdr-t">Мои вопросы · {myQuestions.length}</span>
+                </div>
+                {myQuestions.map(q => (
+                  <div key={q.id} className="myq2 m-card" style={{ marginBottom: 8 }}>
+                    <div>{q.text}</div>
+                    <div className="peer-meta">
+                      {q.moderationStatus === 'pending'
+                        ? 'На модерации — появится после одобления'
+                        : q.moderationStatus === 'rejected'
+                          ? 'Не прошёл модерацию'
+                          : exchangeAnswerCountLabel(q)}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
             <div className="ask-btn m-card">
               <Textarea value={newQuestion} onChange={e => setNewQuestion(e.target.value)} placeholder="Задайте вопрос участникам..." />
               <div className="time-sw" style={{ marginTop: 8, marginBottom: 0 }}>
@@ -438,6 +529,11 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
               </div>
               <Button style={{ marginTop: 8 }} onClick={submitExchange}>+ Задать новый вопрос</Button>
             </div>
+            {peerApproved.length > 0 && (
+              <div className="rq-hdr" style={{ marginTop: 12 }}>
+                <span className="rq-hdr-t">Вопросы участников · {peerApproved.length}</span>
+              </div>
+            )}
             {peerApproved.map(q => (
               <div key={q.id} className="peer-item m-card" style={{ marginTop: 8 }}>
                 <div className="peer-wrap">
@@ -449,70 +545,64 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                         : 'Всем участникам'}
                     </div>
                     <div className="peer-q">{q.text}</div>
-                    <div className="peer-meta">{q.authorName} · {q.answers?.length ?? 0} ответ(ов)</div>
+                    <div className="peer-meta">{q.authorName} · {exchangeAnswerCountLabel(q)}</div>
                   </div>
                 </div>
-                {q.answers?.map((a: any) => (
-                  <div key={a.id} className="peer-answer" style={{ marginLeft: a.parentAnswerId ? 16 : 0 }}>
-                    <div style={{ fontSize: 10, color: '#888' }}>
-                      {a.authorName}{a.parentAnswerId ? ' · ответ на комментарий' : ''}
+                {exchangeTopLevelAnswers(q.answers).map((a: ExchangeAnswerRow) => (
+                  <div key={a.id}>
+                    <div className="peer-answer">
+                      <div style={{ fontSize: 10, color: '#888' }}>{a.authorName}</div>
+                      <div style={{ fontSize: 12 }}>{a.text}</div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <Button
+                          size="s"
+                          mode={userLiked(a.reactions, myParticipantId) ? 'primary' : 'secondary'}
+                          disabled={userLiked(a.reactions, myParticipantId)}
+                          onClick={async () => {
+                            try {
+                              await apiPost(`/exchange/answers/${a.id}/react`, { type: 'like' });
+                              loadAll();
+                            } catch {
+                              /* ignore */
+                            }
+                          }}
+                        >
+                          👍 {a.reactions?.likes ?? 0}
+                        </Button>
+                        <Button
+                          size="s"
+                          mode={userDiscussed(a.reactions, myParticipantId) ? 'primary' : 'secondary'}
+                          disabled={userDiscussed(a.reactions, myParticipantId)}
+                          onClick={async () => {
+                            try {
+                              await apiPost(`/exchange/answers/${a.id}/react`, { type: 'discuss' });
+                              loadAll();
+                            } catch {
+                              /* ignore */
+                            }
+                          }}
+                        >
+                          Интересно обсудить · {a.reactions?.discuss ?? 0}
+                        </Button>
+                        <Button size="s" mode="tertiary" onClick={() => {
+                          setReplyParentId(a.id);
+                          setReplyTo(q.id);
+                        }}>Ответить</Button>
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12 }}>{a.text}</div>
-                    <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <Button
-                        size="s"
-                        mode="secondary"
-                        onClick={async () => {
-                          try {
-                            await apiPost(`/exchange/answers/${a.id}/react`, { type: 'like' });
-                            loadAll();
-                          } catch {
-                            /* ignore */
-                          }
-                        }}
-                      >
-                        👍 {a.reactions?.likes ?? 0}
-                      </Button>
-                      <Button
-                        size="s"
-                        mode="secondary"
-                        onClick={async () => {
-                          try {
-                            await apiPost(`/exchange/answers/${a.id}/react`, { type: 'discuss' });
-                            loadAll();
-                          } catch {
-                            /* ignore */
-                          }
-                        }}
-                      >
-                        Хочу обсудить · {a.reactions?.discuss ?? 0}
-                      </Button>
-                      <Button size="s" mode="tertiary" onClick={() => {
-                        if (a.parentAnswerId) {
-                          showSubmitSuccess({ confirm: { ...DEFAULT_CONFIRM, titleTemplate: 'Можно ответить только на ответ первого уровня' } });
-                          return;
-                        }
-                        setReplyParentId(a.id);
-                        setReplyTo(q.id);
-                      }}>Ответить</Button>
-                    </div>
+                    {exchangeRepliesTo(a.id, q.answers).map((r: ExchangeAnswerRow) => (
+                      <div key={r.id} className="peer-answer" style={{ marginLeft: 16, marginTop: 6 }}>
+                        <div style={{ fontSize: 10, color: '#888' }}>{r.authorName} · уточнение</div>
+                        <div style={{ fontSize: 12 }}>{r.text}</div>
+                      </div>
+                    ))}
                   </div>
                 ))}
                 <Button size="s" style={{ marginTop: 8 }} onClick={() => { setReplyParentId(null); setReplyTo(q.id); }}>Ответить на вопрос</Button>
               </div>
             ))}
-            {myQuestions.length > 0 && (
-              <>
-                <div className="rq-hdr" style={{ marginTop: 16 }}>
-                  <span className="rq-hdr-t">Мои вопросы</span>
-                </div>
-                {myQuestions.map(q => (
-                  <div key={q.id} className="myq2 m-card">
-                    <div>{q.text}</div>
-                    <div className="peer-meta">{q.moderationStatus === 'pending' ? 'На модерации' : `${q.answers?.length ?? 0} ответ(ов)`}</div>
-                  </div>
-                ))}
-              </>
+            {peerApproved.length === 0 && myQuestions.length === 0 && (
+              <EmptyState icon="🤝" title="Пока нет вопросов" subtitle="Задайте первый вопрос участникам или дождитесь публикации после модерации" />
             )}
           </>
         ) : (

@@ -4,13 +4,20 @@ export function buildOutcomesHeuristic(input: {
   piggyTotal: number;
   piggyInWork: number;
   eveningNotes: string[];
+  recentAnswerTexts?: string[];
 }): string[] {
   const bullets: string[] = [];
   if (input.tasksApproved > 0) {
     bullets.push(`Выполнено заданий на форуме: ${input.tasksApproved}`);
   }
-  if (input.answersCount >= 3) {
+  if (input.answersCount >= 1 && input.recentAnswerTexts?.length) {
+    for (const t of input.recentAnswerTexts.slice(0, 3)) {
+      if (t.trim()) bullets.push(t.trim().slice(0, 160));
+    }
+  } else if (input.answersCount >= 3) {
     bullets.push(`Рефлексия: ${input.answersCount} ответов на вопросы программы`);
+  } else if (input.answersCount > 0) {
+    bullets.push(`Рефлексия: ${input.answersCount} ответ${input.answersCount === 1 ? '' : 'а'} — тексты в «Общение» → «Мои ответы»`);
   }
   if (input.piggyTotal >= 2) {
     bullets.push(`Копилка: ${input.piggyTotal} записей (${input.piggyInWork} «в работу»)`);

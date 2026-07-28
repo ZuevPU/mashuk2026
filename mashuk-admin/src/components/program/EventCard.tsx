@@ -5,6 +5,7 @@ import { ParticipantPreviewHtml, ParticipantPreviewModal } from '../admin/Partic
 import { RichHtmlEditor } from '../admin/RichHtmlEditor';
 import { PlaceSelect } from './ProgramPlacesBlock';
 import { SpeakerMultiPick } from './ProgramCatalogs';
+import { speakerFullLabel } from '../speakers/speakerFormat';
 import {
   BLOCK_TYPE_OPTIONS,
   buildTimeSlot,
@@ -31,7 +32,6 @@ type Draft = {
   audienceDirectionId: string;
   speakerIds: number[];
   hasSubSessions: boolean;
-  isPublished: boolean;
 };
 
 function draftFromEvent(e: ProgramEvent): Draft {
@@ -53,7 +53,6 @@ function draftFromEvent(e: ProgramEvent): Draft {
     audienceDirectionId: e.audienceDirectionId ? String(e.audienceDirectionId) : '',
     speakerIds: [...speakerIds],
     hasSubSessions: e.hasSubSessions === true,
-    isPublished: e.isPublished === true,
   };
 }
 
@@ -72,6 +71,7 @@ export function EventCard({
   speakers,
   directions,
   selectedDay,
+  daySchedulePublished,
   onSaved,
   adminFetch,
   act,
@@ -83,6 +83,7 @@ export function EventCard({
   speakers: ProgramSpeaker[];
   directions: { id: number; name: string }[];
   selectedDay: number;
+  daySchedulePublished: boolean;
   onSaved: () => void;
   adminFetch: (path: string, opts?: RequestInit) => Promise<any>;
   act: (fn: () => Promise<void>, msg?: string) => void;
@@ -107,11 +108,14 @@ export function EventCard({
     return BLOCK_TYPE_OPTIONS.map(o => ({ value: o.value, label: label(o.labelKey) }));
   }, [blockTypes]);
 
-  const vis = eventVisibilityLabel({ ...event, isPublished: draft.isPublished, dayPublished: event.dayPublished });
+  const vis = eventVisibilityLabel(event);
   const visLabel =
     vis === 'visible' ? label('schedule_visible') : vis === 'waiting_day' ? label('schedule_waiting_day') : label('draft');
 
-  const speakerLine = (event.speakers?.map(s => s.name).join(', ') || speakers.filter(s => draft.speakerIds.includes(s.id)).map(s => s.name).join(', '));
+  const speakerLine = (
+    event.speakers?.map(s => speakerFullLabel(s)).join('; ')
+    || speakers.filter(s => draft.speakerIds.includes(s.id)).map(speakerFullLabel).join('; ')
+  );
 
   const toggleTag = (name: string) => {
     setDraft(d => ({
@@ -134,7 +138,6 @@ export function EventCard({
       isKeyBlock,
       pushReminder: draft.pushReminder,
       dayNumber: event.dayNumber,
-      isPublished: draft.isPublished,
       audienceType: draft.audienceType,
       audienceDirectionId: draft.audienceType === 'direction' && draft.audienceDirectionId
         ? Number(draft.audienceDirectionId)
@@ -155,8 +158,14 @@ export function EventCard({
         body: JSON.stringify(patchBody()),
       });
       onSaved();
-    }, 'Событие сохранено');
+    }, 'Изменения сохранены');
   };
+
+  const publishPayload = () => ({
+    ...patchBody(),
+    isPublished: true,
+    ...(daySchedulePublished ? { dayPublished: true } : {}),
+  });
 
   const addChild = () => {
     if (!childTitle.trim()) {
@@ -172,8 +181,8 @@ export function EventCard({
           dayNumber: event.dayNumber ?? selectedDay,
           timeSlot: event.timeSlot,
           parentEventId: event.id,
-          isPublished: draft.isPublished,
-          dayPublished: false,
+          isPublished: event.isPublished === true,
+          ...(event.isPublished && daySchedulePublished ? { dayPublished: true } : {}),
           blockType: 'session',
           tags: [],
           speakerIds: childSpeakerIds,
@@ -288,10 +297,6 @@ export function EventCard({
             Уведомление за ~15 мин до начала
           </label>
           <label className="adm-forum-check">
-            <input type="checkbox" checked={draft.isPublished} onChange={e => setDraft({ ...draft, isPublished: e.target.checked })} />
-            Опубликовано (видно участникам при опубликованном дне)
-          </label>
-          <label className="adm-forum-check">
             <input type="checkbox" checked={draft.hasSubSessions} onChange={e => setDraft({ ...draft, hasSubSessions: e.target.checked })} />
             Блок с несколькими под-темами
           </label>
@@ -331,14 +336,14 @@ export function EventCard({
             </div>
           )}
           <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap' }}>
-            <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={save}>
+            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={save}>
               Сохранить черновик
             </button>
             <button
               type="button"
-              className="adm-btn adm-btn-sm"
+              className="adm-btn adm-btn-primary adm-btn-sm"
               onClick={() => act(async () => {
-                await adminFetch(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify({ ...patchBody(), isPublished: true }) });
+                await adminFetch(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(publishPayload()) });
                 onSaved();
               }, 'Опубликовано')}
             >

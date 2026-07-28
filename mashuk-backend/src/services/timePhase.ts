@@ -123,6 +123,17 @@ export function resolveEffectiveCurrentDay(
   return Math.min(total, Math.max(adminDay, cal));
 }
 
+/** День для «сейчас / будущее» в расписании: календарь по startDate, без завышенного admin currentDay. */
+export function resolveLiveScheduleDay(
+  settings: { currentDay?: number | null; totalDays?: number | null; startDate?: Date | null },
+  now = new Date(),
+): number {
+  const total = settings.totalDays ?? 8;
+  const cal = getCalendarForumDay(settings.startDate ?? null, now, total);
+  if (cal != null) return cal;
+  return resolveEffectiveCurrentDay(settings, now);
+}
+
 /**
  * Точка осмысления:
  * - dayNumber < effectiveCurrentDay → locked (день закончился / прошёл)

@@ -7,10 +7,15 @@ import {
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
   getForumSettings, formatTime, getMoscowPhase, isEveningWrapWindow,
-  getTouchpointAccess, resolveEffectiveCurrentDay, stateCheckTimePointOrder,
+  getTouchpointAccess, resolveEffectiveCurrentDay, resolveLiveScheduleDay, stateCheckTimePointOrder,
 } from '../services/helpers.js';
 import { getEventLiveStatus, resolveEventInterval } from '../services/eventSchedule.js';
 import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
+import {
+  buildTouchpointItemsForDay,
+  isTouchpointQuestionForForumDay,
+} from '../services/touchpointProgress.js';
+import { questionMatchesDay } from '../services/questionAdminHelpers.js';
 import { getLevelProgress, totalRatingScore } from '../services/pointsService.js';
 import { loadDayContext } from './dayStateController.js';
 import { resolveHomeActiveCard } from '../services/homeActiveCard.js';
@@ -22,6 +27,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const settings = await getForumSettings();
     const now = new Date();
     const currentDay = resolveEffectiveCurrentDay(settings, now);
+    const liveScheduleDay = resolveLiveScheduleDay(settings, now);
     const totalDays = settings.totalDays ?? 8;
     const timeSlot = getMoscowPhase(now);
     const eveningWrap = isEveningWrapWindow(now);
@@ -32,10 +38,8 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const publishedQuestions = await db.select().from(questions)
       .where(eq(questions.status, 'published'));
 
-    const TOUCH_BLOCKS = new Set(['Проверка состояния', 'Точки осмысления', 'Итоги дня']);
-    const templateTitles = new Set(TOUCHPOINT_SLOTS.map(s => s.title));
     const dayQuestions = publishedQuestions.filter(q =>
-      q.dayNumber === currentDay && TOUCH_BLOCKS.has(q.block || '') && templateTitles.has(q.title));
+      isTouchpointQuestionForForumDay(q, currentDay));
     const participantAnswers = await db.select().from(answers)
       .where(eq(answers.participantId, participant.id));
 
@@ -83,7 +87,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     for (const tp of stateCheckOrder) {
       priorityQuestion = publishedQuestions.find(q => {
         if (answeredIds.has(q.id) || q.block !== 'Проверка состояния') return false;
-        if (q.dayNumber !== currentDay) return false;
+        if (!questionMatchesDay(q, currentDay)) return false;
         if ((q.timePoint || '') !== tp) return false;
         const access = getTouchpointAccess(q.dayNumber, currentDay, q.closeTime, now, q.publishTime);
         return access === 'open' || access === 'overdue';
@@ -98,7 +102,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     });
 
     const dayEvents = await db.select().from(events)
-      .where(and(eq(events.dayNumber, currentDay), eq(events.isPublished, true)))
+      .where(and(eq(events.dayNumber, liveScheduleDay), eq(events.isPublished, true)))
       .orderBy(asc(events.startTime));
 
     const SOON_MIN_MS = 15 * 60_000;
@@ -106,7 +110,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
 
     const enrichedEvents = dayEvents.map(e => {
       const { start, end } = resolveEventInterval(e, settings);
-      const status = getEventLiveStatus(currentDay, currentDay, start, end, now);
+      const status = getEventLiveStatus(liveScheduleDay, liveScheduleDay, start, end, now);
       return { event: e, start, end, status };
     }).filter(x => x.start);
 
@@ -195,24 +199,14 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       }
       : null;
     const dayTouchpointsTotal = TOUCHPOINT_SLOTS.length;
-    const dayTouchpointsCompleted = participantAnswers.filter(a =>
-      dayQuestions.some(q => q.id === a.questionId)).length;
-
-    const touchpointItems = TOUCHPOINT_SLOTS.map(slot => {
-      const q = dayQuestions.find(dq => dq.title === slot.title);
-      if (!q) {
-        return { id: slot.index, title: slot.title, state: 'pending' as const, block: slot.block };
-      }
-      const done = answeredIds.has(q.id);
-      const access = getTouchpointAccess(q.dayNumber, currentDay, q.closeTime, now, q.publishTime);
-      let state: 'done' | 'active' | 'overdue' | 'locked' | 'pending' = 'pending';
-      if (done) state = 'done';
-      else if (access === 'locked') state = 'locked';
-      else if (access === 'overdue') state = 'overdue';
-      else if (access === 'open') state = 'active';
-      else state = 'pending';
-      return { id: q.id, title: q.title, state, block: q.block };
-    });
+    const touchpointItems = buildTouchpointItemsForDay(
+      dayQuestions,
+      answeredIds,
+      currentDay,
+      currentDay,
+      now,
+    );
+    const dayTouchpointsCompleted = touchpointItems.filter(i => i.state === 'done').length;
 
     const missedToday = touchpointItems
       .filter(i => i.state === 'overdue' || i.state === 'locked')
@@ -237,7 +231,11 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       eveningCard,
       eveningQuestionnaire: dayContext.eveningQuestionnaire,
       schedule,
-      touchpointItems,
+      touchpointItems: touchpointItems.map(i => ({
+        id: typeof i.id === 'number' ? i.id : 0,
+        title: i.title,
+        state: i.state,
+      })),
     });
 
     let activePushBanners: {
@@ -327,8 +325,8 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       eveningCard,
       ui: {
         showTasksBanner: false,
-        showQuickCapture: false,
-        showPiggybankFab: currentDay !== 8,
+        showQuickCapture: currentDay !== 8,
+        showPiggybankFab: false,
         showEveningCard: !!eveningCard,
       },
       sectionsVisibility: settings.sectionsVisibility ?? {},

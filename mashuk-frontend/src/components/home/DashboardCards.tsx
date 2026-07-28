@@ -218,69 +218,90 @@ export const RoleOfDayCard: React.FC<{
   name: string;
   quadrant?: string | null;
   essence?: string | null;
-}> = ({ name, quadrant, essence }) => (
-  <div className="m-card" style={{ background: 'linear-gradient(135deg,#FFF3E0 0%,#FFECB3 100%)' }}>
-    <div style={{ fontSize: 11, color: '#888', fontWeight: 600 }}>Роль дня</div>
-    <div style={{ fontSize: 16, fontWeight: 800, marginTop: 4 }}>◆ {name}</div>
-    {quadrant && <div style={{ fontSize: 11, color: '#B8621A', marginTop: 2 }}>{quadrant}</div>}
-    {essence && <div style={{ fontSize: 12, marginTop: 8, lineHeight: 1.4, color: '#5D4B37' }}>{essence}</div>}
-  </div>
-);
+  experiment?: {
+    title: string;
+    body?: string | null;
+    hint?: string | null;
+    roleName?: string | null;
+  } | null;
+  onSaveExperimentFixation?: () => void;
+}> = ({ name, quadrant, essence, experiment, onSaveExperimentFixation }) => {
+  const [expOpen, setExpOpen] = React.useState(false);
+  const toggleExp = () => setExpOpen(o => !o);
+
+  return (
+    <div className="m-card m-role-day" style={{ background: 'linear-gradient(135deg,#FFF3E0 0%,#FFECB3 100%)' }}>
+      <div style={{ fontSize: 11, color: '#888', fontWeight: 600 }}>Роль дня</div>
+      <div style={{ fontSize: 16, fontWeight: 800, marginTop: 4 }}>◆ {name}</div>
+      {quadrant && <div style={{ fontSize: 11, color: '#B8621A', marginTop: 2 }}>{quadrant}</div>}
+      {essence && <div style={{ fontSize: 12, marginTop: 8, lineHeight: 1.4, color: '#5D4B37' }}>{essence}</div>}
+
+      {experiment && (
+        <div className="m-role-exp" style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            className="m-role-exp-toggle"
+            aria-expanded={expOpen}
+            onClick={toggleExp}
+          >
+            <span>Эксперимент дня — рекомендация</span>
+            <span className="m-role-exp-chevron" aria-hidden>{expOpen ? '▾' : '▸'}</span>
+          </button>
+          {expOpen && (
+            <div className="m-role-exp-body">
+              {experiment.title && (
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, lineHeight: 1.35 }}>{experiment.title}</div>
+              )}
+              {experiment.body && (
+                <p style={{ fontSize: 13, lineHeight: 1.45, margin: '0 0 8px', color: '#3D3429' }}>{experiment.body}</p>
+              )}
+              {experiment.hint && (
+                <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>{experiment.hint}</div>
+              )}
+              {onSaveExperimentFixation && (
+                <Button size="m" stretched mode="secondary" onClick={onSaveExperimentFixation}>
+                  Сохранить фиксацию в копилку
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const ExperimentCard: React.FC<{
   title: string;
   body?: string | null;
   hint?: string | null;
   roleName?: string | null;
-  status: string;
-  onStatusChange: (status: 'in_progress' | 'done') => void;
   onSaveFixation?: () => void;
-}> = ({ title, body, hint, roleName, status, onStatusChange, onSaveFixation }) => {
-  const [open, setOpen] = React.useState(true);
+}> = ({ title, body, hint, roleName, onSaveFixation }) => {
+  const [open, setOpen] = React.useState(false);
   return (
     <div className="m-card">
-      <div
-        role="button"
-        tabIndex={0}
+      <button
+        type="button"
+        className="m-role-exp-toggle"
+        aria-expanded={open}
         onClick={() => setOpen(o => !o)}
-        onKeyDown={e => { if (e.key === 'Enter') setOpen(o => !o); }}
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
       >
-        <div>
-          <div style={{ fontSize: 11, color: '#888', fontWeight: 600 }}>Эксперимент дня</div>
-          <div style={{ fontSize: 14, fontWeight: 700 }}>{title}</div>
-        </div>
-        <span style={{ fontSize: 12, color: '#888' }}>{open ? '▾' : '▸'}</span>
-      </div>
+        <span>Эксперимент дня — рекомендация</span>
+        <span className="m-role-exp-chevron" aria-hidden>{open ? '▾' : '▸'}</span>
+      </button>
       {open && (
-        <div style={{ marginTop: 10 }}>
+        <div className="m-role-exp-body" style={{ marginTop: 10 }}>
           {roleName && (
             <div style={{ fontSize: 11, marginBottom: 8 }}>
               Развиваю сегодня · <strong style={{ color: '#B8621A' }}>◆ {roleName}</strong>
             </div>
           )}
+          {title && <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>{title}</div>}
           {body && <p style={{ fontSize: 13, lineHeight: 1.45, margin: '0 0 8px' }}>{body}</p>}
           {hint && <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>{hint}</div>}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              className="m-prio-btn"
-              style={{ opacity: status === 'in_progress' ? 1 : 0.7 }}
-              onClick={() => onStatusChange('in_progress')}
-            >
-              В процессе
-            </button>
-            <button
-              type="button"
-              className="m-prio-btn"
-              style={{ opacity: status === 'done' ? 1 : 0.7 }}
-              onClick={() => onStatusChange('done')}
-            >
-              Сделано
-            </button>
-          </div>
           {onSaveFixation && (
-            <Button size="m" stretched mode="secondary" style={{ marginTop: 10 }} onClick={onSaveFixation}>
+            <Button size="m" stretched mode="secondary" style={{ marginTop: 4 }} onClick={onSaveFixation}>
               Сохранить фиксацию в копилку
             </Button>
           )}

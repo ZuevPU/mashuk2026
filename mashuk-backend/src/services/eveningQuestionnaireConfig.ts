@@ -73,7 +73,18 @@ export const DEFAULT_EVENING_QUESTIONNAIRE_CONFIG: EveningQuestionnaireConfig = 
         { key: 'likedMost', type: 'text', label: 'Что понравилось больше всего?', required: false },
         { key: 'improveTomorrow', type: 'text', label: 'Что сделать, чтобы завтра оценки стали выше?', required: false },
         { key: 'freeNote', type: 'text', label: 'Свободное поле', required: false },
-        { key: 'experimentResult', type: 'experiment_text', label: 'Эксперимент с ролью: что получилось / не получилось?', required: false },
+      ],
+    },
+    {
+      id: 'experiment',
+      title: 'Эксперимент с ролью',
+      fields: [
+        {
+          key: 'experimentResult',
+          type: 'experiment_text',
+          label: 'Что получилось / не получилось в эксперименте с ролью?',
+          required: false,
+        },
       ],
     },
     {
@@ -81,23 +92,71 @@ export const DEFAULT_EVENING_QUESTIONNAIRE_CONFIG: EveningQuestionnaireConfig = 
       title: 'Роль на завтра',
       fields: [
         { key: 'tomorrowRoleKey', type: 'role_select', label: 'Завтра сфокусироваться на развитии какой роли?', required: false },
-        { key: 'pointB_cta', type: 'point_b_cta', label: 'Точка Б (финал смены)', required: false },
       ],
     },
   ],
 };
+
+/** Точка Б — отдельный вопрос в день 8, не часть вечерней анкеты дней 1–7. */
+export function stripPointBFromEveningConfig(config: EveningQuestionnaireConfig): EveningQuestionnaireConfig {
+  return {
+    steps: config.steps
+      .map(step => ({
+        ...step,
+        fields: step.fields.filter(f => f.type !== 'point_b_cta'),
+      }))
+      .filter(step => step.fields.length > 0),
+  };
+}
+
+/** Вынести поля experiment_text в отдельный шаг (для старых конфигов админки). */
+export function normalizeExperimentStep(config: EveningQuestionnaireConfig): EveningQuestionnaireConfig {
+  const experimentFields: EveningField[] = [];
+  const steps = config.steps.map(step => {
+    const rest = step.fields.filter(f => {
+      if (f.type === 'experiment_text') {
+        experimentFields.push(f);
+        return false;
+      }
+      return true;
+    });
+    return { ...step, fields: rest };
+  }).filter(s => s.fields.length > 0);
+
+  if (experimentFields.length === 0) {
+    return { steps };
+  }
+
+  const roleIdx = steps.findIndex(s => s.id === 'role' || s.fields.some(f => f.type === 'role_select'));
+  const experimentStep: EveningStep = {
+    id: 'experiment',
+    title: 'Эксперимент с ролью',
+    fields: experimentFields,
+  };
+  if (roleIdx >= 0) {
+    steps.splice(roleIdx, 0, experimentStep);
+  } else {
+    steps.push(experimentStep);
+  }
+  return { steps };
+}
 
 export function resolveEveningConfigForDay(
   settings: typeof forumSettings.$inferSelect | null,
   dayNumber: number,
 ): EveningQuestionnaireConfig {
   const byDay = settings?.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null;
+  let config: EveningQuestionnaireConfig;
   if (byDay?.[String(dayNumber)]?.steps?.length) {
-    return byDay[String(dayNumber)];
+    config = byDay[String(dayNumber)];
+  } else {
+    const global = settings?.eveningQuestionnaireConfig as EveningQuestionnaireConfig | null;
+    config = global?.steps?.length ? global : DEFAULT_EVENING_QUESTIONNAIRE_CONFIG;
   }
-  const global = settings?.eveningQuestionnaireConfig as EveningQuestionnaireConfig | null;
-  if (global?.steps?.length) return global;
-  return DEFAULT_EVENING_QUESTIONNAIRE_CONFIG;
+  if (dayNumber >= 1 && dayNumber <= 7) {
+    return normalizeExperimentStep(stripPointBFromEveningConfig(config));
+  }
+  return normalizeExperimentStep(config);
 }
 
 export function isFieldVisible(

@@ -30,7 +30,9 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
     try {
       const ev = await adminFetch(`/evening-questionnaire?day=${d}`);
       const c = ev.config as EveningQuestionnaireConfig;
+      const fallback = ev.defaultConfig as EveningQuestionnaireConfig | undefined;
       if (c?.steps?.length) setConfig(JSON.parse(JSON.stringify(c)));
+      else if (fallback?.steps?.length) setConfig(JSON.parse(JSON.stringify(fallback)));
       else setConfig(JSON.parse(JSON.stringify(EMPTY_CONFIG)));
     } finally {
       setLoading(false);
@@ -148,11 +150,14 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
   const yesNoFieldsInStep = (step: EveningStep) =>
     step.fields.filter(f => f.type === 'yes_no');
 
+  const fieldTypeOptions = EVENING_FIELD_TYPE_OPTIONS.filter(o => o.value !== 'point_b_cta');
+
   return (
     <div className="adm-forum-block">
       <h3>Итоговая анкета вечера</h3>
       <p className="adm-forum-hint">
-        Участники заполняют эту анкету вечером на главной. Настройте шаги и вопросы для каждого дня (1–7).
+        Участники заполняют эту анкету вечером на главной (дни 1–7). Точка Б — отдельный вопрос в последний день смены (день 8), в эту анкету не входит.
+        Поле «Эксперимент с ролью» лучше выносить в отдельный шаг — на главной оно показывается отдельным блоком с текстом эксперимента дня.
       </p>
       <div className="adm-seg adm-forum-day-seg">
         {Array.from({ length: 7 }, (_, i) => i + 1).map(d => (
@@ -246,7 +251,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
                 value={field.type}
                 onChange={e => updateField(stepIndex, fieldIndex, { type: e.target.value as EveningFieldType })}
               >
-                {EVENING_FIELD_TYPE_OPTIONS.map(o => (
+                {fieldTypeOptions.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>

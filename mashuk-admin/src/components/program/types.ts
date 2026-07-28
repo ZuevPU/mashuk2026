@@ -18,7 +18,7 @@ export type ProgramEvent = {
   speakerIds?: number[] | null;
   sortOrder?: number | null;
   children?: ProgramEvent[];
-  speakers?: { id: number; name: string; initials?: string | null }[];
+  speakers?: { id: number; name: string; credentials?: string | null; initials?: string | null }[];
 };
 
 export type ThematicTag = { id: number; name: string };
@@ -27,7 +27,7 @@ export type ProgramPlace = { id: number; name: string };
 
 export type ProgramBlockType = { id: number; key: string; name: string; sortOrder?: number };
 
-export type ProgramSpeaker = { id: number; name: string; initials?: string | null };
+export type ProgramSpeaker = { id: number; name: string; credentials?: string | null; initials?: string | null };
 
 export type ScheduleDayRow = {
   id: number;

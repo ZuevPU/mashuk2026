@@ -4,6 +4,10 @@ import {
   answers, participants, pointsLog, questions, taskSubmissions, tasks,
 } from '../db/schema.js';
 import { TOUCHPOINT_SLOTS } from './touchpointTemplates.js';
+import {
+  findTouchpointQuestionForSlot,
+  isTouchpointQuestionForForumDay,
+} from './touchpointProgress.js';
 import { awardPoints, getLevel, type PointTrack } from './pointsService.js';
 import { sendPushNotification } from './pushService.js';
 import {
@@ -28,7 +32,19 @@ const PATH_ACTIVITY_ACTIONS = new Set([
   'day_complete_bonus',
 ]);
 
-const slotTitles = new Set(TOUCHPOINT_SLOTS.map(s => s.title));
+async function touchpointsDoneForDay(participantId: number, dayNumber: number): Promise<boolean> {
+  const published = await db.select().from(questions).where(eq(questions.status, 'published'));
+  const dayQs = published.filter(q => isTouchpointQuestionForForumDay(q, dayNumber));
+  if (dayQs.length === 0) return false;
+
+  const ans = await db.select({ questionId: answers.questionId }).from(answers)
+    .where(eq(answers.participantId, participantId));
+  const answered = new Set(ans.map(a => a.questionId));
+  return TOUCHPOINT_SLOTS.every(slot => {
+    const q = findTouchpointQuestionForSlot(dayQs, slot);
+    return q != null && answered.has(q.id);
+  });
+}
 
 async function hasBonusForDay(
   participantId: number,
@@ -43,20 +59,6 @@ async function hasBonusForDay(
       isNull(pointsLog.revokedAt),
     )).limit(1);
   return !!row;
-}
-
-async function touchpointsDoneForDay(participantId: number, dayNumber: number): Promise<boolean> {
-  const dayQs = await db.select().from(questions).where(and(
-    eq(questions.status, 'published'),
-    eq(questions.dayNumber, dayNumber),
-  ));
-  const touchQs = dayQs.filter(q => slotTitles.has(q.title));
-  if (touchQs.length < TOUCHPOINT_SLOTS.length) return false;
-
-  const ans = await db.select({ questionId: answers.questionId }).from(answers)
-    .where(eq(answers.participantId, participantId));
-  const answered = new Set(ans.map(a => a.questionId));
-  return touchQs.every(q => answered.has(q.id));
 }
 
 export async function tryDayCompleteBonus(

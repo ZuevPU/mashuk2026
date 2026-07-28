@@ -58,6 +58,8 @@ export const QuickCaptureModal: React.FC<QuickCaptureModalProps> = ({
     try {
       await onSave(text.trim(), src, selectedTags);
       onClose();
+    } catch {
+      // keep modal open; parent may show snackbar via onSave
     } finally {
       setSaving(false);
     }

@@ -172,6 +172,16 @@ export function QuestionForm({
             </label>
           </div>
 
+          {(draft.questionKind === 'day_summary'
+            || draft.reflectionKind === 'evening_summary'
+            || draft.block === 'Итоги дня'
+            || /итоговая анкета/i.test(draft.title)) && (
+            <p className="adm-muted" style={{ fontSize: 13, lineHeight: 1.45, margin: '0 0 12px', padding: '10px 12px', background: 'var(--vkui--color_background_secondary, #f5f5f5)', borderRadius: 8 }}>
+              Это вопрос в «Общении» (7-я точка дня), обычно с одним свободным ответом. Полная анкета с десятками полей —
+              на главной у участника; править её: «Форум» → «Итоговая анкета вечера» → «Заводские настройки» или копирование с другого дня.
+            </p>
+          )}
+
           <label className="adm-field">
             <span className="adm-label">Текст вопроса участнику</span>
             <textarea className="adm-input" rows={3} value={draft.text} onChange={e => onChange({ text: e.target.value })} />
@@ -276,6 +286,7 @@ export function QuestionForm({
             <label className="adm-field">
               <span className="adm-label">Приоритет в списке</span>
               <input type="number" className="adm-input" style={{ width: 80 }} value={draft.sortOrder} onChange={e => onChange({ sortOrder: Number(e.target.value) })} />
+              <span className="adm-muted" style={{ fontSize: 11 }}>Больше число — выше у участника</span>
             </label>
           </div>
 
