@@ -83,6 +83,14 @@ export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> =>
       res.json({ status: 'self_deleted', deletedAt: user.selfDeletedAt });
       return;
     }
+    if (user.isBlocked) {
+      res.json({
+        status: 'blocked',
+        blockReason: user.blockReason || 'Доступ ограничен организаторами',
+        blockedAt: user.blockedAt,
+      });
+      return;
+    }
 
     if (!user.avatarUrl) {
       scheduleParticipantAvatarSync(user.id);
@@ -141,6 +149,13 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       res.status(403).json({
         error: 'Вы удалили профиль из программы. Для повторного участия обратитесь к организаторам.',
         status: 'self_deleted',
+      });
+      return;
+    }
+    if (existing?.isBlocked) {
+      res.status(403).json({
+        error: 'Доступ к программе ограничен. Обратитесь к организаторам.',
+        status: 'blocked',
       });
       return;
     }

@@ -176,6 +176,42 @@ export const unblockParticipant = async (req: AdminRequest, res: Response): Prom
   res.json({ participant: updated });
 };
 
+/** Исключить из программы (как самоудаление участника, данные сохраняются) */
+export const removeParticipantFromProgram = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const [existing] = await db.select().from(participants).where(eq(participants.id, id)).limit(1);
+  if (!existing) {
+    res.status(404).json({ error: 'Participant not found' });
+    return;
+  }
+  if (!existing.onboardingCompletedAt) {
+    res.status(400).json({ error: 'Participant has not completed registration' });
+    return;
+  }
+  if (existing.selfDeletedAt) {
+    res.status(400).json({ error: 'Participant is already removed from program' });
+    return;
+  }
+  const [updated] = await db.update(participants)
+    .set({
+      selfDeletedAt: new Date(),
+      isBlocked: false,
+      blockedAt: null,
+      blockReason: null,
+    })
+    .where(eq(participants.id, id))
+    .returning();
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req,
+    actionType: 'participant_remove_from_program',
+    section: 'participants',
+    objectId: id,
+    isCritical: true,
+  });
+  res.json({ participant: updated });
+};
+
 export const pushParticipant = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
   const text = String(req.body?.text || '').trim();

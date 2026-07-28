@@ -338,6 +338,13 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   background: #fff; border: 1px solid var(--m-border); border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.12); min-width: 200px; padding: 4px 0;
 }
+.adm-row-menu-pop--fixed {
+  position: fixed;
+  z-index: 10050;
+  max-height: min(400px, calc(100vh - 16px));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .adm-row-menu-item {
   display: block; width: 100%; text-align: left; border: none; background: none;
   padding: 8px 12px; font-size: 12px; cursor: pointer; font-family: inherit;

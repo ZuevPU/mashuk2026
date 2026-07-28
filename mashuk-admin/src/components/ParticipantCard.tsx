@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { adminDownloadBinary } from '../admin/client';
+import { CONFIRM_BLOCK_PARTICIPANT, CONFIRM_DELETE_PARTICIPANT, CONFIRM_REMOVE_FROM_PROGRAM, confirmDelete } from '../admin/confirmDelete';
 import { label } from '../labels/ru';
 
 import { VkProfileLink } from './VkProfileLink';
@@ -51,6 +52,8 @@ type CardData = {
     age?: number | null;
 
     isBlocked?: boolean | null;
+
+    blockReason?: string | null;
 
     avatarUrl?: string | null;
 
@@ -339,6 +342,24 @@ export function ParticipantCardModal({
             </div>
           </div>
 
+          {(p.isBlocked || p.selfDeletedAt) && (
+            <div className="adm-pc-status-banner" style={{
+              margin: '0 16px 12px',
+              padding: '10px 12px',
+              borderRadius: 8,
+              background: p.isBlocked ? '#FFF5F5' : '#FFFAF0',
+              border: `1px solid ${p.isBlocked ? '#FEB2B2' : '#FEEBC8'}`,
+              fontSize: 13,
+            }}>
+              {p.isBlocked && (
+                <div><strong>Заблокирован.</strong> {p.blockReason ? `Причина: ${p.blockReason}` : 'Участник видит экран «Доступ ограничен».'}</div>
+              )}
+              {p.selfDeletedAt && (
+                <div style={{ marginTop: p.isBlocked ? 6 : 0 }}><strong>Не в программе</strong> (исключён или вышел сам). Восстановите доступ кнопкой «Вернуть в программу».</div>
+              )}
+            </div>
+          )}
+
           <div className="adm-pc-toolbar adm-forum-toolbar">
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setTab('profile')}>Скорректировать роль</button>
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setTab('points')}>Начислить/снять баллы</button>
@@ -357,13 +378,36 @@ export function ParticipantCardModal({
               )
               : (
                 <button type="button" className="adm-btn adm-btn-sm btn-danger" onClick={() => {
-                  const reason = prompt('Причина блокировки (необязательно)') || undefined;
+                  if (!confirmDelete(CONFIRM_BLOCK_PARTICIPANT)) return;
                   act(async () => {
-                    await adminFetch(`/participants/${p.id}/block`, { method: 'POST', body: JSON.stringify({ reason }) });
+                    await adminFetch(`/participants/${p.id}/block`, { method: 'POST', body: '{}' });
                     onReloadCard();
                   }, 'Заблокирован');
                 }}>Заблокировать</button>
               )}
+            {p.selfDeletedAt
+              ? (
+                <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => act(async () => {
+                  await adminFetch(`/participants/${p.id}/restore`, { method: 'POST' });
+                  onReloadCard();
+                }, 'Восстановлен')}>Вернуть в программу</button>
+              )
+              : (
+                <button type="button" className="adm-btn adm-btn-sm btn-danger" onClick={() => {
+                  if (!confirmDelete(CONFIRM_REMOVE_FROM_PROGRAM)) return;
+                  act(async () => {
+                    await adminFetch(`/participants/${p.id}/remove-from-program`, { method: 'POST', body: '{}' });
+                    onReloadCard();
+                  }, 'Исключён из программы');
+                }}>Исключить из программы</button>
+              )}
+            <button type="button" className="adm-btn adm-btn-sm btn-danger" onClick={() => {
+              if (!confirmDelete(CONFIRM_DELETE_PARTICIPANT)) return;
+              act(async () => {
+                await adminFetch(`/participants/${p.id}/registration`, { method: 'DELETE' });
+                onClose();
+              }, 'Удалён');
+            }}>Удалить безвозвратно</button>
           </div>
         </div>
 

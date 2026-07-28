@@ -1,5 +1,5 @@
 import {
-  and, count, desc, eq, gte, ilike, inArray, isNull, lt, or, sql, type SQL,
+  and, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql, type SQL,
 } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { participants } from '../db/schema.js';
@@ -14,6 +14,8 @@ export type ParticipantListQuery = {
   strongRole?: string;
   activity?: 'active_today' | 'inactive_1d' | 'inactive_3d';
   includeDeleted?: boolean;
+  /** Только участники с self_deleted_at (удалили профиль / исключены) */
+  onlySelfDeleted?: boolean;
   ids?: number[];
 };
 
@@ -26,7 +28,9 @@ function startOfTodayUtc(): Date {
 export function buildParticipantWhere(query: ParticipantListQuery): SQL | undefined {
   const conditions: SQL[] = [];
 
-  if (!query.includeDeleted) {
+  if (query.onlySelfDeleted) {
+    conditions.push(isNotNull(participants.selfDeletedAt));
+  } else if (!query.includeDeleted) {
     conditions.push(isNull(participants.selfDeletedAt));
   }
   if (query.ids?.length) {
@@ -97,7 +101,9 @@ export async function queryParticipants(query: ParticipantListQuery) {
   if (where) countQuery = countQuery.where(where) as typeof countQuery;
   const [total] = await countQuery;
 
-  let listQuery = db.select().from(participants).orderBy(desc(participants.createdAt)).limit(limit).offset(offset);
+  let listQuery = db.select().from(participants)
+    .orderBy(query.onlySelfDeleted ? desc(participants.selfDeletedAt) : desc(participants.createdAt))
+    .limit(limit).offset(offset);
   if (where) listQuery = listQuery.where(where) as typeof listQuery;
   const list = await listQuery;
 
@@ -142,6 +148,8 @@ export function parseParticipantListQuery(req: { query: Record<string, unknown> 
     strongRole: typeof req.query.strongRole === 'string' ? req.query.strongRole : undefined,
     activity: validActivity,
     includeDeleted: req.query.includeDeleted === 'true' || req.query.includeDeleted === '1',
+    onlySelfDeleted: req.query.onlySelfDeleted === 'true' || req.query.onlySelfDeleted === '1'
+      || req.query.list === 'hidden',
     ids,
   };
 }

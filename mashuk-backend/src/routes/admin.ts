@@ -38,6 +38,7 @@ router.post('/participants', requireAdminRole('settings'), wrap(admin.createPart
 router.patch('/participants/:id/direction', requireAdminRole('settings'), wrap(admin.updateParticipantDirection));
 router.patch('/participants/:id/role', requireAdminRole('settings'), wrap(admin.updateParticipantRole));
 router.post('/participants/:id/restore', requireAdminRole('settings'), wrap(admin.restoreParticipantAccount));
+router.post('/participants/:id/remove-from-program', requireAdminRole('moderate'), wrap(admin.removeParticipantFromProgram));
 router.delete('/participants/:id/registration', requireAdminRole('delete'), wrap(admin.resetRegistration));
 
 router.get('/roles', wrap(admin.crudRoles.list));

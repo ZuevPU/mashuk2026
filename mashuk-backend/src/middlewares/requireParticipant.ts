@@ -29,7 +29,11 @@ export const requireParticipant = async (
     return;
   }
   if (user.isBlocked) {
-    res.status(403).json({ error: 'Participant blocked', status: 'blocked' });
+    res.status(403).json({
+      error: user.blockReason || 'Participant blocked',
+      status: 'blocked',
+      blockReason: user.blockReason || 'Доступ ограничен организаторами',
+    });
     return;
   }
 

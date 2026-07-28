@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { adminDownloadBinary } from '../../admin/client';
+import { CONFIRM_BLOCK_PARTICIPANT, CONFIRM_DELETE_PARTICIPANT, CONFIRM_REMOVE_FROM_PROGRAM } from '../../admin/confirmDelete';
 import { label } from '../../labels/ru';
 import { ROLE_OPTIONS } from '../onboarding/roleOptions';
 import { AdminPageHero } from '../admin/AdminPageHero';
@@ -32,6 +33,8 @@ type ParticipantRow = {
   avatarUrl?: string | null;
 };
 
+type ParticipantListMode = 'active' | 'hidden';
+
 function buildListQuery(params: {
   page: number;
   q: string;
@@ -40,8 +43,10 @@ function buildListQuery(params: {
   pedagogicalRole: string;
   strongRole: string;
   activity: string;
+  listMode: ParticipantListMode;
 }): string {
   const sp = new URLSearchParams({ page: String(params.page), limit: '50' });
+  if (params.listMode === 'hidden') sp.set('onlySelfDeleted', 'true');
   if (params.q.trim()) sp.set('q', params.q.trim());
   for (const id of params.directionIds) sp.append('directionId', String(id));
   if (params.groupId) sp.set('groupId', params.groupId);
@@ -49,6 +54,11 @@ function buildListQuery(params: {
   if (params.strongRole) sp.set('strongRole', params.strongRole);
   if (params.activity) sp.set('activity', params.activity);
   return sp.toString();
+}
+
+function formatHiddenAt(iso?: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: ParticipantsTabProps) {
@@ -64,6 +74,8 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
   const [strongRoleFilter, setStrongRoleFilter] = useState('');
   const [showIdColumn, setShowIdColumn] = useState(true);
   const [activityFilter, setActivityFilter] = useState('');
+  const [listMode, setListMode] = useState<ParticipantListMode>('active');
+  const [hiddenTotal, setHiddenTotal] = useState(0);
   const [directions, setDirections] = useState<{ id: number; name: string }[]>([]);
   const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -79,7 +91,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
 
   useEffect(() => {
     setParticipantsPage(1);
-  }, [debouncedQ, directionFilter, groupFilter, roleFilter, strongRoleFilter, activityFilter]);
+  }, [debouncedQ, directionFilter, groupFilter, roleFilter, strongRoleFilter, activityFilter, listMode]);
 
   const listQuery = useMemo(() => buildListQuery({
     page: participantsPage,
@@ -89,7 +101,8 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
     pedagogicalRole: roleFilter,
     strongRole: strongRoleFilter,
     activity: activityFilter,
-  }), [participantsPage, debouncedQ, directionFilter, groupFilter, roleFilter, strongRoleFilter, activityFilter]);
+    listMode,
+  }), [participantsPage, debouncedQ, directionFilter, groupFilter, roleFilter, strongRoleFilter, activityFilter, listMode]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -97,12 +110,18 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
       const res = await adminFetch(`/participants?${listQuery}`);
       setParticipants(res.participants || []);
       setParticipantsTotal(res.totalCount || 0);
+      if (listMode === 'active') {
+        const hiddenRes = await adminFetch('/participants?onlySelfDeleted=true&limit=1&page=1');
+        setHiddenTotal(hiddenRes.totalCount || 0);
+      } else {
+        setHiddenTotal(res.totalCount || 0);
+      }
       setDirections((await adminFetch('/directions')).directions || []);
       setGroups((await adminFetch('/participants/groups')).groups || []);
     } finally {
       setLoading(false);
     }
-  }, [adminFetch, listQuery]);
+  }, [adminFetch, listQuery, listMode]);
 
   useEffect(() => {
     load().catch(() => setLoading(false));
@@ -165,6 +184,8 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
     }, 'Пуш отправлен');
   };
 
+  const isHiddenList = listMode === 'hidden';
+
   if (loading && participants.length === 0) {
     return <p className="adm-muted">Загрузка участников…</p>;
   }
@@ -172,9 +193,30 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
   return (
     <div className="adm-forum">
       <AdminPageHero
-        title={`Участники · ${participantsTotal} всего`}
-        hint="Поиск и фильтры по всей базе. Клик по строке — карточка. Действия — меню ⋮."
+        title={isHiddenList
+          ? `Удалили профиль · ${participantsTotal}`
+          : `Участники · ${participantsTotal} в программе`}
+        hint={isHiddenList
+          ? 'Участники, которые нажали «Удалить профиль» или были исключены организатором. Данные сохранены — можно восстановить в основной список.'
+          : 'Поиск и фильтры по активным участникам. Клик по строке — карточка. Действия — меню ⋮.'}
       />
+
+      <div className="adm-seg" style={{ marginBottom: 12 }}>
+        <button
+          type="button"
+          className={listMode === 'active' ? 'on' : ''}
+          onClick={() => { setListMode('active'); setParticipantsPage(1); setSelected(new Set()); }}
+        >
+          В программе
+        </button>
+        <button
+          type="button"
+          className={listMode === 'hidden' ? 'on' : ''}
+          onClick={() => { setListMode('hidden'); setParticipantsPage(1); setSelected(new Set()); }}
+        >
+          Удалили профиль{hiddenTotal > 0 ? ` (${hiddenTotal})` : ''}
+        </button>
+      </div>
 
       <div className="card adm-forum-block">
         <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
@@ -197,7 +239,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
             <option value="">Все роли (диагностика)</option>
             {ROLE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
           </select>
-          <select className="adm-input" value={activityFilter} onChange={e => setActivityFilter(e.target.value)}>
+          <select className="adm-input" value={activityFilter} onChange={e => setActivityFilter(e.target.value)} disabled={isHiddenList}>
             <option value="">Любая активность</option>
             <option value="active_today">Активен сегодня</option>
             <option value="inactive_1d">Неактивен ≥ 1 дня</option>
@@ -209,9 +251,11 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
           <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => exportList()}>
             Выгрузить список (XLSX)
           </button>
-          <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={() => setShowAdd(v => !v)}>
-            + Добавить участника
-          </button>
+          {!isHiddenList && (
+            <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={() => setShowAdd(v => !v)}>
+              + Добавить участника
+            </button>
+          )}
         </div>
         <div className="adm-program-tag-pick" style={{ marginTop: 10 }}>
           <span className="adm-muted" style={{ fontSize: 12, marginRight: 8 }}>Направления:</span>
@@ -226,7 +270,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
             </button>
           ))}
         </div>
-        {selected.size > 0 && (
+        {selected.size > 0 && !isHiddenList && (
           <div className="adm-forum-toolbar" style={{ marginTop: 10 }}>
             <span className="adm-muted">Выбрано: {selected.size}</span>
             <button type="button" className="adm-btn adm-btn-sm" onClick={() => exportList([...selected])}>Выгрузить выбранных</button>
@@ -271,16 +315,23 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
             <th>Путь</th>
             <th>Опыт</th>
             <th>Рейтинг</th>
-            <th>Активность</th>
+            <th>{isHiddenList ? 'Скрыт с' : 'Активность'}</th>
             <th>Действия</th>
           </tr>
         </thead>
         <tbody>
+          {participants.length === 0 && (
+            <tr>
+              <td colSpan={showIdColumn ? 13 : 12} className="adm-muted" style={{ padding: 24, textAlign: 'center' }}>
+                {isHiddenList ? 'Никто не удалял профиль' : 'Участники не найдены'}
+              </td>
+            </tr>
+          )}
           {participants.map(p => (
             <tr
               key={p.id}
               className="adm-table-row-click"
-              style={p.selfDeletedAt || p.isBlocked ? { opacity: 0.85, background: p.isBlocked ? '#FFF5F5' : undefined } : undefined}
+              style={!isHiddenList && p.isBlocked ? { opacity: 0.85, background: '#FFF5F5' } : isHiddenList ? { opacity: 0.92 } : undefined}
               onClick={e => {
                 const t = e.target as HTMLElement;
                 if (t.closest('button, select, input, a, .adm-row-menu')) return;
@@ -300,7 +351,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
                 />
               </td>
               <td><VkProfileLink vkId={p.vkId} /></td>
-              <td>{p.firstName} {p.lastName}{p.isBlocked ? ' · заблок.' : ''}</td>
+              <td>{p.firstName} {p.lastName}{!isHiddenList && p.isBlocked ? ' · заблок.' : ''}</td>
               <td onClick={e => e.stopPropagation()}>
                 <select
                   className="adm-input adm-input-narrow"
@@ -329,28 +380,54 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
               <td>{p.pathPoints ?? 0}</td>
               <td>{p.experiencePoints ?? 0}</td>
               <td>{p.totalRating ?? ((p.pathPoints ?? 0) + (p.experiencePoints ?? 0))}</td>
-              <td>{p.selfDeletedAt ? 'Вышел' : formatParticipantActivity(p.lastActiveAt)}</td>
+              <td>{isHiddenList ? formatHiddenAt(p.selfDeletedAt) : formatParticipantActivity(p.lastActiveAt)}</td>
               <td onClick={e => e.stopPropagation()}>
-                <RowActionsMenu actions={[
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                  {isHiddenList && (
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-sm adm-btn-primary"
+                      onClick={() => act(() => adminFetch(`/participants/${p.id}/restore`, { method: 'POST' }).then(reloadPage), 'Восстановлен в программу')}
+                    >
+                      Восстановить
+                    </button>
+                  )}
+                  <RowActionsMenu actions={isHiddenList ? [
+                    { label: 'Открыть карточку', onClick: () => onOpenCard(p.id) },
+                    { label: 'Выгрузить данные (PDF)', onClick: () => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF') },
+                    {
+                      label: 'Удалить безвозвратно',
+                      confirmMessage: CONFIRM_DELETE_PARTICIPANT,
+                      onClick: () => act(() => adminFetch(`/participants/${p.id}/registration`, { method: 'DELETE' }).then(reloadPage), 'Удалён'),
+                      danger: true,
+                    },
+                  ] : [
                   { label: 'Открыть карточку', onClick: () => onOpenCard(p.id) },
                   { label: 'Скорректировать роль', onClick: () => onOpenCard(p.id, 'profile') },
                   { label: 'Выгрузить данные (PDF)', onClick: () => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF') },
                   { label: 'Отправить пуш', onClick: () => setPushModal({ ids: [p.id] }) },
-                  p.isBlocked
-                    ? { label: 'Разблокировать', onClick: () => act(() => adminFetch(`/participants/${p.id}/unblock`, { method: 'POST' }).then(reloadPage), 'Разблокирован') }
-                    : { label: 'Заблокировать', onClick: () => {
-                      const reason = prompt('Причина блокировки (необязательно)') || undefined;
-                      act(() => adminFetch(`/participants/${p.id}/block`, { method: 'POST', body: JSON.stringify({ reason }) }).then(reloadPage), 'Заблокирован');
-                    }, danger: true },
-                  p.selfDeletedAt
-                    ? { label: 'Восстановить', onClick: () => act(() => adminFetch(`/participants/${p.id}/restore`, { method: 'POST' }).then(reloadPage), 'Восстановлен') }
-                    : {
-                      label: 'Удалить участника',
-                      confirmMessage: 'Удалить участника безвозвратно? Все данные регистрации будут сброшены.',
-                      onClick: () => adminFetch(`/participants/${p.id}/registration`, { method: 'DELETE' }).then(reloadPage),
+                  ...(p.isBlocked
+                    ? [{ label: 'Разблокировать', onClick: () => act(() => adminFetch(`/participants/${p.id}/unblock`, { method: 'POST' }).then(reloadPage), 'Разблокирован') }]
+                    : [{
+                      label: 'Заблокировать',
+                      confirmMessage: CONFIRM_BLOCK_PARTICIPANT,
+                      onClick: () => act(() => adminFetch(`/participants/${p.id}/block`, { method: 'POST', body: '{}' }).then(reloadPage), 'Заблокирован'),
                       danger: true,
-                    },
+                    }]),
+                  {
+                    label: 'Исключить из программы',
+                    confirmMessage: CONFIRM_REMOVE_FROM_PROGRAM,
+                    onClick: () => act(() => adminFetch(`/participants/${p.id}/remove-from-program`, { method: 'POST', body: '{}' }).then(reloadPage), 'Исключён из программы'),
+                    danger: true,
+                  },
+                  {
+                    label: 'Удалить безвозвратно',
+                    confirmMessage: CONFIRM_DELETE_PARTICIPANT,
+                    onClick: () => act(() => adminFetch(`/participants/${p.id}/registration`, { method: 'DELETE' }).then(reloadPage), 'Удалён'),
+                    danger: true,
+                  },
                 ]} />
+                </div>
               </td>
             </tr>
           ))}

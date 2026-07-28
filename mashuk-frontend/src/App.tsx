@@ -57,6 +57,7 @@ export const App = () => {
   const [initError, setInitError] = useState<string | null>(null);
   const [isRegistered, setIsRegistered] = useState(false);
   const [selfDeleted, setSelfDeleted] = useState(false);
+  const [blockedReason, setBlockedReason] = useState<string | null>(null);
   const [sectionsVisibility, setSectionsVisibility] = useState(DEFAULT_SECTIONS);
   const [questionsBadge, setQuestionsBadge] = useState(0);
   const [showPiggyFab, setShowPiggyFab] = useState(false);
@@ -98,9 +99,14 @@ export const App = () => {
         }
       }
 
-      const auth = await apiGet<{ status: string }>('/auth/me');
+      const auth = await apiGet<{ status: string; blockReason?: string }>('/auth/me');
       if (auth.status === 'self_deleted') {
         setSelfDeleted(true);
+        setBlockedReason(null);
+        setIsRegistered(false);
+      } else if (auth.status === 'blocked') {
+        setSelfDeleted(false);
+        setBlockedReason(auth.blockReason || 'Доступ к программе ограничен организаторами.');
         setIsRegistered(false);
       } else if (auth.status === 'needs_registration') {
         setIsRegistered(false);
@@ -108,6 +114,7 @@ export const App = () => {
           routeNavigator.push('/registration');
         }
       } else {
+        setBlockedReason(null);
         setIsRegistered(true);
 
         try {
@@ -184,6 +191,22 @@ export const App = () => {
           <p style={{ fontSize: 14, color: '#555', margin: 0 }}>
             Доступ к приложению для этого профиля отключён.
             Если вы удалили профиль случайно — напишите организаторам, они помогут восстановить участие.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (blockedReason) {
+    return (
+      <div className="mashuk-root" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 24, textAlign: 'center' }}>
+        <div className="m-card" style={{ maxWidth: 360 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Доступ ограничен</div>
+          <p style={{ fontSize: 14, color: '#555', margin: 0 }}>
+            {blockedReason}
+          </p>
+          <p style={{ fontSize: 13, color: '#888', marginTop: 12, marginBottom: 0 }}>
+            Если это ошибка — напишите организаторам форума.
           </p>
         </div>
       </div>
