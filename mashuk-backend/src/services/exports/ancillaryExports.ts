@@ -1,12 +1,17 @@
-import { eq, desc, and, isNull, like, or } from 'drizzle-orm';
+import { eq, desc, and, isNull, like, or, inArray, lte } from 'drizzle-orm';
 import type { Response } from 'express';
 import { db } from '../../db/index.js';
 import {
-  adminActionsLog, exchangeAnswers, exchangeQuestions,
-  medals, participants, pointsLog, tasks, taskSubmissions, userMedals, piggybank,
+  adminActionsLog, answers, exchangeAnswers, exchangeQuestions,
+  medals, participants, pointsLog, questions, tasks, taskSubmissions, userMedals, piggybank,
 } from '../../db/schema.js';
 import { queryPiggybankForExport } from '../../controllers/adminPiggybankController.js';
 import { isPublishedStatus } from '../publishStatus.js';
+import {
+  isTouchpointQuestionForForumDay,
+  touchpointCompletionRatio,
+} from '../touchpointProgress.js';
+import { resolveActiveShiftId } from '../shiftService.js';
 import { addReadmeSheet, fullName } from './exportCommon.js';
 import { loadEnrichedParticipants } from './participantEnrichment.js';
 import { createWorkbook, sendWorkbook, sendCsv, sendSimpleXlsx } from './workbook.js';
@@ -169,19 +174,55 @@ export async function writeRatingShiftExport(
   const ids = allP.map(p => p.id);
   const { computeLeaderboardScores } = await import('../leaderboardService.js');
   const scores = await computeLeaderboardScores(ids, { scope: 'shift', track: 'total' });
+
+  const medalsByPid = new Map<number, string[]>();
+  const nomsByPid = new Map<number, Set<string>>();
+  if (ids.length) {
+    const medalRows = await db.select({
+      participantId: userMedals.participantId,
+      name: medals.name,
+    }).from(userMedals)
+      .leftJoin(medals, eq(userMedals.medalId, medals.id))
+      .where(inArray(userMedals.participantId, ids));
+    for (const r of medalRows) {
+      if (!r.participantId || !r.name) continue;
+      const list = medalsByPid.get(r.participantId) ?? [];
+      list.push(r.name);
+      medalsByPid.set(r.participantId, list);
+    }
+    const nomRows = await db.select({
+      participantId: taskSubmissions.participantId,
+      nomination: tasks.nomination,
+      status: taskSubmissions.status,
+    }).from(taskSubmissions)
+      .innerJoin(tasks, eq(taskSubmissions.taskId, tasks.id))
+      .where(and(
+        inArray(taskSubmissions.participantId, ids),
+        eq(taskSubmissions.status, 'approved'),
+      ));
+    for (const r of nomRows) {
+      if (!r.nomination) continue;
+      const set = nomsByPid.get(r.participantId) ?? new Set<string>();
+      set.add(r.nomination);
+      nomsByPid.set(r.participantId, set);
+    }
+  }
+
   const ranked = allP
     .map(p => ({ p, pts: scores.get(p.id) ?? 0 }))
     .sort((a, b) => b.pts - a.pts);
   const data = ranked.map((r, i) => [
     i + 1, r.p.id, fullName(r.p), r.pts,
     r.p.pathPoints ?? 0, r.p.experiencePoints ?? 0, r.p.bonusPoints ?? 0,
+    (medalsByPid.get(r.p.id) ?? []).join('; '),
+    [...(nomsByPid.get(r.p.id) ?? [])].join('; '),
   ]);
   if (format === 'xlsx') {
     await sendSimpleXlsx(
       res,
       'leaderboard_shift.xlsx',
       'Рейтинг',
-      ['Место', 'ID участника', 'ФИО', 'Баллы', 'Путь', 'Опыт', 'Бонус'],
+      ['Место', 'ID участника', 'ФИО', 'Баллы', 'Путь', 'Опыт', 'Бонус', 'Медали', 'Номинации'],
       data,
     );
     return;
@@ -189,7 +230,7 @@ export async function writeRatingShiftExport(
   sendCsv(
     res,
     'leaderboard_shift.csv',
-    'rank,participant_id,name,points,path,experience,bonus',
+    'rank,participant_id,name,points,path,experience,bonus,medals,nominations',
     data,
   );
 }
@@ -312,19 +353,51 @@ export async function writeExchangeFullExport(res: Response): Promise<void> {
 
 export async function writeActivityExport(res: Response): Promise<void> {
   const allP = await db.select().from(participants).where(isNull(participants.selfDeletedAt));
-  const { countTouchpointsForDay } = await import('../../controllers/programController.js');
-  const rows = await Promise.all(allP.map(async p => {
+  const ids = allP.map(p => p.id);
+  const shiftId = await resolveActiveShiftId();
+  const now = new Date();
+  const published = await db.select().from(questions)
+    .where(and(
+      eq(questions.shiftId, shiftId),
+      eq(questions.status, 'published'),
+      or(isNull(questions.publishTime), lte(questions.publishTime, now)),
+    ));
+
+  const answersByPid = new Map<number, Set<number>>();
+  if (ids.length) {
+    const allAns = await db.select({
+      participantId: answers.participantId,
+      questionId: answers.questionId,
+    }).from(answers).where(inArray(answers.participantId, ids));
+    for (const a of allAns) {
+      if (a.questionId == null) continue;
+      let set = answersByPid.get(a.participantId);
+      if (!set) {
+        set = new Set();
+        answersByPid.set(a.participantId, set);
+      }
+      set.add(a.questionId);
+    }
+  }
+
+  const dayQsCache = new Map<number, typeof published>();
+  for (let d = 1; d <= 7; d++) {
+    dayQsCache.set(d, published.filter(q => isTouchpointQuestionForForumDay(q, d)));
+  }
+
+  const rows = allP.map(p => {
+    const answeredIds = answersByPid.get(p.id) ?? new Set<number>();
     let tp = 0;
     for (let d = 1; d <= 7; d++) {
-      const c = await countTouchpointsForDay(p.id, d);
-      tp += c.completed;
+      const dayQs = dayQsCache.get(d) ?? [];
+      tp += touchpointCompletionRatio(dayQs, answeredIds, d).completed;
     }
     return [
       String(p.id), fullName(p), p.direction ?? '', p.groupName ?? '',
       p.lastActiveAt ? new Date(p.lastActiveAt).toISOString() : '',
       String(p.pathPoints ?? 0), String(p.experiencePoints ?? 0), String(tp),
     ];
-  }));
+  });
   sendCsv(
     res,
     'activity.csv',
@@ -344,10 +417,12 @@ export async function writePointABSummaryExport(res: Response): Promise<void> {
 }
 
 export async function writeDelayedMeasureTemplate(res: Response): Promise<void> {
+  const { buildDelayedMeasureRows } = await import('./delayedMeasureService.js');
+  const built = await buildDelayedMeasureRows(7);
   sendCsv(
     res,
     'delayed_measure_template.csv',
     'participant_id,full_name,measure_date,notes',
-    [],
+    built.rows.map(r => [r.participant_id, r.full_name, r.measure_date, r.notes]),
   );
 }

@@ -1,26 +1,41 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { eq, desc, lt, isNull } from 'drizzle-orm';
+import { and, eq, desc, lt, isNull } from 'drizzle-orm';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { env } from '../../config/env.js';
 import { db } from '../../db/index.js';
-import { answers, exportHistory, participants, questions, taskSubmissions, tasks } from '../../db/schema.js';
+import { exportHistory, participants, taskSubmissions, tasks } from '../../db/schema.js';
 import { logAdminAction } from '../adminActionsLog.js';
 import { queryPiggybankForExport } from '../../controllers/adminPiggybankController.js';
 import {
   ANSWER_ROW_HEADERS,
   buildAnswerRow,
-  filterAnswersByTouchpoint,
   fullName,
   formatTs,
 } from './exportCommon.js';
-import { normalizeExportTouchpointFilter } from './touchpointFilter.js';
+import { queryAnswerJoinRows } from './answerJoinQuery.js';
 import { loadEnrichedParticipants } from './participantEnrichment.js';
 import { createWorkbook } from './workbook.js';
 import type { ExportSourceId } from './exportMeta.js';
 import { resolveColumnLabels } from './exportMeta.js';
+import { buildParticipantActivityWide, writeParticipantActivityWideToFile } from './participantActivityWide.js';
 
 const TTL_DAYS = 30;
+/** Light sync jobs stuck in pending. */
+export const STUCK_PENDING_MS = 15 * 60 * 1000;
+/** Heavy async ZIP/PDF jobs. */
+export const STUCK_PENDING_MS_HEAVY = 90 * 60 * 1000;
+
+export const HEAVY_EXPORT_SOURCES = new Set([
+  'participants_archive',
+  'final_profiles_zip',
+  'shift_summary_pdf',
+]);
+
+export type ExportJobKind =
+  | 'participants_archive'
+  | 'final_profiles_zip'
+  | 'shift_summary_pdf';
 
 export function getExportStorageDir(): string {
   return path.isAbsolute(env.EXPORT_STORAGE_DIR)
@@ -32,7 +47,29 @@ async function ensureStorageDir(): Promise<void> {
   await fs.mkdir(getExportStorageDir(), { recursive: true });
 }
 
+export async function failStuckPendingExports(): Promise<number> {
+  const lightCutoff = new Date(Date.now() - STUCK_PENDING_MS);
+  const heavyCutoff = new Date(Date.now() - STUCK_PENDING_MS_HEAVY);
+  const unfinished = await db.select().from(exportHistory)
+    .where(lt(exportHistory.createdAt, lightCutoff));
+  let n = 0;
+  for (const row of unfinished) {
+    if (row.status !== 'pending' && row.status !== 'running') continue;
+    const heavy = HEAVY_EXPORT_SOURCES.has(row.source);
+    const cutoff = heavy ? heavyCutoff : lightCutoff;
+    if (!row.createdAt || row.createdAt >= cutoff) continue;
+    const mins = heavy ? 90 : 15;
+    await db.update(exportHistory).set({
+      status: 'failed',
+      errorMessage: `Прервано: выгрузка зависла (${row.status}, таймаут ${mins} мин)`,
+    }).where(eq(exportHistory.id, row.id));
+    n += 1;
+  }
+  return n;
+}
+
 export async function cleanupExpiredExports(): Promise<void> {
+  await failStuckPendingExports();
   const now = new Date();
   const expired = await db.select().from(exportHistory).where(lt(exportHistory.expiresAt, now));
   for (const row of expired) {
@@ -64,14 +101,14 @@ function pickColumns(row: Record<string, unknown>, keys: string[]): unknown[] {
 }
 
 async function fetchAnswerRows(source: 'answers' | 'reflections', params: CustomParams) {
-  const type = source === 'reflections' ? 'all' : normalizeExportTouchpointFilter(params.type);
-  let rows = await db.select({ a: answers, p: participants, q: questions })
-    .from(answers)
-    .leftJoin(participants, eq(answers.participantId, participants.id))
-    .leftJoin(questions, eq(answers.questionId, questions.id));
-  if (params.day) rows = rows.filter(r => r.q?.dayNumber === params.day);
-  rows = rows.filter(r => cohortFilter(r.p, params));
-  if (source === 'answers') rows = filterAnswersByTouchpoint(rows, type);
+  const rows = await queryAnswerJoinRows({
+    day: params.day,
+    direction: params.direction,
+    group: params.group,
+    participantId: params.participantId,
+    touchpoint: source === 'reflections' ? 'all' : params.type,
+    publishedOnly: true,
+  });
   return rows.map(r => {
     const built = buildAnswerRow(r, { source: 'question' });
     const record: Record<string, unknown> = {};
@@ -173,6 +210,15 @@ async function buildRowsForSource(
       return fetchAnswerRows('reflections', params);
     case 'participants':
       return fetchParticipantRows(params);
+    case 'participant_activity_wide': {
+      const built = await buildParticipantActivityWide({
+        day: params.day,
+        direction: params.direction,
+        group: params.group,
+        participantId: params.participantId,
+      });
+      return built.rows;
+    }
     case 'tasks':
       return fetchTaskRows(params);
     case 'rating_day':
@@ -195,6 +241,20 @@ export async function writeCustomExportToFile(
   },
 ): Promise<{ filePath: string; fileName: string; byteSize: number }> {
   await ensureStorageDir();
+  const safeName = opts.title.replace(/[^\w\u0400-\u04FF.-]+/g, '_').slice(0, 80) || 'export';
+  const fileName = `${safeName}_${opts.historyId.slice(0, 8)}.xlsx`;
+  const filePath = path.join(getExportStorageDir(), fileName);
+
+  if (opts.source === 'participant_activity_wide') {
+    const written = await writeParticipantActivityWideToFile(filePath, {
+      day: opts.params.day,
+      direction: opts.params.direction,
+      group: opts.params.group,
+      participantId: opts.params.participantId,
+    }, opts.columns);
+    return { filePath, fileName, byteSize: written.byteSize };
+  }
+
   const keys = opts.columns.length ? opts.columns : [...ANSWER_ROW_HEADERS];
   const labels = resolveColumnLabels(opts.source, keys);
   const rows = await buildRowsForSource(req, opts.source, opts.params);
@@ -204,9 +264,6 @@ export async function writeCustomExportToFile(
   for (const row of rows) {
     ws.addRow(pickColumns(row, keys));
   }
-  const safeName = opts.title.replace(/[^\w\u0400-\u04FF.-]+/g, '_').slice(0, 80) || 'export';
-  const fileName = `${safeName}_${opts.historyId.slice(0, 8)}.xlsx`;
-  const filePath = path.join(getExportStorageDir(), fileName);
   await wb.xlsx.writeFile(filePath);
   const stat = await fs.stat(filePath);
   return { filePath, fileName, byteSize: stat.size };
@@ -258,24 +315,36 @@ export async function createCustomExport(
   }
 }
 
-export async function listExportHistory(limit = 50) {
-  await cleanupExpiredExports();
-  const rows = await db.select().from(exportHistory)
-    .orderBy(desc(exportHistory.createdAt))
-    .limit(Math.min(limit, 200));
-  return rows.map(r => ({
+function mapHistoryRow(r: typeof exportHistory.$inferSelect) {
+  return {
     id: r.id,
     adminId: r.adminId,
     title: r.title,
     source: r.source,
     params: r.params,
     status: r.status,
+    progress: r.progress ?? 0,
+    doneCount: r.doneCount,
+    totalCount: r.totalCount,
     fileName: r.fileName,
     byteSize: r.byteSize,
     errorMessage: r.errorMessage,
     createdAt: r.createdAt,
     expiresAt: r.expiresAt,
-  }));
+  };
+}
+
+export async function listExportHistory(limit = 50) {
+  await cleanupExpiredExports();
+  const rows = await db.select().from(exportHistory)
+    .orderBy(desc(exportHistory.createdAt))
+    .limit(Math.min(limit, 200));
+  return rows.map(mapHistoryRow);
+}
+
+export async function getExportHistoryRow(id: string) {
+  const [row] = await db.select().from(exportHistory).where(eq(exportHistory.id, id)).limit(1);
+  return row ? mapHistoryRow(row) : null;
 }
 
 export async function getExportHistoryFile(id: string) {
@@ -288,6 +357,44 @@ export async function getExportHistoryFile(id: string) {
     return null;
   }
   return row;
+}
+
+export async function enqueueExportJob(
+  req: AdminRequest,
+  body: {
+    kind: ExportJobKind;
+    title?: string;
+    params?: Record<string, unknown>;
+  },
+) {
+  await cleanupExpiredExports();
+  await ensureStorageDir();
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + TTL_DAYS);
+  const titles: Record<ExportJobKind, string> = {
+    participants_archive: 'ZIP участников',
+    final_profiles_zip: 'ZIP PDF профилей',
+    shift_summary_pdf: 'PDF итога смены',
+  };
+  const title = body.title?.trim() || titles[body.kind];
+  const [pending] = await db.insert(exportHistory).values({
+    adminId: req.adminId ?? null,
+    title,
+    source: body.kind,
+    params: body.params ?? {},
+    columns: [],
+    status: 'pending',
+    progress: 0,
+    expiresAt,
+  }).returning();
+  await logAdminAction({
+    req,
+    actionType: 'export.job',
+    section: 'export',
+    objectId: pending.id,
+    newValue: { kind: body.kind, title },
+  });
+  return mapHistoryRow(pending);
 }
 
 export async function recordPresetExport(

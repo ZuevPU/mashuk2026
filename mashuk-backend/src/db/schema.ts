@@ -862,6 +862,9 @@ export const exportHistory = pgTable('export_history', {
   params: jsonb('params').notNull().default({}),
   columns: jsonb('columns').notNull().default([]),
   status: varchar('status', { length: 20 }).notNull().default('pending'),
+  progress: integer('progress').notNull().default(0),
+  doneCount: integer('done_count'),
+  totalCount: integer('total_count'),
   filePath: text('file_path'),
   fileName: varchar('file_name', { length: 255 }),
   byteSize: integer('byte_size'),
@@ -871,4 +874,5 @@ export const exportHistory = pgTable('export_history', {
 }, (table) => [
   index('export_history_admin_created_idx').on(table.adminId, table.createdAt),
   index('export_history_expires_idx').on(table.expiresAt),
+  index('export_history_status_created_idx').on(table.status, table.createdAt),
 ]);

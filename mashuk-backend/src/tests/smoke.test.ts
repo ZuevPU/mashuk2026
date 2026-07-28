@@ -229,6 +229,7 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
       .set('Authorization', `Bearer ${token}`);
     assert.equal(meta.status, 200);
     assert.ok(Array.isArray(meta.body.sources));
+    assert.ok(meta.body.sources.some((s: { id: string }) => s.id === 'participant_activity_wide'));
 
     const created = await request(app)
       .post('/api/admin/exports/custom')
@@ -247,6 +248,27 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
       .get(`/api/admin/exports/history/${created.body.id}/download`)
       .set('Authorization', `Bearer ${token}`);
     assert.equal(dl.status, 200);
+
+    const wide = await request(app)
+      .post('/api/admin/exports/custom')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        source: 'participant_activity_wide',
+        title: 'smoke-wide-day',
+        columns: ['id', 'full_name', 'checkin_done', 'evening_done'],
+        params: { day: 1 },
+      });
+    assert.equal(wide.status, 201);
+    assert.equal(wide.body.status, 'ready');
+    const wideDl = await request(app)
+      .get(`/api/admin/exports/history/${wide.body.id}/download`)
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(wideDl.status, 200);
+
+    const wideDirect = await request(app)
+      .get('/api/admin/exports/participant-activity-wide?day=1')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(wideDirect.status, 200);
 
     const hist = await request(app)
       .get('/api/admin/exports/history?limit=5')

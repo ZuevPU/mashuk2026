@@ -3,7 +3,7 @@ import { Response } from 'express';
 import { and, count, desc, eq, gte, ilike, isNull, lte, or, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  adminActionsLog, adminUsers, answers, delayedSurvey, directions, medals, participants,
+  adminActionsLog, adminUsers, answers, directions, medals, participants,
   pdfWhitelist, userMedals, events, tasks,
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
@@ -14,7 +14,6 @@ import { env } from '../config/env.js';
 import { sendPushNotification } from '../services/pushService.js';
 import { synthesizeOutcomes, isGigachatConfigured } from '../services/gigachatService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
-import { isNotNull } from 'drizzle-orm';
 import { ADMIN_USER_ROLES, adminUserCreateSchema, adminUserUpdateSchema, medalCreateSchema, medalUpdateSchema, parseBody } from '../validation/adminSchemas.js';
 import { MEDAL_RULE_METRICS } from '../services/medalRuleMetrics.js';
 
@@ -659,21 +658,17 @@ export const getAnalyticsDashboards = async (req: AdminRequest, res: Response): 
 
 export const scheduleDelayedSurvey = async (req: AdminRequest, res: Response): Promise<void> => {
   const weeks = Number(req.body.weeks) || 7;
-  const scheduledAt = new Date();
-  scheduledAt.setDate(scheduledAt.getDate() + weeks * 7);
-  const onboarded = await db.select({ id: participants.id }).from(participants)
-    .where(isNotNull(participants.onboardingCompletedAt));
-  let n = 0;
-  for (const p of onboarded) {
-    await db.insert(delayedSurvey).values({
-      participantId: p.id,
-      scheduledAt,
-      status: 'pending',
-      payload: { type: 'post_forum_6_8_weeks' },
-    });
-    n += 1;
-  }
-  res.json({ ok: true, scheduled: n, scheduledAt });
+  const { scheduleDelayedSurveyFromShiftEnd } = await import('../services/exports/delayedMeasureService.js');
+  const result = await scheduleDelayedSurveyFromShiftEnd({
+    weeksAfter: weeks,
+    adminId: req.adminId ?? null,
+  });
+  res.json({ ok: true, scheduled: result.scheduled, scheduledAt: result.scheduledAt, shiftId: result.shiftId });
+};
+
+export const delayedSurveyStatus = async (_req: AdminRequest, res: Response): Promise<void> => {
+  const { getDelayedSurveyStatus } = await import('../services/exports/delayedMeasureService.js');
+  res.json(await getDelayedSurveyStatus());
 };
 
 export const importDirectionDiagnosis = async (req: AdminRequest, res: Response): Promise<void> => {

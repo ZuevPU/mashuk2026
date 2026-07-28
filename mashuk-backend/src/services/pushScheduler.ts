@@ -76,7 +76,7 @@ async function processPushQueue(now: Date): Promise<number> {
   }
 }
 
-export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: string[]; events: number; queue: number }> {
+export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: string[]; events: number; queue: number; delayed: number }> {
   const { totalMinutes } = getMoscowParts(now);
   const dayStart = startOfMoscowDay(now);
   const fired: string[] = [];
@@ -191,7 +191,15 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
     fired.push(trigger);
   }
 
-  return { slots: fired, events: eventCount, queue };
+  let delayed = 0;
+  try {
+    const { processDueDelayedSurveys } = await import('./exports/delayedMeasureService.js');
+    delayed = await processDueDelayedSurveys(now);
+  } catch {
+    delayed = 0;
+  }
+
+  return { slots: fired, events: eventCount, queue, delayed };
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;

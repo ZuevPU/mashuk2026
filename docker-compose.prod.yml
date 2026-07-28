@@ -21,8 +21,10 @@ services:
       - ./mashuk-backend/.env.production
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-changeme}@db:5432/mashuk?sslmode=disable
+      EXPORT_STORAGE_DIR: /app/data/admin-exports
     volumes:
       - mashuk_uploads:/app/uploads
+      - mashuk_exports:/app/data/admin-exports
     depends_on:
       db:
         condition: service_healthy
@@ -30,3 +32,4 @@ services:
 volumes:
   mashuk_pg:
   mashuk_uploads:
+  mashuk_exports:

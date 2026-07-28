@@ -49,6 +49,10 @@ export function PulseView({ data }: { data: any }) {
     <>
       <div className="card">
         <h3>Активность</h3>
+        <p className="adm-muted" style={{ fontSize: 12 }}>
+          Краткий пульс дня. Рейтинг, задания и медали — подробнее в дашборде 4 «Активность и рейтинг».
+          Зоны ниже — доля ответов (не среднее по людям).
+        </p>
         <p>Зарегистрировано: {data.activity?.registered} · Активны сегодня: {data.activity?.activeToday}</p>
         <p style={{ fontSize: 12 }}>
           Итоги дня: {data.activity?.eveningCompleted} · Проверки состояния:{' '}

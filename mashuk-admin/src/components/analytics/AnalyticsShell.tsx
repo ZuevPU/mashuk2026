@@ -36,9 +36,124 @@ function dashboardApiPath(id: DashboardId): string | null {
 
 function xlsxExportPath(dash: DashboardId): string | null {
   if (dash === 'piggybank') return '/exports/piggybank';
-  if (dash === 'pulse' || dash === 'portrait' || dash === 'semantic') return '/exports/reflections';
-  if (dash === 'activity') return '/exports/task-submissions';
-  return '/exports/participants';
+  if (dash === 'portrait' || dash === 'semantic') return '/exports/reflections';
+  if (dash === 'clubs') return '/exports/piggybank';
+  if (dash === 'roles') return '/exports/roles-experiments';
+  if (dash === 'overview') return '/exports/participants';
+  // pulse / activity / program / departure use slice CTAs only
+  return null;
+}
+
+function csvExportPath(dash: DashboardId): string | null {
+  if (dash === 'piggybank') return '/exports/piggybank?format=csv';
+  if (dash === 'departure') return '/exports/point-a-b-summary';
+  if (dash === 'activity') return '/exports/rating/shift';
+  if (dash === 'roles') return null;
+  if (dash === 'clubs') return '/exports/piggybank?format=csv';
+  return '/exports/reflections?format=csv';
+}
+
+function sliceExportCtas(
+  dash: DashboardId,
+  day: string,
+  direction?: string,
+  group?: string,
+): { label: string; path: string; file: string }[] {
+  const cohort = qs({ day, direction: direction || undefined, group: group || undefined });
+  if (dash === 'pulse') {
+    return [
+      {
+        label: 'Выгрузить этот срез (участники×активности)',
+        path: `/exports/participant-activity-wide${cohort}`,
+        file: `participant_activity_d${day}.xlsx`,
+      },
+      {
+        label: 'Выгрузка дня (листы)',
+        path: `/exports/day${qs({ day })}`,
+        file: `day_${day}.xlsx`,
+      },
+    ];
+  }
+  if (dash === 'portrait') {
+    return [
+      {
+        label: 'Точка А → Б',
+        path: '/exports/point-a-b-summary',
+        file: 'point_a_b_summary.csv',
+      },
+    ];
+  }
+  if (dash === 'activity') {
+    return [
+      {
+        label: 'Выгрузить рейтинг дня',
+        path: `/exports/rating/day${qs({ day })}`,
+        file: `rating_day_${day}.xlsx`,
+      },
+      {
+        label: 'Выгрузить заявки',
+        path: '/exports/task-submissions',
+        file: 'task_submissions.xlsx',
+      },
+      {
+        label: 'Рейтинг смены',
+        path: '/exports/rating/shift',
+        file: 'leaderboard_shift.csv',
+      },
+    ];
+  }
+  if (dash === 'program') {
+    return [
+      {
+        label: 'Выгрузить ответы дня',
+        path: `/exports/day${qs({ day, type: 'all' })}`,
+        file: `day_${day}_program.xlsx`,
+      },
+      {
+        label: 'Выгрузить по типу «направление»',
+        path: `/exports/day${qs({ day, type: 'direction' })}`,
+        file: `day_${day}_direction.xlsx`,
+      },
+    ];
+  }
+  if (dash === 'departure') {
+    return [
+      {
+        label: 'Точка А → Б',
+        path: '/exports/point-a-b-summary',
+        file: 'point_a_b_summary.csv',
+      },
+      {
+        label: 'Рефлексии',
+        path: '/exports/reflections?format=xlsx',
+        file: 'reflections.xlsx',
+      },
+    ];
+  }
+  if (dash === 'overview') {
+    return [
+      {
+        label: 'Активность',
+        path: '/exports/activity',
+        file: 'activity.csv',
+      },
+      {
+        label: 'Статистика дня',
+        path: `/exports/day/stats${qs({ day })}`,
+        file: `day_stats_d${day}.json`,
+      },
+    ];
+  }
+  if (dash === 'roles') {
+    return [
+      {
+        label: 'Роли и эксперименты',
+        path: '/exports/roles-experiments?format=xlsx',
+        file: 'roles_experiments.xlsx',
+      },
+    ];
+  }
+  return [];
 }
 
 function withFormatXlsx(path: string, filterQuery: string): string {
@@ -152,6 +267,7 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
   const matrix = meta?.roleTaxonomy?.matrix;
   const catalog = meta?.roleTaxonomy?.catalog ?? [];
   const xlsxPath = xlsxExportPath(dash);
+  const sliceCtas = sliceExportCtas(dash, effectiveDay, direction, group);
 
   return (
     <div className="adm-forum adm-analytics">
@@ -161,16 +277,34 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => exportPng()} disabled={dash === 'roles'}>
             Скачать PNG
           </button>
-          <button
-            type="button"
-            className="adm-btn adm-btn-secondary"
-            onClick={() => downloadCsv(
-              filterQuery ? `/exports/reflections${filterQuery}&format=csv` : '/exports/reflections?format=csv',
-              'reflections.csv',
-            )}
-          >
-            Скачать CSV
-          </button>
+          {csvExportPath(dash) && (
+            <button
+              type="button"
+              className="adm-btn adm-btn-secondary"
+              onClick={() => {
+                const path = csvExportPath(dash)!;
+                if (path.includes('reflections')) {
+                  downloadCsv(
+                    filterQuery ? `/exports/reflections${filterQuery}&format=csv` : path,
+                    'reflections.csv',
+                  );
+                } else if (path.endsWith('.json') || path.includes('/stats')) {
+                  act(async () => {
+                    const data = await adminFetch(path);
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `export_${dash}.json`;
+                    a.click();
+                  }, 'Файл скачан');
+                } else {
+                  downloadCsv(path, `export_${dash}.csv`);
+                }
+              }}
+            >
+              Скачать CSV
+            </button>
+          )}
           {xlsxPath && (
             <button
               type="button"
@@ -180,6 +314,31 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
               Скачать XLSX
             </button>
           )}
+          {sliceCtas.map(cta => (
+            <button
+              key={cta.label}
+              type="button"
+              className="adm-btn adm-btn-primary"
+              onClick={() => act(async () => {
+                if (cta.file.endsWith('.json') || cta.path.includes('/stats')) {
+                  const data = await adminFetch(cta.path);
+                  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                  const a = document.createElement('a');
+                  a.href = URL.createObjectURL(blob);
+                  a.download = cta.file;
+                  a.click();
+                  return;
+                }
+                if (cta.file.endsWith('.csv')) {
+                  downloadCsv(cta.path, cta.file);
+                  return;
+                }
+                await adminDownloadBinary(cta.path, cta.file);
+              }, 'Файл скачан')}
+            >
+              {cta.label}
+            </button>
+          ))}
           <button type="button" className="adm-btn adm-btn-ghost" onClick={() => setChartHelpOpen(v => !v)}>
             {chartHelpOpen ? 'Скрыть подсказку' : 'Как читать диаграммы'}
           </button>

@@ -274,6 +274,13 @@
       "when": 1818000000000,
       "tag": "0038_forum_shifts",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1819000000000,
+      "tag": "0039_export_history_progress",
+      "breakpoints": true
     }
   ]
 }

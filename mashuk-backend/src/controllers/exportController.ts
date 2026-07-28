@@ -22,15 +22,30 @@ import {
   writeDelayedMeasureTemplate,
 } from '../services/exports/ancillaryExports.js';
 import { writeParticipantsArchiveZip, writeFinalProfilesZip } from '../services/exports/participantArchiveExport.js';
+import { writeParticipantActivityWideWorkbook } from '../services/exports/participantActivityWide.js';
 import {
-  ANSWER_ROW_HEADERS, buildAnswerRow, filterAnswersByTouchpoint, answerText,
+  ANSWER_ROW_HEADERS, buildAnswerRow, answerText,
 } from '../services/exports/exportCommon.js';
 import { normalizeExportTouchpointFilter } from '../services/exports/touchpointFilter.js';
 import { sendCsv } from '../services/exports/workbook.js';
-import { eq } from 'drizzle-orm';
-import { db } from '../db/index.js';
-import { answers, participants, questions } from '../db/schema.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
+
+export async function exportParticipantActivityWideHandler(req: AdminRequest, res: Response): Promise<void> {
+  const dayRaw = req.query.day;
+  const day = dayRaw != null && dayRaw !== '' && String(dayRaw) !== 'all'
+    ? Number(dayRaw)
+    : undefined;
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
+  await writeParticipantActivityWideWorkbook(res, {
+    day: day != null && Number.isFinite(day) && day > 0 ? day : undefined,
+    direction: typeof req.query.direction === 'string' ? req.query.direction : undefined,
+    group: typeof req.query.group === 'string' ? req.query.group : undefined,
+    participantId: req.query.participantId ? Number(req.query.participantId) : undefined,
+    shiftId,
+  });
+}
+
 export async function exportDayWorkbookHandler(req: AdminRequest, res: Response): Promise<void> {
   const day = Number(req.query.day) || 1;
   const type = req.query.type as string | undefined;
@@ -69,12 +84,12 @@ export async function exportAnswersHandler(req: AdminRequest, res: Response): Pr
   const type = normalizeExportTouchpointFilter(req.query.type as string | undefined);
   const includeDepth = req.query.depth === '1' || req.query.depth === 'true';
 
-  let rows = await db.select({ a: answers, p: participants, q: questions })
-    .from(answers)
-    .leftJoin(participants, eq(answers.participantId, participants.id))
-    .leftJoin(questions, eq(answers.questionId, questions.id));
-  if (day) rows = rows.filter(r => r.q?.dayNumber === day);
-  rows = filterAnswersByTouchpoint(rows, type);
+  const { queryAnswerJoinRows } = await import('../services/exports/answerJoinQuery.js');
+  const rows = await queryAnswerJoinRows({
+    day: day && !Number.isNaN(day) ? day : undefined,
+    touchpoint: type,
+    publishedOnly: true,
+  });
 
   const header = [...ANSWER_ROW_HEADERS, ...(includeDepth ? ['depth_orientir'] : [])].join(',');
   sendCsv(
@@ -169,3 +184,7 @@ export const exportActivityHandler = (_req: AdminRequest, res: Response) => writ
 export const exportPointABHandler = (_req: AdminRequest, res: Response) => writePointABSummaryExport(res);
 export const exportDelayedMeasureHandler = (_req: AdminRequest, res: Response) => writeDelayedMeasureTemplate(res);
 export const exportFinalProfilesZipHandler = (_req: AdminRequest, res: Response) => writeFinalProfilesZip(res);
+export async function exportShiftSummaryPdfHandler(_req: AdminRequest, res: Response): Promise<void> {
+  const { writeShiftSummaryPdf } = await import('../services/exports/shiftSummaryPdfBuilder.js');
+  await writeShiftSummaryPdf(res);
+}

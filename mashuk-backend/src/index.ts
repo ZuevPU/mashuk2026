@@ -7,6 +7,7 @@ import { ensureAdminPermissionsSeeded } from './services/adminPermissionsService
 import { runSeed } from './db/seed.js';
 import { startAnalyticsRefreshScheduler } from './services/analytics/refreshScheduler.js';
 import { startPushScheduler } from './services/pushScheduler.js';
+import { startExportJobRunner } from './services/exports/exportJobRunner.js';
 
 dotenv.config();
 
@@ -42,6 +43,7 @@ app.listen(port, host, () => {
       }
       startAnalyticsRefreshScheduler();
       startPushScheduler();
+      startExportJobRunner();
     } catch (err) {
       console.error('Migrations failed — server stays up for healthchecks, but DB routes will fail until this is fixed and the app is restarted:', err);
     }

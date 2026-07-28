@@ -7,6 +7,7 @@ import { isPublishedStatus } from '../publishStatus.js';
 import {
   ANSWER_ROW_HEADERS, addReadmeSheet, answerText, buildAnswerRow, fullName,
 } from './exportCommon.js';
+import { queryAnswerJoinRows } from './answerJoinQuery.js';
 import { touchpointTypeForQuestion } from './touchpointFilter.js';
 import { createWorkbook, sendWorkbook, sendCsv } from './workbook.js';
 
@@ -16,17 +17,13 @@ export async function loadReflectionRows(filters: {
   direction?: string;
   group?: string;
 } = {}) {
-  const rows = await db.select({ a: answers, p: participants, q: questions })
-    .from(answers)
-    .leftJoin(participants, eq(answers.participantId, participants.id))
-    .leftJoin(questions, eq(answers.questionId, questions.id));
-  return rows.filter(r => {
-    if (!r.q || !isPublishedStatus(r.q.status)) return false;
-    if (filters.shiftId != null && r.p?.shiftId !== filters.shiftId) return false;
-    if (filters.day != null && !Number.isNaN(filters.day) && r.q.dayNumber !== filters.day) return false;
-    if (filters.direction?.trim() && (r.p?.direction || '') !== filters.direction.trim()) return false;
-    if (filters.group?.trim() && (r.p?.groupName || '') !== filters.group.trim()) return false;
-    return true;
+  return queryAnswerJoinRows({
+    shiftId: filters.shiftId,
+    day: filters.day,
+    direction: filters.direction,
+    group: filters.group,
+    publishedOnly: true,
+    touchpoint: 'all',
   });
 }
 

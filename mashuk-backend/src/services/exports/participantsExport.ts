@@ -19,11 +19,16 @@ export async function writeParticipantsFullExport(
   format: string,
   query: ParticipantListQuery = {},
 ): Promise<void> {
-  const rows = await loadEnrichedParticipants(query);
+  const limit = Math.max(1, Math.min(5000, query.limit || 5000));
+  const rows = await loadEnrichedParticipants({ ...query, limit });
+  const truncated = rows.length >= limit;
   if (format === 'xlsx') {
     const wb = await createWorkbook();
     addReadmeSheet(wb, [
       'База участников (сквозная). consent_date = onboardingCompletedAt при согласии ПД.',
+      truncated
+        ? `ВНИМАНИЕ: выгрузка обрезана до ${limit} участников. Сузьте фильтр direction/group или повысьте limit.`
+        : `Строк в файле: ${rows.length} (лимит ${limit}).`,
     ]);
     const ws = wb.addWorksheet('Участники');
     ws.addRow(HEADERS);

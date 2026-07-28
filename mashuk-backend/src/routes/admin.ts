@@ -190,6 +190,7 @@ router.post('/rating/bonus-rules', P('levels', 'update'), wrap(admin.createRatin
 router.patch('/rating/bonus-rules/:id', P('levels', 'update'), wrap(admin.patchRatingBonusRule));
 
 router.get('/exports/participants', requireAdminRole('export'), wrap(exportsCtrl.exportParticipantsFullHandler));
+router.get('/exports/participant-activity-wide', requireAdminRole('export'), wrap(exportsCtrl.exportParticipantActivityWideHandler));
 router.get('/exports/answers', requireAdminRole('export'), wrap(exportsCtrl.exportAnswersHandler));
 router.get('/exports/piggybank', requireAdminRole('export'), wrap(exportsCtrl.exportPiggybankHandler));
 router.get('/exports/task-submissions', P('exports', 'export'), wrap(exportsCtrl.exportTaskSubmissionsHandler));
@@ -214,10 +215,13 @@ router.get('/exports/activity', requireAdminRole('export'), wrap(exportsCtrl.exp
 router.get('/exports/point-a-b-summary', requireAdminRole('export'), wrap(exportsCtrl.exportPointABHandler));
 router.get('/exports/delayed-measure-template', requireAdminRole('export'), wrap(exportsCtrl.exportDelayedMeasureHandler));
 router.get('/exports/final-profiles.zip', requireAdminRole('export'), wrap(exportsCtrl.exportFinalProfilesZipHandler));
+router.get('/exports/shift-summary.pdf', requireAdminRole('export'), wrap(exportsCtrl.exportShiftSummaryPdfHandler));
 router.get('/exports/meta', requireAdminRole('export'), wrap(exportCustomCtrl.getExportMetaHandler));
 router.post('/exports/custom', requireAdminRole('export'), wrap(exportCustomCtrl.postCustomExportHandler));
+router.post('/exports/jobs', requireAdminRole('export'), wrap(exportCustomCtrl.postExportJobHandler));
 router.post('/exports/history/preset', requireAdminRole('export'), wrap(exportCustomCtrl.postPresetExportHistoryHandler));
 router.get('/exports/history', requireAdminRole('export'), wrap(exportCustomCtrl.getExportHistoryHandler));
+router.get('/exports/history/:id', requireAdminRole('export'), wrap(exportCustomCtrl.getExportHistoryItemHandler));
 router.get('/exports/history/:id/download', requireAdminRole('export'), wrap(exportCustomCtrl.downloadExportHistoryHandler));
 router.get('/analytics/summary', wrap(admin.getAnalyticsSummary));
 router.get('/analytics/charts', wrap(admin.getAnalyticsCharts));
@@ -304,6 +308,8 @@ router.post('/participants/:id/pdf-publish', requireAdminRole('export'), wrap(pr
 router.get('/pdf-template', wrap(profilePdf.getAdminPdfTemplate));
 router.patch('/pdf-template', requireAdminRole('settings'), wrap(profilePdf.patchAdminPdfTemplate));
 router.post('/integrations/delayed-survey', requireAdminRole('settings'), wrap(ops.scheduleDelayedSurvey));
+router.get('/integrations/delayed-survey/status', requireAdminRole('export'), wrap(ops.delayedSurveyStatus));
+router.post('/exports/delayed-survey/schedule', requireAdminRole('export'), wrap(ops.scheduleDelayedSurvey));
 router.post('/integrations/import-diagnosis', requireAdminRole('settings'), wrap(ops.importDirectionDiagnosis));
 router.post('/integrations/club-match', requireAdminRole('settings'), wrap(p0.runClubMatching));
 router.get('/integrations/club-matches', wrap(p0.listClubMatches));

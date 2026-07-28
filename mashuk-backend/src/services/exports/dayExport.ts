@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import type { Response } from 'express';
 import { db } from '../../db/index.js';
 import {
-  answers, events, materials, participantDayState, participants, questions, tasks, taskSubmissions,
+  events, materials, participantDayState, participants, questions, tasks, taskSubmissions,
 } from '../../db/schema.js';
 import { inferReflectionDepth } from '../reflectionDepth.js';
 import { isPublishedStatus } from '../publishStatus.js';
@@ -10,6 +10,7 @@ import { EVENING_SCALE_KEYS } from '../touchpointTemplates.js';
 import {
   ANSWER_ROW_HEADERS, addReadmeSheet, answerText, buildAnswerRow, filterAnswersByTouchpoint, fullName,
 } from './exportCommon.js';
+import { queryAnswerJoinRows } from './answerJoinQuery.js';
 import { normalizeExportTouchpointFilter } from './touchpointFilter.js';
 import { createWorkbook, sendWorkbook } from './workbook.js';
 
@@ -17,12 +18,12 @@ export async function loadDayAnswerRows(day: number) {
   const dayQuestions = await db.select().from(questions)
     .where(eq(questions.dayNumber, day));
   const publishedQ = dayQuestions.filter(q => isPublishedStatus(q.status));
-  const qIds = new Set(publishedQ.map(q => q.id));
-  const allAns = await db.select({ a: answers, p: participants, q: questions })
-    .from(answers)
-    .leftJoin(participants, eq(answers.participantId, participants.id))
-    .leftJoin(questions, eq(answers.questionId, questions.id));
-  return allAns.filter(r => r.q && qIds.has(r.q.id));
+  const qIds = publishedQ.map(q => q.id);
+  return queryAnswerJoinRows({
+    day,
+    questionIds: qIds,
+    publishedOnly: false, // already filtered to published ids
+  });
 }
 
 export async function writeDayWorkbook(res: Response, day: number, typeRaw: string | undefined): Promise<void> {

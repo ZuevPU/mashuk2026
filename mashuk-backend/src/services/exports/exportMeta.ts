@@ -1,4 +1,8 @@
 import { ANSWER_ROW_HEADERS } from './exportCommon.js';
+import {
+  PARTICIPANT_ACTIVITY_WIDE_DAY_COLUMNS,
+  PARTICIPANT_ACTIVITY_WIDE_SHIFT_COLUMNS,
+} from './participantActivityWide.js';
 
 export type ExportSourceId =
   | 'answers'
@@ -6,7 +10,8 @@ export type ExportSourceId =
   | 'participants'
   | 'tasks'
   | 'rating_day'
-  | 'piggybank';
+  | 'piggybank'
+  | 'participant_activity_wide';
 
 export type ExportColumnDef = { key: string; label: string };
 
@@ -67,6 +72,20 @@ const PIGGYBANK_COLUMNS: ExportColumnDef[] = [
   { key: 'created_at', label: 'Создано' },
 ];
 
+/** Day-scoped defaults; shift-wide columns are also exposed for custom picker. */
+const WIDE_COLUMNS: ExportColumnDef[] = (() => {
+  const seen = new Set<string>();
+  const out: ExportColumnDef[] = [];
+  for (const c of [...PARTICIPANT_ACTIVITY_WIDE_DAY_COLUMNS, ...PARTICIPANT_ACTIVITY_WIDE_SHIFT_COLUMNS]) {
+    if (seen.has(c.key)) continue;
+    seen.add(c.key);
+    out.push(c);
+  }
+  return out;
+})();
+
+const WIDE_DEFAULT_COLUMNS = PARTICIPANT_ACTIVITY_WIDE_DAY_COLUMNS.map(c => c.key);
+
 export const EXPORT_SOURCES: {
   id: ExportSourceId;
   label: string;
@@ -90,6 +109,12 @@ export const EXPORT_SOURCES: {
     label: 'Участники',
     defaultColumns: PARTICIPANT_COLUMNS.map(c => c.key),
     columns: PARTICIPANT_COLUMNS,
+  },
+  {
+    id: 'participant_activity_wide',
+    label: 'Участники × активности (wide)',
+    defaultColumns: WIDE_DEFAULT_COLUMNS,
+    columns: WIDE_COLUMNS,
   },
   {
     id: 'tasks',

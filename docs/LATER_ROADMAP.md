@@ -28,6 +28,6 @@ Later (не в этом треке):
 
 ## Прочее
 
-- Автоматизация отсроченного замера 6–8 недель (сейчас: `GET /exports/delayed-measure-template`).
-- PDF итога смены без построчной детализации ([`GAMIFICATION_ADMIN.md`](GAMIFICATION_ADMIN.md)).
+- ~~Автоматизация отсроченного замера 6–8 недель~~ — сделано: шаблон с участниками, schedule от конца смены, push tick; ingest ответов — later.
+- ~~PDF итога смены без построчной детализации~~ — сделано: `GET /exports/shift-summary.pdf`.
 - Полный сценарий QR участника → бот VK (сейчас: волонтёр `/volunteer` + deep link).
