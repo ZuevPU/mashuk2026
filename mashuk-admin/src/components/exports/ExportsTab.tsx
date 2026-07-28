@@ -103,7 +103,7 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadXlsx('/exports/task-submissions', 'task_submissions.xlsx')}>
             Заявки на задания
           </button>
-          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadXlsx('/exports/medals', 'medals.xlsx')}>
+          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadXlsx('/exports/medals?format=xlsx', 'medals.xlsx')}>
             Медали
           </button>
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadCsv('/exports/points-log', 'points_log.csv')}>

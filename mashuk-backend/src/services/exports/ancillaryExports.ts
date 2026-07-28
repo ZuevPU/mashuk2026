@@ -9,7 +9,7 @@ import { queryPiggybankForExport } from '../../controllers/adminPiggybankControl
 import { isPublishedStatus } from '../publishStatus.js';
 import { addReadmeSheet, fullName } from './exportCommon.js';
 import { loadEnrichedParticipants } from './participantEnrichment.js';
-import { createWorkbook, sendWorkbook, sendCsv } from './workbook.js';
+import { createWorkbook, sendWorkbook, sendCsv, sendSimpleXlsx } from './workbook.js';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 
 export async function writePiggybankFullExport(req: AdminRequest, res: Response): Promise<void> {
@@ -19,21 +19,32 @@ export async function writePiggybankFullExport(req: AdminRequest, res: Response)
     sendCsv(
       res,
       'piggybank.csv',
-      'created_at,participant,direction,group,day,tags,source,text',
+      'created_at,participant_id,participant,direction,group,day,tags,source,text,is_hidden,is_violation',
       rows.map(r => [
-        r.createdAt, r.participantName, r.directionName ?? '', '',
-        r.tags, r.source ?? '', r.text,
+        r.createdAt, r.participantId, r.participantName, r.directionName ?? '', r.groupName ?? '',
+        r.forumDay ?? '', r.tags, r.source ?? '', r.text,
+        r.isHidden ? '1' : '0', r.isViolation ? '1' : '0',
       ]),
     );
     return;
   }
   const wb = await createWorkbook();
-  addReadmeSheet(wb, ['Копилка + сводки по тегам и источникам.']);
+  addReadmeSheet(wb, ['Копилка + сводки по тегам и источникам. Колонки совпадают с данными в админке.']);
   const ws = wb.addWorksheet('Записи');
-  ws.addRow(['participant_id', 'direction', 'group', 'day', 'time', 'text', 'tag', 'source', 'block_link']);
+  ws.addRow(['ID участника', 'Участник', 'Направление', 'Группа', 'День', 'Дата', 'Текст', 'Теги', 'Источник', 'Скрыто', 'Нарушение']);
   for (const r of rows) {
     ws.addRow([
-      '', r.directionName, '', '', r.createdAt, r.text, r.tags, r.source ?? '', '',
+      r.participantId,
+      r.participantName,
+      r.directionName ?? '',
+      r.groupName ?? '',
+      r.forumDay ?? '',
+      r.createdAt ? new Date(r.createdAt).toISOString() : '',
+      r.text,
+      r.tags,
+      r.source ?? '',
+      r.isHidden ? 'да' : '',
+      r.isViolation ? 'да' : '',
     ]);
   }
   const tagAgg = new Map<string, number>();
@@ -45,10 +56,10 @@ export async function writePiggybankFullExport(req: AdminRequest, res: Response)
     srcAgg.set(src, (srcAgg.get(src) || 0) + 1);
   }
   const wsTags = wb.addWorksheet('По тегам');
-  wsTags.addRow(['tag', 'count']);
+  wsTags.addRow(['Тег', 'Количество']);
   for (const [tag, count] of tagAgg) wsTags.addRow([tag, count]);
   const wsSrc = wb.addWorksheet('По источникам');
-  wsSrc.addRow(['source', 'count']);
+  wsSrc.addRow(['Источник', 'Количество']);
   for (const [src, count] of srcAgg) wsSrc.addRow([src, count]);
   await sendWorkbook(res, wb, 'piggybank.xlsx');
 }
@@ -68,54 +79,118 @@ export async function writeTasksCatalogExport(res: Response): Promise<void> {
   await sendWorkbook(res, wb, 'tasks_catalog.xlsx');
 }
 
-export async function writeTaskSubmissionsFullExport(res: Response): Promise<void> {
-  const rows = await db.select({ s: taskSubmissions, p: participants, t: tasks })
+export async function writeTaskSubmissionsFullExport(
+  res: Response,
+  opts: { format?: string; shiftId?: number } = {},
+): Promise<void> {
+  const format = String(opts.format || 'xlsx').toLowerCase();
+  const conditions = [];
+  if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
+    conditions.push(eq(participants.shiftId, opts.shiftId));
+  }
+  const where = conditions.length ? and(...conditions) : undefined;
+  let q = db.select({ s: taskSubmissions, p: participants, t: tasks })
     .from(taskSubmissions)
     .leftJoin(participants, eq(taskSubmissions.participantId, participants.id))
     .leftJoin(tasks, eq(taskSubmissions.taskId, tasks.id));
-  sendCsv(
-    res,
-    'task_submissions.csv',
-    'participant_id,task_id,status,answer,photo,link,submitted_at,checked_at,points,moderator_comment',
-    rows.map(r => [
-      r.p?.id, r.t?.id, r.s.status, r.s.answerText ?? '', r.s.photoUrl ?? '', r.s.postUrl ?? '',
-      r.s.submittedAt, r.s.checkedAt, r.s.pointsAwarded, r.s.moderatorComment ?? '',
-    ]),
-  );
+  if (where) q = q.where(where) as typeof q;
+  const rows = await q;
+  const headers = [
+    'ID участника', 'ФИО', 'ID задания', 'Задание', 'Статус', 'Ответ', 'Фото', 'Ссылка',
+    'Отправлено', 'Проверено', 'Баллы', 'Комментарий модератора',
+  ];
+  const data = rows.map(r => [
+    r.p?.id ?? '',
+    fullName(r.p),
+    r.t?.id ?? '',
+    r.t?.title ?? '',
+    r.s.status,
+    r.s.answerText ?? '',
+    r.s.photoUrl ?? '',
+    r.s.postUrl ?? '',
+    r.s.submittedAt ? new Date(r.s.submittedAt).toISOString() : '',
+    r.s.checkedAt ? new Date(r.s.checkedAt).toISOString() : '',
+    r.s.pointsAwarded ?? '',
+    r.s.moderatorComment ?? '',
+  ]);
+  if (format === 'csv') {
+    sendCsv(
+      res,
+      'task_submissions.csv',
+      'participant_id,name,task_id,task_title,status,answer,photo,link,submitted_at,checked_at,points,moderator_comment',
+      data,
+    );
+    return;
+  }
+  await sendSimpleXlsx(res, 'task_submissions.xlsx', 'Заявки', headers, data);
 }
 
-export async function writeRatingDayExport(res: Response, day: number): Promise<void> {
-  const allP = await db.select().from(participants).where(isNull(participants.selfDeletedAt));
+export async function writeRatingDayExport(
+  res: Response,
+  day: number,
+  opts: { format?: string; shiftId?: number } = {},
+): Promise<void> {
+  const format = String(opts.format || 'xlsx').toLowerCase();
+  const conditions = [isNull(participants.selfDeletedAt)];
+  if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
+    conditions.push(eq(participants.shiftId, opts.shiftId));
+  }
+  const allP = await db.select().from(participants).where(and(...conditions));
   const ids = allP.map(p => p.id);
   const { computeLeaderboardScores } = await import('../leaderboardService.js');
   const scores = await computeLeaderboardScores(ids, { scope: 'day', day, track: 'total' });
   const ranked = allP
     .map(p => ({ p, pts: scores.get(p.id) ?? 0 }))
     .sort((a, b) => b.pts - a.pts);
-  sendCsv(
+  const data = ranked.map((r, i) => [i + 1, r.p.id, fullName(r.p), r.pts]);
+  if (format === 'csv') {
+    sendCsv(res, `leaderboard_day${day}.csv`, 'rank,participant_id,name,points', data);
+    return;
+  }
+  await sendSimpleXlsx(
     res,
-    `leaderboard_day${day}.csv`,
-    'rank,participant_id,name,points',
-    ranked.map((r, i) => [i + 1, r.p.id, fullName(r.p), r.pts]),
+    `rating_day_${day}.xlsx`,
+    'Рейтинг',
+    ['Место', 'ID участника', 'ФИО', 'Баллы'],
+    data,
   );
 }
 
-export async function writeRatingShiftExport(res: Response): Promise<void> {
-  const allP = await db.select().from(participants).where(isNull(participants.selfDeletedAt));
+export async function writeRatingShiftExport(
+  res: Response,
+  opts: { format?: string; shiftId?: number } = {},
+): Promise<void> {
+  const format = String(opts.format || 'csv').toLowerCase();
+  const conditions = [isNull(participants.selfDeletedAt)];
+  if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
+    conditions.push(eq(participants.shiftId, opts.shiftId));
+  }
+  const allP = await db.select().from(participants).where(and(...conditions));
   const ids = allP.map(p => p.id);
   const { computeLeaderboardScores } = await import('../leaderboardService.js');
   const scores = await computeLeaderboardScores(ids, { scope: 'shift', track: 'total' });
   const ranked = allP
     .map(p => ({ p, pts: scores.get(p.id) ?? 0 }))
     .sort((a, b) => b.pts - a.pts);
+  const data = ranked.map((r, i) => [
+    i + 1, r.p.id, fullName(r.p), r.pts,
+    r.p.pathPoints ?? 0, r.p.experiencePoints ?? 0, r.p.bonusPoints ?? 0,
+  ]);
+  if (format === 'xlsx') {
+    await sendSimpleXlsx(
+      res,
+      'leaderboard_shift.xlsx',
+      'Рейтинг',
+      ['Место', 'ID участника', 'ФИО', 'Баллы', 'Путь', 'Опыт', 'Бонус'],
+      data,
+    );
+    return;
+  }
   sendCsv(
     res,
     'leaderboard_shift.csv',
     'rank,participant_id,name,points,path,experience,bonus',
-    ranked.map((r, i) => [
-      i + 1, r.p.id, fullName(r.p), r.pts,
-      r.p.pathPoints ?? 0, r.p.experiencePoints ?? 0, r.p.bonusPoints ?? 0,
-    ]),
+    data,
   );
 }
 
@@ -145,16 +220,39 @@ export async function writeRatingNominationExport(res: Response, nominationKey: 
   );
 }
 
-export async function writeMedalsExport(res: Response): Promise<void> {
-  const rows = await db.select({ um: userMedals, p: participants, m: medals })
+export async function writeMedalsExport(
+  res: Response,
+  opts: { format?: string; shiftId?: number } = {},
+): Promise<void> {
+  const format = String(opts.format || 'xlsx').toLowerCase();
+  const conditions = [];
+  if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
+    conditions.push(eq(participants.shiftId, opts.shiftId));
+  }
+  const where = conditions.length ? and(...conditions) : undefined;
+  let q = db.select({ um: userMedals, p: participants, m: medals })
     .from(userMedals)
     .leftJoin(participants, eq(userMedals.participantId, participants.id))
     .leftJoin(medals, eq(userMedals.medalId, medals.id));
-  sendCsv(
+  if (where) q = q.where(where) as typeof q;
+  const rows = await q;
+  const data = rows.map(r => [
+    r.p?.id ?? '',
+    fullName(r.p),
+    r.m?.name ?? '',
+    r.m?.level ?? '',
+    r.um.awardedAt ? new Date(r.um.awardedAt).toISOString() : '',
+  ]);
+  if (format === 'csv') {
+    sendCsv(res, 'medals_awarded.csv', 'participant_id,name,medal,level,awarded_at', data);
+    return;
+  }
+  await sendSimpleXlsx(
     res,
-    'medals_awarded.csv',
-    'participant_id,name,medal,level,awarded_at',
-    rows.map(r => [r.p?.id, fullName(r.p), r.m?.name, r.m?.level, r.um.awardedAt]),
+    'medals.xlsx',
+    'Медали',
+    ['ID участника', 'ФИО', 'Медаль', 'Уровень', 'Выдано'],
+    data,
   );
 }
 

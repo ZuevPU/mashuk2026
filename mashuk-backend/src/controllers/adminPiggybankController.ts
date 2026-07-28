@@ -17,9 +17,14 @@ function parseListQuery(req: AdminRequest) {
     participantId: req.query.participantId ? Number(req.query.participantId) : undefined,
     directionId: req.query.directionId ? Number(req.query.directionId) : undefined,
     groupId: req.query.groupId ? Number(req.query.groupId) : undefined,
-    forumDay: req.query.forumDay ? Number(req.query.forumDay) : undefined,
+    directionName: String(req.query.direction || '').trim(),
+    groupName: String(req.query.group || '').trim(),
+    forumDay: req.query.forumDay
+      ? Number(req.query.forumDay)
+      : (req.query.day ? Number(req.query.day) : undefined),
     tag: String(req.query.tag || '').trim(),
     source: String(req.query.source || '').trim(),
+    shiftId: req.query.shiftId ? Number(req.query.shiftId) : undefined,
   };
 }
 
@@ -37,11 +42,28 @@ function buildWhere(params: ReturnType<typeof parseListQuery>) {
   }
   if (params.directionId) conditions.push(eq(participants.directionId, params.directionId));
   if (params.groupId) conditions.push(eq(participants.groupId, params.groupId));
+  if (params.shiftId && !Number.isNaN(params.shiftId)) {
+    conditions.push(eq(participants.shiftId, params.shiftId));
+  }
   return and(...conditions);
 }
 
+async function resolveCohortIds(params: ReturnType<typeof parseListQuery>) {
+  if (!params.directionId && params.directionName) {
+    const [d] = await db.select({ id: directions.id }).from(directions)
+      .where(eq(directions.name, params.directionName)).limit(1);
+    if (d) params.directionId = d.id;
+  }
+  if (!params.groupId && params.groupName) {
+    const [g] = await db.select({ id: participantGroups.id }).from(participantGroups)
+      .where(eq(participantGroups.name, params.groupName)).limit(1);
+    if (g) params.groupId = g.id;
+  }
+  return params;
+}
+
 export async function listPiggybankEntries(req: AdminRequest, res: Response): Promise<void> {
-  const params = parseListQuery(req);
+  const params = await resolveCohortIds(parseListQuery(req));
   const whereClause = buildWhere(params);
 
   const baseFrom = db.select({
@@ -132,8 +154,11 @@ export async function deletePiggybankEntry(req: AdminRequest, res: Response): Pr
 
 export type PiggybankExportRow = {
   createdAt: Date | null;
+  participantId: number;
   participantName: string;
   directionName: string | null;
+  groupName: string | null;
+  forumDay: number | null;
   text: string;
   tags: string;
   source: string | null;
@@ -142,7 +167,11 @@ export type PiggybankExportRow = {
 };
 
 export async function queryPiggybankForExport(req: AdminRequest): Promise<PiggybankExportRow[]> {
-  const params = parseListQuery(req);
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const params = await resolveCohortIds(parseListQuery(req));
+  if (params.shiftId == null || Number.isNaN(params.shiftId)) {
+    params.shiftId = await resolveAdminShiftId(req);
+  }
   params.limit = 10000;
   params.offset = 0;
   const whereClause = buildWhere(params);
@@ -150,18 +179,23 @@ export async function queryPiggybankForExport(req: AdminRequest): Promise<Piggyb
     e: piggybank,
     p: participants,
     dirName: directions.name,
+    groupName: participantGroups.name,
   })
     .from(piggybank)
     .innerJoin(participants, eq(piggybank.participantId, participants.id))
     .leftJoin(directions, eq(participants.directionId, directions.id))
+    .leftJoin(participantGroups, eq(participants.groupId, participantGroups.id))
     .where(whereClause)
     .orderBy(desc(piggybank.createdAt))
     .limit(params.limit);
 
   return rows.map(r => ({
     createdAt: r.e.createdAt,
+    participantId: r.e.participantId,
     participantName: [r.p.firstName, r.p.lastName].filter(Boolean).join(' ') || String(r.p.vkId),
-    directionName: r.dirName ?? null,
+    directionName: r.dirName ?? r.p.direction ?? null,
+    groupName: r.groupName ?? r.p.groupName ?? null,
+    forumDay: r.e.forumDay ?? null,
     text: r.e.text,
     tags: formatTagsForExport(r.e),
     source: r.e.source,
@@ -173,47 +207,39 @@ export async function queryPiggybankForExport(req: AdminRequest): Promise<Piggyb
 export async function exportPiggybankEntries(req: AdminRequest, res: Response): Promise<void> {
   const format = String(req.query.format || 'xlsx').toLowerCase();
   const rows = await queryPiggybankForExport(req);
+  const { createWorkbook, sendWorkbook, sendCsv } = await import('../services/exports/workbook.js');
 
   if (format === 'xlsx') {
-    const ExcelJS = (await import('exceljs')).default;
-    const wb = new ExcelJS.Workbook();
+    const wb = await createWorkbook();
     const ws = wb.addWorksheet('Копилка');
-    ws.columns = [
-      { header: 'Дата', key: 'createdAt', width: 20 },
-      { header: 'Участник', key: 'participantName', width: 24 },
-      { header: 'Направление', key: 'directionName', width: 18 },
-      { header: 'Текст', key: 'text', width: 50 },
-      { header: 'Теги', key: 'tags', width: 20 },
-      { header: 'Источник', key: 'source', width: 18 },
-      { header: 'Скрыто', key: 'isHidden', width: 8 },
-      { header: 'Нарушение', key: 'isViolation', width: 10 },
-    ];
+    ws.addRow(['Дата', 'ID участника', 'Участник', 'Направление', 'Группа', 'День', 'Текст', 'Теги', 'Источник', 'Скрыто', 'Нарушение']);
     for (const r of rows) {
-      ws.addRow({
-        ...r,
-        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : '',
-        isHidden: r.isHidden ? 'да' : '',
-        isViolation: r.isViolation ? 'да' : '',
-      });
+      ws.addRow([
+        r.createdAt ? new Date(r.createdAt).toISOString() : '',
+        r.participantId,
+        r.participantName,
+        r.directionName ?? '',
+        r.groupName ?? '',
+        r.forumDay ?? '',
+        r.text,
+        r.tags,
+        r.source ?? '',
+        r.isHidden ? 'да' : '',
+        r.isViolation ? 'да' : '',
+      ]);
     }
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=piggybank.xlsx');
-    await wb.xlsx.write(res);
+    await sendWorkbook(res, wb, 'piggybank.xlsx');
     return;
   }
 
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename=piggybank.csv');
-  const header = 'created_at,participant,direction,tags,source,text,is_hidden,is_violation\n';
-  const csv = rows.map(r => [
-    r.createdAt,
-    JSON.stringify(r.participantName),
-    JSON.stringify(r.directionName ?? ''),
-    JSON.stringify(r.tags),
-    JSON.stringify(r.source ?? ''),
-    JSON.stringify(r.text),
-    r.isHidden ? '1' : '0',
-    r.isViolation ? '1' : '0',
-  ].join(',')).join('\n');
-  res.send('\uFEFF' + header + csv);
+  sendCsv(
+    res,
+    'piggybank.csv',
+    'created_at,participant_id,participant,direction,group,day,tags,source,text,is_hidden,is_violation',
+    rows.map(r => [
+      r.createdAt, r.participantId, r.participantName, r.directionName ?? '', r.groupName ?? '',
+      r.forumDay ?? '', r.tags, r.source ?? '', r.text,
+      r.isHidden ? '1' : '0', r.isViolation ? '1' : '0',
+    ]),
+  );
 }

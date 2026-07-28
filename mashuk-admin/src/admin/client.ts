@@ -153,7 +153,8 @@ export async function adminFetch(path: string, options: RequestInit = {}) {
 
 export function downloadCsv(path: string, filename: string) {
   adminFetch(path).then((csv: unknown) => {
-    const blob = new Blob([csv as string], { type: 'text/csv' });
+    // charset + BOM from API so Excel opens Cyrillic correctly
+    const blob = new Blob([csv as string], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = filename;

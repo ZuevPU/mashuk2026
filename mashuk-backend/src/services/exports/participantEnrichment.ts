@@ -84,6 +84,8 @@ export function enrichParticipantRowSync(
     nextExperiment: p.nextExperiment,
     interests,
     roleAnswers: p.roleAnswers ? JSON.stringify(p.roleAnswers) : '',
+    lastActiveAt: formatTs(p.lastActiveAt),
+    isBlocked: p.isBlocked ? 'да' : 'нет',
   };
 }
 

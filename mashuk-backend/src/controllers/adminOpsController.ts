@@ -99,15 +99,37 @@ export const listAdminActions = async (req: AdminRequest, res: Response): Promis
 };
 
 export const exportAdminActionsXlsx = async (req: AdminRequest, res: Response): Promise<void> => {
-  req.query.limit = '5000';
   const critical = req.query.critical === '1' || req.query.critical === 'true';
-  const conditions = critical ? [eq(adminActionsLog.isCritical, true)] : [];
+  const reviewFilter = req.query.review as string | undefined;
+  const adminId = req.query.adminId ? Number(req.query.adminId) : null;
+  const section = typeof req.query.section === 'string' ? req.query.section : null;
+  const actionType = typeof req.query.actionType === 'string' ? req.query.actionType : null;
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+  const dateFrom = typeof req.query.dateFrom === 'string' ? new Date(req.query.dateFrom) : null;
+  const dateTo = typeof req.query.dateTo === 'string' ? new Date(req.query.dateTo) : null;
+
+  const conditions = [];
+  if (critical) conditions.push(eq(adminActionsLog.isCritical, true));
+  if (adminId) conditions.push(eq(adminActionsLog.adminId, adminId));
+  if (section) conditions.push(eq(adminActionsLog.section, section));
+  if (actionType) conditions.push(eq(adminActionsLog.actionType, actionType));
+  if (dateFrom && !Number.isNaN(dateFrom.getTime())) conditions.push(gte(adminActionsLog.createdAt, dateFrom));
+  if (dateTo && !Number.isNaN(dateTo.getTime())) conditions.push(lte(adminActionsLog.createdAt, dateTo));
+  if (reviewFilter === 'pending') conditions.push(isNull(adminActionsLog.reviewedAt));
+  if (reviewFilter === 'reviewed') conditions.push(sql`${adminActionsLog.reviewedAt} IS NOT NULL`);
+  if (search) {
+    conditions.push(or(
+      ilike(adminActionsLog.objectId, `%${search}%`),
+      ilike(adminActionsLog.comment, `%${search}%`),
+      ilike(adminActionsLog.adminLogin, `%${search}%`),
+    ));
+  }
   const where = conditions.length ? and(...conditions) : undefined;
   const rows = await db.select().from(adminActionsLog).where(where).orderBy(desc(adminActionsLog.createdAt)).limit(5000);
 
-  const ExcelJS = await import('exceljs');
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Journal');
+  const { createWorkbook, sendWorkbook } = await import('../services/exports/workbook.js');
+  const wb = await createWorkbook();
+  const ws = wb.addWorksheet('Журнал');
   ws.addRow(['Дата', 'Пользователь', 'Раздел', 'Действие', 'Объект', 'Старое', 'Новое', 'IP', 'Критичное', 'Отревьюено']);
   for (const a of rows) {
     ws.addRow([
@@ -123,9 +145,7 @@ export const exportAdminActionsXlsx = async (req: AdminRequest, res: Response): 
       a.reviewedAt ? 'да' : '',
     ]);
   }
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', 'attachment; filename=admin_actions_log.xlsx');
-  await wb.xlsx.write(res);
+  await sendWorkbook(res, wb, 'admin_actions_log.xlsx');
 };
 
 export const reviewAdminAction = async (req: AdminRequest, res: Response): Promise<void> => {

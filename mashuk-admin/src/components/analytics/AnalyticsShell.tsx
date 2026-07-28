@@ -41,6 +41,13 @@ function xlsxExportPath(dash: DashboardId): string | null {
   return '/exports/participants';
 }
 
+function withFormatXlsx(path: string, filterQuery: string): string {
+  const base = filterQuery
+    ? `${path}${filterQuery}&format=xlsx`
+    : `${path}?format=xlsx`;
+  return base;
+}
+
 export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: AnalyticsTabProps) {
   const {
     forumDay,
@@ -157,7 +164,10 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
           <button
             type="button"
             className="adm-btn adm-btn-secondary"
-            onClick={() => downloadCsv(`/exports/reflections${filterQuery}`, 'reflections.csv')}
+            onClick={() => downloadCsv(
+              filterQuery ? `/exports/reflections${filterQuery}&format=csv` : '/exports/reflections?format=csv',
+              'reflections.csv',
+            )}
           >
             Скачать CSV
           </button>
@@ -165,7 +175,7 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
             <button
               type="button"
               className="adm-btn adm-btn-secondary"
-              onClick={() => adminDownloadBinary(`${xlsxPath}${filterQuery}`, `export_${dash}.xlsx`)}
+              onClick={() => adminDownloadBinary(withFormatXlsx(xlsxPath, filterQuery), `export_${dash}.xlsx`)}
             >
               Скачать XLSX
             </button>

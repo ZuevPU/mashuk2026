@@ -79,7 +79,8 @@ export async function downloadExportHistoryHandler(req: AdminRequest, res: Respo
     res.status(404).json({ error: 'Export not found or expired' });
     return;
   }
+  const { contentDispositionAttachment } = await import('../services/exports/workbook.js');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename=${row.fileName}`);
+  res.setHeader('Content-Disposition', contentDispositionAttachment(row.fileName || 'export.xlsx'));
   fs.createReadStream(row.filePath!).pipe(res);
 }

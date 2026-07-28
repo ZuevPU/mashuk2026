@@ -10,16 +10,37 @@ import {
 import { touchpointTypeForQuestion } from './touchpointFilter.js';
 import { createWorkbook, sendWorkbook, sendCsv } from './workbook.js';
 
-export async function loadReflectionRows() {
+export async function loadReflectionRows(filters: {
+  shiftId?: number;
+  day?: number;
+  direction?: string;
+  group?: string;
+} = {}) {
   const rows = await db.select({ a: answers, p: participants, q: questions })
     .from(answers)
     .leftJoin(participants, eq(answers.participantId, participants.id))
     .leftJoin(questions, eq(answers.questionId, questions.id));
-  return rows.filter(r => r.q && isPublishedStatus(r.q.status));
+  return rows.filter(r => {
+    if (!r.q || !isPublishedStatus(r.q.status)) return false;
+    if (filters.shiftId != null && r.p?.shiftId !== filters.shiftId) return false;
+    if (filters.day != null && !Number.isNaN(filters.day) && r.q.dayNumber !== filters.day) return false;
+    if (filters.direction?.trim() && (r.p?.direction || '') !== filters.direction.trim()) return false;
+    if (filters.group?.trim() && (r.p?.groupName || '') !== filters.group.trim()) return false;
+    return true;
+  });
 }
 
-export async function writeReflectionsExport(res: Response, format: string): Promise<void> {
-  const rows = await loadReflectionRows();
+export async function writeReflectionsExport(
+  res: Response,
+  format: string,
+  filters: {
+    shiftId?: number;
+    day?: number;
+    direction?: string;
+    group?: string;
+  } = {},
+): Promise<void> {
+  const rows = await loadReflectionRows(filters);
   const extraHeaders = ['question_id', 'touchpoint_type', 'block_id', 'word_count', 'depth_orientir'];
 
   if (format === 'xlsx') {

@@ -47,7 +47,8 @@ export async function exportParticipantsFullHandler(req: AdminRequest, res: Resp
   const format = String(req.query.format || 'xlsx').toLowerCase();
   const { parseParticipantListQuery } = await import('../services/participantsList.js');
   const { resolveAdminShiftId } = await import('../services/shiftService.js');
-  const parsed = parseParticipantListQuery(req);
+  const { applyCohortNameFilters } = await import('../services/exports/exportCohort.js');
+  let parsed = parseParticipantListQuery(req);
   parsed.page = 1;
   const rawLimit = req.query.limit != null && req.query.limit !== ''
     ? Number(req.query.limit)
@@ -56,6 +57,10 @@ export async function exportParticipantsFullHandler(req: AdminRequest, res: Resp
   if (parsed.shiftId == null || Number.isNaN(parsed.shiftId)) {
     parsed.shiftId = await resolveAdminShiftId(req);
   }
+  parsed = await applyCohortNameFilters(parsed, {
+    direction: typeof req.query.direction === 'string' ? req.query.direction : undefined,
+    group: typeof req.query.group === 'string' ? req.query.group : undefined,
+  });
   await writeParticipantsFullExport(res, format === 'csv' ? 'csv' : 'xlsx', parsed);
 }
 
@@ -102,7 +107,14 @@ export const exportRolesExperimentsHandler = async (_req: AdminRequest, res: Res
 
 export const exportReflectionsHandler = async (req: AdminRequest, res: Response) => {
   const format = String(req.query.format || 'xlsx').toLowerCase();
-  await writeReflectionsExport(res, format);
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
+  await writeReflectionsExport(res, format, {
+    shiftId,
+    day: req.query.day ? Number(req.query.day) : undefined,
+    direction: typeof req.query.direction === 'string' ? req.query.direction : undefined,
+    group: typeof req.query.group === 'string' ? req.query.group : undefined,
+  });
 };
 
 export const exportParticipantAnswersHandler = async (req: AdminRequest, res: Response) => {
@@ -120,13 +132,36 @@ export const exportParticipantsArchiveHandler = async (req: AdminRequest, res: R
 
 export const exportPiggybankHandler = (req: AdminRequest, res: Response) => writePiggybankFullExport(req, res);
 export const exportTasksCatalogHandler = (_req: AdminRequest, res: Response) => writeTasksCatalogExport(res);
-export const exportTaskSubmissionsHandler = (_req: AdminRequest, res: Response) => writeTaskSubmissionsFullExport(res);
-export const exportRatingDayHandler = (req: AdminRequest, res: Response) =>
-  writeRatingDayExport(res, Number(req.query.day) || 1);
-export const exportRatingShiftHandler = (_req: AdminRequest, res: Response) => writeRatingShiftExport(res);
+export const exportTaskSubmissionsHandler = async (req: AdminRequest, res: Response) => {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  await writeTaskSubmissionsFullExport(res, {
+    format: String(req.query.format || 'xlsx'),
+    shiftId: await resolveAdminShiftId(req),
+  });
+};
+export const exportRatingDayHandler = async (req: AdminRequest, res: Response) => {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  await writeRatingDayExport(res, Number(req.query.day) || 1, {
+    format: String(req.query.format || 'xlsx'),
+    shiftId: await resolveAdminShiftId(req),
+  });
+};
+export const exportRatingShiftHandler = async (req: AdminRequest, res: Response) => {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  await writeRatingShiftExport(res, {
+    format: String(req.query.format || 'csv'),
+    shiftId: await resolveAdminShiftId(req),
+  });
+};
 export const exportRatingNominationHandler = (req: AdminRequest, res: Response) =>
   writeRatingNominationExport(res, String(req.params.key || 'general'));
-export const exportMedalsHandler = (_req: AdminRequest, res: Response) => writeMedalsExport(res);
+export const exportMedalsHandler = async (req: AdminRequest, res: Response) => {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  await writeMedalsExport(res, {
+    format: String(req.query.format || 'xlsx'),
+    shiftId: await resolveAdminShiftId(req),
+  });
+};
 export const exportModerationLogHandler = (_req: AdminRequest, res: Response) => writeModerationLogExport(res);
 export const exportPointsManualHandler = (_req: AdminRequest, res: Response) => writePointsManualExport(res);
 export const exportExchangeHandler = (_req: AdminRequest, res: Response) => writeExchangeFullExport(res);

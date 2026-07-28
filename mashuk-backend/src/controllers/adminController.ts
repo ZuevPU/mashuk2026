@@ -2097,33 +2097,37 @@ export const exportExchange = async (_req: AdminRequest, res: Response): Promise
 };
 
 export const exportAttendance = async (_req: AdminRequest, res: Response): Promise<void> => {
+  const { sendCsv } = await import('../services/exports/workbook.js');
   const rows = await db.select({ a: eventAttendance, p: participants, e: events })
     .from(eventAttendance)
     .leftJoin(participants, eq(eventAttendance.participantId, participants.id))
     .leftJoin(events, eq(eventAttendance.eventId, events.id));
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename=attendance.csv');
-  const header = 'id,participant_id,name,direction,event_title,event_day,created_at\n';
-  const csv = rows.map(r => [
-    r.a.id, r.p?.id, `${r.p?.firstName} ${r.p?.lastName}`, r.p?.direction,
-    r.e?.title, r.e?.dayNumber, r.a.createdAt,
-  ].join(',')).join('\n');
-  res.send('\uFEFF' + header + csv);
+  sendCsv(
+    res,
+    'attendance.csv',
+    'id,participant_id,name,direction,event_title,event_day,created_at',
+    rows.map(r => [
+      r.a.id, r.p?.id, `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(), r.p?.direction ?? '',
+      r.e?.title ?? '', r.e?.dayNumber ?? '', r.a.createdAt,
+    ]),
+  );
 };
 
 export const exportPointsLog = async (_req: AdminRequest, res: Response): Promise<void> => {
+  const { sendCsv } = await import('../services/exports/workbook.js');
   const rows = await db.select({ l: pointsLog, p: participants })
     .from(pointsLog)
     .leftJoin(participants, eq(pointsLog.participantId, participants.id))
     .orderBy(desc(pointsLog.createdAt));
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename=points_log.csv');
-  const header = 'id,participant_id,name,direction,action_type,points,created_at\n';
-  const csv = rows.map(r => [
-    r.l.id, r.p?.id, `${r.p?.firstName} ${r.p?.lastName}`, r.p?.direction,
-    r.l.actionType, r.l.points, r.l.createdAt,
-  ].join(',')).join('\n');
-  res.send('\uFEFF' + header + csv);
+  sendCsv(
+    res,
+    'points_log.csv',
+    'id,participant_id,name,direction,action_type,points,created_at',
+    rows.map(r => [
+      r.l.id, r.p?.id, `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(), r.p?.direction ?? '',
+      r.l.actionType, r.l.points, r.l.createdAt,
+    ]),
+  );
 };
 
 export const getAnalyticsSummary = async (_req: AdminRequest, res: Response): Promise<void> => {
