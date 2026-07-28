@@ -262,7 +262,7 @@ export function TaskForm({
       </div>
 
       <div className="adm-forum-toolbar" style={{ marginTop: 16 }}>
-        <button type="button" className="adm-btn adm-btn-primary" onClick={onSave}>Сохранить</button>
+        <button type="button" className="adm-btn adm-btn-primary" onClick={onSave}>Сохранить черновик</button>
         <button type="button" className="adm-btn adm-btn-secondary" onClick={onPublish}>Опубликовать</button>
         <span className="adm-muted" style={{ fontSize: 12 }}>Статус: {draft.status === 'published' ? 'Опубликовано' : draft.status === 'archived' ? 'Архив' : 'Черновик'}</span>
       </div>

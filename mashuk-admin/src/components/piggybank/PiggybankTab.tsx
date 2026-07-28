@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { confirmDelete } from '../../admin/confirmDelete';
 import { adminDownloadBinary } from '../../admin/client';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
@@ -118,12 +119,14 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
       await load();
     }, 'Сохранено');
 
-  const deleteEntry = (id: number) =>
+  const deleteEntry = (id: number) => {
+    if (!confirmDelete()) return;
     act(async () => {
       await adminFetch(`/piggybank-entries/${id}`, { method: 'DELETE' });
       setOpenEntry(null);
       await load();
     }, 'Запись удалена');
+  };
 
   const exportXlsx = () => {
     const sp = buildQuery({ ...filters, format: 'xlsx' });

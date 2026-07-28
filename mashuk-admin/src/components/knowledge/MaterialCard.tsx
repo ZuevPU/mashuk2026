@@ -1,106 +1,282 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { SpeakerMultiPick } from '../program/ProgramCatalogs';
+import type { ProgramSpeaker } from '../program/types';
+import { confirmDelete } from '../../admin/confirmDelete';
+import { RowActionsMenu } from '../participants/RowActionsMenu';
 
 export type MaterialRow = {
   id: number;
   title: string;
   url?: string | null;
+  fileUrl?: string | null;
+  type?: string | null;
+  status?: string | null;
   tags?: string[];
   dayNumber?: number;
   eventId?: number | null;
   direction?: string | null;
   isGeneral?: boolean;
   createdAt?: string;
+  speakerName?: string | null;
+  speakerIds?: number[];
+  kbUnlockMode?: 'immediate' | 'touchpoints' | string | null;
+  kbUnlockMinTouchpoints?: number | null;
 };
 
 type Draft = {
   title: string;
   url: string;
+  fileUrl: string;
+  type: string;
+  status: string;
   tags: string[];
+  speakerIds: number[];
+  dayNumber: number;
+  eventId: string;
+  direction: string;
+  isGeneral: boolean;
+  audienceAll: boolean;
+  kbUnlockMode: 'immediate' | 'touchpoints';
+  kbUnlockMinTouchpoints: number | '';
 };
 
 type Props = {
   material: MaterialRow;
-  onSave: (body: { title: string; url: string; tags: string[] }) => void;
+  typeOptions: { key: string; name: string }[];
+  speakers: ProgramSpeaker[];
+  events: { id: number; dayNumber: number; title: string }[];
+  directions: { id: number; name: string }[];
+  onSave: (body: Record<string, unknown>) => void;
   onDelete: () => void;
+  onCopyLink?: (url: string) => void;
+  onPreview?: () => void;
 };
 
-export function MaterialCard({ material, onSave, onDelete }: Props) {
-  const [draft, setDraft] = useState<Draft>(() => ({
-    title: material.title || '',
-    url: material.url || '',
-    tags: [...((material.tags as string[]) || [])],
-  }));
-  const [tagInput, setTagInput] = useState('');
+function speakerLabel(ids: number[], speakers: ProgramSpeaker[], fallback?: string | null): string {
+  if (ids.length) {
+    return speakers.filter(s => ids.includes(s.id)).map(s => s.name).join(', ') || '—';
+  }
+  return fallback || '—';
+}
+
+function bindingLabel(m: MaterialRow, events: Props['events']): string {
+  if (m.isGeneral) return 'Общий';
+  if (m.eventId) {
+    const ev = events.find(e => e.id === m.eventId);
+    return ev ? `Блок: Д${ev.dayNumber} · ${ev.title}` : `Событие #${m.eventId}`;
+  }
+  return '—';
+}
+
+function mkDraft(m: MaterialRow): Draft {
+  return {
+    title: m.title || '',
+    url: m.url || '',
+    fileUrl: m.fileUrl || '',
+    type: m.type || '',
+    status: m.status || 'draft',
+    tags: [...((m.tags as string[]) || [])],
+    speakerIds: [...(m.speakerIds || [])],
+    dayNumber: m.dayNumber ?? 1,
+    eventId: m.eventId != null ? String(m.eventId) : '',
+    direction: m.direction || '',
+    isGeneral: !!m.isGeneral,
+    audienceAll: !m.direction,
+    kbUnlockMode: (m.kbUnlockMode === 'immediate' ? 'immediate' : 'touchpoints') as 'immediate' | 'touchpoints',
+    kbUnlockMinTouchpoints: m.kbUnlockMinTouchpoints != null ? m.kbUnlockMinTouchpoints : '',
+  };
+}
+
+export function MaterialCard({
+  material,
+  typeOptions,
+  speakers,
+  events,
+  directions,
+  onSave,
+  onDelete,
+  onCopyLink,
+  onPreview,
+}: Props) {
+  const rowRef = useRef<HTMLTableRowElement>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<Draft>(() => mkDraft(material));
 
   useEffect(() => {
-    setDraft({
-      title: material.title || '',
-      url: material.url || '',
-      tags: [...((material.tags as string[]) || [])],
-    });
+    setDraft(mkDraft(material));
+    setEditing(false);
   }, [material]);
 
-  const addTag = () => {
-    const t = tagInput.trim();
-    if (!t || draft.tags.includes(t)) return;
-    setDraft(d => ({ ...d, tags: [...d.tags, t] }));
-    setTagInput('');
+  const link = draft.url || draft.fileUrl || material.url || material.fileUrl;
+  const dateStr = material.createdAt
+    ? new Date(material.createdAt).toLocaleDateString('ru-RU')
+    : '—';
+  const typeName = typeOptions.find(t => t.key === material.type)?.name || material.type || '—';
+  const audienceStr = material.direction ? material.direction : 'Для всех';
+
+  const persist = () => {
+    const direction = draft.audienceAll ? '' : draft.direction;
+    onSave({
+      title: draft.title,
+      url: draft.url || null,
+      fileUrl: draft.fileUrl || null,
+      type: draft.type || null,
+      status: draft.status,
+      tags: draft.tags,
+      speakerIds: draft.speakerIds,
+      dayNumber: draft.dayNumber,
+      eventId: draft.isGeneral ? null : (draft.eventId ? Number(draft.eventId) : null),
+      direction: direction || null,
+      isGeneral: draft.isGeneral,
+      kbUnlockMode: draft.kbUnlockMode,
+      kbUnlockMinTouchpoints: draft.kbUnlockMode === 'touchpoints' && draft.kbUnlockMinTouchpoints !== ''
+        ? draft.kbUnlockMinTouchpoints
+        : null,
+    });
+    setEditing(false);
   };
 
-  const removeTag = (tag: string) => setDraft(d => ({ ...d, tags: d.tags.filter(x => x !== tag) }));
-
-  const confirmDelete = () => {
-    if (!window.confirm('Точно удалить? Действие необратимо')) return;
-    onDelete();
-  };
+  if (!editing) {
+    return (
+      <tr ref={rowRef}>
+        <td className="adm-muted" style={{ fontSize: 11 }}>{dateStr}</td>
+        <td style={{ fontSize: 11, maxWidth: 140 }}>{speakerLabel(material.speakerIds || [], speakers, material.speakerName)}</td>
+        <td>{material.title}</td>
+        <td>{typeName}</td>
+        <td>{audienceStr}</td>
+        <td style={{ fontSize: 11 }}>{bindingLabel(material, events)}</td>
+        <td>{material.status === 'published' ? 'Опубликован' : material.status === 'archived' ? 'Скрыт' : 'Черновик'}</td>
+        <td>
+          <RowActionsMenu
+            actions={[
+              { label: 'Редактировать', onClick: () => setEditing(true) },
+              ...(link && onCopyLink ? [{ label: 'Скопировать ссылку', onClick: () => onCopyLink(link) }] : []),
+              ...(onPreview ? [{ label: 'Превью', onClick: onPreview }] : []),
+              ...(material.status !== 'archived' ? [{
+                label: 'Скрыть',
+                onClick: () => onSave({ status: 'archived' }),
+              }] : [{
+                label: 'Вернуть из архива',
+                onClick: () => onSave({ status: 'draft' }),
+              }]),
+              {
+                label: 'Удалить',
+                onClick: () => {
+                  if (!confirmDelete('Удалить материал?')) return;
+                  onDelete();
+                },
+              },
+            ]}
+          />
+        </td>
+      </tr>
+    );
+  }
 
   return (
-    <div className="card adm-kb-material" style={{ fontSize: 12 }}>
-      <strong>{material.title}</strong> · Д{material.dayNumber}
-      {material.eventId ? ` · event#${material.eventId}` : ''}
-      {material.direction ? ` · ${material.direction}` : ''}
-      {material.isGeneral ? ' · общий' : ''}
-      {material.createdAt ? ` · ${new Date(material.createdAt).toLocaleString('ru-RU')}` : ''}
-      <div className="form-row" style={{ marginTop: 4 }}>
+    <tr ref={rowRef} className="adm-material-edit-row">
+      <td>
         <input
-          className="adm-input"
-          value={draft.title}
-          onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
-          placeholder="Название"
+          type="number"
+          className="adm-input adm-input-narrow"
+          value={draft.dayNumber}
+          onChange={e => setDraft(d => ({ ...d, dayNumber: Number(e.target.value) }))}
+          title="День смены"
         />
-        <input
-          className="adm-input"
-          value={draft.url}
-          onChange={e => setDraft(d => ({ ...d, url: e.target.value }))}
-          placeholder="Ссылка"
-          style={{ flex: 1 }}
+        <div className="adm-muted" style={{ fontSize: 10 }}>{dateStr}</div>
+      </td>
+      <td style={{ minWidth: 160 }}>
+        <SpeakerMultiPick
+          speakers={speakers}
+          selectedIds={draft.speakerIds}
+          onChange={ids => setDraft(d => ({ ...d, speakerIds: ids }))}
         />
-        <button type="button" className="adm-btn" onClick={() => onSave(draft)}>Сохранить</button>
-        <button type="button" className="adm-btn btn-danger" onClick={confirmDelete}>Удалить</button>
-      </div>
-      <div className="form-row" style={{ marginTop: 4, flexWrap: 'wrap', gap: 6 }}>
-        {draft.tags.map(tag => (
-          <span key={tag} className="tag-chip">
-            {tag}
-            <button
-              type="button"
-              style={{ marginLeft: 4, border: 'none', background: 'transparent', cursor: 'pointer', color: '#C53030' }}
-              onClick={() => removeTag(tag)}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        <input
-          className="adm-input"
-          value={tagInput}
-          onChange={e => setTagInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
-          placeholder="Новый тег"
-          style={{ width: 120 }}
-        />
-        <button type="button" className="adm-btn adm-btn-secondary" onClick={addTag}>+ тег</button>
-      </div>
-    </div>
+      </td>
+      <td>
+        <input className="adm-input adm-input-narrow" value={draft.title} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} />
+        <input className="adm-input" style={{ marginTop: 4 }} value={draft.url} onChange={e => setDraft(d => ({ ...d, url: e.target.value }))} placeholder="URL" />
+      </td>
+      <td>
+        <select className="adm-input adm-input-narrow" value={draft.type} onChange={e => setDraft(d => ({ ...d, type: e.target.value }))}>
+          <option value="">—</option>
+          {typeOptions.map(t => <option key={t.key} value={t.key}>{t.name}</option>)}
+        </select>
+      </td>
+      <td>
+        <label className="adm-forum-check" style={{ display: 'block', fontSize: 11 }}>
+          <input type="radio" checked={draft.audienceAll} onChange={() => setDraft(d => ({ ...d, audienceAll: true, direction: '' }))} />
+          Для всех
+        </label>
+        <label className="adm-forum-check" style={{ display: 'block', fontSize: 11 }}>
+          <input type="radio" checked={!draft.audienceAll} onChange={() => setDraft(d => ({ ...d, audienceAll: false }))} />
+          Направление
+        </label>
+        {!draft.audienceAll && (
+          <select className="adm-input adm-input-narrow" value={draft.direction} onChange={e => setDraft(d => ({ ...d, direction: e.target.value }))}>
+            <option value="">—</option>
+            {directions.map(dir => <option key={dir.id} value={dir.name}>{dir.name}</option>)}
+          </select>
+        )}
+      </td>
+      <td>
+        <label className="adm-forum-check" style={{ fontSize: 11 }}>
+          <input type="checkbox" checked={draft.isGeneral} onChange={e => setDraft(d => ({ ...d, isGeneral: e.target.checked, eventId: e.target.checked ? '' : d.eventId }))} />
+          Общий
+        </label>
+        {!draft.isGeneral && (
+          <select className="adm-input adm-input-narrow" value={draft.eventId} onChange={e => setDraft(d => ({ ...d, eventId: e.target.value }))}>
+            <option value="">— блок —</option>
+            {events.map(ev => <option key={ev.id} value={String(ev.id)}>Д{ev.dayNumber} · {ev.title}</option>)}
+          </select>
+        )}
+        <div style={{ marginTop: 8, fontSize: 11 }}>
+          <span className="adm-label" style={{ display: 'block', marginBottom: 4 }}>Условие открытия (учёт)</span>
+          <label className="adm-forum-check" style={{ display: 'block' }}>
+            <input
+              type="radio"
+              checked={draft.kbUnlockMode === 'immediate'}
+              onChange={() => setDraft(d => ({ ...d, kbUnlockMode: 'immediate', kbUnlockMinTouchpoints: '' }))}
+            />
+            Открыт сразу
+          </label>
+          <label className="adm-forum-check" style={{ display: 'block' }}>
+            <input
+              type="radio"
+              checked={draft.kbUnlockMode === 'touchpoints'}
+              onChange={() => setDraft(d => ({ ...d, kbUnlockMode: 'touchpoints', kbUnlockMinTouchpoints: d.kbUnlockMinTouchpoints === '' ? 4 : d.kbUnlockMinTouchpoints }))}
+            />
+            После ≥ N точек осмысления
+          </label>
+          {draft.kbUnlockMode === 'touchpoints' && (
+            <input
+              type="number"
+              min={1}
+              max={7}
+              className="adm-input adm-input-narrow"
+              style={{ marginTop: 4, width: 56 }}
+              value={draft.kbUnlockMinTouchpoints === '' ? '' : draft.kbUnlockMinTouchpoints}
+              placeholder="4"
+              onChange={e => setDraft(d => ({ ...d, kbUnlockMinTouchpoints: e.target.value === '' ? '' : Number(e.target.value) }))}
+            />
+          )}
+          <p className="adm-muted" style={{ fontSize: 10, margin: '4px 0 0' }}>
+            У участника сейчас разблокировка по дню (порог форума + kb-unlocks).
+          </p>
+        </div>
+      </td>
+      <td>
+        <select className="adm-input adm-input-narrow" value={draft.status} onChange={e => setDraft(d => ({ ...d, status: e.target.value }))}>
+          <option value="draft">Черновик</option>
+          <option value="published">Опубликован</option>
+          <option value="archived">Скрыт</option>
+        </select>
+      </td>
+      <td>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          <button type="button" className="adm-btn adm-btn-sm" onClick={persist}>Сохранить</button>
+          <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => { setDraft(mkDraft(material)); setEditing(false); }}>Отмена</button>
+        </div>
+      </td>
+    </tr>
   );
 }

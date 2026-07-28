@@ -341,7 +341,7 @@ export type ProfileBundle = NonNullable<Awaited<ReturnType<typeof gatherProfileB
 
 export async function streamProfilePdf(
   bundle: ProfileBundle,
-  res: Response,
+  res: import('express').Response | NodeJS.WritableStream,
   blockOverrides?: Record<string, unknown>,
 ): Promise<void> {
   const p = bundle.participant;
@@ -352,8 +352,10 @@ export async function streamProfilePdf(
     ?? bundle.nextSteps.join('\n• ');
 
   const PDFDocument = (await import('pdfkit')).default;
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename=profile_${p.id}.pdf`);
+  if ('setHeader' in res && typeof res.setHeader === 'function') {
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=profile_${p.id}.pdf`);
+  }
   const doc = new PDFDocument({ margin: 50 });
   doc.pipe(res);
 

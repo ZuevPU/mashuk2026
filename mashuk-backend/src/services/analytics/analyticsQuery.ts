@@ -1,0 +1,58 @@
+import type { AdminRequest } from '../../middlewares/adminAuth.js';
+
+export type AnalyticsViewMode = 'today' | 'day' | 'shift' | 'compare';
+
+export type AnalyticsFilters = {
+  mode: AnalyticsViewMode;
+  day: number | null;
+  compareDays: number[];
+  direction: string | null;
+  group: string | null;
+  roleKey: string | null;
+  participantId: number | null;
+  tag: string | null;
+  source: string | null;
+  page: number;
+  limit: number;
+};
+
+function parseDays(raw: unknown): number[] {
+  if (raw == null || raw === '') return [];
+  const arr = Array.isArray(raw) ? raw : String(raw).split(',');
+  return arr.map(d => Number(d)).filter(n => n >= 1 && n <= 8);
+}
+
+export function parseAnalyticsQuery(req: AdminRequest): AnalyticsFilters {
+  const modeRaw = String(req.query.mode || 'today').toLowerCase();
+  const mode: AnalyticsViewMode =
+    modeRaw === 'day' || modeRaw === 'shift' || modeRaw === 'compare' ? modeRaw : 'today';
+
+  const day = req.query.day != null && req.query.day !== '' ? Number(req.query.day) : null;
+  const compareDays = parseDays(req.query.days ?? req.query['days[]']);
+
+  return {
+    mode,
+    day: day && !Number.isNaN(day) ? day : null,
+    compareDays,
+    direction: typeof req.query.direction === 'string' && req.query.direction.trim()
+      ? req.query.direction.trim() : null,
+    group: typeof req.query.group === 'string' && req.query.group.trim()
+      ? req.query.group.trim() : null,
+    roleKey: typeof req.query.roleKey === 'string' && req.query.roleKey.trim()
+      ? req.query.roleKey.trim() : null,
+    participantId: req.query.participantId ? Number(req.query.participantId) : null,
+    tag: typeof req.query.tag === 'string' ? req.query.tag : null,
+    source: typeof req.query.source === 'string' ? req.query.source : null,
+    page: Math.max(1, Number(req.query.page) || 1),
+    limit: Math.min(200, Math.max(10, Number(req.query.limit) || 50)),
+  };
+}
+
+export function resolveDayRange(filters: AnalyticsFilters, currentForumDay: number): number[] {
+  if (filters.mode === 'compare' && filters.compareDays.length) {
+    return filters.compareDays.slice(0, 3);
+  }
+  if (filters.mode === 'day' && filters.day) return [filters.day];
+  if (filters.mode === 'today') return [currentForumDay];
+  return [1, 2, 3, 4, 5, 6, 7];
+}

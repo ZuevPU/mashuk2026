@@ -2,7 +2,7 @@ import { and, eq, inArray, lt } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { taskSubmissions, taskTeamConfirmations, tasks, forumSettings } from '../db/schema.js';
 import { awardPoints } from './pointsService.js';
-import { effectiveTaskPoints } from './taskPoints.js';
+import { resolveTaskAwardPoints } from './taskPoints.js';
 import { evaluateMedalsForParticipant } from './medalEvaluator.js';
 import { sendPushNotification } from './pushService.js';
 
@@ -45,7 +45,7 @@ export async function tryFinalizeTeamSubmission(submissionId: number): Promise<b
 
   const [task] = await db.select().from(tasks).where(eq(tasks.id, sub.taskId)).limit(1);
   if (!task) return false;
-  const pts = effectiveTaskPoints(task);
+  const pts = await resolveTaskAwardPoints(task);
   if (!pts) return false;
 
   await db.update(taskSubmissions)
@@ -105,7 +105,7 @@ export async function awardTeamOnModeratorApprove(
   submission: typeof taskSubmissions.$inferSelect,
   task: typeof tasks.$inferSelect,
 ): Promise<void> {
-  const pts = effectiveTaskPoints(task);
+  const pts = await resolveTaskAwardPoints(task);
   if (task.confirmationType !== 'team') {
     await awardPoints(submission.participantId, 'task_complete', pts, task.dayNumber ?? undefined);
     return;

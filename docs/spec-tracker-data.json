@@ -4926,10 +4926,10 @@
     "subsection": "1. Участники · Список",
     "task": "Заголовок страницы: «Участники · N всего»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "Не хватает того, что просили: Нет счётчика «Участники · N всего» — сейчас только название вкладки, общее количество нигде не видно. Нет колонки/фильтра «Группа» — есть только «Направление». Если группа участнику всё-таки нужна (внутри направления), её не видно вообще. Нет колонки «Общий рейтинг» (Путь + Опыт вместе) — сейчас Путь и Опыт показаны раздельно, сложить самому можно, но отдельной колонки нет. Нет статуса активности (когда последний раз заходил / не заходит N дней) — фильтра по активности тоже нет. Нет кнопки «Выгрузить список» (весь список целиком в XLSX) — только штучные действия в строке. Нет действий «Отправить пуш» по участнику. Не соответствует ТЗ / непонятно, что это: Кнопки в «Действия» — QR, PDF+, PDF, Сброс — в ТЗ таких не было (там были: Открыть карточку · Скорректировать роль · Выгрузить данные · Отправить пуш · Заблокировать · Удалить). сейчас нет ни «Удалить», ни «Отправить пуш», ни «Заблокировать». Строка поиска смешана с формой добавления участника в одну линию (Поиск / ID ВК / Имя / Фамилия / Направление / Добавить) · [код: AdminPageHero + participantsTotal (2026-07)]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не хватает того, что просили: Нет счётчика «Участники · N всего» — сейчас только название вкладки, общее количество нигд"
   },
   {
     "sectionId": 14,
@@ -4938,10 +4938,10 @@
     "subsection": "1. Участники · Список",
     "task": "Строка поиска: по ФИО, VK ID",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -4950,10 +4950,10 @@
     "subsection": "1. Участники · Список",
     "task": "Фильтр: Направление (мультивыбор)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -4962,10 +4962,10 @@
     "subsection": "1. Участники · Список",
     "task": "Фильтр: Группа",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -4973,11 +4973,11 @@
     "pointCount": 207,
     "subsection": "1. Участники · Список",
     "task": "Фильтр: Ведущая роль по диагностике",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "[код: фильтр pedagogicalRole]",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: фильтр pedagogicalRole] · [код: strongRole + pedagogicalRole (2026-07 roadmap)]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: фильтр pedagogicalRole] · [код: strongRole + pedagogicalRole (2026-07 roadmap)]"
   },
   {
     "sectionId": 14,
@@ -4986,10 +4986,10 @@
     "subsection": "1. Участники · Список",
     "task": "Фильтр: Активность (активен сегодня / неактивен ≥ 1 дня / неактивен ≥ 3 дней)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -4998,10 +4998,10 @@
     "subsection": "1. Участники · Список",
     "task": "Кнопка: «+ Добавить участника»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5010,10 +5010,10 @@
     "subsection": "1. Участники · Список",
     "task": "Кнопка: «Выгрузить список» (XLSX)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5021,11 +5021,11 @@
     "pointCount": 207,
     "subsection": "1. Участники · Список",
     "task": "Таблица — колонки: ID · VK ID · ФИО · Направление · Группа · Ведущая роль · Путь · Опыт · Общий рейтинг · Активность · Действия",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "Достаточно ли этого · [код: нет колонки внутреннего ID]",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "Достаточно ли этого · [код: нет колонки внутреннего ID] · [код: колонка ID + toggle (2026-07)]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Достаточно ли этого · [код: нет колонки внутреннего ID] · [код: колонка ID + toggle (2026-07)]"
   },
   {
     "sectionId": 14,
@@ -5033,11 +5033,11 @@
     "pointCount": 207,
     "subsection": "1. Участники · Список",
     "task": "Действия в строке (кебаб-меню): Открыть карточку · Скорректировать роль · Выгрузить данные · Отправить пуш · Заблокировать · Удалить",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "Не вижу этого · [код: нет «Удалить», есть сброс регистрации]",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "Не вижу этого · [код: нет «Удалить», есть сброс регистрации] · [код: «Удалить участника» + confirm + journal]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не вижу этого · [код: нет «Удалить», есть сброс регистрации] · [код: «Удалить участника» + confirm + journal]"
   },
   {
     "sectionId": 14,
@@ -5046,10 +5046,10 @@
     "subsection": "1. Участники · Список",
     "task": "Массовые действия: Выгрузить выбранных · Отправить пуш выбранным · Экспорт в XLSX",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "Не вижу этого",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не вижу этого"
   },
   {
     "sectionId": 14,
@@ -5058,10 +5058,10 @@
     "subsection": "1. Участники · Карточка участника",
     "task": "Открывается по клику на строку",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "Не вижу этого",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не вижу этого"
   },
   {
     "sectionId": 14,
@@ -5069,11 +5069,11 @@
     "pointCount": 207,
     "subsection": "1. Участники · Карточка участника",
     "task": "Верхняя шапка: аватар · ФИО · VK ID · Направление · Группа · Ведущая роль (с кнопкой «Скорректировать»)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "Не вижу этого · [код: инициалы вместо фото]",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "Не вижу этого · [код: инициалы вместо фото] · [код: VK photo users.get + fallback initials]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не вижу этого · [код: инициалы вместо фото] · [код: VK photo users.get + fallback initials]"
   },
   {
     "sectionId": 14,
@@ -5081,11 +5081,11 @@
     "pointCount": 207,
     "subsection": "1. Участники · Карточка участника",
     "task": "Вкладка «Профиль»: данные регистрации · интересы (теги) · согласия",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "Не вижу этого · [код: интересы/согласия не в UI]",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "Не вижу этого · [код: интересы/согласия не в UI] · [код: согласия, интересы, workplace (2026-07)]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не вижу этого · [код: интересы/согласия не в UI] · [код: согласия, интересы, workplace (2026-07)]"
   },
   {
     "sectionId": 14,
@@ -5094,10 +5094,10 @@
     "subsection": "1. Участники · Карточка участника",
     "task": "Вкладка «Активность»: временная лента событий",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "Не вижу этого",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не вижу этого"
   },
   {
     "sectionId": 14,
@@ -5105,11 +5105,11 @@
     "pointCount": 207,
     "subsection": "1. Участники · Карточка участника",
     "task": "Вкладка «Ответы»: все ответы с фильтром по типу и дню",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "Не вижу этого · [код: фильтр по дню, не по типу]",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "Не вижу этого · [код: фильтр по дню, не по типу] · [код: фильтр день + block]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не вижу этого · [код: фильтр по дню, не по типу] · [код: фильтр день + block]"
   },
   {
     "sectionId": 14,
@@ -5117,11 +5117,11 @@
     "pointCount": 207,
     "subsection": "1. Участники · Карточка участника",
     "task": "Вкладка «Копилка»: все записи с тегами и источниками",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "Не вижу этого",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "Не вижу этого · [код: фильтры тег/источник/день в карточке]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не вижу этого · [код: фильтры тег/источник/день в карточке]"
   },
   {
     "sectionId": 14,
@@ -5130,10 +5130,10 @@
     "subsection": "1. Участники · Карточка участника",
     "task": "Вкладка «Задания»: выполненные, на модерации, отклонённые",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "Не вижу этого",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не вижу этого"
   },
   {
     "sectionId": 14,
@@ -5141,11 +5141,11 @@
     "pointCount": 207,
     "subsection": "1. Участники · Карточка участника",
     "task": "Вкладка «Медали»: полученные (с датой) и незакрытые (прогресс)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "Не вижу этого · [код: без прогресса незакрытых]",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "Не вижу этого · [код: без прогресса незакрытых] · [код: awardedAt + не получены]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не вижу этого · [код: без прогресса незакрытых] · [код: awardedAt + не получены]"
   },
   {
     "sectionId": 14,
@@ -5153,11 +5153,11 @@
     "pointCount": 207,
     "subsection": "1. Участники · Карточка участника",
     "task": "Вкладка «Баллы»: разбивка «Путь» / «Опыт» / общий, разрез по дням, ручные начисления",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "Не вижу этого",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "Не вижу этого · [код: сводка path/exp/bonus + by day]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не вижу этого · [код: сводка path/exp/bonus + by day]"
   },
   {
     "sectionId": 14,
@@ -5166,10 +5166,10 @@
     "subsection": "1. Участники · Карточка участника",
     "task": "Вкладка «Логи»: все действия админов по этому участнику",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "Не вижу этого",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не вижу этого"
   },
   {
     "sectionId": 14,
@@ -5177,11 +5177,11 @@
     "pointCount": 207,
     "subsection": "1. Участники · Карточка участника",
     "task": "Действия: Скорректировать роль · Начислить/снять баллы · Отправить пуш · Заблокировать · Выгрузить всё",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "Не вижу этого · [код: блок из списка]",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "Не вижу этого · [код: блок из списка] · [код: hero toolbar ParticipantCard]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не вижу этого · [код: блок из списка] · [код: hero toolbar ParticipantCard]"
   },
   {
     "sectionId": 14,
@@ -5190,10 +5190,10 @@
     "subsection": "2. Программа · Создание дня",
     "task": "Кнопка «+ Добавить день»: Дата · Номер дня смены (напр. «День 3») · Номер смены",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5202,10 +5202,10 @@
     "subsection": "2. Программа · Создание дня",
     "task": "Табы по дням: [День 1] [День 2] … — формируются автоматически по созданным дням",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5214,10 +5214,10 @@
     "subsection": "2. Программа · Создание дня",
     "task": "Кнопка «Скопировать день» — полностью дублирует все события дня на новый день с возможностью правки",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5226,10 +5226,10 @@
     "subsection": "2. Программа · Создание дня",
     "task": "Кнопки: [Сохранить черновик дня] [Опубликовать день] [История версий]",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5237,11 +5237,11 @@
     "pointCount": 207,
     "subsection": "2. Программа · Список событий",
     "task": "Строка события в хронологическом порядке: Время · Название · Тип (бейдж) · Место · Спикер · Статус · Действия",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "[код: EventCard, не таблица]",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: EventCard, не таблица] · [код: EventCard timeline]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: EventCard, не таблица] · [код: EventCard timeline]"
   },
   {
     "sectionId": 14,
@@ -5250,10 +5250,10 @@
     "subsection": "2. Программа · Список событий",
     "task": "Действия: Редактировать · Скрыть · Дублировать в другой день · Удалить",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5261,11 +5261,11 @@
     "pointCount": 207,
     "subsection": "2. Программа · Форма события",
     "task": "Название блока · Описание блока (rich text) · Спикер (мультивыбор из справочника)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "Не хватает: день/дата смены, время окончания, тип блока (dropdown), место (не текст, а список из справочника), спикер, аудитория (все/направление), теги к событию, черновик/опубликовано, копирование дня, блок с несколькими темами внутри. Список аудиторий: Пушкин Харламов Левитан Достоевский (Росмолодежь) Рахманинов Циолковский (Ростелеком) Брюллов Кутузов Лермонтов Движение Первых Машук Бештау Малая сцена Октогональ · [код: textarea, не rich text]",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "Не хватает: день/дата смены, время окончания, тип блока (dropdown), место (не текст, а список из справочника), спикер, аудитория (все/направление), теги к событию, черновик/опубликовано, копирование дня, блок с несколькими темами внутри. Список аудиторий: Пушкин Харламов Левитан Достоевский (Росмолодежь) Рахманинов Циолковский (Ростелеком) Брюллов Кутузов Лермонтов Движение Первых Машук Бештау Малая сцена Октогональ · [код: textarea, не rich text] · [код: descriptionHtml + plain (2026-07)] · [код: descriptionHtml editor]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Не хватает: день/дата смены, время окончания, тип блока (dropdown), место (не текст, а список из справочника), спикер, а"
   },
   {
     "sectionId": 14,
@@ -5274,10 +5274,10 @@
     "subsection": "2. Программа · Форма события",
     "task": "Тип блока (выпадающий список — справочник, редактируется админом): работа по направлению / уроки о важном / открытые уроки / альтернативные площадки / культурные активности / клуб / практика практик / полезный выезд / другое",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5286,10 +5286,10 @@
     "subsection": "2. Программа · Форма события",
     "task": "Аудитория блока: Все участники / Конкретное направление (выбор из справочника направлений)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5298,10 +5298,10 @@
     "subsection": "2. Программа · Форма события",
     "task": "Теги блока — мультивыбор из справочника тегов (для персональных рекомендаций участнику)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5310,10 +5310,10 @@
     "subsection": "2. Программа · Форма события",
     "task": "Время начала · Время окончания",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5322,10 +5322,10 @@
     "subsection": "2. Программа · Форма события",
     "task": "Место — выпадающий список из справочника мест площадки (редактируется админом). Стартовый список: Пушкин · Харламов · Левитан · «Достоевский (Росмолодёжь)» · Рахманинов · «Циолковский (Ростелеком)» · Брюллов · Кутузов · Лермонтов · Движение Первых · Машук · Бештау · Малая сцена · Октогональ",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5334,10 +5334,10 @@
     "subsection": "2. Программа · Форма события",
     "task": "Публикация: [Черновик] / [Опубликовано]",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5345,11 +5345,11 @@
     "pointCount": 207,
     "subsection": "2. Программа · Форма события",
     "task": "Кнопки: [Сохранить черновик] [Опубликовать] [👁 Посмотреть как участник]",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: модал превью HTML] · [код: EventCard + preview modal]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: модал превью HTML] · [код: EventCard + preview modal]"
   },
   {
     "sectionId": 14,
@@ -5358,10 +5358,10 @@
     "subsection": "2. Программа · Блок с несколькими темами (напр. «Открытые уроки»)",
     "task": "Блок можно пометить как «содержит несколько тем» — тогда внутри создаётся список под-событий (тем/мастер-классов)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5369,11 +5369,11 @@
     "pointCount": 207,
     "subsection": "2. Программа · Блок с несколькими темами (напр. «Открытые уроки»)",
     "task": "У каждой темы внутри блока — своё название, спикер, место (тот же справочник мест)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: SpeakerMultiPick на под-теме]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: SpeakerMultiPick на под-теме]"
   },
   {
     "sectionId": 14,
@@ -5381,11 +5381,11 @@
     "pointCount": 207,
     "subsection": "2. Программа · Блок с несколькими темами (напр. «Открытые уроки»)",
     "task": "Участник видит в расписании ОДНУ карточку блока (например, «Открытые уроки»), при нажатии — разворачивается список всех тем внутри",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "[код: фронт участника]",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: фронт участника] · [код: Program.tsx expand parent]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: фронт участника] · [код: Program.tsx expand parent]"
   },
   {
     "sectionId": 14,
@@ -5393,11 +5393,11 @@
     "pointCount": 207,
     "subsection": "3. База знаний · Список",
     "task": "Заголовок: «База знаний · N материалов»",
-    "statusUser": "Нет",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5405,11 +5405,11 @@
     "pointCount": 207,
     "subsection": "3. База знаний · Список",
     "task": "Поиск по названию · Фильтр: День · Направление · Статус (черновик/опубликовано)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5418,10 +5418,10 @@
     "subsection": "3. База знаний · Список",
     "task": "Кнопка: «+ Добавить материал»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5429,11 +5429,11 @@
     "pointCount": 207,
     "subsection": "3. База знаний · Список",
     "task": "Колонки: Дата · Спикер · Название материала · Тип материала · Аудитория · Привязка (общий / к блоку) · Статус · Действия",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: KnowledgeTab table TZ columns]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: KnowledgeTab table TZ columns]"
   },
   {
     "sectionId": 14,
@@ -5441,11 +5441,11 @@
     "pointCount": 207,
     "subsection": "3. База знаний · Список",
     "task": "Действия: Редактировать · Скопировать ссылку · Скрыть · Удалить",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: RowActionsMenu + Скрыть archived]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: RowActionsMenu + Скрыть archived]"
   },
   {
     "sectionId": 14,
@@ -5453,11 +5453,11 @@
     "pointCount": 207,
     "subsection": "3. База знаний · Форма материала",
     "task": "Дата",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: dayNumber + createdAt в списке]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: dayNumber + createdAt в списке]"
   },
   {
     "sectionId": 14,
@@ -5465,11 +5465,11 @@
     "pointCount": 207,
     "subsection": "3. База знаний · Форма материала",
     "task": "Спикер (мультивыбор из справочника)",
-    "statusUser": "Нет",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: SpeakerMultiPick program-speakers]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: SpeakerMultiPick program-speakers]"
   },
   {
     "sectionId": 14,
@@ -5478,10 +5478,10 @@
     "subsection": "3. База знаний · Форма материала",
     "task": "Название материала",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5489,11 +5489,11 @@
     "pointCount": 207,
     "subsection": "3. База знаний · Форма материала",
     "task": "Тип материала (выпадающий список — справочник, редактируется админом): конспект / презентация / запись / ссылка на ресурс / другое",
-    "statusUser": "Нет",
-    "statusAudit": "—",
-    "note": "❓ уточнить финальный список типов",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "❓ уточнить финальный список типов · [код: material_types catalog]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "❓ уточнить финальный список типов · [код: material_types catalog]"
   },
   {
     "sectionId": 14,
@@ -5501,11 +5501,11 @@
     "pointCount": 207,
     "subsection": "3. База знаний · Форма материала",
     "task": "Аудитория: Для всех / Для конкретного направления",
-    "statusUser": "Нет",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: поле direction в форме материала] · [код: radio + direction select]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: поле direction в форме материала] · [код: radio + direction select]"
   },
   {
     "sectionId": 14,
@@ -5513,11 +5513,11 @@
     "pointCount": 207,
     "subsection": "3. База знаний · Форма материала",
     "task": "Ссылка на материал (URL) ИЛИ файл (drag-drop, до 100 МБ) — на выбор",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "[код: только URL]",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: только URL] · [код: upload-file до 100MB]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: только URL] · [код: upload-file до 100MB]"
   },
   {
     "sectionId": 14,
@@ -5525,11 +5525,11 @@
     "pointCount": 207,
     "subsection": "3. База знаний · Форма материала",
     "task": "Привязка: Общий материал форума / К конкретному блоку программы (dropdown событий)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: isGeneral + event select]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: isGeneral + event select]"
   },
   {
     "sectionId": 14,
@@ -5538,10 +5538,10 @@
     "subsection": "3. База знаний · Форма материала",
     "task": "Публикация: [Черновик] / [Опубликовано]",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5549,11 +5549,11 @@
     "pointCount": 207,
     "subsection": "3. База знаний · Форма материала",
     "task": "Условие открытия участнику: [Открыт сразу] / [После прохождения ≥ N точек осмысления] (N настраивается, по умолчанию 4 из 7)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "[код: kb-unlocks]",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: kb-unlocks] · [код: kb-unlocks по участнику+дню] · [код: поля материала в админке; runtime kbUnlockThreshold по дню] · [код: admin kbUnlockMode + runtime isMaterialUnlockedForParticipant]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: kb-unlocks] · [код: kb-unlocks по участнику+дню] · [код: поля материала в админке; runtime kbUnlockThreshold по дн"
   },
   {
     "sectionId": 14,
@@ -5562,10 +5562,10 @@
     "subsection": "3. База знаний · Форма материала",
     "task": "Публикация: [Черновик] / [Опубликовано]",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5574,10 +5574,10 @@
     "subsection": "4. Вопросы · Список",
     "task": "ВАЖНО: в интерфейсе участника это ОДИН раздел «Вопросы». В админке — ТИПЫ вопросов внутри одного раздела (рефлексивные / обмен опытом / связь с дирекцией). НЕ отдельные разделы админки",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "Тоже неудобно, чтобы создавать: непонятно работает ли Нужно, чтобы было так: Создать вопросы на день такой-то Новый вопрос - Вид вопроса - Его подзаголовок - каким отображается в списке (приоритет) и в чекбоксе Тип ответа: Тип ответа: свободный текст / шкала 1-5 / шкала 1-10 / выбор / мультивыбор / эмоция Варианты ответа Обязательность вопроса Черновик, опубликовать сейчас, опубликовать в конкретное время С уведомлением или без Возможность скопировать вопрос или все вопросы дня Вопрос Все / Направление / Группа / Роль Баллы за ответ на вопрос",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Тоже неудобно, чтобы создавать: непонятно работает ли Нужно, чтобы было так: Создать вопросы на день такой-то Новый вопр"
   },
   {
     "sectionId": 14,
@@ -5586,10 +5586,10 @@
     "subsection": "4. Вопросы · Список",
     "task": "Заголовок: «Вопросы · N всего»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5598,10 +5598,10 @@
     "subsection": "4. Вопросы · Список",
     "task": "Табы по типу: [Все] [Входные] [Диагностика] [Проверка состояния] [После блоков] [Итоги дня] [Дополнительные] [Обмен опытом] [Связь с дирекцией]",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5610,10 +5610,10 @@
     "subsection": "4. Вопросы · Список",
     "task": "Поиск · Фильтр: День · Аудитория · Статус",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5622,10 +5622,10 @@
     "subsection": "4. Вопросы · Список",
     "task": "Кнопка: «+ Создать вопрос»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5634,10 +5634,10 @@
     "subsection": "4. Вопросы · Список",
     "task": "Колонки: № · Заголовок · Тип · Тип ответа · День · Окно · Аудитория · Статус · Ответов · Действия",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5646,10 +5646,10 @@
     "subsection": "4. Вопросы · Список",
     "task": "Действия: Редактировать · Дублировать · Просмотр ответов · Скопировать на другой день · Скрыть · Удалить",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5658,10 +5658,10 @@
     "subsection": "4. Вопросы · Список",
     "task": "Массовое действие «Скопировать выбранные на день N» — для быстрой сборки одинаковых точек на всю смену",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5670,10 +5670,10 @@
     "subsection": "4. Вопросы · Форма вопроса",
     "task": "Заголовок (внутренний)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5682,10 +5682,10 @@
     "subsection": "4. Вопросы · Форма вопроса",
     "task": "Тип вопроса (радио 6 типов)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5694,10 +5694,10 @@
     "subsection": "4. Вопросы · Форма вопроса",
     "task": "Подтип (dropdown) · Текст вопроса участнику",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5706,10 +5706,10 @@
     "subsection": "4. Вопросы · Форма вопроса",
     "task": "Тип ответа: свободный текст / шкала 1-5 / шкала 1-10 / выбор / мультивыбор / эмоция",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5718,10 +5718,10 @@
     "subsection": "4. Вопросы · Форма вопроса",
     "task": "Варианты ответа (если применимо, drag-drop)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5730,10 +5730,10 @@
     "subsection": "4. Вопросы · Форма вопроса",
     "task": "День показа: чекбоксы 1-8 или диапазон",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5742,10 +5742,10 @@
     "subsection": "4. Вопросы · Форма вопроса",
     "task": "Окно: время открытия/закрытия",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5753,11 +5753,11 @@
     "pointCount": 207,
     "subsection": "4. Вопросы · Форма вопроса",
     "task": "Аудитория: Все / Направление / Группа / Роль",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: dropdown directions/groups/roles]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: dropdown directions/groups/roles]"
   },
   {
     "sectionId": 14,
@@ -5766,10 +5766,10 @@
     "subsection": "4. Вопросы · Форма вопроса",
     "task": "Обязательность · Баллы за ответ (по линии «Путь») · С уведомлением + шаблон",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5777,11 +5777,11 @@
     "pointCount": 207,
     "subsection": "4. Вопросы · Форма вопроса",
     "task": "ВЕРСИОННОСТЬ: при редактировании создаётся новая версия. Плашка «⚠ уже собрано N ответов на прежнюю формулировку. Старые ответы сохранят старый текст в снэпшоте»",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: versionNotice + versions tab]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: versionNotice + versions tab]"
   },
   {
     "sectionId": 14,
@@ -5790,10 +5790,10 @@
     "subsection": "4. Вопросы · Форма вопроса",
     "task": "Отдельная вкладка «История версий вопроса» — список всех версий с датой и автором",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5801,11 +5801,11 @@
     "pointCount": 207,
     "subsection": "4. Вопросы · Форма вопроса",
     "task": "Кнопки: [Сохранить черновик] [Опубликовать] [👁 Посмотреть как участник — превью вопроса]",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5813,11 +5813,11 @@
     "pointCount": 207,
     "subsection": "5. Роли · Список ролей",
     "task": "Заголовок: «Роли · 6 ролей матрицы»",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5825,11 +5825,11 @@
     "pointCount": 207,
     "subsection": "5. Роли · Список ролей",
     "task": "Матрица 2×3 (визуально): столбцы МЫШЛЕНИЕ · ДЕЙСТВИЯ · ЛЮДИ; строки ЛИДЕРСКИЙ (вовне) · ОРГАНИЗАЦИОННЫЙ (внутри группы)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5838,10 +5838,10 @@
     "subsection": "5. Роли · Список ролей",
     "task": "Роли: Исследователь смыслов · Реализатор практики · Проводник коммуникации · Упаковщик содержания · Навигатор процесса · Хранитель среды",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5849,11 +5849,11 @@
     "pointCount": 207,
     "subsection": "5. Роли · Список ролей",
     "task": "Колонки: Название · Ключ · Квадрант · Иконка · Описание · Действия",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5861,11 +5861,11 @@
     "pointCount": 207,
     "subsection": "5. Роли · Список ролей",
     "task": "Действия: Редактировать · Просмотр советов",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5873,11 +5873,11 @@
     "pointCount": 207,
     "subsection": "5. Каталог советов · Список",
     "task": "ОДНА МЕХАНИКА: каждой паре (роль × день) соответствует ОДИН совет. НЕ «2-3 варианта на выбор» и НЕ ротация. Жёсткая привязка, редактируется вручную",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: unique day+role + upsert]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: unique day+role + upsert]"
   },
   {
     "sectionId": 14,
@@ -5885,11 +5885,11 @@
     "pointCount": 207,
     "subsection": "5. Каталог советов · Список",
     "task": "Заголовок: «Каталог советов · N советов»",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5897,11 +5897,11 @@
     "pointCount": 207,
     "subsection": "5. Каталог советов · Список",
     "task": "Поиск · Фильтр: Роль · День · Статус",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5909,11 +5909,11 @@
     "pointCount": 207,
     "subsection": "5. Каталог советов · Список",
     "task": "Кнопки: [+ Добавить совет] [Импорт из CSV] [Скачать шаблон CSV]",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5921,11 +5921,11 @@
     "pointCount": 207,
     "subsection": "5. Каталог советов · Список",
     "task": "Колонки: Роль · День · Заголовок · Первые ~100 символов · Статус · Действия",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5933,11 +5933,11 @@
     "pointCount": 207,
     "subsection": "5. Каталог советов · Список",
     "task": "Действия: Редактировать · Удалить",
-    "statusUser": "Нет",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: AdviceCatalogSection]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: AdviceCatalogSection]"
   },
   {
     "sectionId": 14,
@@ -5945,11 +5945,11 @@
     "pointCount": 207,
     "subsection": "5. Каталог советов · Форма совета",
     "task": "Роль (dropdown из 6 ролей)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5957,11 +5957,11 @@
     "pointCount": 207,
     "subsection": "5. Каталог советов · Форма совета",
     "task": "День смены (dropdown 1–7)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5969,11 +5969,11 @@
     "pointCount": 207,
     "subsection": "5. Каталог советов · Форма совета",
     "task": "Заголовок совета (до 60 символов)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5981,11 +5981,11 @@
     "pointCount": 207,
     "subsection": "5. Каталог советов · Форма совета",
     "task": "Текст совета (до 500 символов)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -5993,11 +5993,11 @@
     "pointCount": 207,
     "subsection": "5. Каталог советов · Форма совета",
     "task": "Статус: [Черновик] / [Опубликован]",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6005,11 +6005,11 @@
     "pointCount": 207,
     "subsection": "5. Каталог советов · Форма совета",
     "task": "Кнопки: [Сохранить] [Опубликовать] [👁 Посмотреть как участник — превью карточки «Совет дня»]",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6018,10 +6018,10 @@
     "subsection": "6. Задания · Список",
     "task": "Заголовок: «Задания · N всего»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6029,11 +6029,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Список",
     "task": "Табы: [Активные] [Черновики] [Архив]",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: TasksTab status tabs]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: TasksTab status tabs]"
   },
   {
     "sectionId": 14,
@@ -6041,11 +6041,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Список",
     "task": "Поиск · Фильтр: Категория (11) · День · Способ подтверждения",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: task-categories dropdown]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: task-categories dropdown]"
   },
   {
     "sectionId": 14,
@@ -6054,10 +6054,10 @@
     "subsection": "6. Задания · Список",
     "task": "Кнопка: «+ Создать задание»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6065,11 +6065,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Список",
     "task": "Колонки: № · Название · Иконка · Категория · Баллы · День · Способ подтверждения · Модерация · Статус · Выполнено раз · Действия",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: TasksListTable]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: TasksListTable]"
   },
   {
     "sectionId": 14,
@@ -6077,11 +6077,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Список",
     "task": "Действия: Редактировать · Дублировать · Скачать QR · Скрыть · Удалить",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: RowActionsMenu + hide/archive]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: RowActionsMenu + hide/archive]"
   },
   {
     "sectionId": 14,
@@ -6089,11 +6089,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Форма задания",
     "task": "Название · Описание (rich text) · Иконка",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "Категория — сделать выпадающим списком из 11 категорий (сейчас текстовое поле, и там Нетворкинг — так писать нельзя, у нас полезные знакомства/общение) Не хватает: Тип: индивидуальное / командное Тип: одноразовое / ежедневное / многоразовое (сейчас это два разных поля, а не одно) Требует модерации или авто — отдельным явным полем Лимит выполнений Уровень: обычное / особое (с медалью) Срок выполнения: дата и время начала + дата и время окончания (отдельно друг от друга) Дата публикации Черновик и опубликовать (сейчас только «Сохранить») Иконка задания Номинация (для подсчёта по номинациям) Место проведения Кнопка «Скопировать» Способ подтверждения — сделать мультивыбором: QR · Фото до 5 МБ · Ссылка · Волонтёр · Команда · Модератор (сейчас похоже на выбор одного варианта из двух)",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "Категория — сделать выпадающим списком из 11 категорий (сейчас текстовое поле, и там Нетворкинг — так писать нельзя, у нас полезные знакомства/общение) Не хватает: Тип: индивидуальное / командное Тип: одноразовое / ежедневное / многоразовое (сейчас это два разных поля, а не одно) Требует модерации или авто — отдельным явным полем Лимит выполнений Уровень: обычное / особое (с медалью) Срок выполнения: дата и время начала + дата и время окончания (отдельно друг от друга) Дата публикации Черновик и опубликовать (сейчас только «Сохранить») Иконка задания Номинация (для подсчёта по номинациям) Место проведения Кнопка «Скопировать» Способ подтверждения — сделать мультивыбором: QR · Фото до 5 МБ · Ссылка · Волонтёр · Команда · Модератор (сейчас похоже на выбор одного варианта из двух) · [код: TaskForm rich editor]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Категория — сделать выпадающим списком из 11 категорий (сейчас текстовое поле, и там Нетворкинг — так писать нельзя, у н"
   },
   {
     "sectionId": 14,
@@ -6101,11 +6101,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Форма задания",
     "task": "Категория (dropdown 11 категорий)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: TaskCategoriesBlock + select]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: TaskCategoriesBlock + select]"
   },
   {
     "sectionId": 14,
@@ -6113,11 +6113,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Форма задания",
     "task": "День доступности (мультивыбор 1-8) · Срок выполнения",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6126,10 +6126,10 @@
     "subsection": "6. Задания · Форма задания",
     "task": "Баллы (линия «Опыт»): число",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6137,11 +6137,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Форма задания",
     "task": "Способ подтверждения (мультивыбор): QR · Фото до 5 МБ · Ссылка · Волонтёр · Команда · Модератор",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: CONFIRMATION_METHOD_OPTIONS chips]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: CONFIRMATION_METHOD_OPTIONS chips]"
   },
   {
     "sectionId": 14,
@@ -6150,10 +6150,10 @@
     "subsection": "6. Задания · Форма задания",
     "task": "Требует модерации: чекбокс",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6161,11 +6161,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Форма задания",
     "task": "Лимит выполнений: одноразовое / ежедневное / многоразовое",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: executionType select]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: executionType select]"
   },
   {
     "sectionId": 14,
@@ -6173,11 +6173,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Форма задания",
     "task": "Уровень: обычное / особое (награда медалью)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: medalTask checkbox]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: medalTask checkbox]"
   },
   {
     "sectionId": 14,
@@ -6186,10 +6186,10 @@
     "subsection": "6. Задания · Форма задания",
     "task": "Кнопка «Сгенерировать QR» (для активностей)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6197,11 +6197,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Форма задания",
     "task": "Публикация: черновик / опубликовано",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: Сохранить черновик + Опубликовать]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: Сохранить черновик + Опубликовать]"
   },
   {
     "sectionId": 14,
@@ -6209,11 +6209,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Форма задания",
     "task": "Кнопки: [Сохранить] [Опубликовать] [👁 Посмотреть как участник — превью карточки]",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6221,11 +6221,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Форма задания",
     "task": "Поле «Номинация» — для подсчёта по номинациям рейтинга (спорт/креатив/медиа и т.д.)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6233,11 +6233,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Форма задания",
     "task": "Поле «Время публикации» — когда карточка становится видна участнику (отдельно от дня доступности)",
-    "statusUser": "Нет",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: TaskForm availableFromLocal]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: TaskForm availableFromLocal]"
   },
   {
     "sectionId": 14,
@@ -6245,11 +6245,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Форма задания",
     "task": "Поле «Срок приёма заявки» — до какого момента принимается заявка (может отличаться от дня доступности)",
-    "statusUser": "Нет",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: TaskForm applicationDeadlineLocal]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: TaskForm applicationDeadlineLocal]"
   },
   {
     "sectionId": 14,
@@ -6257,11 +6257,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Форма задания",
     "task": "Поле «Место проведения» — если задание привязано к локации (выбор из справочника мест — см. «2. Программа»)",
-    "statusUser": "Нет",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: TaskForm programPlaceId]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: TaskForm programPlaceId]"
   },
   {
     "sectionId": 14,
@@ -6269,11 +6269,11 @@
     "pointCount": 207,
     "subsection": "6. Задания · Форма задания",
     "task": "Поле «Push при публикации» — чекбокс: отправлять ли уведомление участникам при публикации задания",
-    "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusUser": "Да",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6282,10 +6282,10 @@
     "subsection": "6. Модерация заявок по заданиям",
     "task": "Заголовок: «Заявки на модерации · N в очереди»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "Три вкладки (Обмен опытом / Задания на проверке / Архив обмена) есть — но как страница пустая, непонятно, они реально переключаются или это просто три подписи подряд текстом. Не хватает: карточки без действий — нет кнопок «Одобрить/Отклонить», нет фильтров (по заданию/направлению/дате), нет комментария при отклонении.",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "Три вкладки (Обмен опытом / Задания на проверке / Архив обмена) есть — но как страница пустая, непонятно, они реально пе"
   },
   {
     "sectionId": 14,
@@ -6293,11 +6293,11 @@
     "pointCount": 207,
     "subsection": "6. Модерация заявок по заданиям",
     "task": "Фильтр: Задание · Способ подтверждения · Направление · Группа",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: TaskModerationQueue]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: TaskModerationQueue]"
   },
   {
     "sectionId": 14,
@@ -6306,10 +6306,10 @@
     "subsection": "6. Модерация заявок по заданиям",
     "task": "Колонки: Дата · Участник · Задание · Способ · Фото/ссылка · Действия",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6318,10 +6318,10 @@
     "subsection": "6. Модерация заявок по заданиям",
     "task": "Действия: Подтвердить · Отклонить · Открыть карточку участника",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6329,11 +6329,11 @@
     "pointCount": 207,
     "subsection": "6. Модерация заявок по заданиям",
     "task": "Массовые: Подтвердить выбранных · Отклонить выбранных с комментарием",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: bulk-moderate approve+reject]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: bulk-moderate approve+reject]"
   },
   {
     "sectionId": 14,
@@ -6341,11 +6341,11 @@
     "pointCount": 207,
     "subsection": "6. Рейтинг · Настройка",
     "task": "Две линии — «Путь» и «Опыт»",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "По баллам сейчас непонятно, как то странно начисление написано: у нас на разные вопросы будут разные баллы, тоже с заданиями - вообщем ерунда какая-то",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "По баллам сейчас непонятно, как то странно начисление написано: у нас на разные вопросы будут разные баллы, тоже с заданиями - вообщем ерунда какая-то · [код: LevelsTab path/experience + leaderboards]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "По баллам сейчас непонятно, как то странно начисление написано: у нас на разные вопросы будут разные баллы, тоже с задан"
   },
   {
     "sectionId": 14,
@@ -6353,11 +6353,11 @@
     "pointCount": 207,
     "subsection": "6. Рейтинг · Настройка",
     "task": "Пороги уровней «Пути»: [Уровень · От · До · Название], + добавить уровень",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: ThresholdEditor path_level]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: ThresholdEditor path_level]"
   },
   {
     "sectionId": 14,
@@ -6365,11 +6365,11 @@
     "pointCount": 207,
     "subsection": "6. Рейтинг · Настройка",
     "task": "Пороги уровней «Опыта»: аналогично",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: ThresholdEditor exp_level]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: ThresholdEditor exp_level]"
   },
   {
     "sectionId": 14,
@@ -6377,11 +6377,11 @@
     "pointCount": 207,
     "subsection": "6. Рейтинг · Настройка",
     "task": "Правила бонусов (конструктор)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: вкл/выкл существующих правил, без создания новых] · [код: BonusRulesEditor + runtime enabled/params]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: вкл/выкл существующих правил, без создания новых] · [код: BonusRulesEditor + runtime enabled/params]"
   },
   {
     "sectionId": 14,
@@ -6389,11 +6389,11 @@
     "pointCount": 207,
     "subsection": "6. Рейтинг · Настройка",
     "task": "Таблица actionType × points × линия — единая настройка ставок",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: ActionTable action-catalog]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: ActionTable action-catalog]"
   },
   {
     "sectionId": 14,
@@ -6401,11 +6401,11 @@
     "pointCount": 207,
     "subsection": "6. Рейтинг · Настройка",
     "task": "Кнопки: [Сохранить] [Пересчитать всех]",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: LevelsTab settings toolbar]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: LevelsTab settings toolbar]"
   },
   {
     "sectionId": 14,
@@ -6413,11 +6413,11 @@
     "pointCount": 207,
     "subsection": "6. Рейтинг · Настройка",
     "task": "История пересчётов",
-    "statusUser": "Нет",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: LevelsTab recalc-history]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: LevelsTab recalc-history]"
   },
   {
     "sectionId": 14,
@@ -6425,11 +6425,11 @@
     "pointCount": 207,
     "subsection": "6. Рейтинг · Ручные операции",
     "task": "Форма ручного начисления: Участник (search) · Линия (Путь / Опыт) · Баллы (+/-) · Причина (обязательно) · Дата",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: search + line + points + reason + date]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: search + line + points + reason + date]"
   },
   {
     "sectionId": 14,
@@ -6438,10 +6438,10 @@
     "subsection": "6. Рейтинг · Ручные операции",
     "task": "Кнопка [Начислить] — запись сразу в points_log и admin_actions_log",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6449,11 +6449,11 @@
     "pointCount": 207,
     "subsection": "6. Рейтинг · Ручные операции",
     "task": "История ручных начислений с возможностью отмены",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: manual log + revoke]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: manual log + revoke]"
   },
   {
     "sectionId": 14,
@@ -6462,10 +6462,10 @@
     "subsection": "6. Медали · Список",
     "task": "Заголовок: «Медали · N всего»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6473,11 +6473,11 @@
     "pointCount": 207,
     "subsection": "6. Медали · Список",
     "task": "Табы: [Активные] [Черновики]",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: MedalsTab listTab]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: MedalsTab listTab]"
   },
   {
     "sectionId": 14,
@@ -6485,11 +6485,11 @@
     "pointCount": 207,
     "subsection": "6. Медали · Список",
     "task": "Фильтр: Категория · Уровень · Тип выдачи · Видимость",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: MedalsTab filters]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: MedalsTab filters]"
   },
   {
     "sectionId": 14,
@@ -6498,10 +6498,10 @@
     "subsection": "6. Медали · Список",
     "task": "Кнопка: «+ Создать медаль»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6509,11 +6509,11 @@
     "pointCount": 207,
     "subsection": "6. Медали · Список",
     "task": "Колонки: Иконка · Название · Уровень · Категория · Тип выдачи · Видимость · Выдано раз · Действия (Редактировать · Скрыть · Удалить)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: MedalsListTable]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: MedalsListTable]"
   },
   {
     "sectionId": 14,
@@ -6521,11 +6521,11 @@
     "pointCount": 207,
     "subsection": "6. Медали · Форма медали",
     "task": "Название · Описание (rich text) · Иконка (SVG/PNG)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: TaskForm rich editor]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: TaskForm rich editor]"
   },
   {
     "sectionId": 14,
@@ -6533,11 +6533,11 @@
     "pointCount": 207,
     "subsection": "6. Медали · Форма медали",
     "task": "Категория · Уровень: [Бронза]/[Серебро]/[Золото]",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: MedalForm seg bronze/silver/gold]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: MedalForm seg bronze/silver/gold]"
   },
   {
     "sectionId": 14,
@@ -6545,11 +6545,11 @@
     "pointCount": 207,
     "subsection": "6. Медали · Форма медали",
     "task": "Тип выдачи: [Автоматическая] / [Ручная]",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: MedalForm awardType]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: MedalForm awardType]"
   },
   {
     "sectionId": 14,
@@ -6557,11 +6557,11 @@
     "pointCount": 207,
     "subsection": "6. Медали · Форма медали",
     "task": "Условие получения (если авто) — конструктор правил",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: ruleMetric + ruleValue]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: ruleMetric + ruleValue]"
   },
   {
     "sectionId": 14,
@@ -6569,11 +6569,11 @@
     "pointCount": 207,
     "subsection": "6. Медали · Форма медали",
     "task": "ТИП ВИДИМОСТИ (радио): «Открытая» — участник видит условие в разделе «Медали» с прогрессом · «Скрытая» — получает неожиданно, условие не показывается",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: open/hidden radio + hints]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: open/hidden radio + hints]"
   },
   {
     "sectionId": 14,
@@ -6581,11 +6581,11 @@
     "pointCount": 207,
     "subsection": "6. Медали · Форма медали",
     "task": "Примеры открытых: «Посетил 5 активностей», «Собрал 20 записей в копилке»",
-    "statusUser": "Нет",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: примеры в ТЗ, не контент] · [код: подсказки в MedalForm, не контент медалей]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: примеры в ТЗ, не контент] · [код: подсказки в MedalForm, не контент медалей]"
   },
   {
     "sectionId": 14,
@@ -6593,11 +6593,11 @@
     "pointCount": 207,
     "subsection": "6. Медали · Форма медали",
     "task": "Примеры скрытых: «7 дней подряд фиксировал мысли», «Помог 10 участникам без просьбы»",
-    "statusUser": "Нет",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: примеры в ТЗ, не контент] · [код: подсказки в MedalForm, не контент медалей]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: примеры в ТЗ, не контент] · [код: подсказки в MedalForm, не контент медалей]"
   },
   {
     "sectionId": 14,
@@ -6605,11 +6605,11 @@
     "pointCount": 207,
     "subsection": "6. Медали · Форма медали",
     "task": "Статус: [Активна] / [Черновик]",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: MedalForm isActive seg]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: MedalForm isActive seg]"
   },
   {
     "sectionId": 14,
@@ -6618,10 +6618,10 @@
     "subsection": "7. Копилка · Список записей",
     "task": "Заголовок: «Записи копилки · N всего»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6630,10 +6630,10 @@
     "subsection": "7. Копилка · Список записей",
     "task": "Поиск по тексту",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6642,10 +6642,10 @@
     "subsection": "7. Копилка · Список записей",
     "task": "Фильтр: Участник · Направление · Группа · День · Тег · Источник",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6654,10 +6654,10 @@
     "subsection": "7. Копилка · Список записей",
     "task": "Колонки: Дата+время · Участник · Направление · Текст (150 симв) · Теги · Источник · Действия",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6666,10 +6666,10 @@
     "subsection": "7. Копилка · Список записей",
     "task": "Действия: Открыть · Пометить как нарушение · Скрыть · Удалить (лог)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6678,10 +6678,10 @@
     "subsection": "7. Копилка · Список записей",
     "task": "Кнопка [Экспорт в XLSX]",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6690,10 +6690,10 @@
     "subsection": "8. Пуши · Список",
     "task": "Заголовок: «Пуши · N всего · N в очереди»",
     "statusUser": "Да",
-    "statusAudit": "—",
-    "note": "1. Человеческие названия вместо slot_0800. 2. День программы (Д1–Д8) или дату 3. Тип уведомления из выпадающего списка: Проверка состояния, Напоминание, Итоги дня, Программа, Задание, Организационное 4. Статус (черновик/опубликовано). 5. Время публикации и до скольки висит в боте 6. Возможность прикрепить картинку",
+    "statusAudit": "Да",
+    "note": "1. Человеческие названия вместо slot_0800. 2. День программы (Д1–Д8) или дату 3. Тип уведомления из выпадающего списка: Проверка состояния, Напоминание, Итоги дня, Программа, Задание, Организационное 4. Статус (черновик/опубликовано). 5. Время публикации и до скольки висит в боте 6. Возможность прикрепить картинку · [код: PushTab AdminPageHero]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "1. Человеческие названия вместо slot_0800. 2. День программы (Д1–Д8) или дату 3. Тип уведомления из выпадающего списка: "
   },
   {
     "sectionId": 14,
@@ -6702,10 +6702,10 @@
     "subsection": "8. Пуши · Список",
     "task": "Табы: [Отправлено] [В очереди] [Черновики] [Шаблоны]",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6714,10 +6714,10 @@
     "subsection": "8. Пуши · Список",
     "task": "Фильтр: Тип · Аудитория · Дата отправки",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6726,10 +6726,10 @@
     "subsection": "8. Пуши · Список",
     "task": "Кнопка: «+ Создать уведомление»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6738,10 +6738,10 @@
     "subsection": "8. Пуши · Список",
     "task": "Колонки: Дата · Заголовок · Аудитория · Доставлено/Открыто · Тип · Действия (Редактировать (для черновиков/очереди) · Дублировать · Удалить)",
     "statusUser": "Да",
-    "statusAudit": "—",
-    "note": "",
+    "statusAudit": "Да",
+    "note": "[код: PushListTable]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: PushListTable]"
   },
   {
     "sectionId": 14,
@@ -6750,10 +6750,10 @@
     "subsection": "8. Пуши · Шаблоны (пресеты)",
     "task": "Отдельная вкладка «Шаблоны» в разделе Пуши",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6762,10 +6762,10 @@
     "subsection": "8. Пуши · Шаблоны (пресеты)",
     "task": "Пресеты по типу: Утро · Проверка состояния · Вопрос дня · Напоминание · Срочное сообщение",
     "statusUser": "Да",
-    "statusAudit": "—",
-    "note": "",
+    "statusAudit": "Да",
+    "note": "[код: PushTemplatesPanel]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: PushTemplatesPanel]"
   },
   {
     "sectionId": 14,
@@ -6774,10 +6774,10 @@
     "subsection": "8. Пуши · Шаблоны (пресеты)",
     "task": "Форма шаблона: название · заголовок · текст (с плейсхолдерами {ФИО}, {День}, {Роль}, {Событие}) · иконка · тип",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6786,10 +6786,10 @@
     "subsection": "8. Пуши · Шаблоны (пресеты)",
     "task": "В форме создания пуша — dropdown «Использовать шаблон»: выбрать → поля автозаполняются",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6798,10 +6798,10 @@
     "subsection": "8. Пуши · Шаблоны (пресеты)",
     "task": "Плейсхолдеры разворачиваются при отправке",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6810,10 +6810,10 @@
     "subsection": "8. Пуши · Форма уведомления",
     "task": "Внутреннее название · Заголовок пуша · Текст (200 симв) · Иконка",
     "statusUser": "Да",
-    "statusAudit": "—",
-    "note": "",
+    "statusAudit": "Да",
+    "note": "[код: PushNotificationForm]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: PushNotificationForm]"
   },
   {
     "sectionId": 14,
@@ -6822,10 +6822,10 @@
     "subsection": "8. Пуши · Форма уведомления",
     "task": "Аудитория: Все / Направление / Группа / Список ID / Правило (конструктор)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6834,10 +6834,10 @@
     "subsection": "8. Пуши · Форма уведомления",
     "task": "Дата/день программы, к которому относится уведомление (для привязки и фильтрации)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6846,10 +6846,10 @@
     "subsection": "8. Пуши · Форма уведомления",
     "task": "Время публикации · Время окончания показа («до скольки висит»)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6858,10 +6858,10 @@
     "subsection": "8. Пуши · Форма уведомления",
     "task": "Возможность прикрепить картинку",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6870,10 +6870,10 @@
     "subsection": "8. Пуши · Форма уведомления",
     "task": "Отправить: Сейчас / По расписанию / По триггеру",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6882,10 +6882,10 @@
     "subsection": "8. Пуши · Форма уведомления",
     "task": "Тип уведомления (выпадающий список): проверка состояния / напоминание / итоги дня / программа / задания / организационные",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "заменено по уточнению: было «информация / напоминание / ошибка»",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "заменено по уточнению: было «информация / напоминание / ошибка»"
   },
   {
     "sectionId": 14,
@@ -6894,10 +6894,10 @@
     "subsection": "8. Пуши · Форма уведомления",
     "task": "НЕ использовать «чек-ин» — везде «проверка состояния»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6906,10 +6906,10 @@
     "subsection": "8. Пуши · Форма уведомления",
     "task": "Статус: [Черновик] / [Опубликовано]. Кнопки: [Сохранить черновик] [Тест-отправка себе] [👁 Предпросмотр] [Отправить / В очередь]",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6918,10 +6918,10 @@
     "subsection": "11. Пользователи админки · Список",
     "task": "Заголовок: «Пользователи админки · N всего»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6930,10 +6930,10 @@
     "subsection": "11. Пользователи админки · Список",
     "task": "Поиск · Фильтр: Роль · Направление",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6942,10 +6942,10 @@
     "subsection": "11. Пользователи админки · Список",
     "task": "Кнопка: «+ Добавить пользователя»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6954,10 +6954,10 @@
     "subsection": "11. Пользователи админки · Список",
     "task": "Колонки: ФИО · Email · Роль · Направление · Последний вход · Статус · Действия",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6966,10 +6966,10 @@
     "subsection": "11. Пользователи админки · Список",
     "task": "Действия: Редактировать · Сбросить пароль · Заблокировать · Удалить · Логи действий",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6978,10 +6978,10 @@
     "subsection": "11. Пользователи админки · Форма",
     "task": "ФИО · Email (валидация)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -6989,11 +6989,11 @@
     "pointCount": 207,
     "subsection": "11. Пользователи админки · Форма",
     "task": "Роль (dropdown): администратор · дирекция · аналитик · куратор · модератор · волонтёр · организатор",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: AdminUserForm 7 roles]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: AdminUserForm 7 roles]"
   },
   {
     "sectionId": 14,
@@ -7002,10 +7002,10 @@
     "subsection": "11. Пользователи админки · Форма",
     "task": "Направление (обязательно для куратора направления)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7013,11 +7013,11 @@
     "pointCount": 207,
     "subsection": "11. Пользователи админки · Форма",
     "task": "Пароль: [Сгенерировать и отправить] / [Задать вручную]",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: generate + modal login/password]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: generate + modal login/password]"
   },
   {
     "sectionId": 14,
@@ -7025,11 +7025,11 @@
     "pointCount": 207,
     "subsection": "11. Пользователи админки · Форма",
     "task": "Кнопки: [Сохранить] [Отправить приглашение]",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: reset-password invite flow]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: reset-password invite flow]"
   },
   {
     "sectionId": 14,
@@ -7038,10 +7038,10 @@
     "subsection": "11. Роли и права · Матрица прав",
     "task": "Строки: разделы админ-панели",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7050,10 +7050,10 @@
     "subsection": "11. Роли и права · Матрица прав",
     "task": "Столбцы: чтение · создание · редактирование · удаление · подтверждение · выгрузка",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7062,10 +7062,10 @@
     "subsection": "11. Роли и права · Матрица прав",
     "task": "Ячейка — чекбокс для каждой роли (табы вверху)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7074,10 +7074,10 @@
     "subsection": "11. Роли и права · Матрица прав",
     "task": "Кнопки: [Сохранить] [Сбросить к дефолту]",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7086,10 +7086,10 @@
     "subsection": "12. Журнал изменений",
     "task": "Поиск · Фильтр: Пользователь · Раздел · Тип действия · Дата от-до",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7098,10 +7098,10 @@
     "subsection": "12. Журнал изменений",
     "task": "Колонки: Дата+время · Пользователь · Раздел · Действие · Объект · Старое значение · Новое значение · IP",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7110,10 +7110,10 @@
     "subsection": "12. Журнал изменений",
     "task": "Действия: Открыть детали · Откатить · Экспорт",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7122,10 +7122,10 @@
     "subsection": "12. Журнал изменений",
     "task": "Кнопка: [Экспорт лога в XLSX]",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7134,10 +7134,10 @@
     "subsection": "12. Журнал · Отдельная вкладка «Критичные операции»",
     "task": "Отдельная вкладка для операций особого внимания",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7146,10 +7146,10 @@
     "subsection": "12. Журнал · Отдельная вкладка «Критичные операции»",
     "task": "Автоматически туда попадают: ручное начисление баллов · снятие баллов · изменение роли участника · подтверждение/отклонение задания · изменение вопросов · изменение программы",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7158,10 +7158,10 @@
     "subsection": "12. Журнал · Отдельная вкладка «Критичные операции»",
     "task": "Фильтр: «требует ревью» / «отревьюено»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7170,10 +7170,10 @@
     "subsection": "12. Журнал · Отдельная вкладка «Критичные операции»",
     "task": "Действие: «Пометить как отревьюено»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7182,10 +7182,10 @@
     "subsection": "13. Настройки рекомендаций · Управление тегами",
     "task": "Заголовок: «Управление тегами · N тегов»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7194,10 +7194,10 @@
     "subsection": "13. Настройки рекомендаций · Управление тегами",
     "task": "Строка поиска: по названию тега",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7206,10 +7206,10 @@
     "subsection": "13. Настройки рекомендаций · Управление тегами",
     "task": "Фильтр: Тип применения (события / диагностика / интересы / материалы / клубы)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7218,10 +7218,10 @@
     "subsection": "13. Настройки рекомендаций · Управление тегами",
     "task": "Кнопка: «+ Создать тег»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7230,10 +7230,10 @@
     "subsection": "13. Настройки рекомендаций · Управление тегами",
     "task": "Колонки: Название · Тип применения (мультивыбор) · Использование (событий N, вопросов N, участников N) · Порядок · Действия",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7242,10 +7242,10 @@
     "subsection": "13. Настройки рекомендаций · Управление тегами",
     "task": "Действия: Редактировать · Объединить (merge) · Переименовать · Удалить (с проверкой связей)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7253,11 +7253,11 @@
     "pointCount": 207,
     "subsection": "13. Настройки рекомендаций · Управление тегами",
     "task": "Массовое: «Объединить выбранные в один»",
-    "statusUser": "Нет",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: RecommendationTagsTab bulkMerge]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: RecommendationTagsTab bulkMerge]"
   },
   {
     "sectionId": 14,
@@ -7265,11 +7265,11 @@
     "pointCount": 207,
     "subsection": "13. Настройки рекомендаций · Управление тегами",
     "task": "Drag-drop сортировка порядка (для регистрации участника)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: RecommendationTagsTab drag + reorder API]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: RecommendationTagsTab drag + reorder API]"
   },
   {
     "sectionId": 14,
@@ -7278,10 +7278,10 @@
     "subsection": "13. Тег · Форма",
     "task": "Название (обязательное) · Ключ (латиница)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7290,10 +7290,10 @@
     "subsection": "13. Тег · Форма",
     "task": "Тип применения (мультивыбор чекбоксами): для событий · для диагностики · для интересов · для материалов · для клубов",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7302,10 +7302,10 @@
     "subsection": "13. Тег · Форма",
     "task": "Описание · Цвет · Активен",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7314,10 +7314,10 @@
     "subsection": "13. Тег · Форма",
     "task": "Кнопки: [Сохранить] [Отменить]",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7326,10 +7326,10 @@
     "subsection": "13. Тег · Слияние (merge)",
     "task": "Форма выбора двух тегов",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7338,10 +7338,10 @@
     "subsection": "13. Тег · Слияние (merge)",
     "task": "Preview: сколько записей будут перепривязаны",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7350,10 +7350,10 @@
     "subsection": "13. Тег · Слияние (merge)",
     "task": "Кнопка [Объединить] — необратимо, все связи одного тега переходят на другой",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7362,10 +7362,10 @@
     "subsection": "13. Тег · Слияние (merge)",
     "task": "Логируется в admin_actions_log",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin-panel §14"
   },
   {
     "sectionId": 14,
@@ -7373,11 +7373,11 @@
     "pointCount": 207,
     "subsection": "Сквозной принцип: черновики не в аналитике + удаление",
     "task": "Убираем чекбокс «Учитывать в аналитике» — вместо него: сущности со статусом «Черновик» автоматически НЕ попадают в дашборды и выгрузки (учитываются только «Опубликовано»)",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "заменено по уточнению — было отдельным чекбоксом на каждой форме",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "заменено по уточнению — было отдельным чекбоксом на каждой форме · [код: status published + isPublishedStatus in analytics]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "заменено по уточнению — было отдельным чекбоксом на каждой форме · [код: status published + isPublishedStatus in analyti"
   },
   {
     "sectionId": 14,
@@ -7385,11 +7385,11 @@
     "pointCount": 207,
     "subsection": "Сквозной принцип: черновики не в аналитике + удаление",
     "task": "На каждой сущности (событие · вопрос · задание · материал · медаль · пуш) — кнопка «Удалить» в списке, чтобы технические/тестовые записи можно было просто стереть, а не скрывать флагом",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: Удалить в списках RowActionsMenu]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: Удалить в списках RowActionsMenu]"
   },
   {
     "sectionId": 14,
@@ -7397,11 +7397,11 @@
     "pointCount": 207,
     "subsection": "Сквозной принцип: черновики не в аналитике + удаление",
     "task": "Удаление — с подтверждением («Точно удалить? Действие необратимо»), логируется в admin_actions_log",
-    "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "[код: confirmDelete + admin_actions_log]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "[код: confirmDelete + admin_actions_log]"
   },
   {
     "sectionId": 15,
@@ -7650,10 +7650,10 @@
     "subsection": "14+. Рейтинг и баллы · Настройка действий и баллов",
     "task": "Раздел «Система баллов» в админ-панели",
     "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "[код: LevelsTab]",
+    "statusAudit": "Частично",
+    "note": "LevelsTab + GET /levels-config/action-catalog",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "см. note в spec-tracker-admin.tsv"
   },
   {
     "sectionId": 15,
@@ -7662,10 +7662,10 @@
     "subsection": "14+. Рейтинг и баллы · Настройка действий и баллов",
     "task": "Для каждого действия задаётся: название · количество баллов · тип счётчика (Путь / Опыт / Идей) · максимальное число начислений",
     "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusAudit": "Частично",
+    "note": "Путь/Опыт/Бонус в UI; «Идей» — счётчик записей без XP",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "см. note в spec-tracker-admin.tsv"
   },
   {
     "sectionId": 15,
@@ -7674,10 +7674,10 @@
     "subsection": "14+. Рейтинг и баллы · Настройка действий и баллов",
     "task": "Действия для счётчика «Путь»: прохождение каждой из 7 точек осмысления (отдельно), бонус за полный день, бонус за регулярность 7 дней",
     "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusAudit": "Частично",
+    "note": "state_check_* + question_answer + day_complete_bonus + reflection_streak_7",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "см. note в spec-tracker-admin.tsv"
   },
   {
     "sectionId": 15,
@@ -7686,10 +7686,10 @@
     "subsection": "14+. Рейтинг и баллы · Настройка действий и баллов",
     "task": "Действия для счётчика «Опыт»: выполнение задания (по категориям), ответ другому участнику в «Общении», участие в команде, получение медали",
     "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusAudit": "Частично",
+    "note": "task_cat_* + exchange_answer; команда=task_complete; медаль без XP",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "см. note в spec-tracker-admin.tsv"
   },
   {
     "sectionId": 15,
@@ -7698,10 +7698,10 @@
     "subsection": "14+. Рейтинг и баллы · Настройка действий и баллов",
     "task": "Действия для счётчика «Идей»: добавление записи в копилку",
     "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusAudit": "Частично",
+    "note": "XP по тегам копилки; «Идей» на главной — count only",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "см. note в spec-tracker-admin.tsv"
   },
   {
     "sectionId": 15,
@@ -7710,10 +7710,10 @@
     "subsection": "14+. Рейтинг и баллы · Настройка действий и баллов",
     "task": "Система автоматически учитывает ограничения при начислении (не начислять сверх максимума)",
     "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusAudit": "Частично",
+    "note": "awardPoints + maxAccruals",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "см. note в spec-tracker-admin.tsv"
   },
   {
     "sectionId": 15,
@@ -7722,10 +7722,10 @@
     "subsection": "14+. Рейтинг и баллы · Настройка действий и баллов",
     "task": "Все настройки без участия разработчика",
     "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusAudit": "Частично",
+    "note": "levels_config batch из админки",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "см. note в spec-tracker-admin.tsv"
   },
   {
     "sectionId": 15,
@@ -7734,10 +7734,10 @@
     "subsection": "14+. Рейтинг и баллы · Медали — каталог",
     "task": "Раздел «Медали» в админ-панели — создание, редактирование, удаление",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7746,10 +7746,10 @@
     "subsection": "14+. Рейтинг и баллы · Медали — каталог",
     "task": "Поле «Название медали»",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7758,10 +7758,10 @@
     "subsection": "14+. Рейтинг и баллы · Медали — каталог",
     "task": "Поле «Описание» — за что выдаётся",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7770,10 +7770,10 @@
     "subsection": "14+. Рейтинг и баллы · Медали — каталог",
     "task": "Поле «Условие получения» — конкретное правило (например, «активен 6 дней подряд», «выполнил 3 командных задания»)",
     "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusAudit": "Частично",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "см. note в spec-tracker-admin.tsv"
   },
   {
     "sectionId": 15,
@@ -7782,10 +7782,10 @@
     "subsection": "14+. Рейтинг и баллы · Медали — каталог",
     "task": "Поле «Иконка» — изображение для отображения",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7794,10 +7794,10 @@
     "subsection": "14+. Рейтинг и баллы · Медали — каталог",
     "task": "Поле «Категория» — привязка к категории заданий",
     "statusUser": "Частично",
-    "statusAudit": "—",
+    "statusAudit": "Частично",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "см. note в spec-tracker-admin.tsv"
   },
   {
     "sectionId": 15,
@@ -7806,10 +7806,10 @@
     "subsection": "14+. Рейтинг и баллы · Медали — каталог",
     "task": "Поле «Уровень» — бронза / серебро / золото",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7818,10 +7818,10 @@
     "subsection": "14+. Рейтинг и баллы · Медали — каталог",
     "task": "Поле «Тип выдачи» — автоматическая (по условию) или ручная (выдаёт администратор)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7830,10 +7830,10 @@
     "subsection": "14+. Рейтинг и баллы · Ручное управление баллами",
     "task": "Поиск участника → его профиль → история начислений",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7842,10 +7842,10 @@
     "subsection": "14+. Рейтинг и баллы · Ручное управление баллами",
     "task": "Кнопка «Добавить баллы» с комментарием (тип счётчика, сумма, причина)",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7854,10 +7854,10 @@
     "subsection": "14+. Рейтинг и баллы · Ручное управление баллами",
     "task": "Кнопка «Снять баллы» с комментарием",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7865,11 +7865,11 @@
     "pointCount": 20,
     "subsection": "14+. Рейтинг и баллы · Ручное управление баллами",
     "task": "Кнопка «Аннулировать подозрительные баллы» — массовая операция с уведомлением участникам",
-    "statusUser": "Нет",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "POST /points/revoke-bulk + push · [код: revoke-bulk LevelsTab + ParticipantCard]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7878,10 +7878,10 @@
     "subsection": "14+. Рейтинг и баллы · Ручное управление баллами",
     "task": "Все ручные операции — в журнале действий администратора",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7890,10 +7890,10 @@
     "subsection": "14+. Рейтинг и баллы · Настройка в админке",
     "task": "Возможность настройки порогов уровней «Пути»",
     "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusAudit": "Частично",
+    "note": "LevelsTab ThresholdEditor path_level",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "см. note в spec-tracker-admin.tsv"
   },
   {
     "sectionId": 15,
@@ -7902,10 +7902,10 @@
     "subsection": "14+. Рейтинг и баллы · Настройка в админке",
     "task": "Возможность настройки порогов уровней «Опыта»",
     "statusUser": "Частично",
-    "statusAudit": "—",
-    "note": "",
+    "statusAudit": "Частично",
+    "note": "LevelsTab ThresholdEditor exp_level",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "см. note в spec-tracker-admin.tsv"
   },
   {
     "sectionId": 15,
@@ -7913,11 +7913,11 @@
     "pointCount": 20,
     "subsection": "14+. Рейтинг и баллы · Настройка в админке",
     "task": "Настройка типов рейтинговых таблиц",
-    "statusUser": "Нет",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Частично",
+    "statusAudit": "Частично",
+    "note": "forum_settings.leaderboardScopes · [код: leaderboardScopes в LevelsTab]",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "см. note в spec-tracker-admin.tsv"
   },
   {
     "sectionId": 15,
@@ -7926,10 +7926,10 @@
     "subsection": "14+. Рейтинг и баллы · Настройка в админке",
     "task": "Ручное начисление и снятие баллов с логированием",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7938,10 +7938,10 @@
     "subsection": "14+. Push · Управление администратором",
     "task": "Ручная отправка: выбор аудитории (все / направление / участник) + текст + отправить сейчас",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7950,10 +7950,10 @@
     "subsection": "14+. Push · Управление администратором",
     "task": "Отложенная отправка: задать дату и время",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7961,11 +7961,11 @@
     "pointCount": 20,
     "subsection": "14+. Push · Управление администратором",
     "task": "Шаблоны уведомлений",
-    "statusUser": "Нет",
-    "statusAudit": "—",
-    "note": "",
+    "statusUser": "Да",
+    "statusAudit": "Да",
+    "note": "PushTemplatesPanel + CRUD /push/templates",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   },
   {
     "sectionId": 15,
@@ -7974,9 +7974,9 @@
     "subsection": "14+. Push · Управление администратором",
     "task": "История с указанием статуса доставки",
     "statusUser": "Да",
-    "statusAudit": "—",
+    "statusAudit": "Да",
     "note": "</user_query>",
     "llmDeferred": false,
-    "auditNote": ""
+    "auditNote": "admin wave: LevelsTab/MedalsTab/PushTab"
   }
 ]

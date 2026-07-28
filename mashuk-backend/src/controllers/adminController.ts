@@ -5,7 +5,7 @@ import {
   participants, directions, thematicTags, programPlaces, programBlockTypes, programSpeakers,
   forumSettings, dayFocus, scheduleDays,
   events, tasks, taskCategories, questions, questionOptions, taskSubmissions, taskTeamConfirmations, exchangeQuestions,
-  exchangeAnswers, eventAttendance, materials, kbDayUnlocks,
+  exchangeAnswers, eventAttendance, materials, materialTypes, kbDayUnlocks,
   levelsConfig, piggybank, answers, dailyStats, pushLog, pointsLog,
   participantDayState, pedagogicalRoles, dayExperiments, adminActionsLog,
   ratingRecalcRuns, ratingBonusRules,
@@ -224,13 +224,26 @@ export const adjustParticipantPoints = async (req: AdminRequest, res: Response):
     return;
   }
   const abs = Math.abs(points);
+  let effectiveAt: Date | undefined;
+  const rawAt = req.body?.effectiveAt ?? req.body?.createdAt;
+  if (typeof rawAt === 'string' && rawAt.trim()) {
+    const d = new Date(rawAt);
+    if (!Number.isNaN(d.getTime())) {
+      const now = Date.now();
+      const min = now - 366 * 24 * 60 * 60 * 1000;
+      const max = now + 24 * 60 * 60 * 1000;
+      if (d.getTime() >= min && d.getTime() <= max) effectiveAt = d;
+    }
+  }
+  const logValues = (actionType: string, pts: number) => ({
+    participantId,
+    actionType,
+    points: pts,
+    ...(effectiveAt ? { createdAt: effectiveAt } : {}),
+  });
   if (points > 0) {
     const actionType = track === 'experience' ? 'admin_manual_experience' : 'admin_manual_path';
-    await db.insert(pointsLog).values({
-      participantId,
-      actionType,
-      points: abs,
-    });
+    await db.insert(pointsLog).values(logValues(actionType, abs));
     if (track === 'experience') {
       await db.update(participants)
         .set({ experiencePoints: sql`${participants.experiencePoints} + ${abs}` })
@@ -242,11 +255,7 @@ export const adjustParticipantPoints = async (req: AdminRequest, res: Response):
     }
   } else {
     const actionType = track === 'experience' ? 'admin_manual_deduct_experience' : 'admin_manual_deduct_path';
-    await db.insert(pointsLog).values({
-      participantId,
-      actionType,
-      points: -abs,
-    });
+    await db.insert(pointsLog).values(logValues(actionType, -abs));
     if (track === 'experience') {
       await db.update(participants)
         .set({ experiencePoints: sql`GREATEST(0, ${participants.experiencePoints} - ${abs})` })
@@ -382,6 +391,16 @@ export const resetRegistration = async (req: AdminRequest, res: Response): Promi
     await tx.delete(pointsLog).where(eq(pointsLog.participantId, id));
     await tx.delete(participantDayState).where(eq(participantDayState.participantId, id));
     await tx.delete(participants).where(eq(participants.id, id));
+  });
+
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req,
+    actionType: 'participant_delete',
+    section: 'participants',
+    objectId: String(id),
+    oldValue: { vkId: participant.vkId, firstName: participant.firstName, lastName: participant.lastName },
+    isCritical: true,
   });
 
   res.json({ ok: true });
@@ -1508,6 +1527,24 @@ export const listExchangeAnswers = async (_req: AdminRequest, res: Response): Pr
   });
 };
 
+export const getLevelsActionCatalog = async (_req: AdminRequest, res: Response): Promise<void> => {
+  const { mergeCatalogWithDb, ACTION_CATALOG, LEVEL_THRESHOLD_ACTION_TYPES } = await import('../services/levelsActionCatalog.js');
+  const config = await db.select().from(levelsConfig);
+  const categories = await db.select().from(taskCategories).orderBy(asc(taskCategories.sortOrder));
+  const catNames = categories.map(c => c.name);
+  const catalog = mergeCatalogWithDb(config, catNames);
+  const levelRows = config.filter(c => LEVEL_THRESHOLD_ACTION_TYPES.has(c.actionType));
+  res.json({
+    catalog,
+    levelConfig: levelRows,
+    catalogMeta: ACTION_CATALOG.filter(d => !LEVEL_THRESHOLD_ACTION_TYPES.has(d.actionType)).map(d => ({
+      actionType: d.actionType,
+      group: d.group,
+    })),
+    taskCategories: categories,
+  });
+};
+
 export const crudLevels = {
   list: async (_req: AdminRequest, res: Response) => res.json({ config: await db.select().from(levelsConfig) }),
   upsert: async (req: AdminRequest, res: Response) => {
@@ -1582,52 +1619,126 @@ const DEFAULT_BONUS_RULES = [
   { code: 'day_complete_bonus', pointsActionType: 'day_complete_bonus', params: { type: 'touchpoints_day' } },
   { code: 'reflection_streak_7', pointsActionType: 'reflection_streak_7', params: { minDays: 7 } },
   { code: 'bonus_regularity', pointsActionType: 'bonus_regularity', params: { minStreak: 6 } },
-  { code: 'bonus_diversity', pointsActionType: 'bonus_diversity', params: {} },
+  { code: 'bonus_diversity', pointsActionType: 'bonus_diversity', params: { minCategories: 4 } },
 ];
 
-export const listRatingBonusRules = async (_req: AdminRequest, res: Response): Promise<void> => {
-  let rules = await db.select().from(ratingBonusRules);
-  if (rules.length === 0) {
-    for (const r of DEFAULT_BONUS_RULES) {
-      const [exists] = await db.select({ id: ratingBonusRules.id }).from(ratingBonusRules)
-        .where(eq(ratingBonusRules.code, r.code)).limit(1);
-      if (!exists) {
-        await db.insert(ratingBonusRules).values({ ...r, enabled: true });
-      }
+async function ensureDefaultBonusRules(): Promise<void> {
+  for (const r of DEFAULT_BONUS_RULES) {
+    const [exists] = await db.select({ id: ratingBonusRules.id }).from(ratingBonusRules)
+      .where(eq(ratingBonusRules.code, r.code)).limit(1);
+    if (!exists) {
+      await db.insert(ratingBonusRules).values({ ...r, enabled: true });
     }
-    rules = await db.select().from(ratingBonusRules);
   }
+}
+
+export const listRatingBonusRules = async (_req: AdminRequest, res: Response): Promise<void> => {
+  await ensureDefaultBonusRules();
+  const rules = await db.select().from(ratingBonusRules).orderBy(asc(ratingBonusRules.id));
   res.json({ rules });
+};
+
+export const createRatingBonusRule = async (req: AdminRequest, res: Response): Promise<void> => {
+  const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
+  const { parseBody, ratingBonusRuleCreateSchema } = await import('../validation/adminSchemas.js');
+  const parsed = parseBody(ratingBonusRuleCreateSchema, { code });
+  if (!parsed.ok) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const template = DEFAULT_BONUS_RULES.find(r => r.code === parsed.data.code);
+  if (!template) {
+    res.status(400).json({ error: 'Unknown bonus rule code' });
+    return;
+  }
+  const [exists] = await db.select({ id: ratingBonusRules.id }).from(ratingBonusRules)
+    .where(eq(ratingBonusRules.code, parsed.data.code)).limit(1);
+  if (exists) {
+    res.status(400).json({ error: 'Rule already exists' });
+    return;
+  }
+  const [created] = await db.insert(ratingBonusRules).values({ ...template, enabled: true }).returning();
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req, actionType: 'rating_bonus_rule_create', section: 'levels', objectId: String(created.id),
+    newValue: created, isCritical: true,
+  });
+  res.json({ rule: created });
 };
 
 export const patchRatingBonusRule = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
-  const { enabled, params, pointsActionType } = req.body;
+  const { parseBody, ratingBonusRulePatchSchema } = await import('../validation/adminSchemas.js');
+  const parsed = parseBody(ratingBonusRulePatchSchema, req.body);
+  if (!parsed.ok) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const { enabled, params, pointsActionType } = parsed.data;
+  const [before] = await db.select().from(ratingBonusRules).where(eq(ratingBonusRules.id, id)).limit(1);
+  if (!before) { res.status(404).json({ error: 'Not found' }); return; }
   const [updated] = await db.update(ratingBonusRules)
     .set({
-      enabled: enabled ?? undefined,
-      params: params ?? undefined,
-      pointsActionType: pointsActionType ?? undefined,
+      ...(enabled !== undefined ? { enabled } : {}),
+      ...(params !== undefined ? { params } : {}),
+      ...(pointsActionType !== undefined ? { pointsActionType } : {}),
     })
     .where(eq(ratingBonusRules.id, id)).returning();
   if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req, actionType: 'rating_bonus_rule_update', section: 'levels', objectId: String(id),
+    oldValue: before, newValue: updated, isCritical: true,
+  });
   res.json({ rule: updated });
 };
 
+function normalizeMaterialKbUnlock(body: Record<string, unknown>): {
+  kbUnlockMode?: 'immediate' | 'touchpoints';
+  kbUnlockMinTouchpoints?: number | null;
+} {
+  const out: { kbUnlockMode?: 'immediate' | 'touchpoints'; kbUnlockMinTouchpoints?: number | null } = {};
+  if (body.kbUnlockMode === 'immediate' || body.kbUnlockMode === 'touchpoints') {
+    out.kbUnlockMode = body.kbUnlockMode;
+  }
+  if (body.kbUnlockMinTouchpoints !== undefined) {
+    const n = body.kbUnlockMinTouchpoints;
+    if (n === null || n === '') {
+      out.kbUnlockMinTouchpoints = null;
+    } else {
+      const num = Number(n);
+      if (Number.isFinite(num)) {
+        out.kbUnlockMinTouchpoints = Math.min(7, Math.max(1, Math.round(num)));
+      }
+    }
+  }
+  if (out.kbUnlockMode === 'immediate') {
+    out.kbUnlockMinTouchpoints = null;
+  }
+  return out;
+}
+
 export const crudMaterials = {
-  list: async (_req: AdminRequest, res: Response) => {
-    res.json({ materials: await db.select().from(materials) });
+  list: async (req: AdminRequest, res: Response) => {
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    let rows = await db.select().from(materials);
+    if (status) rows = rows.filter(m => (m.status || 'published') === status);
+    res.json({ materials: rows, totalCount: rows.length });
   },
   create: async (req: AdminRequest, res: Response) => {
+    const kb = normalizeMaterialKbUnlock(req.body as Record<string, unknown>);
     const [m] = await db.insert(materials).values({
       ...req.body,
+      ...kb,
       isNew: req.body.isNew !== false,
+      status: req.body.status || 'draft',
     }).returning();
     res.json({ material: m });
   },
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
-    const [updated] = await db.update(materials).set(req.body).where(eq(materials.id, id)).returning();
+    const kb = normalizeMaterialKbUnlock(req.body as Record<string, unknown>);
+    const [updated] = await db.update(materials).set({ ...req.body, ...kb }).where(eq(materials.id, id)).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ material: updated });
   },
@@ -1640,6 +1751,36 @@ export const crudMaterials = {
       req, actionType: 'material_delete', section: 'knowledge', objectId: id,
       oldValue: deleted, isCritical: true,
     });
+    res.json({ ok: true });
+  },
+};
+
+export const crudMaterialTypes = {
+  list: async (_req: AdminRequest, res: Response) => {
+    res.json({ types: await db.select().from(materialTypes).orderBy(asc(materialTypes.sortOrder)) });
+  },
+  create: async (req: AdminRequest, res: Response) => {
+    const key = String(req.body.key || '').trim();
+    const name = String(req.body.name || '').trim();
+    if (!key || !name) { res.status(400).json({ error: 'key and name required' }); return; }
+    const [row] = await db.insert(materialTypes).values({
+      key, name, sortOrder: Number(req.body.sortOrder) || 0,
+    }).returning();
+    res.json({ type: row });
+  },
+  update: async (req: AdminRequest, res: Response) => {
+    const id = Number(req.params.id);
+    const patch: Partial<typeof materialTypes.$inferInsert> = {};
+    if (req.body.name != null) patch.name = String(req.body.name).trim();
+    if (req.body.sortOrder != null) patch.sortOrder = Number(req.body.sortOrder);
+    const [updated] = await db.update(materialTypes).set(patch).where(eq(materialTypes.id, id)).returning();
+    if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
+    res.json({ type: updated });
+  },
+  delete: async (req: AdminRequest, res: Response) => {
+    const id = Number(req.params.id);
+    const [deleted] = await db.delete(materialTypes).where(eq(materialTypes.id, id)).returning();
+    if (!deleted) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ ok: true });
   },
 };

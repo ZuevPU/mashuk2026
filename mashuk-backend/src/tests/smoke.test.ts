@@ -184,4 +184,74 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     assert.equal(res.body.source, 'exchange');
     assert.ok(Array.isArray(res.body.questions));
   });
+
+  it('GET /api/admin/exports/day/stats and day XLSX with export role', async () => {
+    const token = await getAdminBearerToken(app);
+    const stats = await request(app)
+      .get('/api/admin/exports/day/stats?day=1')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(stats.status, 200);
+    assert.equal(stats.body.day, 1);
+    assert.ok(stats.body.byTouchpointType);
+
+    const book = await request(app)
+      .get('/api/admin/exports/day?day=1&type=all')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(book.status, 200);
+    assert.ok(
+      (book.headers['content-type'] || '').includes('spreadsheet') ||
+      (book.headers['content-type'] || '').includes('octet-stream'),
+    );
+  });
+
+  it('GET /api/admin/analytics/meta and pulse dashboard', async () => {
+    const token = await getAdminBearerToken(app);
+    const meta = await request(app)
+      .get('/api/admin/analytics/meta')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(meta.status, 200);
+    assert.ok(meta.body.refreshMs);
+    assert.ok(Array.isArray(meta.body.dashboardCatalog));
+    assert.equal(meta.body.dashboardCatalog.length, 10);
+
+    const pulse = await request(app)
+      .get('/api/admin/analytics/dashboards/pulse?mode=day&day=1')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(pulse.status, 200);
+    assert.ok(pulse.body.activity);
+    assert.ok(pulse.body.emotionalPulse);
+  });
+
+  it('GET /exports/meta and POST /exports/custom', async () => {
+    const token = await getAdminBearerToken(app);
+    const meta = await request(app)
+      .get('/api/admin/exports/meta')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(meta.status, 200);
+    assert.ok(Array.isArray(meta.body.sources));
+
+    const created = await request(app)
+      .post('/api/admin/exports/custom')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        source: 'participants',
+        title: 'smoke-custom',
+        columns: ['id', 'full_name', 'direction'],
+        params: {},
+      });
+    assert.equal(created.status, 201);
+    assert.equal(created.body.status, 'ready');
+    assert.ok(created.body.id);
+
+    const dl = await request(app)
+      .get(`/api/admin/exports/history/${created.body.id}/download`)
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(dl.status, 200);
+
+    const hist = await request(app)
+      .get('/api/admin/exports/history?limit=5')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(hist.status, 200);
+    assert.ok(Array.isArray(hist.body.items));
+  });
 });

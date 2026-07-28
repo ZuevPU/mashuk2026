@@ -4,6 +4,7 @@ import { db } from '../db/index.js';
 import { events, eventAttendance, materials, questions, answers, scheduleDays, dayFocus, kbDayUnlocks } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { getForumSettings, formatTime, resolveEffectiveCurrentDay } from '../services/helpers.js';
+import { isPublishedStatus } from '../services/publishStatus.js';
 import { getForumDayDateLabel } from '../services/timePhase.js';
 import {
   getEventLiveStatus,
@@ -51,6 +52,18 @@ export function materialIsNew(m: typeof materials.$inferSelect, now: Date): bool
     return now.getTime() - new Date(m.createdAt).getTime() < 24 * 60 * 60 * 1000;
   }
   return false;
+}
+
+/** Per-material KB unlock after the day gate is open. */
+export function isMaterialUnlockedForParticipant(
+  m: Pick<typeof materials.$inferSelect, 'kbUnlockMode' | 'kbUnlockMinTouchpoints'>,
+  touchpointsCompleted: number,
+  forumDefaultN: number,
+): boolean {
+  const mode = m.kbUnlockMode ?? 'touchpoints';
+  if (mode === 'immediate') return true;
+  const required = m.kbUnlockMinTouchpoints ?? forumDefaultN;
+  return touchpointsCompleted >= required;
 }
 
 function mapMaterialForClient(m: typeof materials.$inferSelect, now: Date) {
@@ -388,6 +401,7 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
     const opensOn = getForumDayDateLabel(settings.startDate ?? null, day);
 
     const filtered = mats.filter(m => {
+      if (!isPublishedStatus(m.status)) return false;
       if (m.isGeneral) return true;
       if (m.direction && direction && m.direction !== direction) return false;
       const tags = (m.tags as string[]) || [];
@@ -400,7 +414,11 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
       return false;
     });
 
-    const mapped = filtered.map(m => mapMaterialForClient(m, now));
+    const forumDefaultN = access.requiredTouchpoints;
+    const unlockedMaterials = access.unlocked
+      ? filtered.filter(m => isMaterialUnlockedForParticipant(m, access.touchpointsCompleted, forumDefaultN))
+      : [];
+    const mapped = unlockedMaterials.map(m => mapMaterialForClient(m, now));
 
     let lockMessage: string | null = null;
     if (!access.unlocked) {
@@ -422,7 +440,7 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
       dayDescription: focus?.text ?? null,
       opensOn,
       lockMessage,
-      materials: access.unlocked ? mapped : [],
+      materials: mapped,
     });
   } catch (error) {
     console.error('getKnowledgeBase:', error);
@@ -436,6 +454,19 @@ export const saveMaterialToPiggybank = async (req: ParticipantRequest, res: Resp
     const [mat] = await db.select().from(materials).where(eq(materials.id, id)).limit(1);
     if (!mat) {
       res.status(404).json({ error: 'Material not found' });
+      return;
+    }
+    if (!isPublishedStatus(mat.status)) {
+      res.status(404).json({ error: 'Material not found' });
+      return;
+    }
+    const settings = await getForumSettings();
+    const day = mat.dayNumber ?? settings.currentDay ?? 1;
+    const now = new Date();
+    const access = await evaluateKbDayAccess(req.participant!.id, day, settings, now);
+    const forumDefaultN = access.requiredTouchpoints;
+    if (!access.unlocked || !isMaterialUnlockedForParticipant(mat, access.touchpointsCompleted, forumDefaultN)) {
+      res.status(403).json({ error: 'Material locked', lockReason: access.lockReason ?? 'touchpoints' });
       return;
     }
     const { events: eventsTable } = await import('../db/schema.js');

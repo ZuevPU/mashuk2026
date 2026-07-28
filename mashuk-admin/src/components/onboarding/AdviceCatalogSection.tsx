@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { confirmDelete } from '../../admin/confirmDelete';
 import { getAdminApiBase, getAdminToken } from '../../admin/client';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import { RowActionsMenu } from '../participants/RowActionsMenu';
@@ -160,7 +161,7 @@ export function AdviceCatalogSection({
     <>
       <AdminPageHero
         title={`Каталог советов · ${totalInDb} советов`}
-        hint="Каждой паре (роль × день) соответствует ровно один совет. Участник на главной видит только опубликованные (дни 2–7)."
+        hint={`Каждой паре (роль × день) — ровно один совет (${totalInDb}/${TOTAL_CELLS} ячеек). Участник на главной видит только опубликованные (дни 2–7).`}
       >
         <div className="adm-forum-toolbar adm-advice-toolbar">
           <input
@@ -226,6 +227,7 @@ export function AdviceCatalogSection({
                 <th>День</th>
                 <th>Заголовок</th>
                 <th>Текст</th>
+                <th>Превью «Совет дня»</th>
                 <th>Статус</th>
                 <th>Действия</th>
               </tr>
@@ -237,7 +239,11 @@ export function AdviceCatalogSection({
                   <td>{e.dayNumber}</td>
                   <td>{e.title}</td>
                   <td className="adm-role-table-desc">
-                    {(e.body || '').slice(0, 100)}{(e.body || '').length > 100 ? '…' : ''}
+                    {(e.body || '').slice(0, 120)}{(e.body || '').length > 120 ? '…' : ''}
+                  </td>
+                  <td style={{ fontSize: 12, maxWidth: 160, color: '#555' }}>
+                    <strong>{e.title}</strong>
+                    <div>{(e.body || '').slice(0, 80)}{(e.body || '').length > 80 ? '…' : ''}</div>
                   </td>
                   <td>{statusLabel(e.status)}</td>
                   <td>
@@ -248,7 +254,7 @@ export function AdviceCatalogSection({
                           label: 'Удалить',
                           danger: true,
                           onClick: () => {
-                            if (!window.confirm('Удалить этот совет?')) return;
+                            if (!confirmDelete()) return;
                             deleteOne(e.id);
                           },
                         },

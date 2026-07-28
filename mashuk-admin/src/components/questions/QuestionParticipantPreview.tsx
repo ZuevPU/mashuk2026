@@ -1,13 +1,13 @@
 import type { QuestionDraft } from './types';
 import { answerTypeLabel, kindLabel } from './types';
+import { ParticipantPreviewFrame } from '../admin/ParticipantPreviewModal';
 
 const EMOTIONS = ['😊', '😌', '🤔', '✨', '💪', '😴'];
 
 export function QuestionParticipantPreview({ draft }: { draft: QuestionDraft }) {
   const displayTitle = draft.text.trim() || draft.title;
   return (
-    <div className="card" style={{ marginBottom: 16, background: '#FAFAF8', border: '1px dashed #C4B5A0' }}>
-      <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>Превью для участника</div>
+    <ParticipantPreviewFrame>
       <div style={{ fontSize: 12, color: '#666' }}>{kindLabel(draft.questionKind)} · {answerTypeLabel(draft.answerType)}</div>
       {draft.subtitle && <div style={{ fontSize: 12, fontWeight: 600, marginTop: 4 }}>{draft.subtitle}</div>}
       <div style={{ fontSize: 15, fontWeight: 700, marginTop: 8 }}>{displayTitle}</div>
@@ -38,6 +38,6 @@ export function QuestionParticipantPreview({ draft }: { draft: QuestionDraft }) 
       )}
       {draft.isRequired && <div style={{ fontSize: 11, color: '#C53030', marginTop: 8 }}>Обязательный вопрос</div>}
       {draft.points > 0 && <div style={{ fontSize: 11, color: '#2D6A4F', marginTop: 4 }}>+{draft.points} к Пути</div>}
-    </div>
+    </ParticipantPreviewFrame>
   );
 }

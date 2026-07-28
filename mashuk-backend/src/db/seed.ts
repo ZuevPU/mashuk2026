@@ -7,7 +7,7 @@ import {
   participants, answers, taskSubmissions,
   exchangeQuestions, exchangeAnswers, eventAttendance,
   pedagogicalRoles, dayExperiments,
-  consentTexts, participantGroups, medals, pushTemplates,
+  consentTexts, participantGroups, medals, pushTemplates, programPlaces,
 } from './schema.js';
 import { recalculateDailyStats } from '../services/analyticsService.js';
 import { ROLE_CATALOG } from '../services/roleService.js';
@@ -30,6 +30,14 @@ export async function runSeed() {
       { name: 'управление' }, { name: 'команда' }, { name: 'коммуникация' },
       { name: 'аналитика' }, { name: 'технологии' }, { name: 'творчество' },
     ]);
+
+    await db.insert(programPlaces).values([
+      { name: 'Конференц-зал' },
+      { name: 'Шатёр «Учителя»' },
+      { name: 'Площадка у озера' },
+      { name: 'Аудитория Пушкин' },
+      { name: 'Аудитория Гоголь' },
+    ]).onConflictDoNothing({ target: programPlaces.name });
 
     const startDate = new Date('2026-08-12T00:00:00');
     await db.insert(forumSettings).values({
@@ -78,7 +86,14 @@ export async function runSeed() {
       { name: 'Образование', iconKey: 'education', sortOrder: 1 },
       { name: 'Полезные знакомства/общение', iconKey: 'network', sortOrder: 2 },
       { name: 'Медиа', iconKey: 'media', sortOrder: 3 },
+      { name: 'Рефлексия', iconKey: 'reflection', sortOrder: 4 },
+      { name: 'Командная работа', iconKey: 'team', sortOrder: 5 },
       { name: 'Организация', iconKey: 'org', sortOrder: 6 },
+      { name: 'Направление', iconKey: 'direction', sortOrder: 7 },
+      { name: 'Волонтёрство', iconKey: 'volunteer', sortOrder: 8 },
+      { name: 'Творчество', iconKey: 'creative', sortOrder: 9 },
+      { name: 'Активность', iconKey: 'activity', sortOrder: 10 },
+      { name: 'Прочее', iconKey: 'other', sortOrder: 11 },
     ]).onConflictDoNothing({ target: taskCategories.name });
 
     const cats = await db.select().from(taskCategories);
@@ -482,32 +497,45 @@ export async function runSeed() {
     await db.insert(levelsConfig).values({ actionType: 'evening_complete', pointsPerUnit: 15, maxAccruals: 8 });
   }
 
-  const ratingFixes: Array<{ actionType: string; pointsPerUnit: number; maxAccruals?: number }> = [
-    { actionType: 'point_a_complete', pointsPerUnit: 20, maxAccruals: 1 },
-    { actionType: 'point_b_complete', pointsPerUnit: 30, maxAccruals: 1 },
-    { actionType: 'question_answer', pointsPerUnit: 5, maxAccruals: 100 },
-    { actionType: 'state_check_morning', pointsPerUnit: 5, maxAccruals: 8 },
-    { actionType: 'state_check_day', pointsPerUnit: 5, maxAccruals: 8 },
-    { actionType: 'state_check_evening', pointsPerUnit: 5, maxAccruals: 8 },
-    { actionType: 'exchange_question', pointsPerUnit: 3, maxAccruals: 30 },
-    { actionType: 'exchange_answer', pointsPerUnit: 5, maxAccruals: 50 },
-    { actionType: 'day_complete_bonus', pointsPerUnit: 20, maxAccruals: 8 },
-    { actionType: 'reflection_streak_7', pointsPerUnit: 50, maxAccruals: 1 },
-    { actionType: 'bonus_regularity', pointsPerUnit: 25, maxAccruals: 1 },
-    { actionType: 'bonus_diversity', pointsPerUnit: 25, maxAccruals: 1 },
-    { actionType: 'attendance', pointsPerUnit: 5, maxAccruals: 40 },
-  ];
-  for (const row of ratingFixes) {
-    const [existing] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, row.actionType)).limit(1);
+  const { ACTION_CATALOG } = await import('../services/levelsActionCatalog.js');
+  for (const def of ACTION_CATALOG) {
+    const row = {
+      actionType: def.actionType,
+      pointsPerUnit: def.pointsPerUnit,
+      maxAccruals: def.maxAccruals ?? null,
+      track: def.track,
+      displayName: def.displayName,
+    };
+    const [existing] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, def.actionType)).limit(1);
     if (!existing) {
       await db.insert(levelsConfig).values(row);
-    } else if (
-      existing.pointsPerUnit !== row.pointsPerUnit
-      || (row.maxAccruals != null && existing.maxAccruals !== row.maxAccruals)
-    ) {
+    } else if (def.actionType === 'path_level' || def.actionType === 'exp_level') {
+      if (!existing.displayName) {
+        await db.update(levelsConfig).set({ displayName: def.displayName, track: def.track }).where(eq(levelsConfig.id, existing.id));
+      }
+    } else if (!existing.displayName || existing.track == null) {
       await db.update(levelsConfig)
-        .set({ pointsPerUnit: row.pointsPerUnit, maxAccruals: row.maxAccruals ?? existing.maxAccruals })
+        .set({
+          displayName: existing.displayName || def.displayName,
+          track: existing.track || def.track,
+        })
         .where(eq(levelsConfig.id, existing.id));
+    }
+  }
+
+  const cats = await db.select().from(taskCategories);
+  const { taskCategoryCatalogDef } = await import('../services/levelsActionCatalog.js');
+  for (const cat of cats) {
+    const def = taskCategoryCatalogDef(cat.name);
+    const [existing] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, def.actionType)).limit(1);
+    if (!existing) {
+      await db.insert(levelsConfig).values({
+        actionType: def.actionType,
+        pointsPerUnit: def.pointsPerUnit,
+        maxAccruals: def.maxAccruals,
+        track: def.track,
+        displayName: def.displayName,
+      });
     }
   }
 

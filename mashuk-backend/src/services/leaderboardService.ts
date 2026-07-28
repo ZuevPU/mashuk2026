@@ -5,6 +5,49 @@ import { pointsTrackForAction, totalRatingScore } from './pointsService.js';
 
 export type LeaderboardScope = 'total' | 'day' | 'shift';
 
+export type LeaderboardScopesConfig = {
+  total?: boolean;
+  path?: boolean;
+  experience?: boolean;
+  day?: boolean;
+  shift?: boolean;
+};
+
+export const DEFAULT_LEADERBOARD_SCOPES: Required<LeaderboardScopesConfig> = {
+  total: true,
+  path: true,
+  experience: true,
+  day: true,
+  shift: true,
+};
+
+export function normalizeLeaderboardScopes(raw: unknown): Required<LeaderboardScopesConfig> {
+  const o = (raw && typeof raw === 'object') ? raw as LeaderboardScopesConfig : {};
+  return {
+    total: o.total !== false,
+    path: o.path !== false,
+    experience: o.experience !== false,
+    day: o.day !== false,
+    shift: o.shift !== false,
+  };
+}
+
+export function isLeaderboardScopeEnabled(
+  scopes: Required<LeaderboardScopesConfig>,
+  scope: LeaderboardScope,
+  track: string,
+): boolean {
+  if (scope === 'day' && !scopes.day) return false;
+  if (scope === 'shift' && !scopes.shift) return false;
+  if (scope === 'total') {
+    if (track === 'path' && !scopes.path) return false;
+    if (track === 'experience' && !scopes.experience) return false;
+    if (track === 'total' && !scopes.total) return false;
+    if (track === 'bonus') return scopes.total;
+  }
+  return true;
+}
+
 function scoreForTrack(
   p: { pathPoints: number | null; experiencePoints: number | null; bonusPoints: number | null },
   track: string,

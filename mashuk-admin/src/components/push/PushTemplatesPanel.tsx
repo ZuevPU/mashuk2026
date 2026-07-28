@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { confirmDelete } from '../../admin/confirmDelete';
 import type { AdminTabProps } from '../admin/types';
 import {
   PUSH_NOTIFICATION_TYPE_OPTIONS,
@@ -88,7 +89,7 @@ export function PushTemplatesPanel({ adminFetch, act, templates, onReload }: Pro
                   className="adm-btn adm-btn-secondary adm-btn-sm"
                   style={{ marginTop: 6 }}
                   onClick={() => {
-                    if (confirm('Удалить шаблон?')) {
+                    if (confirmDelete('Удалить шаблон?')) {
                       act(async () => {
                         await adminFetch(`/push/templates/${t.id}`, { method: 'DELETE' });
                         onReload();

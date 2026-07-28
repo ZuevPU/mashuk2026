@@ -46,6 +46,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   const [age, setAge] = useState('');
   const [workplace, setWorkplace] = useState('');
   const [position, setPosition] = useState('');
+  const [region, setRegion] = useState('');
   const [consentPd, setConsentPd] = useState(false);
   const [consentAnalytics, setConsentAnalytics] = useState(false);
   const [consentPdMeta, setConsentPdMeta] = useState<{ version: number; title: string; body: string } | null>(null);
@@ -171,7 +172,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
 
   const canGoStep1 = Boolean(
     directionId && age && Number(age) >= 14 && Number(age) <= 100
-    && workplace.trim() && position.trim() && consentPd && consentAnalytics
+    && workplace.trim() && position.trim() && region.trim() && consentPd && consentAnalytics
     && (groupAssignMode !== 'list' || groups.length === 0 || groupId),
   );
   const canGoStep2 = goalQuestions.every((_, i) => (goalAnswers[i] || '').trim().length > 0);
@@ -198,6 +199,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         directionId,
         workplace: workplace.trim(),
         position: position.trim(),
+        region: region.trim(),
         consentPd: true,
         consentAnalytics: true,
         consentPdVersion: consentPdMeta?.version,
@@ -253,6 +255,9 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
             </FormItem>
             <FormItem top="Должность / деятельность *">
               <Input value={position} onChange={e => setPosition(e.target.value)} placeholder="Учитель истории…" />
+            </FormItem>
+            <FormItem top="Регион *">
+              <Input value={region} onChange={e => setRegion(e.target.value)} placeholder="Карачаево-Черкесская Республика" />
             </FormItem>
             {groupAssignMode === 'list' && groups.length > 0 && (
               <FormItem top="Группа *">

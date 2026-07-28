@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { confirmDelete } from '../../admin/confirmDelete';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import { RowActionsMenu } from '../participants/RowActionsMenu';
 import type { AdminTabProps } from '../admin/types';
@@ -34,6 +35,7 @@ export function RecommendationTagsTab({ adminFetch, act, reloadKey }: AdminTabPr
   const [mergeTo, setMergeTo] = useState<number | ''>('');
   const [mergePreview, setMergePreview] = useState<Record<string, number> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dragTagId, setDragTagId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -122,6 +124,36 @@ export function RecommendationTagsTab({ adminFetch, act, reloadKey }: AdminTabPr
       setSelected(new Set());
       await load();
     }, 'Объединение выполнено');
+  };
+
+  const moveTag = (idx: number, dir: -1 | 1) => {
+    const j = idx + dir;
+    if (j < 0 || j >= tags.length) return;
+    const reordered = [...tags];
+    const tmp = reordered[idx];
+    reordered[idx] = reordered[j];
+    reordered[j] = tmp;
+    const order = reordered.map((t, i) => ({ id: t.id, sortOrder: i }));
+    act(async () => {
+      await adminFetch('/thematic-tags/reorder', { method: 'PATCH', body: JSON.stringify({ order }) });
+      await load();
+    }, 'Порядок сохранён');
+  };
+
+  const reorderByDrag = (targetId: number) => {
+    if (dragTagId == null || dragTagId === targetId) return;
+    const fromIdx = tags.findIndex(t => t.id === dragTagId);
+    const toIdx = tags.findIndex(t => t.id === targetId);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const reordered = [...tags];
+    const [item] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, item);
+    const order = reordered.map((t, i) => ({ id: t.id, sortOrder: i }));
+    act(async () => {
+      await adminFetch('/thematic-tags/reorder', { method: 'PATCH', body: JSON.stringify({ order }) });
+      await load();
+    }, 'Порядок сохранён');
+    setDragTagId(null);
   };
 
   return (
@@ -216,15 +248,26 @@ export function RecommendationTagsTab({ adminFetch, act, reloadKey }: AdminTabPr
               </tr>
             </thead>
             <tbody>
-              {tags.map(t => (
-                <tr key={t.id}>
+              {tags.map((t, idx) => (
+                <tr
+                  key={t.id}
+                  draggable
+                  onDragStart={() => setDragTagId(t.id)}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={() => reorderByDrag(t.id)}
+                  style={dragTagId === t.id ? { opacity: 0.5 } : undefined}
+                >
                   <td><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleSelect(t.id)} /></td>
                   <td>{t.name}</td>
                   <td>{(t.applicationTypes ?? []).join(', ')}</td>
                   <td>
                     событий {t.usage?.events ?? 0}, материалов {t.usage?.materials ?? 0}, участников {t.usage?.participants ?? 0}
                   </td>
-                  <td>{t.sortOrder ?? 0}</td>
+                  <td>
+                    <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" disabled={idx === 0} onClick={() => moveTag(idx, -1)} aria-label="Выше">↑</button>
+                    <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" disabled={idx >= tags.length - 1} onClick={() => moveTag(idx, 1)} aria-label="Ниже">↓</button>
+                    {' '}{t.sortOrder ?? 0}
+                  </td>
                   <td>
                     <RowActionsMenu actions={[
                       { label: 'Редактировать', onClick: () => setForm({ ...t }) },
@@ -233,7 +276,7 @@ export function RecommendationTagsTab({ adminFetch, act, reloadKey }: AdminTabPr
                         label: 'Удалить',
                         danger: true,
                         onClick: () => {
-                          if (!window.confirm('Точно удалить? Действие необратимо')) return;
+                          if (!confirmDelete()) return;
                           act(() => adminFetch(`/thematic-tags/${t.id}`, { method: 'DELETE' }).then(load), 'Удалено');
                         },
                       },

@@ -6,6 +6,14 @@ import {
 import { TOUCHPOINT_SLOTS } from './touchpointTemplates.js';
 import { awardPoints, getLevel, type PointTrack } from './pointsService.js';
 import { sendPushNotification } from './pushService.js';
+import {
+  bonusParamInt,
+  bonusPointsActionType,
+  bonusRuleEnabled,
+  getBonusRuleByCode,
+  loadBonusRulesByCode,
+  type BonusRuleRow,
+} from './ratingBonusRulesConfig.js';
 
 const PATH_ACTIVITY_ACTIONS = new Set([
   'question_answer',
@@ -51,11 +59,18 @@ async function touchpointsDoneForDay(participantId: number, dayNumber: number): 
   return touchQs.every(q => answered.has(q.id));
 }
 
-export async function tryDayCompleteBonus(participantId: number, dayNumber: number): Promise<void> {
+export async function tryDayCompleteBonus(
+  participantId: number,
+  dayNumber: number,
+  rules?: Map<string, BonusRuleRow>,
+): Promise<void> {
+  const rule = rules?.get('day_complete_bonus') ?? await getBonusRuleByCode('day_complete_bonus');
+  if (!bonusRuleEnabled(rule)) return;
   if (dayNumber < 1 || dayNumber > 7) return;
   if (!(await touchpointsDoneForDay(participantId, dayNumber))) return;
-  if (await hasBonusForDay(participantId, 'day_complete_bonus', dayNumber)) return;
-  await awardPoints(participantId, 'day_complete_bonus', undefined, dayNumber);
+  const actionType = bonusPointsActionType(rule, 'day_complete_bonus');
+  if (await hasBonusForDay(participantId, actionType, dayNumber)) return;
+  await awardPoints(participantId, actionType, undefined, dayNumber);
 }
 
 async function distinctActiveForumDays(participantId: number): Promise<number[]> {
@@ -102,30 +117,44 @@ async function reflectionDays(participantId: number): Promise<number[]> {
   return [...days].sort((a, b) => a - b);
 }
 
-export async function tryReflectionStreakBonus(participantId: number): Promise<void> {
+export async function tryReflectionStreakBonus(
+  participantId: number,
+  rules?: Map<string, BonusRuleRow>,
+): Promise<void> {
+  const rule = rules?.get('reflection_streak_7') ?? await getBonusRuleByCode('reflection_streak_7');
+  if (!bonusRuleEnabled(rule)) return;
+  const minDays = bonusParamInt(rule?.params as Record<string, unknown>, 'minDays', 7);
   const streak = longestConsecutiveRun(await reflectionDays(participantId));
-  if (streak < 7) return;
+  if (streak < minDays) return;
+  const actionType = bonusPointsActionType(rule, 'reflection_streak_7');
   const [existing] = await db.select({ id: pointsLog.id }).from(pointsLog)
     .where(and(
       eq(pointsLog.participantId, participantId),
-      eq(pointsLog.actionType, 'reflection_streak_7'),
+      eq(pointsLog.actionType, actionType),
       isNull(pointsLog.revokedAt),
     )).limit(1);
   if (existing) return;
-  await awardPoints(participantId, 'reflection_streak_7');
+  await awardPoints(participantId, actionType);
 }
 
-export async function tryRegularityBonus(participantId: number): Promise<void> {
+export async function tryRegularityBonus(
+  participantId: number,
+  rules?: Map<string, BonusRuleRow>,
+): Promise<void> {
+  const rule = rules?.get('bonus_regularity') ?? await getBonusRuleByCode('bonus_regularity');
+  if (!bonusRuleEnabled(rule)) return;
+  const minStreak = bonusParamInt(rule?.params as Record<string, unknown>, 'minStreak', 6);
   const streak = longestConsecutiveRun(await distinctActiveForumDays(participantId));
-  if (streak < 6) return;
+  if (streak < minStreak) return;
+  const actionType = bonusPointsActionType(rule, 'bonus_regularity');
   const [existing] = await db.select({ id: pointsLog.id }).from(pointsLog)
     .where(and(
       eq(pointsLog.participantId, participantId),
-      eq(pointsLog.actionType, 'bonus_regularity'),
+      eq(pointsLog.actionType, actionType),
       isNull(pointsLog.revokedAt),
     )).limit(1);
   if (existing) return;
-  await awardPoints(participantId, 'bonus_regularity');
+  await awardPoints(participantId, actionType);
 }
 
 const DIVERSITY_BUCKETS = [
@@ -142,7 +171,13 @@ function categoryBucket(category: string | null | undefined): string | null {
   return c.slice(0, 24);
 }
 
-export async function tryDiversityBonus(participantId: number): Promise<void> {
+export async function tryDiversityBonus(
+  participantId: number,
+  rules?: Map<string, BonusRuleRow>,
+): Promise<void> {
+  const rule = rules?.get('bonus_diversity') ?? await getBonusRuleByCode('bonus_diversity');
+  if (!bonusRuleEnabled(rule)) return;
+  const minCategories = bonusParamInt(rule?.params as Record<string, unknown>, 'minCategories', 4);
   const rows = await db.select({ category: tasks.category })
     .from(taskSubmissions)
     .innerJoin(tasks, eq(taskSubmissions.taskId, tasks.id))
@@ -155,15 +190,16 @@ export async function tryDiversityBonus(participantId: number): Promise<void> {
     const b = categoryBucket(r.category);
     if (b) buckets.add(b);
   }
-  if (buckets.size < 4) return;
+  if (buckets.size < minCategories) return;
+  const actionType = bonusPointsActionType(rule, 'bonus_diversity');
   const [existing] = await db.select({ id: pointsLog.id }).from(pointsLog)
     .where(and(
       eq(pointsLog.participantId, participantId),
-      eq(pointsLog.actionType, 'bonus_diversity'),
+      eq(pointsLog.actionType, actionType),
       isNull(pointsLog.revokedAt),
     )).limit(1);
   if (existing) return;
-  await awardPoints(participantId, 'bonus_diversity');
+  await awardPoints(participantId, actionType);
 }
 
 async function notifyLevelUpIfNeeded(
@@ -209,11 +245,12 @@ export async function afterPointsAwarded(
     );
   }
 
+  const rulesMap = await loadBonusRulesByCode();
   const day = opts?.forumDay;
   if (day != null && opts?.actionType && PATH_ACTIVITY_ACTIONS.has(opts.actionType)) {
-    await tryDayCompleteBonus(participantId, day);
+    await tryDayCompleteBonus(participantId, day, rulesMap);
   }
-  await tryReflectionStreakBonus(participantId);
-  await tryRegularityBonus(participantId);
-  await tryDiversityBonus(participantId);
+  await tryReflectionStreakBonus(participantId, rulesMap);
+  await tryRegularityBonus(participantId, rulesMap);
+  await tryDiversityBonus(participantId, rulesMap);
 }

@@ -150,15 +150,21 @@ export async function synthesizeSemanticLayers(input: {
  */
 export async function clubMatchNightly(): Promise<{ matched: number; usedLlm: boolean }> {
   const { db } = await import('../db/index.js');
-  const { participants, clubMatches, piggybank } = await import('../db/schema.js');
+  const { participants, clubMatches, piggybank, forumClubs } = await import('../db/schema.js');
   const { isNotNull, eq } = await import('drizzle-orm');
 
-  const CLUBS = [
-    { id: 'club_practice', name: 'Клуб практики', keywords: ['практика', 'урок', 'класс'] },
-    { id: 'club_research', name: 'Клуб исследований', keywords: ['исследование', 'данные', 'анализ'] },
-    { id: 'club_community', name: 'Клуб сообщества', keywords: ['команда', 'сообщество', 'родители'] },
-    { id: 'club_innovation', name: 'Клуб инноваций', keywords: ['проект', 'инновац', 'цифров'] },
-  ];
+  const dbClubs = await db.select().from(forumClubs).where(eq(forumClubs.isActive, true));
+  const CLUBS = dbClubs.length
+    ? dbClubs.map(c => ({
+      id: c.id,
+      name: c.name,
+      keywords: (c.description || c.name).toLowerCase().split(/[\s,.;]+/).filter(w => w.length > 3).slice(0, 12),
+    }))
+    : [
+      { id: 'club_future', name: 'Будущее', keywords: ['будущ', 'образован', 'школ'] },
+      { id: 'club_human', name: 'Образование вокруг человека', keywords: ['человек', 'среда', 'отношен'] },
+      { id: 'club_unity', name: 'Единство', keywords: ['единств', 'сообществ', 'коман'] },
+    ];
 
   const list = await db.select().from(participants).where(isNotNull(participants.onboardingCompletedAt));
   let matched = 0;

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
+import { adminDownloadBinary } from '../admin/client';
 import { label } from '../labels/ru';
 
 import { VkProfileLink } from './VkProfileLink';
@@ -34,6 +35,22 @@ type CardData = {
 
     selfDeletedAt?: string | null;
 
+    consentPd?: boolean;
+
+    consentAnalytics?: boolean;
+
+    interests?: unknown;
+
+    workplace?: string | null;
+
+    goals?: unknown;
+
+    createdAt?: string;
+
+    age?: number | null;
+
+    isBlocked?: boolean | null;
+
     outcomesEdited?: unknown;
 
     nextStepsEdited?: unknown;
@@ -48,9 +65,15 @@ type CardData = {
 
   medals?: any[];
 
+  medalProgress?: { id: number; name: string; level?: string; earned: boolean; awardedAt?: string | null }[];
+
+  pointsSummary?: { path: number; experience: number; bonus: number; total: number; byDay: Record<string, number> };
+
   piggybank?: any[];
 
   dayStates?: any[];
+
+  avatarUrl?: string | null;
 
 };
 
@@ -131,6 +154,10 @@ export function ParticipantCardModal({
   const p = card.participant!;
 
   const initials = `${(p.firstName || '?')[0]}${(p.lastName || '?')[0]}`.toUpperCase();
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const avatarSrc = !avatarFailed && card.avatarUrl ? card.avatarUrl : null;
+  const leadingRole = p.strongRole || p.pedagogicalRole;
+  const leadingRoleLabel = leadingRole ? label(leadingRole) : 'роль не задана';
 
   const tabs = ['profile', 'activity', 'answers', 'tasks', 'points', 'medals', 'piggybank', 'logs'] as const;
 
@@ -169,6 +196,28 @@ export function ParticipantCardModal({
   const [adminLogs, setAdminLogs] = useState<any[]>([]);
 
   const [answerDayFilter, setAnswerDayFilter] = useState('');
+
+  const [answerBlockFilter, setAnswerBlockFilter] = useState('');
+
+  const [answerReflectionFilter, setAnswerReflectionFilter] = useState('');
+
+  const [piggyTagFilter, setPiggyTagFilter] = useState('');
+
+  const [piggySourceFilter, setPiggySourceFilter] = useState('');
+
+  const [piggyDayFilter, setPiggyDayFilter] = useState('');
+
+  const [pointsTrack, setPointsTrack] = useState<'path' | 'experience'>('path');
+  const [pointsAmount, setPointsAmount] = useState(10);
+  const [pointsReason, setPointsReason] = useState('');
+  const [bulkForumDay, setBulkForumDay] = useState<number | ''>('');
+  const [bulkReason, setBulkReason] = useState('');
+  const [medalCatalog, setMedalCatalog] = useState<{ id: number; name: string; level?: string }[]>([]);
+  const [awardMedalId, setAwardMedalId] = useState<number | ''>('');
+
+  useEffect(() => {
+    setAvatarFailed(false);
+  }, [card.avatarUrl, p.id]);
 
 
 
@@ -210,6 +259,12 @@ export function ParticipantCardModal({
 
     }
 
+    if (tab === 'medals') {
+      adminFetch('/medals?tab=active')
+        .then((r: { medals?: { id: number; name: string; level?: string }[] }) => setMedalCatalog(r.medals || []))
+        .catch(() => setMedalCatalog([]));
+    }
+
   }, [tab, p.id, adminFetch]);
 
 
@@ -243,47 +298,48 @@ export function ParticipantCardModal({
 
           <button type="button" className="adm-btn adm-btn-ghost adm-pc-close" onClick={onClose}>✕</button>
 
-          <div className="adm-pc-avatar">{initials}</div>
+          <div className="adm-pc-avatar">
+            {avatarSrc ? (
+              <img src={avatarSrc} alt="" className="adm-pc-avatar-img" onError={() => setAvatarFailed(true)} />
+            ) : initials}
+          </div>
 
           <div className="adm-pc-name">{p.firstName} {p.lastName}</div>
 
           <div className="adm-pc-meta">
-            VK {p.vkId} · {p.direction || '—'}{p.groupName ? ` · ${p.groupName}` : ''} · {p.pedagogicalRole ? label(p.pedagogicalRole) : 'роль не задана'}
+            <VkProfileLink vkId={p.vkId} /> · {p.direction || '—'}{p.groupName ? ` · Группа: ${p.groupName}` : ''} · Ведущая роль: {leadingRoleLabel}
           </div>
 
           <div className="adm-forum-toolbar" style={{ justifyContent: 'center', marginTop: 10, flexWrap: 'wrap' }}>
 
-            <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setTab('profile')}>Скорректировать</button>
+            <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setTab('profile')}>Скорректировать роль</button>
+
+            <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setTab('points')}>Начислить/снять баллы</button>
 
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => {
-
               const text = prompt('Текст пуша');
-
               if (!text?.trim()) return;
-
               act(() => adminFetch(`/participants/${p.id}/push`, { method: 'POST', body: JSON.stringify({ text: text.trim() }) }), 'Пуш отправлен');
+            }}>Отправить пуш</button>
 
-            }}>Пуш</button>
+            <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF')}>Выгрузить всё</button>
 
-            <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => {
-
-              const pts = Number(prompt('Баллы (+ или −)'));
-
-              if (!Number.isFinite(pts) || pts === 0) return;
-
-              const track = confirm('Линия «Опыт»? OK — Опыт, Отмена — Путь') ? 'experience' : 'path';
-
-              const reason = prompt('Причина') || 'Ручная корректировка';
-
-              act(async () => {
-
-                await adminFetch(`/participants/${p.id}/points/adjust`, { method: 'POST', body: JSON.stringify({ points: pts, track, reason }) });
-
-                onReloadCard();
-
-              }, 'Баллы обновлены');
-
-            }}>Баллы ±</button>
+            {p.isBlocked
+              ? (
+                <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => act(async () => {
+                  await adminFetch(`/participants/${p.id}/unblock`, { method: 'POST' });
+                  onReloadCard();
+                }, 'Разблокирован')}>Разблокировать</button>
+              )
+              : (
+                <button type="button" className="adm-btn adm-btn-sm btn-danger" onClick={() => {
+                  const reason = prompt('Причина блокировки (необязательно)') || undefined;
+                  act(async () => {
+                    await adminFetch(`/participants/${p.id}/block`, { method: 'POST', body: JSON.stringify({ reason }) });
+                    onReloadCard();
+                  }, 'Заблокирован');
+                }}>Заблокировать</button>
+              )}
 
           </div>
 
@@ -354,6 +410,32 @@ export function ParticipantCardModal({
               </label>
 
               <div className="adm-field-row">Сильная / рост: {p.strongRole || '—'} / {p.growthRole || '—'}</div>
+
+              <div className="adm-field-row">
+                Согласия: ПД {p.consentPd ? 'да' : 'нет'} · аналитика {p.consentAnalytics ? 'да' : 'нет'}
+              </div>
+
+              {p.workplace && <div className="adm-field-row">Место работы: {p.workplace}</div>}
+
+              {p.interests != null && (
+                <div className="adm-field-row">
+                  Интересы: {Array.isArray(p.interests) ? (p.interests as string[]).join(', ') : JSON.stringify(p.interests)}
+                </div>
+              )}
+
+              {p.createdAt && (
+                <div className="adm-field-row">Регистрация: {new Date(p.createdAt).toLocaleString('ru-RU')}</div>
+              )}
+
+              {p.age != null && (
+                <div className="adm-field-row">Возраст: {p.age}</div>
+              )}
+
+              {p.goals != null && p.goals !== '' && (
+                <div className="adm-field-row">
+                  Цели: {typeof p.goals === 'string' ? p.goals : JSON.stringify(p.goals)}
+                </div>
+              )}
 
               <label className="adm-field">
 
@@ -591,19 +673,55 @@ export function ParticipantCardModal({
 
               </select>
 
+              <select className="adm-input" value={answerBlockFilter} onChange={e => setAnswerBlockFilter(e.target.value)}>
+
+                <option value="">Все блоки</option>
+
+                {[...new Set((card.answers || []).map((a: any) => a.block).filter(Boolean))].sort().map((b: any) => (
+
+                  <option key={b} value={String(b)}>{label(b) || b}</option>
+
+                ))}
+
+              </select>
+
+              <select className="adm-input" value={answerReflectionFilter} onChange={e => setAnswerReflectionFilter(e.target.value)}>
+
+                <option value="">Тип рефлексии</option>
+
+                {[...new Set((card.answers || []).map((a: any) => a.reflectionKind).filter(Boolean))].sort().map((k: any) => (
+
+                  <option key={k} value={String(k)}>{label(k) || k}</option>
+
+                ))}
+
+              </select>
+
             </div>
 
             <table className="adm-table">
 
-              <thead><tr><th>Вопрос</th><th>День</th><th>Ответ</th></tr></thead>
+              <thead><tr><th>Вопрос</th><th>Блок</th><th>День</th><th>Ответ</th></tr></thead>
 
               <tbody>
 
-                {(card.answers || []).filter((a: any) => !answerDayFilter || String(a.dayNumber) === answerDayFilter).slice(0, 100).map((a: any) => (
+                {(card.answers || []).filter((a: any) => {
+
+                  if (answerDayFilter && String(a.dayNumber) !== answerDayFilter) return false;
+
+                  if (answerBlockFilter && String(a.block || '') !== answerBlockFilter) return false;
+
+                  if (answerReflectionFilter && String(a.reflectionKind || '') !== answerReflectionFilter) return false;
+
+                  return true;
+
+                }).slice(0, 100).map((a: any) => (
 
                   <tr key={a.id}>
 
                     <td>{a.questionTitle}</td>
+
+                    <td>{a.block ? label(a.block) : '—'}</td>
 
                     <td>{a.dayNumber ?? '—'}</td>
 
@@ -730,6 +848,154 @@ export function ParticipantCardModal({
 
           {tab === 'points' && (
 
+            <div className="adm-stack">
+
+            {card.pointsSummary && (
+
+              <div className="card" style={{ padding: 12, fontSize: 13 }}>
+
+                <strong>Сводка:</strong> Путь {card.pointsSummary.path} · Опыт {card.pointsSummary.experience} · Бонус {card.pointsSummary.bonus} · всего {card.pointsSummary.total}
+
+                {Object.keys(card.pointsSummary.byDay || {}).length > 0 && (
+
+                  <div className="adm-muted" style={{ marginTop: 6 }}>
+
+                    По дням: {Object.entries(card.pointsSummary.byDay).sort((a, b) => Number(a[0]) - Number(b[0])).map(([d, pts]) => `Д${d}: ${pts}`).join(' · ')}
+
+                  </div>
+
+                )}
+
+              </div>
+
+            )}
+
+            <div className="card" style={{ padding: 12 }}>
+
+              <h4 style={{ marginTop: 0 }}>Добавить / снять баллы</h4>
+
+              <div className="adm-forum-grid-2">
+
+                <label className="adm-field">
+
+                  <span className="adm-label">Линия</span>
+
+                  <select className="adm-input" value={pointsTrack} onChange={e => setPointsTrack(e.target.value as 'path' | 'experience')}>
+
+                    <option value="path">Путь</option>
+
+                    <option value="experience">Опыт</option>
+
+                  </select>
+
+                </label>
+
+                <label className="adm-field">
+
+                  <span className="adm-label">Сумма</span>
+
+                  <input type="number" min={1} className="adm-input" value={pointsAmount} onChange={e => setPointsAmount(Math.max(1, Number(e.target.value) || 1))} />
+
+                </label>
+
+                <label className="adm-field" style={{ gridColumn: '1 / -1' }}>
+
+                  <span className="adm-label">Причина</span>
+
+                  <input className="adm-input" value={pointsReason} onChange={e => setPointsReason(e.target.value)} />
+
+                </label>
+
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+
+                <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={() => {
+
+                  if (!pointsReason.trim()) { alert('Укажите причину'); return; }
+
+                  act(async () => {
+
+                    await adminFetch(`/participants/${p.id}/points/adjust`, { method: 'POST', body: JSON.stringify({ points: pointsAmount, track: pointsTrack, reason: pointsReason.trim() }) });
+
+                    setPointsReason('');
+
+                    onReloadCard();
+
+                  }, 'Начислено');
+
+                }}>Добавить баллы</button>
+
+                <button type="button" className="adm-btn btn-danger adm-btn-sm" onClick={() => {
+
+                  if (!pointsReason.trim()) { alert('Укажите причину'); return; }
+
+                  act(async () => {
+
+                    await adminFetch(`/participants/${p.id}/points/adjust`, { method: 'POST', body: JSON.stringify({ points: -pointsAmount, track: pointsTrack, reason: pointsReason.trim() }) });
+
+                    setPointsReason('');
+
+                    onReloadCard();
+
+                  }, 'Списано');
+
+                }}>Снять баллы</button>
+
+              </div>
+
+            </div>
+
+            <div className="card" style={{ padding: 12 }}>
+
+              <h4 style={{ marginTop: 0 }}>Аннулировать подозрительные</h4>
+
+              <div className="adm-forum-grid-2">
+
+                <label className="adm-field">
+
+                  <span className="adm-label">День смены</span>
+
+                  <input type="number" min={1} max={8} className="adm-input" value={bulkForumDay} onChange={e => setBulkForumDay(e.target.value === '' ? '' : Number(e.target.value))} />
+
+                </label>
+
+                <label className="adm-field">
+
+                  <span className="adm-label">Причина</span>
+
+                  <input className="adm-input" value={bulkReason} onChange={e => setBulkReason(e.target.value)} />
+
+                </label>
+
+              </div>
+
+              <button type="button" className="adm-btn btn-danger adm-btn-sm" onClick={() => {
+
+                if (!bulkReason.trim()) { alert('Укажите причину'); return; }
+
+                if (!confirm('Аннулировать начисления за выбранный день?')) return;
+
+                act(async () => {
+
+                  await adminFetch(`/participants/${p.id}/points/revoke-bulk`, {
+
+                    method: 'POST',
+
+                    body: JSON.stringify({ reason: bulkReason.trim(), notify: true, forumDay: bulkForumDay === '' ? undefined : Number(bulkForumDay) }),
+
+                  });
+
+                  setBulkReason('');
+
+                  onReloadCard();
+
+                }, 'Готово');
+
+              }}>Аннулировать подозрительные</button>
+
+            </div>
+
             <table className="adm-table">
 
               <thead><tr><th>Тип</th><th>Баллы</th><th>Когда</th><th></th></tr></thead>
@@ -794,15 +1060,75 @@ export function ParticipantCardModal({
 
             </table>
 
+            </div>
+
           )}
 
           {tab === 'medals' && (
+
+            <div className="adm-stack">
+
+            <div className="card" style={{ padding: 12 }}>
+
+              <h4 style={{ marginTop: 0 }}>Выдать медаль</h4>
+
+              <div className="adm-forum-grid-2">
+
+                <select className="adm-input" value={awardMedalId === '' ? '' : String(awardMedalId)} onChange={e => setAwardMedalId(e.target.value ? Number(e.target.value) : '')}>
+
+                  <option value="">— выберите медаль —</option>
+
+                  {medalCatalog.map(m => (
+
+                    <option key={m.id} value={m.id}>{m.name}</option>
+
+                  ))}
+
+                </select>
+
+                <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" disabled={awardMedalId === ''} onClick={() => {
+
+                  act(async () => {
+
+                    await adminFetch('/medals/award', { method: 'POST', body: JSON.stringify({ participantId: p.id, medalId: awardMedalId }) });
+
+                    setAwardMedalId('');
+
+                    onReloadCard();
+
+                  }, 'Медаль выдана');
+
+                }}>Выдать</button>
+
+              </div>
+
+            </div>
+
+            {(card.medalProgress || []).filter((m: any) => !m.earned).length > 0 && (
+
+              <div className="card" style={{ padding: 12 }}>
+
+                <h4 style={{ marginTop: 0 }}>Ещё не получены</h4>
+
+                <ul className="adm-list">
+
+                  {(card.medalProgress || []).filter((m: any) => !m.earned).map((m: any) => (
+
+                    <li key={m.id} className="adm-muted">{m.name} ({label(m.level)})</li>
+
+                  ))}
+
+                </ul>
+
+              </div>
+
+            )}
 
             <ul className="adm-list">
 
               {(card.medals || []).map((m: any) => (
 
-                <li key={m.id}>{m.name} ({label(m.level)})</li>
+                <li key={m.id}>{m.name} ({label(m.level)}){m.awardedAt ? ` · ${new Date(m.awardedAt).toLocaleDateString('ru-RU')}` : ''}</li>
 
               ))}
 
@@ -810,19 +1136,75 @@ export function ParticipantCardModal({
 
             </ul>
 
+            </div>
+
           )}
 
           {tab === 'piggybank' && (
 
+            <>
+
+            <div className="adm-forum-toolbar" style={{ marginBottom: 8, flexWrap: 'wrap' }}>
+
+              <select className="adm-input" value={piggyTagFilter} onChange={e => setPiggyTagFilter(e.target.value)}>
+
+                <option value="">Все теги</option>
+
+                {[...new Set((card.piggybank || []).map((e: any) => e.tag).filter(Boolean))].map((t: any) => (
+
+                  <option key={t} value={String(t)}>{label(t) || t}</option>
+
+                ))}
+
+              </select>
+
+              <select className="adm-input" value={piggySourceFilter} onChange={e => setPiggySourceFilter(e.target.value)}>
+
+                <option value="">Все источники</option>
+
+                {[...new Set((card.piggybank || []).map((e: any) => e.source).filter(Boolean))].map((s: any) => (
+
+                  <option key={s} value={String(s)}>{label(s) || s}</option>
+
+                ))}
+
+              </select>
+
+              <select className="adm-input" value={piggyDayFilter} onChange={e => setPiggyDayFilter(e.target.value)}>
+
+                <option value="">Все дни</option>
+
+                {[...new Set((card.piggybank || []).map((e: any) => e.forumDay).filter(v => v != null))].sort().map((d: any) => (
+
+                  <option key={d} value={String(d)}>День {d}</option>
+
+                ))}
+
+              </select>
+
+            </div>
+
             <ul className="adm-list">
 
-              {(card.piggybank || []).map((e: any) => (
+              {(card.piggybank || []).filter((e: any) => {
+
+                if (piggyTagFilter && String(e.tag || '') !== piggyTagFilter) return false;
+
+                if (piggySourceFilter && String(e.source || '') !== piggySourceFilter) return false;
+
+                if (piggyDayFilter && String(e.forumDay ?? '') !== piggyDayFilter) return false;
+
+                return true;
+
+              }).map((e: any) => (
 
                 <li key={e.id}><strong>{label(e.tag) || e.tag}</strong> · {label(e.source) || e.source}: {(e.text || '').slice(0, 120)}</li>
 
               ))}
 
             </ul>
+
+            </>
 
           )}
 

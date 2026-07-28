@@ -237,6 +237,18 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
     const dayNum = req.query.day != null ? Number(req.query.day) : undefined;
     const medalId = req.query.medalId != null ? Number(req.query.medalId) : undefined;
 
+    const { getForumSettings } = await import('../services/helpers.js');
+    const {
+      normalizeLeaderboardScopes,
+      isLeaderboardScopeEnabled,
+    } = await import('../services/leaderboardService.js');
+    const settings = await getForumSettings();
+    const scopes = normalizeLeaderboardScopes(settings?.leaderboardScopes);
+    if (!isLeaderboardScopeEnabled(scopes, scope, track)) {
+      res.status(400).json({ error: 'Leaderboard scope disabled' });
+      return;
+    }
+
     const list = await db.select({
       id: participants.id,
       firstName: participants.firstName,

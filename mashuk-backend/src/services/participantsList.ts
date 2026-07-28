@@ -11,6 +11,7 @@ export type ParticipantListQuery = {
   directionIds?: number[];
   groupId?: number;
   pedagogicalRole?: string;
+  strongRole?: string;
   activity?: 'active_today' | 'inactive_1d' | 'inactive_3d';
   includeDeleted?: boolean;
   ids?: number[];
@@ -59,6 +60,9 @@ export function buildParticipantWhere(query: ParticipantListQuery): SQL | undefi
   }
   if (query.pedagogicalRole?.trim()) {
     conditions.push(eq(participants.pedagogicalRole, query.pedagogicalRole.trim()));
+  }
+  if (query.strongRole?.trim()) {
+    conditions.push(eq(participants.strongRole, query.strongRole.trim()));
   }
   const now = new Date();
   if (query.activity === 'active_today') {
@@ -135,6 +139,7 @@ export function parseParticipantListQuery(req: { query: Record<string, unknown> 
     directionIds,
     groupId: req.query.groupId != null ? Number(req.query.groupId) : undefined,
     pedagogicalRole: typeof req.query.pedagogicalRole === 'string' ? req.query.pedagogicalRole : undefined,
+    strongRole: typeof req.query.strongRole === 'string' ? req.query.strongRole : undefined,
     activity: validActivity,
     includeDeleted: req.query.includeDeleted === 'true' || req.query.includeDeleted === '1',
     ids,

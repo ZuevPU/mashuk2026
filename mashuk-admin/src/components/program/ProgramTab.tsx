@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { confirmDelete } from '../../admin/confirmDelete';
 import { label } from '../../labels/ru';
 import { EventCard } from './EventCard';
 import { PlaceSelect, ProgramPlacesBlock } from './ProgramPlacesBlock';
@@ -35,7 +36,7 @@ const emptyForm = (day: number) => ({
   isPublished: false,
 });
 
-export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
+export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps) {
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(1);
   const [totalDays, setTotalDays] = useState(8);
@@ -313,7 +314,17 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
       <div className="card adm-forum-block">
         <h3>Тематические теги</h3>
-        <p className="adm-forum-hint">Совпадают с интересами из онбординга — от них строится блок «Рекомендуем тебе».</p>
+        <p className="adm-forum-hint">
+          Совпадают с интересами из онбординга — от них строится блок «Рекомендуем тебе».
+          {setTab && (
+            <>
+              {' '}
+              <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => setTab('recommendation-tags')}>
+                Полное управление тегами →
+              </button>
+            </>
+          )}
+        </p>
         {tags.length === 0 && <p className="adm-muted">Создайте теги — без них не работают рекомендации.</p>}
         <div className="adm-forum-toolbar">
           <input className="adm-input" value={newTagName} onChange={e => setNewTagName(e.target.value)} placeholder="Новый тег" style={{ maxWidth: 220 }} />
@@ -367,7 +378,7 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                     title="Удалить"
                     aria-label="Удалить"
                     onClick={() => {
-                      if (!confirm('Удалить тег?')) return;
+                      if (!confirmDelete('Удалить тег?')) return;
                       act(async () => {
                         await adminFetch(`/thematic-tags/${t.id}`, { method: 'DELETE' });
                         await reloadTags();
@@ -417,6 +428,9 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         </details>
       </div>
 
+      <p className="adm-muted adm-forum-hint" style={{ margin: '0 0 8px 0' }}>
+        Справочник мест (Пушкин, Гоголь и др.) — для поля «Место» в событиях программы.
+      </p>
       <ProgramPlacesBlock
         places={places}
         newPlaceName={newPlaceName}
@@ -444,7 +458,7 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           }, 'Сохранено');
         }}
         onDelete={id => {
-          if (!confirm('Удалить место? У событий с этим местом поле будет очищено.')) return;
+          if (!confirmDelete('Удалить место? У событий с этим местом поле будет очищено.')) return;
           act(async () => {
             await adminFetch(`/program-places/${id}`, { method: 'DELETE' });
             await reloadPlaces();
@@ -477,7 +491,7 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           }, 'Сохранено');
         }}
         onDelete={id => {
-          if (!confirm('Удалить тип блока?')) return;
+          if (!confirmDelete('Удалить тип блока?')) return;
           act(async () => {
             await adminFetch(`/program-block-types/${id}`, { method: 'DELETE' });
             await reloadBlockTypes();
@@ -508,7 +522,7 @@ export function ProgramTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           }, 'Сохранено');
         }}
         onDelete={id => {
-          if (!confirm('Удалить спикера?')) return;
+          if (!confirmDelete('Удалить спикера?')) return;
           act(async () => {
             await adminFetch(`/program-speakers/${id}`, { method: 'DELETE' });
             await reloadSpeakers();

@@ -27,9 +27,9 @@ const ROLE_LABELS: Record<string, string> = {
 type Direction = { id: number; name: string };
 
 type Props = AdminTabProps & {
-  initial?: Partial<AdminUserDraft> & { id?: number };
+  initial?: Partial<AdminUserDraft> & { id?: number; login?: string };
   onCancel: () => void;
-  onSaved: (tempPassword?: string) => void;
+  onSaved: (info?: { temporaryPassword: string; login?: string }) => void;
 };
 
 export function emptyAdminUserDraft(): AdminUserDraft {
@@ -79,9 +79,25 @@ export function AdminUserForm({ adminFetch, act, initial, onCancel, onSaved }: P
           method: 'POST',
           body: JSON.stringify(body),
         });
-        onSaved(res.temporaryPassword as string | undefined);
+        const pwd = res.temporaryPassword as string | undefined;
+        if (pwd) {
+          onSaved({ temporaryPassword: pwd, login: res.user?.login as string | undefined });
+        } else {
+          onSaved();
+        }
       }
     }, editing ? 'Пользователь сохранён' : 'Пользователь создан');
+  };
+
+  const sendInvitation = () => {
+    if (!editing || initial?.id == null) return;
+    act(async () => {
+      const r = await adminFetch(`/admin-users/${initial.id}/reset-password`, { method: 'POST', body: '{}' });
+      onSaved({
+        temporaryPassword: r.temporaryPassword as string,
+        login: initial.login ?? (draft.email.trim() || undefined),
+      });
+    }, 'Данные для входа сгенерированы — передайте пользователю');
   };
 
   return (
@@ -135,7 +151,7 @@ export function AdminUserForm({ adminFetch, act, initial, onCancel, onSaved }: P
                 checked={draft.passwordMode === 'generate'}
                 onChange={() => setDraft({ ...draft, passwordMode: 'generate', password: '' })}
               />
-              Сгенерировать
+              Сгенерировать и отправить
             </label>
           </div>
           {draft.passwordMode === 'manual' && (
@@ -153,6 +169,11 @@ export function AdminUserForm({ adminFetch, act, initial, onCancel, onSaved }: P
       )}
       <div className="adm-forum-toolbar" style={{ marginTop: 12 }}>
         <button type="button" className="adm-btn adm-btn-primary" onClick={save}>Сохранить</button>
+        {editing && (
+          <button type="button" className="adm-btn adm-btn-secondary" onClick={sendInvitation}>
+            Отправить приглашение
+          </button>
+        )}
         <button type="button" className="adm-btn adm-btn-secondary" onClick={onCancel}>Отменить</button>
       </div>
     </div>

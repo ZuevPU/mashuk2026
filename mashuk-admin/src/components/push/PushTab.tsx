@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { confirmDelete } from '../../admin/confirmDelete';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
 import { PushAutoSettingsCard } from './PushAutoSettingsCard';
@@ -242,7 +243,7 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
               await load();
             }, 'Копия создана')}
             onDelete={id => {
-              if (confirm('Удалить уведомление?')) {
+              if (confirmDelete('Удалить уведомление?')) {
                 act(async () => {
                   await adminFetch(`/push/notifications/${id}`, { method: 'DELETE' });
                   await load();

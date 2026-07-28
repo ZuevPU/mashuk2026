@@ -3,6 +3,8 @@ import { DEFAULT_ROLE_ICONS, roleIcon } from './roleMatrix';
 import type { AdminRole } from './types';
 
 type Draft = {
+  name: string;
+  quadrant: string;
   essence: string;
   inClass: string;
   keywords: string;
@@ -19,6 +21,8 @@ type Props = {
 
 export function RoleEditModal({ role, onClose, adminFetch, act, onSaved }: Props) {
   const [draft, setDraft] = useState<Draft>({
+    name: '',
+    quadrant: '',
     essence: '',
     inClass: '',
     keywords: '',
@@ -28,6 +32,8 @@ export function RoleEditModal({ role, onClose, adminFetch, act, onSaved }: Props
   useEffect(() => {
     if (!role) return;
     setDraft({
+      name: role.name || '',
+      quadrant: role.quadrant || '',
       essence: role.essence || '',
       inClass: role.inClass || '',
       keywords: role.keywords || '',
@@ -41,6 +47,8 @@ export function RoleEditModal({ role, onClose, adminFetch, act, onSaved }: Props
     const res = await adminFetch(`/roles/${role.id}`, {
       method: 'PATCH',
       body: JSON.stringify({
+        name: draft.name.trim() || undefined,
+        quadrant: draft.quadrant.trim() || null,
         essence: draft.essence,
         inClass: draft.inClass,
         keywords: draft.keywords,
@@ -49,19 +57,26 @@ export function RoleEditModal({ role, onClose, adminFetch, act, onSaved }: Props
     });
     onSaved({ ...role, ...(res.role as AdminRole) });
     onClose();
-  }, `Роль «${role.name}» сохранена`);
+  }, `Роль «${draft.name || role.name}» сохранена`);
 
   return (
     <div className="adm-modal-backdrop" onClick={onClose} role="presentation">
       <div className="adm-modal card adm-role-edit-modal" onClick={e => e.stopPropagation()}>
         <div className="adm-forum-toolbar">
-          <h3 style={{ margin: 0 }}>{role.name}</h3>
+          <h3 style={{ margin: 0 }}>Роль</h3>
           <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onClose}>✕</button>
         </div>
         <p className="adm-muted adm-forum-hint">
           Ключ: <code>{role.roleKey}</code>
-          {role.quadrant && <> · {role.quadrant}</>}
         </p>
+        <label className="adm-field">
+          <span className="adm-label">Название</span>
+          <input className="adm-input" value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} />
+        </label>
+        <label className="adm-field">
+          <span className="adm-label">Квадрант / ось матрицы</span>
+          <input className="adm-input" value={draft.quadrant} onChange={e => setDraft({ ...draft, quadrant: e.target.value })} placeholder="например: leader × thinking" />
+        </label>
         <label className="adm-field">
           <span className="adm-label">Иконка</span>
           <input

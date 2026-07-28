@@ -11,6 +11,8 @@ import { AnalyticsTab } from './components/analytics/AnalyticsTab';
 import { DataTab } from './components/data/DataTab';
 import { DirectionsTab } from './components/directions/DirectionsTab';
 import { ExportsTab } from './components/exports/ExportsTab';
+import { InsightsChrome } from './components/insights/InsightsChrome';
+import { InsightsProvider } from './components/insights/InsightsContext';
 import { ForumTab } from './components/forum/ForumTab';
 import { JournalTab } from './components/journal/JournalTab';
 import { KnowledgeTab } from './components/knowledge/KnowledgeTab';
@@ -155,10 +157,21 @@ export const App = () => {
         )}
         {tab === 'data' && <DataTab {...tabProps} />}
         {tab === 'levels' && <LevelsTab {...tabProps} />}
-        {tab === 'analytics' && (
-          <AnalyticsTab {...tabProps} onOpenCard={openParticipantCard} />
+        {(tab === 'analytics' || tab === 'exports') && (
+          <InsightsProvider
+            adminFetch={adminFetch}
+            setTab={setTab}
+            reloadKey={reloadKey}
+            activeSection={tab === 'exports' ? 'exports' : 'analytics'}
+          >
+            <InsightsChrome>
+              {tab === 'analytics' && (
+                <AnalyticsTab {...tabProps} onOpenCard={openParticipantCard} />
+              )}
+              {tab === 'exports' && <ExportsTab {...tabProps} />}
+            </InsightsChrome>
+          </InsightsProvider>
         )}
-        {tab === 'exports' && <ExportsTab {...tabProps} />}
         {tab === 'push' && <PushTab {...tabProps} />}
         {tab === 'recommendation-tags' && <RecommendationTagsTab {...tabProps} />}
         {tab === 'admins' && <AdminsTab {...tabProps} />}

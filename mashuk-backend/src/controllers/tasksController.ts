@@ -5,7 +5,7 @@ import { tasks, taskSubmissions, questions, answers, participants, taskTeamConfi
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { getForumSettings } from '../services/helpers.js';
 import { awardPoints } from '../services/pointsService.js';
-import { effectiveTaskPoints } from '../services/taskPoints.js';
+import { resolveTaskAwardPoints } from '../services/taskPoints.js';
 import { sendPushNotification } from '../services/pushService.js';
 import { evaluateMedalsForParticipant } from '../services/medalEvaluator.js';
 import {
@@ -272,7 +272,7 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
     const isTeam = outcome.isTeam;
     const forceAuto = outcome.forceAuto;
     const status = outcome.status;
-    const pointsAwarded = forceAuto ? effectiveTaskPoints(task) : 0;
+    const pointsAwarded = forceAuto ? await resolveTaskAwardPoints(task) : 0;
 
     let submission;
     if (existing && allowResubmit) {

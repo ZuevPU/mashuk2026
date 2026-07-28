@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { confirmDelete } from '../../admin/confirmDelete';
 import { adminFetchHtml } from '../../admin/client';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
@@ -160,7 +161,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     }, 'В архиве');
 
   const deleteTask = (id: number) => {
-    if (!confirm('Точно удалить? Действие необратимо')) return;
+    if (!confirmDelete()) return;
     act(async () => {
       await adminFetch(`/tasks/${id}`, { method: 'DELETE' });
       await loadTasks();
@@ -184,7 +185,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   };
 
   const deleteCategory = (id: number) => {
-    if (!confirm('Удалить категорию?')) return;
+    if (!confirmDelete()) return;
     act(async () => {
       await adminFetch(`/task-categories/${id}`, { method: 'DELETE' });
       setCategories((await adminFetch('/task-categories')).categories || []);

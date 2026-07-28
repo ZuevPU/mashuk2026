@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { label } from '../../labels/ru';
+import { confirmDelete, CONFIRM_DELETE_EVENT, CONFIRM_DELETE_SUBTOPIC } from '../../admin/confirmDelete';
+import { ParticipantPreviewHtml, ParticipantPreviewModal } from '../admin/ParticipantPreviewModal';
+import { RichHtmlEditor } from '../admin/RichHtmlEditor';
 import { PlaceSelect } from './ProgramPlacesBlock';
 import { SpeakerMultiPick } from './ProgramCatalogs';
 import {
@@ -18,6 +21,7 @@ type Draft = {
   title: string;
   place: string;
   description: string;
+  descriptionHtml: string;
   timeStart: string;
   timeEnd: string;
   blockType: string;
@@ -39,6 +43,7 @@ function draftFromEvent(e: ProgramEvent): Draft {
     title: e.title || '',
     place: e.place || '',
     description: e.description || '',
+    descriptionHtml: e.descriptionHtml || e.description || '',
     timeStart: start,
     timeEnd: end,
     blockType,
@@ -86,6 +91,8 @@ export function EventCard({
   const [expanded, setExpanded] = useState(true);
   const [childTitle, setChildTitle] = useState('');
   const [childPlace, setChildPlace] = useState('');
+  const [childSpeakerIds, setChildSpeakerIds] = useState<number[]>([]);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [dupDay, setDupDay] = useState(String(selectedDay));
 
   useEffect(() => {
@@ -120,6 +127,7 @@ export function EventCard({
       title: draft.title.trim(),
       place: draft.place.trim() || null,
       description: draft.description.trim() || null,
+      descriptionHtml: draft.descriptionHtml.trim() || draft.description.trim() || null,
       timeSlot: buildTimeSlot(draft.timeStart, draft.timeEnd),
       tags: draft.tagNames,
       blockType: isKeyBlock ? 'key_block' : blockType,
@@ -168,10 +176,12 @@ export function EventCard({
           dayPublished: false,
           blockType: 'session',
           tags: [],
+          speakerIds: childSpeakerIds,
         }),
       });
       setChildTitle('');
       setChildPlace('');
+      setChildSpeakerIds([]);
       if (!draft.hasSubSessions) {
         await adminFetch(`/events/${event.id}`, {
           method: 'PATCH',
@@ -222,9 +232,15 @@ export function EventCard({
             </label>
           </div>
           <label className="adm-field">
-            <span className="adm-label">Описание</span>
+            <span className="adm-label">Описание (текст)</span>
             <textarea className="adm-input" rows={2} value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} />
           </label>
+          <RichHtmlEditor
+            label="Описание (HTML / rich)"
+            value={draft.descriptionHtml}
+            onChange={html => setDraft({ ...draft, descriptionHtml: html })}
+            resetKey={event.id}
+          />
           <label className="adm-field">
             <span className="adm-label">Тип блока</span>
             <select className="adm-input" value={draft.blockType} onChange={e => setDraft({ ...draft, blockType: e.target.value })}>
@@ -290,7 +306,7 @@ export function EventCard({
                     type="button"
                     className="adm-btn adm-btn-danger adm-btn-sm"
                     onClick={() => {
-                      if (!confirm('Удалить под-тему?')) return;
+                      if (!confirmDelete(CONFIRM_DELETE_SUBTOPIC)) return;
                       act(async () => {
                         await adminFetch(`/events/${ch.id}`, { method: 'DELETE' });
                         onSaved();
@@ -305,6 +321,10 @@ export function EventCard({
                 <input className="adm-input" placeholder="Название под-темы" value={childTitle} onChange={e => setChildTitle(e.target.value)} />
                 <PlaceSelect places={allPlaces} value={childPlace} onChange={setChildPlace} />
               </div>
+              <div className="adm-field" style={{ marginTop: 8 }}>
+                <span className="adm-label">Спикеры под-темы</span>
+                <SpeakerMultiPick speakers={speakers} selectedIds={childSpeakerIds} onChange={setChildSpeakerIds} />
+              </div>
               <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" style={{ marginTop: 8 }} onClick={addChild}>
                 + Под-тема
               </button>
@@ -312,7 +332,17 @@ export function EventCard({
           )}
           <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap' }}>
             <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={save}>
-              Сохранить
+              Сохранить черновик
+            </button>
+            <button
+              type="button"
+              className="adm-btn adm-btn-sm"
+              onClick={() => act(async () => {
+                await adminFetch(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify({ ...patchBody(), isPublished: true }) });
+                onSaved();
+              }, 'Опубликовано')}
+            >
+              Опубликовать
             </button>
             <button
               type="button"
@@ -352,11 +382,14 @@ export function EventCard({
             >
               QR посещаемости
             </button>
+            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setPreviewOpen(true)}>
+              👁 Посмотреть как участник
+            </button>
             <button
               type="button"
               className="adm-btn adm-btn-danger adm-btn-sm"
               onClick={() => {
-                if (!confirm('Удалить событие?')) return;
+                if (!confirmDelete(CONFIRM_DELETE_EVENT)) return;
                 act(async () => {
                   await adminFetch(`/events/${event.id}`, { method: 'DELETE' });
                   onSaved();
@@ -366,6 +399,15 @@ export function EventCard({
               Удалить
             </button>
           </div>
+          {previewOpen && (
+            <ParticipantPreviewModal open={previewOpen} onClose={() => setPreviewOpen(false)} title="Событие — превью">
+              <p className="adm-muted">{preview}</p>
+              <ParticipantPreviewHtml
+                title={draft.title || 'Событие'}
+                html={draft.descriptionHtml || draft.description.replace(/\n/g, '<br/>')}
+              />
+            </ParticipantPreviewModal>
+          )}
         </>
       )}
     </div>

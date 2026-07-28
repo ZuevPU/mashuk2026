@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, timestamp, jsonb, integer, boolean, index, uniqueIndex, smallint } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, text, timestamp, jsonb, integer, boolean, index, uniqueIndex, smallint, uuid } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 export const directions = pgTable('directions', {
@@ -57,6 +57,13 @@ export const forumSettings = pgTable('forum_settings', {
   recommendationTemplates: jsonb('recommendation_templates'),
   /** Онбординг: goalQuestions, interestGroups, questions, optionToRole */
   roleDiagnosticsConfig: jsonb('role_diagnostics_config'),
+  leaderboardScopes: jsonb('leaderboard_scopes').default({
+    total: true,
+    path: true,
+    experience: true,
+    day: true,
+    shift: true,
+  }),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
@@ -119,6 +126,13 @@ export const programBlockTypes = pgTable('program_block_types', {
   name: varchar('name', { length: 255 }).notNull(),
   sortOrder: integer('sort_order').default(0),
   createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const materialTypes = pgTable('material_types', {
+  id: serial('id').primaryKey(),
+  key: varchar('key', { length: 50 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  sortOrder: integer('sort_order').default(0),
 });
 
 export const programSpeakers = pgTable('program_speakers', {
@@ -281,6 +295,7 @@ export const participants = pgTable('participants', {
   age: integer('age'),
   workplace: varchar('workplace', { length: 500 }),
   position: varchar('position', { length: 500 }),
+  region: varchar('region', { length: 255 }),
   consentPd: boolean('consent_pd').default(false),
   consentAnalytics: boolean('consent_analytics').default(false),
   directionId: integer('direction_id').references(() => directions.id),
@@ -423,6 +438,7 @@ export const events = pgTable('events', {
   id: serial('id').primaryKey(),
   title: varchar('title', { length: 255 }).notNull(),
   description: text('description'),
+  descriptionHtml: text('description_html'),
   place: varchar('place', { length: 255 }),
   dayNumber: integer('day_number'),
   eventDate: timestamp('event_date'),
@@ -453,6 +469,7 @@ export const materials = pgTable('materials', {
   eventId: integer('event_id').references(() => events.id),
   dayNumber: integer('day_number'),
   speakerName: varchar('speaker_name', { length: 255 }),
+  speakerIds: jsonb('speaker_ids').default([]),
   speakerInitials: varchar('speaker_initials', { length: 10 }),
   eventTitle: varchar('event_title', { length: 255 }),
   type: varchar('type', { length: 50 }),
@@ -464,7 +481,11 @@ export const materials = pgTable('materials', {
   direction: varchar('direction', { length: 255 }),
   tags: jsonb('tags'),
   isGeneral: boolean('is_general').default(false),
-  includeInAnalytics: boolean('include_in_analytics').default(true),
+  includeInAnalytics: boolean('include_in_analytics').default(true), // deprecated: use status published for analytics
+  status: varchar('status', { length: 50 }).default('published'),
+  fileUrl: varchar('file_url', { length: 500 }),
+  kbUnlockMode: varchar('kb_unlock_mode', { length: 32 }).default('touchpoints').notNull(),
+  kbUnlockMinTouchpoints: integer('kb_unlock_min_touchpoints'),
 }, (table) => [
   index('materials_event_id_idx').on(table.eventId),
   index('materials_day_number_idx').on(table.dayNumber),
@@ -651,6 +672,30 @@ export const pushLog = pgTable('push_log', {
   index('push_log_participant_id_idx').on(table.participantId),
 ]);
 
+export const analyticsSnapshots = pgTable('analytics_snapshots', {
+  id: serial('id').primaryKey(),
+  snapshotKey: varchar('snapshot_key', { length: 128 }).notNull(),
+  statDate: timestamp('stat_date').defaultNow(),
+  dayNumber: integer('day_number'),
+  direction: varchar('direction', { length: 255 }),
+  groupName: varchar('group_name', { length: 255 }),
+  roleKey: varchar('role_key', { length: 100 }),
+  payload: jsonb('payload').notNull(),
+}, (table) => [
+  index('analytics_snapshots_key_idx').on(table.snapshotKey),
+  index('analytics_snapshots_day_idx').on(table.dayNumber),
+]);
+
+export const forumClubs = pgTable('forum_clubs', {
+  id: varchar('id', { length: 64 }).primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  embedding: jsonb('embedding'),
+  isActive: boolean('is_active').default(true),
+  sortOrder: integer('sort_order').default(0),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 export const dailyStats = pgTable('daily_stats', {
   id: serial('id').primaryKey(),
   direction: varchar('direction', { length: 255 }),
@@ -736,6 +781,8 @@ export const clubMatches = pgTable('club_matches', {
   clubId: varchar('club_id', { length: 100 }),
   similarity: integer('similarity'),
   verdict: text('verdict'),
+  sourceType: varchar('source_type', { length: 64 }),
+  snippet: text('snippet'),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -747,3 +794,22 @@ export const delayedSurvey = pgTable('delayed_survey', {
   status: varchar('status', { length: 50 }).default('pending'),
   payload: jsonb('payload'),
 });
+
+export const exportHistory = pgTable('export_history', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  adminId: integer('admin_id'),
+  title: varchar('title', { length: 255 }).notNull().default('Выгрузка'),
+  source: varchar('source', { length: 64 }).notNull(),
+  params: jsonb('params').notNull().default({}),
+  columns: jsonb('columns').notNull().default([]),
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  filePath: text('file_path'),
+  fileName: varchar('file_name', { length: 255 }),
+  byteSize: integer('byte_size'),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  expiresAt: timestamp('expires_at'),
+}, (table) => [
+  index('export_history_admin_created_idx').on(table.adminId, table.createdAt),
+  index('export_history_expires_idx').on(table.expiresAt),
+]);

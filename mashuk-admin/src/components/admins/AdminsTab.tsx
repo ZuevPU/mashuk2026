@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { confirmDelete } from '../../admin/confirmDelete';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import { RowActionsMenu } from '../participants/RowActionsMenu';
 import type { AdminTabProps } from '../admin/types';
@@ -11,6 +12,7 @@ type AdminUser = {
   fullName?: string | null;
   email?: string | null;
   role?: string;
+  directionId?: number | null;
   directionName?: string | null;
   lastLoginAt?: string | null;
   isActive?: boolean;
@@ -29,7 +31,7 @@ export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [directions, setDirections] = useState<Direction[]>([]);
   const [view, setView] = useState<'list' | 'form'>('list');
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
-  const [tempPasswordModal, setTempPasswordModal] = useState<string | null>(null);
+  const [tempPasswordModal, setTempPasswordModal] = useState<{ password: string; login?: string } | null>(null);
   const [logsModal, setLogsModal] = useState<{ user: AdminUser; actions: unknown[] } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -71,15 +73,17 @@ export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           reloadKey={reloadKey}
           initial={editUser ? {
             id: editUser.id,
+            login: editUser.login,
             fullName: editUser.fullName ?? '',
             email: editUser.email ?? '',
             role: editUser.role ?? 'moderator',
+            directionId: (editUser as { directionId?: number | null }).directionId ?? '',
           } : undefined}
           onCancel={() => { setView('list'); setEditUser(null); }}
-          onSaved={pwd => {
+          onSaved={info => {
             setView('list');
             setEditUser(null);
-            if (pwd) setTempPasswordModal(pwd);
+            if (info?.temporaryPassword) setTempPasswordModal({ password: info.temporaryPassword, login: info.login });
             load();
           }}
         />
@@ -161,7 +165,7 @@ export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                           label: 'Сбросить пароль',
                           onClick: () => act(async () => {
                             const r = await adminFetch(`/admin-users/${u.id}/reset-password`, { method: 'POST', body: '{}' });
-                            setTempPasswordModal(r.temporaryPassword);
+                            setTempPasswordModal({ password: r.temporaryPassword, login: u.login });
                           }, 'Пароль сброшен'),
                         },
                         {
@@ -175,7 +179,7 @@ export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                           label: 'Удалить',
                           danger: true,
                           onClick: () => {
-                            if (!window.confirm('Точно удалить? Действие необратимо')) return;
+                            if (!confirmDelete()) return;
                             act(() => adminFetch(`/admin-users/${u.id}`, { method: 'DELETE' }).then(load), 'Удалён');
                           },
                         },
@@ -193,9 +197,12 @@ export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       {tempPasswordModal && (
         <div className="adm-modal-backdrop" onClick={() => setTempPasswordModal(null)}>
           <div className="adm-modal" onClick={e => e.stopPropagation()}>
-            <h3>Временный пароль</h3>
+            <h3>Данные для входа</h3>
+            {tempPasswordModal.login && (
+              <p>Логин: <code>{tempPasswordModal.login}</code></p>
+            )}
             <p>Сохраните и передайте пользователю один раз:</p>
-            <code style={{ fontSize: 18 }}>{tempPasswordModal}</code>
+            <code style={{ fontSize: 18 }}>{tempPasswordModal.password}</code>
             <button type="button" className="adm-btn adm-btn-primary" style={{ marginTop: 12 }} onClick={() => setTempPasswordModal(null)}>Закрыть</button>
           </div>
         </div>

@@ -1,0 +1,99 @@
+import { eq, inArray } from 'drizzle-orm';
+import { db } from '../../db/index.js';
+import { piggybank } from '../../db/schema.js';
+import type { AdminRequest } from '../../middlewares/adminAuth.js';
+import {
+  PIGGYBANK_SOURCES,
+  PIGGYBANK_TAGS,
+  entryTags,
+  normalizePiggybankSource,
+} from '../piggybankDict.js';
+import { loadCohortParticipants } from './cohort.js';
+import type { AnalyticsFilters } from './analyticsQuery.js';
+import { topReasonTokens } from './zoneDistribution.js';
+
+export async function buildPiggybankDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
+  const cohort = await loadCohortParticipants(filters, req);
+  const ids = cohort.map(p => p.id);
+  const rows = ids.length
+    ? await db.select().from(piggybank).where(inArray(piggybank.participantId, ids))
+    : await db.select().from(piggybank);
+
+  let entries = rows;
+  if (filters.tag) {
+    entries = entries.filter(e => entryTags(e).includes(filters.tag!));
+  }
+  if (filters.source) {
+    entries = entries.filter(e => normalizePiggybankSource(e.source) === filters.source);
+  }
+  if (filters.day) {
+    entries = entries.filter(e => e.forumDay === filters.day);
+  }
+
+  const byTag: Record<string, { count: number; series: { day: number; count: number }[]; entries: unknown[] }> = {};
+  for (const tag of PIGGYBANK_TAGS) {
+    const tagged = rows.filter(e => entryTags(e).includes(tag));
+    const dayMap = new Map<number, number>();
+    for (const e of tagged) {
+      const d = e.forumDay ?? 0;
+      dayMap.set(d, (dayMap.get(d) || 0) + 1);
+    }
+    byTag[tag] = {
+      count: tagged.length,
+      series: [...dayMap.entries()].sort((a, b) => a[0] - b[0]).map(([day, count]) => ({ day, count })),
+      entries: tagged.slice(0, filters.tag === tag ? filters.limit : 5).map(e => ({
+        id: e.id,
+        participantId: e.participantId,
+        day: e.forumDay,
+        text: e.text,
+        source: e.source,
+        createdAt: e.createdAt,
+      })),
+    };
+  }
+
+  const bySource: Record<string, { count: number; tagMix: { tag: string; count: number }[] }> = {};
+  for (const src of PIGGYBANK_SOURCES) {
+    const sourced = rows.filter(e => normalizePiggybankSource(e.source) === src);
+    const tagMix = new Map<string, number>();
+    for (const e of sourced) {
+      for (const t of entryTags(e)) tagMix.set(t, (tagMix.get(t) || 0) + 1);
+    }
+    bySource[src] = {
+      count: sourced.length,
+      tagMix: [...tagMix.entries()].map(([tag, count]) => ({ tag, count })),
+    };
+  }
+
+  const vRabota = rows.filter(e => entryTags(e).includes('в работу'));
+  const vRabotaByDirection = new Map<string, number>();
+  for (const e of vRabota) {
+    const p = cohort.find(c => c.id === e.participantId);
+    const d = p?.direction || '—';
+    vRabotaByDirection.set(d, (vRabotaByDirection.get(d) || 0) + 1);
+  }
+
+  const offset = (filters.page - 1) * filters.limit;
+  const pageEntries = entries.slice(offset, offset + filters.limit);
+
+  return {
+    filters,
+    navigation: { total: entries.length, page: filters.page, limit: filters.limit },
+    byTag,
+    bySource,
+    topThemes: topReasonTokens(rows.map(e => e.text), 20),
+    vRabota: {
+      total: vRabota.length,
+      byDirection: [...vRabotaByDirection.entries()].map(([direction, count]) => ({ direction, count })),
+      sample: vRabota.slice(0, 20).map(e => ({ id: e.id, text: e.text, source: e.source })),
+    },
+    entries: pageEntries.map(e => ({
+      id: e.id,
+      participantId: e.participantId,
+      day: e.forumDay,
+      text: e.text,
+      tags: entryTags(e),
+      source: e.source,
+    })),
+  };
+}

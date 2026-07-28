@@ -33,8 +33,8 @@ export async function applyTaskModeration(
 
   if (status === 'approved' && updated && !(existing.pointsAwarded ?? 0) && task) {
     const { awardTeamOnModeratorApprove } = await import('./teamTaskService.js');
-    const { effectiveTaskPoints } = await import('./taskPoints.js');
-    const pts = effectiveTaskPoints(task);
+    const { resolveTaskAwardPoints } = await import('./taskPoints.js');
+    const pts = await resolveTaskAwardPoints(task);
     await awardTeamOnModeratorApprove(updated, task);
     await db.update(taskSubmissions)
       .set({ pointsAwarded: pts })

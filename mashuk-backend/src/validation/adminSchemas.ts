@@ -222,6 +222,16 @@ export const dayAdviceImportSchema = z.object({
   csv: z.string().min(1),
 }).strict();
 
+export const ratingBonusRulePatchSchema = z.object({
+  enabled: z.boolean().optional(),
+  pointsActionType: z.string().max(100).optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
+}).strict();
+
+export const ratingBonusRuleCreateSchema = z.object({
+  code: z.string().min(1).max(100),
+}).strict();
+
 export function parseBody<T>(schema: z.ZodType<T>, body: unknown): { ok: true; data: T } | { ok: false; error: string } {
   const result = schema.safeParse(body);
   if (!result.success) {

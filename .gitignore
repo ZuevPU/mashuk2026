@@ -30,6 +30,7 @@ Thumbs.db
 
 # Uploads (runtime data)
 mashuk-backend/uploads/
+mashuk-backend/data/admin-exports/
 
 # Docker volumes
 *.local.yml

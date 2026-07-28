@@ -240,6 +240,7 @@
     <div class="page-tabs" role="tablist" aria-label="Режим просмотра">
       <button type="button" role="tab" id="tab-audit" aria-selected="true" aria-controls="panel-audit">Аудит по коду</button>
       <button type="button" role="tab" id="tab-impl" aria-selected="false" aria-controls="panel-impl">Реализация (проверка UI)</button>
+      <button type="button" role="tab" id="tab-dashboard" aria-selected="false" aria-controls="panel-dashboard">Дашборд (выгрузки · аналитика · БД)</button>
     </div>
 
     <div class="legend" aria-label="Легенда статусов">
@@ -325,12 +326,57 @@
       </div>
       <p class="empty hidden" id="no-results-flat">Ничего не найдено по фильтрам.</p>
     </div>
+
+    <div id="panel-dashboard" class="view-panel hidden" role="tabpanel" aria-labelledby="tab-dashboard">
+      <div class="controls">
+        <div>
+          <label for="q-dashboard">Поиск</label>
+          <input type="search" id="q-dashboard" placeholder="Задача, подраздел, примечание…" autocomplete="off" />
+        </div>
+        <div>
+          <label for="section-filter-dashboard">Раздел</label>
+          <select id="section-filter-dashboard">
+            <option value="">Все разделы</option>
+          </select>
+        </div>
+        <div class="audit-filter-block">
+          <span class="filter-label">Реализовано — показывать</span>
+          <div id="dashboard-status-filters" class="audit-filters" role="group" aria-label="Фильтр реализации дашборда"></div>
+          <div class="audit-quick">
+            <button type="button" data-dashboard-preset="all">Все</button>
+            <button type="button" data-dashboard-preset="yes">Только «Да»</button>
+            <button type="button" data-dashboard-preset="no">Только «Нет»</button>
+            <button type="button" data-dashboard-preset="gaps">«Нет» + «Частично»</button>
+          </div>
+        </div>
+      </div>
+      <div class="summary" id="summary-dashboard" aria-live="polite"></div>
+      <div class="flat-list-wrap">
+        <div class="table-scroll">
+          <table id="dashboard-table">
+            <thead>
+              <tr>
+                <th>Подраздел</th>
+                <th>Задача / функция</th>
+                <th>Реализовано</th>
+                <th>Примечание</th>
+              </tr>
+            </thead>
+            <tbody id="dashboard-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <p class="empty hidden" id="no-results-dashboard">Ничего не найдено по фильтрам.</p>
+    </div>
   </div>
 
   <script type="application/json" id="spec-data">__SPEC_DATA__</script>
+  <script type="application/json" id="dashboard-data">__DASHBOARD_DATA__</script>
   <script>
     const ROWS = JSON.parse(document.getElementById('spec-data').textContent);
+    const DASHBOARD_ROWS = JSON.parse(document.getElementById('dashboard-data').textContent);
     let viewMode = 'audit';
+    let activePageTab = 'audit';
 
     function badgeClass(status) {
       switch (status) {
@@ -707,16 +753,193 @@
 
     const tabAudit = document.getElementById('tab-audit');
     const tabImpl = document.getElementById('tab-impl');
+    const tabDashboard = document.getElementById('tab-dashboard');
     const panelAudit = document.getElementById('panel-audit');
     const panelImpl = document.getElementById('panel-impl');
+    const panelDashboard = document.getElementById('panel-dashboard');
     const pageSubtitle = document.getElementById('page-subtitle');
 
+    const dashboardSectionsMap = new Map();
+    for (const row of DASHBOARD_ROWS) {
+      if (!row.sectionId) continue;
+      if (!dashboardSectionsMap.has(row.sectionId)) {
+        dashboardSectionsMap.set(row.sectionId, {
+          id: row.sectionId,
+          title: row.sectionTitle,
+          pointCount: row.pointCount,
+          rows: [],
+        });
+      }
+      dashboardSectionsMap.get(row.sectionId).rows.push(row);
+    }
+
+    const sectionFilterDashboard = document.getElementById('section-filter-dashboard');
+    for (const sec of [...dashboardSectionsMap.values()].sort((a, b) => a.id - b.id)) {
+      const opt = document.createElement('option');
+      opt.value = String(sec.id);
+      opt.textContent = `${sec.id}. ${sec.title} · ${sec.rows.length} п.`;
+      sectionFilterDashboard.appendChild(opt);
+    }
+
+    const allowedDashboard = new Set(collectDashboardStatuses());
+    const dashboardStatusFiltersEl = document.getElementById('dashboard-status-filters');
+
+    function collectDashboardStatuses() {
+      const set = new Set();
+      for (const row of DASHBOARD_ROWS) {
+        if (!row.sectionId) continue;
+        set.add(normalizeStatus(row.statusUser));
+      }
+      const ordered = STATUS_ORDER.filter((s) => set.has(s));
+      for (const s of set) {
+        if (!ordered.includes(s)) ordered.push(s);
+      }
+      return ordered;
+    }
+
+    function buildDashboardStatusFilters() {
+      dashboardStatusFiltersEl.innerHTML = '';
+      for (const status of collectDashboardStatuses()) {
+        const lbl = document.createElement('label');
+        lbl.className = 'audit-chk';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = status;
+        cb.checked = allowedDashboard.has(status);
+        cb.addEventListener('change', () => {
+          if (cb.checked) allowedDashboard.add(status);
+          else allowedDashboard.delete(status);
+          updateDashboardUI();
+        });
+        lbl.appendChild(cb);
+        lbl.appendChild(document.createTextNode(status));
+        dashboardStatusFiltersEl.appendChild(lbl);
+      }
+    }
+
+    buildDashboardStatusFilters();
+
+    document.querySelectorAll('[data-dashboard-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const preset = btn.getAttribute('data-dashboard-preset');
+        const all = collectDashboardStatuses();
+        allowedDashboard.clear();
+        if (preset === 'all') all.forEach((s) => allowedDashboard.add(s));
+        else if (preset === 'yes') allowedDashboard.add('Да');
+        else if (preset === 'no') allowedDashboard.add('Нет');
+        else if (preset === 'gaps') {
+          allowedDashboard.add('Нет');
+          allowedDashboard.add('Частично');
+        }
+        dashboardStatusFiltersEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+          cb.checked = allowedDashboard.has(cb.value);
+        });
+        updateDashboardUI();
+      });
+    });
+
+    const dashboardTbody = document.getElementById('dashboard-tbody');
+    for (const sec of [...dashboardSectionsMap.values()].sort((a, b) => a.id - b.id)) {
+      const divider = document.createElement('tr');
+      divider.className = 'section-divider';
+      divider.dataset.sectionId = String(sec.id);
+      divider.innerHTML = `<td colspan="4">${sec.id}. ${escapeHtml(sec.title)} · ${sec.rows.length} пунктов (в ТЗ: ${sec.pointCount})</td>`;
+      dashboardTbody.appendChild(divider);
+      sec.rows.forEach((row, rowIdx) => {
+        const tr = document.createElement('tr');
+        tr.dataset.sectionId = String(sec.id);
+        tr.dataset.rowIdx = String(rowIdx);
+        tr.innerHTML = `
+          <td class="sub">${escapeHtml(row.subsection)}</td>
+          <td class="task">${escapeHtml(row.task)}</td>
+          <td>${renderBadge(row.statusUser)}</td>
+          <td class="note">${escapeHtml(row.note || '')}</td>`;
+        dashboardTbody.appendChild(tr);
+      });
+    }
+
+    function rowMatchesDashboardFilters(row, q, sectionId) {
+      if (sectionId && String(row.sectionId) !== sectionId) return false;
+      if (!allowedDashboard.has(normalizeStatus(row.statusUser))) return false;
+      if (!q) return true;
+      const hay = `${row.subsection} ${row.task} ${row.note}`.toLowerCase();
+      return hay.includes(q);
+    }
+
+    function updateDashboardUI() {
+      const q = document.getElementById('q-dashboard').value.trim().toLowerCase();
+      const sectionId = sectionFilterDashboard.value;
+      let visible = 0;
+      let implYes = 0;
+      let implNo = 0;
+      let implPartial = 0;
+
+      for (const row of DASHBOARD_ROWS) {
+        if (!row.sectionId) continue;
+        if (row.statusUser === 'Да') implYes++;
+        if (row.statusUser === 'Нет') implNo++;
+        if (row.statusUser === 'Частично') implPartial++;
+      }
+
+      let anyVisible = false;
+      dashboardTbody.querySelectorAll('tr:not(.section-divider)').forEach((tr) => {
+        const sid = tr.dataset.sectionId;
+        const row = dashboardSectionsMap.get(Number(sid)).rows[Number(tr.dataset.rowIdx)];
+        const show = rowMatchesDashboardFilters(row, q, sectionId);
+        tr.classList.toggle('hidden', !show);
+        if (show) {
+          anyVisible = true;
+          visible++;
+        }
+      });
+
+      dashboardTbody.querySelectorAll('tr.section-divider').forEach((div) => {
+        const sid = div.dataset.sectionId;
+        if (sectionId && sid !== sectionId) {
+          div.classList.add('hidden');
+          return;
+        }
+        let hasRows = false;
+        let next = div.nextElementSibling;
+        while (next && !next.classList.contains('section-divider')) {
+          if (!next.classList.contains('hidden') && next.dataset.sectionId === sid) {
+            hasRows = true;
+            break;
+          }
+          next = next.nextElementSibling;
+        }
+        div.classList.toggle('hidden', !hasRows);
+      });
+
+      const total = DASHBOARD_ROWS.filter((r) => r.sectionId).length;
+      document.getElementById('summary-dashboard').innerHTML = `
+        <span>Всего пунктов: <strong>${total}</strong></span>
+        <span>Показано: <strong>${visible}</strong></span>
+        <span>«Да»: <strong>${implYes}</strong></span>
+        <span>«Частично»: <strong>${implPartial}</strong></span>
+        <span>«Нет»: <strong>${implNo}</strong></span>`;
+      document.getElementById('no-results-dashboard').classList.toggle('hidden', anyVisible);
+    }
+
     function setTab(which) {
+      activePageTab = which;
       const impl = which === 'impl';
-      tabAudit.setAttribute('aria-selected', impl ? 'false' : 'true');
+      const dash = which === 'dashboard';
+      tabAudit.setAttribute('aria-selected', !impl && !dash ? 'true' : 'false');
       tabImpl.setAttribute('aria-selected', impl ? 'true' : 'false');
-      panelAudit.classList.toggle('hidden', impl);
+      tabDashboard.setAttribute('aria-selected', dash ? 'true' : 'false');
+      panelAudit.classList.toggle('hidden', impl || dash);
       panelImpl.classList.toggle('hidden', !impl);
+      panelDashboard.classList.toggle('hidden', !dash);
+      if (dash) {
+        pageSubtitle.innerHTML = 'Выгрузки, аналитика и модель данных (§11–13 + экран админки). Данные: <code>scripts/spec-tracker-dashboard.tsv</code>, sync: <code>node scripts/sync-dashboard-implementation-status.mjs</code>. Пересборка: <code>node scripts/generate-spec-tracker.mjs</code>.';
+        updateDashboardUI();
+        if (sectionFilterDashboard.value === '' && dashboardSectionsMap.has(11)) {
+          sectionFilterDashboard.value = '11';
+          updateDashboardUI();
+        }
+        return;
+      }
       pageSubtitle.innerHTML = impl
         ? 'Проверка реализации в интерфейсе (колонка «Реализовано»). Данные: <code>scripts/spec-tracker-source.tsv</code> + <code>scripts/spec-tracker-admin.tsv</code>. Пересборка: <code>node scripts/generate-spec-tracker.mjs</code>.'
         : 'Статус по коду (аудит). Пересборка: <code>node scripts/generate-spec-tracker.mjs</code>.';
@@ -733,11 +956,14 @@
 
     tabAudit.addEventListener('click', () => setTab('audit'));
     tabImpl.addEventListener('click', () => setTab('impl'));
+    tabDashboard.addEventListener('click', () => setTab('dashboard'));
 
     document.getElementById('q').addEventListener('input', updateUI);
     sectionFilter.addEventListener('change', updateUI);
     document.getElementById('q-flat').addEventListener('input', updateFlatUI);
     sectionFilterFlat.addEventListener('change', updateFlatUI);
+    document.getElementById('q-dashboard').addEventListener('input', updateDashboardUI);
+    sectionFilterDashboard.addEventListener('change', updateDashboardUI);
 
     updateUI();
   </script>

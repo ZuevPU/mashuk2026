@@ -141,6 +141,15 @@ export const deletePushNotification = async (req: AdminRequest, res: Response): 
   const [deleted] = await db.delete(adminPushNotifications)
     .where(eq(adminPushNotifications.id, id)).returning();
   if (!deleted) { res.status(404).json({ error: 'Not found' }); return; }
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req,
+    actionType: 'push_delete',
+    section: 'push',
+    objectId: String(id),
+    oldValue: { internalName: deleted.internalName, status: deleted.status },
+    isCritical: true,
+  });
   res.json({ ok: true });
 };
 

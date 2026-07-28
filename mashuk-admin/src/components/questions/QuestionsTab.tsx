@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { confirmDelete } from '../../admin/confirmDelete';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
 import { AnswerConfirmationSettings, type AnswerConfirmForm } from './AnswerConfirmationSettings';
@@ -16,6 +17,7 @@ import {
   draftFromQuestion,
   emptyDraft,
 } from './types';
+import { ROLE_OPTIONS } from '../onboarding/roleOptions';
 
 export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps) {
   const [loading, setLoading] = useState(true);
@@ -53,6 +55,9 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
     titleTemplate: 'Ответ отправлен',
   });
 
+  const [directions, setDirections] = useState<{ id: number; name: string }[]>([]);
+  const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
+
   const readOnly = kindTab === 'exchange' || kindTab === 'org_director';
 
   const listQuery = useMemo(
@@ -82,6 +87,12 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
     }
     const allRes = await adminFetch('/questions');
     setTotalAll(allRes.totalCount ?? allRes.questions?.length ?? 0);
+    const [dirRes, grpRes] = await Promise.all([
+      adminFetch('/directions').catch(() => ({ directions: [] })),
+      adminFetch('/participants/groups').catch(() => ({ groups: [] })),
+    ]);
+    setDirections(dirRes.directions || []);
+    setGroups(grpRes.groups || []);
     return { td, cd };
   }, [adminFetch]);
 
@@ -222,7 +233,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
     }, 'Скрыто');
 
   const deleteQuestion = (id: number) => {
-    if (!confirm('Удалить вопрос?')) return;
+    if (!confirmDelete('Удалить вопрос?')) return;
     act(async () => {
       await adminFetch(`/questions/${id}`, { method: 'DELETE' });
       await loadQuestions();
@@ -354,6 +365,9 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
           onAddOption={() => setDraft(d => ({ ...d, options: [...d.options, { label: '', value: '' }] }))}
           onRemoveOption={i => setDraft(d => ({ ...d, options: d.options.filter((_, idx) => idx !== i) }))}
           previewSlot={<QuestionParticipantPreview draft={draft} />}
+          directions={directions}
+          groups={groups}
+          roleOptions={ROLE_OPTIONS}
         />
       )}
 

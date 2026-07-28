@@ -399,6 +399,14 @@ export const crudQuestions = {
     for (const ch of children) chain.push(ch);
 
     const ids = chain.map(c => c.id);
+    const answerCounts = ids.length
+      ? await db.select({ questionId: answers.questionId, count: count() })
+        .from(answers)
+        .where(inArray(answers.questionId, ids))
+        .groupBy(answers.questionId)
+      : [];
+    const countByQ = new Map(answerCounts.map(r => [r.questionId, Number(r.count)]));
+
     const logs = ids.length
       ? await db.select().from(adminActionsLog)
         .where(and(
@@ -415,6 +423,7 @@ export const crudQuestions = {
         status: v.status,
         createdAt: v.createdAt,
         parentQuestionId: v.parentQuestionId,
+        answerCount: countByQ.get(v.id) ?? 0,
       })),
       logs,
     });

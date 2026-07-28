@@ -4,6 +4,7 @@ export type RowAction = {
   label: string;
   onClick: () => void;
   danger?: boolean;
+  confirmMessage?: string;
 };
 
 export function RowActionsMenu({ actions }: { actions: RowAction[] }) {
@@ -31,7 +32,11 @@ export function RowActionsMenu({ actions }: { actions: RowAction[] }) {
               key={a.label}
               type="button"
               className={a.danger ? 'adm-row-menu-item danger' : 'adm-row-menu-item'}
-              onClick={() => { setOpen(false); a.onClick(); }}
+              onClick={() => {
+                setOpen(false);
+                if (a.confirmMessage && !confirm(a.confirmMessage)) return;
+                a.onClick();
+              }}
             >
               {a.label}
             </button>

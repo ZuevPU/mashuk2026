@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { syncAdminImplementationStatus } from './sync-admin-implementation-status.mjs';
+import { syncDashboardImplementationStatus } from './sync-dashboard-implementation-status.mjs';
 
 function R(
   sectionId,
@@ -44,6 +46,22 @@ function loadSpecTableTsv() {
     })
     .filter(Boolean)
     .join('\n');
+}
+
+function loadDashboardTsv() {
+  const p = path.join(__dirname, 'spec-tracker-dashboard.tsv');
+  if (!fs.existsSync(p)) return '';
+  return repairUtf8FromFile(fs.readFileSync(p));
+}
+
+const adminTsvPath = path.join(__dirname, 'spec-tracker-admin.tsv');
+if (fs.existsSync(adminTsvPath)) {
+  syncAdminImplementationStatus(adminTsvPath);
+}
+
+const dashboardTsvPath = path.join(__dirname, 'spec-tracker-dashboard.tsv');
+if (fs.existsSync(dashboardTsvPath)) {
+  syncDashboardImplementationStatus(dashboardTsvPath);
 }
 
 const SPEC_TABLE_TSV = loadSpecTableTsv();
@@ -170,7 +188,7 @@ function defaultAudit(sectionId, statusUser) {
 }
 
 function auditOverride(row) {
-  const { sectionId, subsection, task, statusUser } = row;
+  const { sectionId, subsection, task, statusUser, note = '' } = row;
   const t = task;
 
   if (sectionId === 1) {
@@ -803,6 +821,32 @@ function auditOverride(row) {
     return { statusAudit: 'Да', auditNote: '§10 dual push docs/PUSH_VK_SETUP.md' };
   }
 
+  if (sectionId === 14) {
+    if (statusUser === 'Да') {
+      return { statusAudit: 'Да', auditNote: note ? note.slice(0, 120) : 'admin-panel §14' };
+    }
+    if (statusUser === 'Частично') {
+      return { statusAudit: 'Частично', auditNote: note ? note.slice(0, 120) : 'см. spec-tracker-admin.tsv' };
+    }
+    if (statusUser === 'Нет') {
+      return { statusAudit: 'Нет', auditNote: '' };
+    }
+  }
+
+  if (sectionId === 15) {
+    if (subsection.includes('14+. Рейтинг') || subsection.includes('14+. Push')) {
+      if (statusUser === 'Да') {
+        return { statusAudit: 'Да', auditNote: 'admin wave: LevelsTab/MedalsTab/PushTab' };
+      }
+      if (statusUser === 'Частично') {
+        return { statusAudit: 'Частично', auditNote: 'см. note в spec-tracker-admin.tsv' };
+      }
+      if (statusUser === 'Нет') {
+        return { statusAudit: 'Нет', auditNote: '' };
+      }
+    }
+  }
+
   return null;
 }
 
@@ -831,10 +875,40 @@ const ROWS = parsed.map((p) => {
   );
 });
 
+const DASHBOARD_EXPECTED = { 11: 54, 12: 84, 13: 87 };
+const dashboardParsed = parseUserTable(loadDashboardTsv());
+const dashboardBySection = new Map();
+for (const p of dashboardParsed) {
+  dashboardBySection.set(p.sectionId, (dashboardBySection.get(p.sectionId) || 0) + 1);
+}
+for (const [sid, expected] of Object.entries(DASHBOARD_EXPECTED)) {
+  const n = dashboardBySection.get(Number(sid)) || 0;
+  if (n !== expected) {
+    console.warn(`Dashboard §${sid}: expected ${expected} rows, got ${n}`);
+  }
+}
+
+const DASHBOARD_ROWS = dashboardParsed.map((p) =>
+  R(
+    p.sectionId,
+    p.sectionTitle,
+    p.pointCount,
+    p.subsection,
+    p.task,
+    p.statusUser,
+    p.statusUser,
+    p.note,
+    false,
+    '',
+  ),
+);
+
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const json = JSON.stringify(ROWS, null, 2);
 fs.writeFileSync(path.join(root, 'docs/spec-tracker-data.json'), json);
+fs.writeFileSync(path.join(root, 'docs/spec-tracker-dashboard-data.json'), JSON.stringify(DASHBOARD_ROWS, null, 2));
 let html = fs.readFileSync(path.join(root, 'docs/spec-tracker-template.html'), 'utf8');
 html = html.replace('__SPEC_DATA__', JSON.stringify(ROWS));
+html = html.replace('__DASHBOARD_DATA__', JSON.stringify(DASHBOARD_ROWS));
 fs.writeFileSync(path.join(root, 'docs/spec-tracker.html'), html);
-console.log('Rows:', ROWS.length);
+console.log('Rows:', ROWS.length, '| Dashboard:', DASHBOARD_ROWS.length);

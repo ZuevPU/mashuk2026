@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { confirmDelete } from '../../admin/confirmDelete';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
 import { MedalForm } from './MedalForm';
@@ -102,11 +103,13 @@ export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       await load();
     }, 'Видимость: скрытая');
 
-  const deleteMedal = (id: number) =>
+  const deleteMedal = (id: number) => {
+    if (!confirmDelete()) return;
     act(async () => {
       await adminFetch(`/medals/${id}`, { method: 'DELETE' });
       await load();
     }, 'Удалено');
+  };
 
   const runEvaluate = () =>
     act(async () => {

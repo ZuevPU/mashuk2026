@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { confirmDelete } from '../../admin/confirmDelete';
 import type { InterestGroup } from './types';
 
 type Props = {
@@ -115,7 +116,7 @@ export function InterestsStepEditor({ groups, onChange, onSave, dirty, onOpenPro
             className="adm-btn adm-btn-danger"
             style={{ marginTop: 10 }}
             onClick={() => {
-              if (!window.confirm('Удалить эту группу интересов?')) return;
+              if (!confirmDelete('Удалить эту группу интересов?')) return;
               onChange(groups.filter((_, idx) => idx !== gi));
             }}
           >

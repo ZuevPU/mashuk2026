@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { label } from '../../labels/ru';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
+import { TaskModerationQueue } from './TaskModerationQueue';
 
-type Segment = 'exchange' | 'org' | 'archive';
+type Segment = 'exchange' | 'org' | 'archive' | 'tasks';
 
 type ParticipantCardTab = 'profile' | 'answers' | 'tasks' | 'medals' | 'points' | 'piggybank';
 
@@ -38,6 +39,7 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard: _onOpenC
 
   const segments: { key: Segment; label: string }[] = [
     { key: 'exchange', label: 'Обмен (ожидает)' },
+    { key: 'tasks', label: 'Задания на проверке' },
     { key: 'org', label: 'Организаторы' },
     { key: 'archive', label: 'Архив обмена' },
   ];
@@ -46,7 +48,7 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard: _onOpenC
 
   return (
     <div className="adm-forum">
-      <AdminPageHero title="Модерация" hint="Обмен опытом и обращения к организаторам. Ответы на задания — в разделе «Задания», кнопка «Модерация ответов» на карточке." />
+      <AdminPageHero title="Модерация" hint="Обмен опытом, очередь заданий и обращения к организаторам." />
 
       <div className="adm-seg" style={{ marginBottom: 12 }}>
         {segments.map(s => (
@@ -55,6 +57,10 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard: _onOpenC
           </button>
         ))}
       </div>
+
+      {segment === 'tasks' && (
+        <TaskModerationQueue adminFetch={adminFetch} act={act} reloadKey={reloadKey} />
+      )}
 
       {segment === 'exchange' && (
         <>

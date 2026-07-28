@@ -5,7 +5,7 @@ import { participants, taskSubmissions, tasks } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { VkAuthRequest } from '../middlewares/vkAuth.js';
 import { awardPoints } from '../services/pointsService.js';
-import { effectiveTaskPoints } from '../services/taskPoints.js';
+import { resolveTaskAwardPoints } from '../services/taskPoints.js';
 import { evaluateMedalsForParticipant } from '../services/medalEvaluator.js';
 import { logAdminAction } from '../services/adminActionsLog.js';
 import { taskMethodsForParticipant } from '../services/taskAdminHelpers.js';
@@ -93,7 +93,7 @@ export const volunteerConfirm = async (req: AdminRequest & VkAuthRequest, res: R
       return;
     }
 
-    const pointsAwarded = effectiveTaskPoints(task);
+    const pointsAwarded = await resolveTaskAwardPoints(task);
     let submission;
     if (existing) {
       [submission] = await db.update(taskSubmissions).set({

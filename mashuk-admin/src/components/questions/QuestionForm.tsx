@@ -9,7 +9,10 @@ type Props = {
   answerCount?: number;
   versionNotice?: string | null;
   formTab: 'main' | 'versions';
-  versions: { id: number; title: string; status?: string; createdAt?: string }[];
+  versions: { id: number; title: string; status?: string; createdAt?: string; answerCount?: number }[];
+  directions?: { id: number; name: string }[];
+  groups?: { id: number; name: string }[];
+  roleOptions?: { key: string; name: string }[];
   onFormTab: (t: 'main' | 'versions') => void;
   onChange: (patch: Partial<QuestionDraft>) => void;
   onSaveDraft: () => void;
@@ -31,6 +34,9 @@ export function QuestionForm({
   versionNotice,
   formTab,
   versions,
+  directions = [],
+  groups = [],
+  roleOptions = [],
   onFormTab,
   onChange,
   onSaveDraft,
@@ -99,7 +105,7 @@ export function QuestionForm({
               <li key={v.id} style={{ marginBottom: 6 }}>
                 <strong>#{v.id}</strong> {v.title}
                 <span className="adm-muted" style={{ marginLeft: 8, fontSize: 11 }}>
-                  {v.status} · {v.createdAt ? new Date(v.createdAt).toLocaleString('ru-RU') : '—'}
+                  {v.status} · {v.answerCount ?? 0} отв. · {v.createdAt ? new Date(v.createdAt).toLocaleString('ru-RU') : '—'}
                 </span>
               </li>
             ))}
@@ -239,13 +245,22 @@ export function QuestionForm({
               <option value="role">Роль</option>
             </select>
             {draft.audienceType === 'direction' && (
-              <input className="adm-input" style={{ marginTop: 6 }} placeholder="ID направления" value={draft.audienceDirectionId} onChange={e => onChange({ audienceDirectionId: e.target.value })} />
+              <select className="adm-input" style={{ marginTop: 6 }} value={draft.audienceDirectionId} onChange={e => onChange({ audienceDirectionId: e.target.value })}>
+                <option value="">— направление —</option>
+                {directions.map(d => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
+              </select>
             )}
             {draft.audienceType === 'group' && (
-              <input className="adm-input" style={{ marginTop: 6 }} placeholder="ID группы" value={draft.audienceGroupId} onChange={e => onChange({ audienceGroupId: e.target.value })} />
+              <select className="adm-input" style={{ marginTop: 6 }} value={draft.audienceGroupId} onChange={e => onChange({ audienceGroupId: e.target.value })}>
+                <option value="">— группа —</option>
+                {groups.map(g => <option key={g.id} value={String(g.id)}>{g.name}</option>)}
+              </select>
             )}
             {draft.audienceType === 'role' && (
-              <input className="adm-input" style={{ marginTop: 6 }} placeholder="Ключ роли" value={draft.audienceRole} onChange={e => onChange({ audienceRole: e.target.value })} />
+              <select className="adm-input" style={{ marginTop: 6 }} value={draft.audienceRole} onChange={e => onChange({ audienceRole: e.target.value })}>
+                <option value="">— роль —</option>
+                {roleOptions.map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
+              </select>
             )}
           </fieldset>
 

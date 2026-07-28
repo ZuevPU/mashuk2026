@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { asc, count, desc, eq, inArray, isNotNull } from 'drizzle-orm';
+import { asc, count, desc, eq, inArray, isNotNull, and, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   answers, clubMatches, consentTexts, dailyStats, eventAttendance, events, materials,
@@ -18,6 +18,7 @@ import { env } from '../config/env.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { EVENING_SCALE_KEYS } from '../services/touchpointTemplates.js';
 import { emptyZoneDistribution } from '../services/emotionZones.js';
+import { fetchVkAvatarUrl } from '../services/vkUserProfile.js';
 
 // ─── Consents CRUD ───────────────────────────────────────────
 
@@ -396,214 +397,30 @@ function filterAnswersByType(
 }
 
 export const exportDayWorkbook = async (req: AdminRequest, res: Response): Promise<void> => {
+  const { writeDayWorkbook } = await import('../services/exports/dayExport.js');
   const day = Number(req.query.day) || 1;
-  const type = (req.query.type as string | undefined)?.toLowerCase() || 'all';
-
-  const dayQuestions = await db.select().from(questions).where(eq(questions.dayNumber, day));
-  const qIds = new Set(dayQuestions.map(q => q.id));
-  const allAns = await db.select({ a: answers, p: participants, q: questions })
-    .from(answers)
-    .leftJoin(participants, eq(answers.participantId, participants.id))
-    .leftJoin(questions, eq(answers.questionId, questions.id));
-  let dayAns = allAns.filter(r => r.q && qIds.has(r.q.id));
-  dayAns = filterAnswersByType(dayAns, type) as typeof dayAns;
-
-  const dayEvents = await db.select().from(events).where(eq(events.dayNumber, day));
-  const dayTasks = await db.select().from(tasks).where(eq(tasks.dayNumber, day));
-  const dayMats = await db.select().from(materials).where(eq(materials.dayNumber, day));
-  const subs = await db.select({ s: taskSubmissions, p: participants, t: tasks })
-    .from(taskSubmissions)
-    .leftJoin(participants, eq(taskSubmissions.participantId, participants.id))
-    .leftJoin(tasks, eq(taskSubmissions.taskId, tasks.id));
-  const daySubs = subs.filter(r => r.t && (r.t.dayNumber === day || dayTasks.some(t => t.id === r.t!.id)));
-
-  const roleRows = await db.select({ s: participantDayState, p: participants })
-    .from(participantDayState)
-    .leftJoin(participants, eq(participantDayState.participantId, participants.id));
-  const dayRoles = roleRows.filter(r => r.s.dayNumber === day);
-  const allParticipants = await db.select().from(participants);
-
-  // Prefer exceljs if installed
-  try {
-    const ExcelJS = await import('exceljs');
-    const wb = new ExcelJS.Workbook();
-    const sheetAns = wb.addWorksheet('Ответы');
-    sheetAns.addRow(['id', 'participant', 'direction', 'question', 'block', 'answer', 'words', 'depth']);
-    for (const r of dayAns) {
-      const text = typeof r.a.answerData === 'string' ? r.a.answerData : JSON.stringify(r.a.answerData);
-      sheetAns.addRow([
-        r.a.id,
-        `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
-        r.p?.direction,
-        r.q?.title,
-        r.q?.block,
-        text,
-        r.a.wordCount,
-        inferReflectionDepth(text),
-      ]);
-    }
-    const sheetEv = wb.addWorksheet('События');
-    sheetEv.addRow(['id', 'title', 'place', 'start', 'end']);
-    for (const e of dayEvents) sheetEv.addRow([e.id, e.title, e.place, e.startTime?.toISOString(), e.endTime?.toISOString()]);
-    const sheetTasks = wb.addWorksheet('Задания');
-    sheetTasks.addRow(['id', 'title', 'points', 'confirmation']);
-    for (const t of dayTasks) sheetTasks.addRow([t.id, t.title, t.points, t.confirmationType]);
-    const sheetSubs = wb.addWorksheet('Сдачи');
-    sheetSubs.addRow(['id', 'participant', 'task', 'status', 'points']);
-    for (const r of daySubs) {
-      sheetSubs.addRow([
-        r.s.id,
-        `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
-        r.t?.title,
-        r.s.status,
-        r.s.pointsAwarded,
-      ]);
-    }
-    const sheetMat = wb.addWorksheet('Материалы');
-    sheetMat.addRow(['id', 'title', 'type', 'direction', 'url']);
-    for (const m of dayMats) sheetMat.addRow([m.id, m.title, m.type, m.direction, m.url]);
-
-    const sheetRoles = wb.addWorksheet('Роли по дням');
-    sheetRoles.addRow([
-      'participant_id', 'name', 'direction', 'group', 'day',
-      'start_role', 'active_role', 'tomorrow_role', 'experiment_status',
-    ]);
-    for (const r of dayRoles) {
-      sheetRoles.addRow([
-        r.p?.id,
-        `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
-        r.p?.direction,
-        r.p?.groupName,
-        r.s.dayNumber,
-        r.p?.pedagogicalRole,
-        r.s.activeRoleKey,
-        r.s.tomorrowRoleKey,
-        r.s.experimentStatus,
-      ]);
-    }
-    const sheetEvening = wb.addWorksheet('Итоговая анкета');
-    const eveningKeys = [
-      'participant_id', 'name', 'direction', 'group', 'day', 'submitted_at', 'tomorrow_role',
-      ...EVENING_SCALE_KEYS,
-      'tripYes', 'tripScore', 'practiceYes', 'practiceName', 'recommendYes', 'recommendScore',
-      'mainThesis', 'understandingChange', 'likedMost', 'improveTomorrow', 'freeNote', 'experimentResult',
-    ];
-    sheetEvening.addRow(eveningKeys);
-    for (const r of dayRoles) {
-      const ratings = r.s.eveningRatings as Record<string, unknown> | null;
-      if (!ratings) continue;
-      sheetEvening.addRow([
-        r.p?.id,
-        `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
-        r.p?.direction,
-        r.p?.groupName,
-        r.s.dayNumber,
-        r.s.updatedAt?.toISOString?.() ?? '',
-        r.s.tomorrowRoleKey,
-        ...EVENING_SCALE_KEYS.map(k => ratings[k] ?? ''),
-        ratings.tripYes, ratings.tripScore, ratings.practiceYes, ratings.practiceName,
-        ratings.recommendYes, ratings.recommendScore,
-        ratings.mainThesis, ratings.understandingChange, ratings.likedMost,
-        ratings.improveTomorrow, ratings.freeNote, ratings.experimentResult,
-      ]);
-    }
-    // Also trajectory sheet: one row per participant with days 1-7
-    const byParticipant = new Map<number, typeof roleRows>();
-    for (const r of roleRows) {
-      const id = r.p?.id;
-      if (!id) continue;
-      if (!byParticipant.has(id)) byParticipant.set(id, []);
-      byParticipant.get(id)!.push(r);
-    }
-    const sheetTraj = wb.addWorksheet('Траектория ролей');
-    sheetTraj.addRow(['participant_id', 'name', 'start_role', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'strong', 'growth']);
-    for (const p of allParticipants) {
-      const states = byParticipant.get(p.id) || [];
-      const byDay: Record<number, string> = {};
-      for (const s of states) {
-        byDay[s.s.dayNumber] = s.s.activeRoleKey || s.s.tomorrowRoleKey || '';
-      }
-      sheetTraj.addRow([
-        p.id,
-        `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim(),
-        p.pedagogicalRole,
-        byDay[1] || '', byDay[2] || '', byDay[3] || '', byDay[4] || '',
-        byDay[5] || '', byDay[6] || '', byDay[7] || '',
-        p.strongRole, p.growthRole,
-      ]);
-    }
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=day_${day}_${type}.xlsx`);
-    await wb.xlsx.write(res);
-    return;
-  } catch {
-    // fallback: multi-section CSV
-  }
-
-  const csv = [
-    toCsvSection('Ответы',
-      ['id', 'participant', 'direction', 'question', 'block', 'answer', 'words'],
-      dayAns.map(r => [
-        r.a.id,
-        `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
-        r.p?.direction,
-        r.q?.title,
-        r.q?.block,
-        typeof r.a.answerData === 'string' ? r.a.answerData : JSON.stringify(r.a.answerData),
-        r.a.wordCount,
-      ]),
-    ),
-    toCsvSection('События',
-      ['id', 'title', 'place'],
-      dayEvents.map(e => [e.id, e.title, e.place]),
-    ),
-    toCsvSection('Задания',
-      ['id', 'title', 'points'],
-      dayTasks.map(t => [t.id, t.title, t.points]),
-    ),
-    toCsvSection('Сдачи',
-      ['id', 'participant', 'task', 'status'],
-      daySubs.map(r => [
-        r.s.id,
-        `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
-        r.t?.title,
-        r.s.status,
-      ]),
-    ),
-    toCsvSection('Материалы',
-      ['id', 'title', 'url'],
-      dayMats.map(m => [m.id, m.title, m.url]),
-    ),
-    toCsvSection('Роли',
-      ['participant', 'day', 'active', 'tomorrow', 'start'],
-      dayRoles.map(r => [
-        `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
-        r.s.dayNumber,
-        r.s.activeRoleKey,
-        r.s.tomorrowRoleKey,
-        r.p?.pedagogicalRole,
-      ]),
-    ),
-  ].join('\n');
-
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename=day_${day}_${type}.csv`);
-  res.send('\uFEFF' + csv);
+  const type = req.query.type as string | undefined;
+  await writeDayWorkbook(res, day, type);
 };
 
 export const getParticipantCard = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
+  const answerBlock = typeof req.query.answerBlock === 'string' ? req.query.answerBlock : undefined;
+  const answerDayRaw = req.query.answerDay;
+  const answerDay = answerDayRaw != null && answerDayRaw !== '' ? Number(answerDayRaw) : undefined;
+
   const [p] = await db.select().from(participants).where(eq(participants.id, id)).limit(1);
   if (!p) {
     res.status(404).json({ error: 'Not found' });
     return;
   }
-  const [userAnswers, userSubs, userPoints, userMedalsRows, dayStates, userPiggy] = await Promise.all([
+  const [userAnswers, userSubs, userPoints, userMedalsRows, dayStates, userPiggy, allPointsRows, allActiveMedals] = await Promise.all([
     db.select({ a: answers, q: questions })
       .from(answers)
       .leftJoin(questions, eq(answers.questionId, questions.id))
-      .where(eq(answers.participantId, id)),
+      .where(eq(answers.participantId, id))
+      .orderBy(desc(answers.createdAt))
+      .limit(200),
     db.select({ s: taskSubmissions, t: tasks })
       .from(taskSubmissions)
       .leftJoin(tasks, eq(taskSubmissions.taskId, tasks.id))
@@ -614,8 +431,43 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
       .leftJoin(medals, eq(userMedals.medalId, medals.id))
       .where(eq(userMedals.participantId, id)),
     db.select().from(participantDayState).where(eq(participantDayState.participantId, id)),
-    db.select().from(piggybank).where(eq(piggybank.participantId, id)).orderBy(desc(piggybank.createdAt)).limit(30),
+    db.select().from(piggybank).where(eq(piggybank.participantId, id)).orderBy(desc(piggybank.createdAt)).limit(100),
+    db.select({
+      forumDay: pointsLog.forumDay,
+      points: pointsLog.points,
+      revokedAt: pointsLog.revokedAt,
+    }).from(pointsLog).where(eq(pointsLog.participantId, id)),
+    db.select().from(medals).where(eq(medals.isActive, true)).orderBy(asc(medals.name)),
   ]);
+
+  const filteredAnswers = userAnswers.filter(r => {
+    if (answerBlock && (r.q?.block || '') !== answerBlock) return false;
+    if (answerDay != null && !Number.isNaN(answerDay) && r.q?.dayNumber !== answerDay) return false;
+    return true;
+  });
+
+  const byDay: Record<string, number> = {};
+  for (const row of allPointsRows) {
+    if (row.revokedAt) continue;
+    const key = String(row.forumDay ?? 0);
+    byDay[key] = (byDay[key] || 0) + (row.points ?? 0);
+  }
+  const pointsSummary = {
+    path: p.pathPoints ?? 0,
+    experience: p.experiencePoints ?? 0,
+    bonus: p.bonusPoints ?? 0,
+    total: (p.pathPoints ?? 0) + (p.experiencePoints ?? 0) + (p.bonusPoints ?? 0),
+    byDay,
+  };
+
+  const earnedMap = new Map(userMedalsRows.map(r => [r.um.medalId, r.um.awardedAt]));
+  const medalProgress = allActiveMedals.map(m => ({
+    id: m.id,
+    name: m.name,
+    level: m.level,
+    earned: earnedMap.has(m.id),
+    awardedAt: earnedMap.get(m.id) ?? null,
+  }));
 
   const subIds = userSubs.map(r => r.s.id);
   const confRows = subIds.length > 0
@@ -627,12 +479,16 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
     confBySub.get(c.submissionId)!.push(c);
   }
 
+  const avatarUrl = await fetchVkAvatarUrl(p.vkId);
+
   res.json({
     participant: p,
-    answers: userAnswers.map(r => ({
+    avatarUrl,
+    answers: filteredAnswers.map(r => ({
       id: r.a.id,
       questionTitle: r.q?.title,
       block: r.q?.block,
+      reflectionKind: r.q?.reflectionKind,
       dayNumber: r.q?.dayNumber,
       answerData: r.a.answerData,
       createdAt: r.a.createdAt,
@@ -661,10 +517,13 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
     piggybank: userPiggy,
     medals: userMedalsRows.map(r => ({
       id: r.um.id,
+      medalId: r.um.medalId,
       name: r.m?.name,
       level: r.m?.level,
       awardedAt: r.um.awardedAt,
     })),
+    medalProgress,
+    pointsSummary,
     dayStates,
   });
 };
@@ -711,7 +570,72 @@ export const revokeParticipantPoints = async (req: AdminRequest, res: Response):
     `Баллы пересмотрены: ${reason}`,
     `points_revoke_${logId}`,
   );
+  await logAdminAction({
+    req,
+    actionType: 'points_revoke',
+    section: 'participants',
+    objectId: String(logId),
+    newValue: { participantId, logId, reason },
+    isCritical: true,
+  });
   res.json({ ok: true, reversalId: result.reversalId });
+};
+
+export const revokeSuspiciousParticipantPoints = async (req: AdminRequest, res: Response): Promise<void> => {
+  const participantId = Number(req.params.id);
+  const reason = String(req.body?.reason || 'Подозрительные начисления аннулированы').trim().slice(0, 500);
+  if (!reason) {
+    res.status(400).json({ error: 'reason required' });
+    return;
+  }
+  const forumDay = req.body?.forumDay != null ? Number(req.body.forumDay) : undefined;
+  const actionTypeFilter = req.body?.actionType ? String(req.body.actionType) : undefined;
+  const notify = req.body?.notify !== false;
+
+  const conditions = [
+    eq(pointsLog.participantId, participantId),
+    isNull(pointsLog.revokedAt),
+  ];
+  if (forumDay != null && Number.isFinite(forumDay)) {
+    conditions.push(eq(pointsLog.forumDay, forumDay));
+  }
+  if (actionTypeFilter) {
+    conditions.push(eq(pointsLog.actionType, actionTypeFilter));
+  }
+
+  const rows = await db.select().from(pointsLog).where(and(...conditions));
+  const toRevoke = rows.filter(r => (r.points ?? 0) > 0 && !(r.actionType || '').endsWith('_revoke'));
+  if (toRevoke.length === 0) {
+    res.status(400).json({ error: 'No matching accruals to revoke' });
+    return;
+  }
+
+  const { revokePointsLogEntry } = await import('../services/pointsService.js');
+  const { sendPushNotification } = await import('../services/pushService.js');
+  let revoked = 0;
+  for (const row of toRevoke) {
+    const result = await revokePointsLogEntry(row.id, participantId, reason);
+    if (result.ok) revoked += 1;
+  }
+
+  if (notify && revoked > 0) {
+    await sendPushNotification(
+      [participantId],
+      `Организаторы пересмотрели начисления (${revoked}): ${reason}`,
+      `points_bulk_revoke_${participantId}_${Date.now()}`,
+    );
+  }
+
+  await logAdminAction({
+    req,
+    actionType: 'points_bulk_revoke',
+    section: 'participants',
+    objectId: String(participantId),
+    newValue: { participantId, forumDay, actionTypeFilter, revoked, reason, notify },
+    isCritical: true,
+  });
+
+  res.json({ ok: true, revoked, totalMatched: toRevoke.length });
 };
 
 export const getQrPack = async (req: AdminRequest, res: Response): Promise<void> => {
@@ -791,15 +715,19 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
   }
 
   const ans = await db.select().from(answers);
+  const { isPublishedStatus } = await import('../services/publishStatus.js');
   const depths: Record<string, number> = {};
   const energySeries: { day: number; avg: number; n: number }[] = [];
+  const dayQsAll = await db.select().from(questions);
+  const dayQs = dayQsAll.filter(q => isPublishedStatus(q.status));
+  const publishedQuestionIds = new Set(dayQs.map(q => q.id));
   for (const a of ans) {
+    if (!publishedQuestionIds.has(a.questionId)) continue;
     const text = typeof a.answerData === 'string' ? a.answerData : JSON.stringify(a.answerData || '');
     const d = inferReflectionDepth(text) || '—';
     depths[d] = (depths[d] || 0) + 1;
   }
 
-  const dayQs = await db.select().from(questions);
   for (let d = 1; d <= 8; d++) {
     const qIds = new Set(dayQs.filter(q => q.dayNumber === d).map(q => q.id));
     const dayAns = ans.filter(a => qIds.has(a.questionId));
@@ -827,7 +755,7 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
   const revokedPointsRows = await db.select().from(pointsLog).where(isNotNull(pointsLog.revokedAt));
   const programEvents = await db.select().from(events);
   const allMats = await db.select().from(materials);
-  const matsInAnalytics = allMats;
+  const { published: matsInAnalytics, excludedCount: materialsExcludedFromAnalytics } = (await import('../services/publishStatus.js')).materialCountsForAnalytics(allMats);
   const attendance = await db.select().from(eventAttendance);
   const dayStates = await db.select().from(participantDayState);
 
@@ -969,7 +897,7 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
       kbUnlockedParticipants,
       kbEligibleParticipants: allP.filter(p => p.onboardingCompletedAt).length,
       materialsCount: matsInAnalytics.length,
-      materialsExcludedFromAnalytics: allMats.length - matsInAnalytics.length,
+      materialsExcludedFromAnalytics,
       totalAttendance: attendance.length,
       scaleAverages,
       topEvents: eventsByAttendance.slice(0, 10),

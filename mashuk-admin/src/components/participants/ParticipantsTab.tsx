@@ -36,6 +36,7 @@ function buildListQuery(params: {
   directionIds: number[];
   groupId: string;
   pedagogicalRole: string;
+  strongRole: string;
   activity: string;
 }): string {
   const sp = new URLSearchParams({ page: String(params.page), limit: '50' });
@@ -43,6 +44,7 @@ function buildListQuery(params: {
   for (const id of params.directionIds) sp.append('directionId', String(id));
   if (params.groupId) sp.set('groupId', params.groupId);
   if (params.pedagogicalRole) sp.set('pedagogicalRole', params.pedagogicalRole);
+  if (params.strongRole) sp.set('strongRole', params.strongRole);
   if (params.activity) sp.set('activity', params.activity);
   return sp.toString();
 }
@@ -57,6 +59,8 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
   const [directionFilter, setDirectionFilter] = useState<number[]>([]);
   const [groupFilter, setGroupFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [strongRoleFilter, setStrongRoleFilter] = useState('');
+  const [showIdColumn, setShowIdColumn] = useState(true);
   const [activityFilter, setActivityFilter] = useState('');
   const [directions, setDirections] = useState<{ id: number; name: string }[]>([]);
   const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
@@ -73,7 +77,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
 
   useEffect(() => {
     setParticipantsPage(1);
-  }, [debouncedQ, directionFilter, groupFilter, roleFilter, activityFilter]);
+  }, [debouncedQ, directionFilter, groupFilter, roleFilter, strongRoleFilter, activityFilter]);
 
   const listQuery = useMemo(() => buildListQuery({
     page: participantsPage,
@@ -81,8 +85,9 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
     directionIds: directionFilter,
     groupId: groupFilter,
     pedagogicalRole: roleFilter,
+    strongRole: strongRoleFilter,
     activity: activityFilter,
-  }), [participantsPage, debouncedQ, directionFilter, groupFilter, roleFilter, activityFilter]);
+  }), [participantsPage, debouncedQ, directionFilter, groupFilter, roleFilter, strongRoleFilter, activityFilter]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -183,7 +188,11 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
             {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
           <select className="adm-input" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
-            <option value="">Все роли</option>
+            <option value="">Все роли (ручная)</option>
+            {ROLE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
+          </select>
+          <select className="adm-input" value={strongRoleFilter} onChange={e => setStrongRoleFilter(e.target.value)} title="Ведущая роль по диагностике">
+            <option value="">Все роли (диагностика)</option>
             {ROLE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
           </select>
           <select className="adm-input" value={activityFilter} onChange={e => setActivityFilter(e.target.value)}>
@@ -192,6 +201,9 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
             <option value="inactive_1d">Неактивен ≥ 1 дня</option>
             <option value="inactive_3d">Неактивен ≥ 3 дней</option>
           </select>
+          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setShowIdColumn(v => !v)}>
+            {showIdColumn ? 'Скрыть ID' : 'Показать ID'}
+          </button>
           <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => exportList()}>
             Выгрузить список (XLSX)
           </button>
@@ -247,6 +259,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
                 else setSelected(new Set(participants.map(p => p.id)));
               }} aria-label="Выбрать все" />
             </th>
+            {showIdColumn && <th>ID</th>}
             <th>VK ID</th>
             <th>ФИО</th>
             <th>Направление</th>
@@ -274,6 +287,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
               <td onClick={e => e.stopPropagation()}>
                 <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
               </td>
+              {showIdColumn && <td className="adm-muted">{p.id}</td>}
               <td><VkProfileLink vkId={p.vkId} /></td>
               <td>{p.firstName} {p.lastName}{p.isBlocked ? ' · заблок.' : ''}</td>
               <td onClick={e => e.stopPropagation()}>
@@ -319,11 +333,12 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
                     }, danger: true },
                   p.selfDeletedAt
                     ? { label: 'Восстановить', onClick: () => act(() => adminFetch(`/participants/${p.id}/restore`, { method: 'POST' }).then(reloadPage), 'Восстановлен') }
-                    : { label: 'Сброс регистрации', onClick: () => {
-                      if (confirm('Сбросить регистрацию участника?')) {
-                        adminFetch(`/participants/${p.id}/registration`, { method: 'DELETE' }).then(reloadPage);
-                      }
-                    }, danger: true },
+                    : {
+                      label: 'Удалить участника',
+                      confirmMessage: 'Удалить участника безвозвратно? Все данные регистрации будут сброшены.',
+                      onClick: () => adminFetch(`/participants/${p.id}/registration`, { method: 'DELETE' }).then(reloadPage),
+                      danger: true,
+                    },
                 ]} />
               </td>
             </tr>

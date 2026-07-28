@@ -13,4 +13,5 @@ export const env = {
   VK_GROUP_ID: process.env.VK_GROUP_ID || '',
   VK_COMMUNITY_TOKEN: process.env.VK_COMMUNITY_TOKEN || '',
   PUBLIC_URL: process.env.PUBLIC_URL || '',
+  EXPORT_STORAGE_DIR: process.env.EXPORT_STORAGE_DIR || 'data/admin-exports',
 };

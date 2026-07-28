@@ -2,6 +2,7 @@ export type ProgramEvent = {
   id: number;
   title: string;
   description?: string | null;
+  descriptionHtml?: string | null;
   place?: string | null;
   dayNumber?: number | null;
   timeSlot?: string | null;

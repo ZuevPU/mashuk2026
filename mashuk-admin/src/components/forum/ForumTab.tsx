@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { confirmDelete } from '../../admin/confirmDelete';
 import { label } from '../../labels/ru';
 import type { AdminTabProps } from '../admin/types';
 import { EveningQuestionnaireBuilder } from './EveningQuestionnaireBuilder';
@@ -334,7 +335,8 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                     type="button"
                     className="adm-btn adm-btn-danger adm-btn-sm"
                     onClick={() => {
-                      if (confirm('Удалить группу?')) act(async () => {
+                      if (!confirmDelete('Удалить группу?')) return;
+                      act(async () => {
                         await adminFetch(`/groups/${g.id}`, { method: 'DELETE' });
                         setGroups((await adminFetch('/groups')).groups || []);
                       });
@@ -462,7 +464,8 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                 </button>
               )}
               <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={() => {
-                if (confirm('Удалить текст?')) act(async () => {
+                if (!confirmDelete('Удалить текст?')) return;
+                act(async () => {
                   await adminFetch(`/consents/${c.id}`, { method: 'DELETE' });
                   setConsents((await adminFetch('/consents')).consents || []);
                 });
