@@ -18,6 +18,7 @@ import {
 export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [loading, setLoading] = useState(true);
   const [medals, setMedals] = useState<Medal[]>([]);
+  const [listCount, setListCount] = useState(0);
   const [totalAll, setTotalAll] = useState(0);
   const [metrics, setMetrics] = useState<RuleMetricOption[]>([]);
   const [tab, setTab] = useState<ListTab>('active');
@@ -52,6 +53,7 @@ export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const loadMedals = useCallback(async () => {
     const res = await adminFetch(`/medals?${listQuery}`);
     setMedals(res.medals || []);
+    setListCount(res.totalCount ?? (res.medals?.length || 0));
   }, [adminFetch, listQuery]);
 
   const load = useCallback(async () => {
@@ -145,10 +147,15 @@ export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     { key: 'drafts', label: 'Черновики' },
   ];
 
+  const hasListFilters = categoryFilter || levelFilter || awardFilter || visibilityFilter;
+  const heroTitle = hasListFilters || tab === 'drafts'
+    ? `Медали · ${listCount} в списке · ${totalAll} всего`
+    : `Медали · ${totalAll} всего`;
+
   return (
     <div className="adm-forum">
       <AdminPageHero
-        title={`Медали · ${totalAll} всего`}
+        title={heroTitle}
         hint="Каталог наград смены. Автоматические медали проверяются по правилам; ручные выдаются из карточки участника."
       >
         <div className="adm-seg" style={{ marginBottom: 12 }}>

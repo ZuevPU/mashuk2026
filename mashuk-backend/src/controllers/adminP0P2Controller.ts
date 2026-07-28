@@ -10,7 +10,7 @@ import {
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { getForumSettings } from '../services/helpers.js';
 import { deactivateOtherConsents } from './consentsController.js';
-import { evaluateAllMedals } from '../services/medalEvaluator.js';
+import { evaluateAllMedals, getMedalRuleProgress, parseMedalRule } from '../services/medalEvaluator.js';
 import { clubMatchNightly, isGigachatConfigured, synthesizeOutcomes } from '../services/gigachatService.js';
 import { generateQrToken, buildTaskQrUrl, buildEventQrUrl, buildParticipantQrUrl } from '../services/qrService.js';
 import { logAdminAction } from '../services/adminActionsLog.js';
@@ -461,12 +461,27 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
   };
 
   const earnedMap = new Map(userMedalsRows.map(r => [r.um.medalId, r.um.awardedAt]));
-  const medalProgress = allActiveMedals.map(m => ({
-    id: m.id,
-    name: m.name,
-    level: m.level,
-    earned: earnedMap.has(m.id),
-    awardedAt: earnedMap.get(m.id) ?? null,
+  const medalProgress = await Promise.all(allActiveMedals.map(async m => {
+    const earned = earnedMap.has(m.id);
+    const base = {
+      id: m.id,
+      name: m.name,
+      level: m.level,
+      earned,
+      awardedAt: earnedMap.get(m.id) ?? null,
+    };
+    if (earned || m.awardType !== 'auto' || m.visibility !== 'open') {
+      return base;
+    }
+    const parsed = parseMedalRule(m.conditionRule);
+    if (!parsed) return base;
+    const prog = await getMedalRuleProgress(id, parsed);
+    return {
+      ...base,
+      current: prog.current,
+      target: prog.target,
+      conditionLabel: prog.conditionLabel,
+    };
   }));
 
   const subIds = userSubs.map(r => r.s.id);

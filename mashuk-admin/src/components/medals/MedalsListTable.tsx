@@ -1,6 +1,6 @@
 import { RowActionsMenu } from '../participants/RowActionsMenu';
 import { label } from '../../labels/ru';
-import type { Medal } from './types';
+import { parseRuleParts, type Medal } from './types';
 
 type Props = {
   medals: Medal[];
@@ -23,6 +23,7 @@ export function MedalsListTable({ medals, onEdit, onHide, onDelete }: Props) {
           <th>Уровень</th>
           <th>Категория</th>
           <th>Тип выдачи</th>
+          <th>Условие</th>
           <th>Видимость</th>
           <th>Выдано раз</th>
           <th>Действия</th>
@@ -44,6 +45,14 @@ export function MedalsListTable({ medals, onEdit, onHide, onDelete }: Props) {
             <td>{label(m.level ?? '')}</td>
             <td>{label(`medal_cat_${m.category}`) !== `medal_cat_${m.category}` ? label(`medal_cat_${m.category}`) : (m.category || '—')}</td>
             <td>{m.awardType === 'auto' ? 'Автоматическая' : 'Ручная'}</td>
+            <td style={{ fontSize: 11 }}>
+              {m.awardType === 'auto' && m.conditionRule
+                ? (() => {
+                  const p = parseRuleParts(m.conditionRule);
+                  return `${p.metric} ≥ ${p.value}`;
+                })()
+                : '—'}
+            </td>
             <td>{m.visibility === 'hidden' ? 'Скрытая' : 'Открытая'}</td>
             <td>{m.awardedCount ?? 0}</td>
             <td>

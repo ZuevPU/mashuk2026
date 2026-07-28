@@ -3,6 +3,8 @@ import { label } from '../../labels/ru';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
 import { BonusRulesEditor, type BonusRule } from './BonusRulesEditor';
+import { RatingFormulaPreview } from './RatingFormulaPreview';
+import { levelNameForPoints, validateThresholdRows, type ThresholdRow } from './levelPreviewUtils';
 
 type LevelConfig = {
   id: number;
@@ -22,8 +24,6 @@ type ActionRow = {
   max: number;
   group: string;
 };
-
-type ThresholdRow = { level: number; from: number; to: number; name: string };
 
 type PointsLogRow = {
   id: number;
@@ -158,6 +158,26 @@ function ThresholdEditor({
       >
         + Добавить уровень
       </button>
+      <ThresholdLevelSample rows={rows} />
+    </div>
+  );
+}
+
+function ThresholdLevelSample({ rows }: { rows: ThresholdRow[] }) {
+  const [sampleA, setSampleA] = useState(50);
+  const [sampleB, setSampleB] = useState(200);
+  return (
+    <div className="adm-muted" style={{ fontSize: 12, marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        Пример
+        <input type="number" min={0} className="adm-input" style={{ width: 72 }} value={sampleA} onChange={e => setSampleA(Math.max(0, Number(e.target.value) || 0))} />
+        баллов → {levelNameForPoints(sampleA, rows)}
+      </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        Пример
+        <input type="number" min={0} className="adm-input" style={{ width: 72 }} value={sampleB} onChange={e => setSampleB(Math.max(0, Number(e.target.value) || 0))} />
+        баллов → {levelNameForPoints(sampleB, rows)}
+      </label>
     </div>
   );
 }
@@ -315,7 +335,13 @@ export function LevelsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     setActionRows(prev => prev.map(r => (r.actionType === actionType ? { ...r, ...patch } : r)));
   };
 
-  const saveAll = () => act(async () => {
+  const saveAll = () => {
+    const issues = [...validateThresholdRows(pathRows), ...validateThresholdRows(expRows)];
+    if (issues.length > 0) {
+      const msg = issues.map(i => i.message).join('\n');
+      if (!confirm(`Пороги уровней выглядят некорректно:\n\n${msg}\n\nВсё равно сохранить?`)) return;
+    }
+    act(async () => {
     const items: Record<string, unknown>[] = [
       { actionType: 'path_level', pointsPerUnit: 0, levelThresholds: rowsToThresholdJson(pathRows), track: 'path', displayName: 'Пороги «Пути»' },
       { actionType: 'exp_level', pointsPerUnit: 0, levelThresholds: rowsToThresholdJson(expRows), track: 'experience', displayName: 'Пороги «Опыта»' },
@@ -336,6 +362,7 @@ export function LevelsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     });
     await load();
   }, 'Настройки сохранены');
+  };
 
   const recalcAll = () => {
     if (!confirm('Пересчитать баллы всех участников из журнала?')) return;
@@ -437,6 +464,8 @@ export function LevelsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             <button type="button" className="adm-btn adm-btn-primary" onClick={saveAll}>Сохранить</button>
             <button type="button" className="adm-btn adm-btn-secondary" onClick={recalcAll}>Пересчитать всех</button>
           </div>
+
+          <RatingFormulaPreview pathRows={pathRows} expRows={expRows} />
 
           <ThresholdEditor title="Пороги уровней «Пути»" actionType="path_level" rows={pathRows} onChange={setPathRows} />
           <ThresholdEditor title="Пороги уровней «Опыта»" actionType="exp_level" rows={expRows} onChange={setExpRows} />
