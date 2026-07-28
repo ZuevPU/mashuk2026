@@ -54,6 +54,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   const [search, setSearch] = useState('');
   const [dayFilter, setDayFilter] = useState('');
   const [directionFilter, setDirectionFilter] = useState('');
+  const [eventFilter, setEventFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [speakers, setSpeakers] = useState<ProgramSpeaker[]>([]);
   const [previewMat, setPreviewMat] = useState<MaterialRow | null>(null);
@@ -96,10 +97,13 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
     return materials.filter(m => {
       if (dayFilter && String(m.dayNumber ?? '') !== dayFilter) return false;
       if (directionFilter && (m.direction || '') !== directionFilter) return false;
+      if (eventFilter === 'general') {
+        if (m.eventId != null || m.isGeneral !== true) return false;
+      } else if (eventFilter && String(m.eventId ?? '') !== eventFilter) return false;
       if (q && !(m.title || '').toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [materials, search, dayFilter, directionFilter]);
+  }, [materials, search, dayFilter, directionFilter, eventFilter]);
 
   const createMaterial = () =>
     act(async () => {
@@ -148,7 +152,11 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   return (
     <div className="adm-forum">
       <AdminPageHero
-        title={`База знаний · ${filtered.length}${filtered.length !== materials.length ? ` из ${materials.length}` : ''} материалов`}
+        title={
+          filtered.length === materials.length
+            ? `База знаний · ${materials.length} материалов`
+            : `База знаний · ${filtered.length} из ${materials.length} материалов`
+        }
         hint="В аналитику и приложение участника попадают только материалы со статусом «Опубликован»."
       >
         {setTab && (
@@ -234,6 +242,13 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
           <select className="adm-input" value={directionFilter} onChange={e => setDirectionFilter(e.target.value)}>
             <option value="">Все направления</option>
             {directions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+          </select>
+          <select className="adm-input" value={eventFilter} onChange={e => setEventFilter(e.target.value)}>
+            <option value="">Все события</option>
+            <option value="general">Общие (без события)</option>
+            {events.map(ev => (
+              <option key={ev.id} value={String(ev.id)}>Д{ev.dayNumber} · {ev.title}</option>
+            ))}
           </select>
           <select className="adm-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
             <option value="">Все статусы</option>

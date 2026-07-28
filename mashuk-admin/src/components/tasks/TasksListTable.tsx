@@ -62,7 +62,9 @@ export function TasksListTable({
               <td>{t.points ?? 0}</td>
               <td>{days}</td>
               <td>{methodsLabel(t.confirmationMethods)}</td>
-              <td>{t.pendingModerationCount ? `${t.pendingModerationCount} в очереди` : '—'}</td>
+              <td title={t.pendingModerationCount ? `${t.pendingModerationCount} заявок ждут модерации` : undefined}>
+                {t.pendingModerationCount ? `${t.pendingModerationCount} в очереди` : '—'}
+              </td>
               <td>{statusLabel(t)}</td>
               <td>{t.completionCount ?? 0}</td>
               <td>

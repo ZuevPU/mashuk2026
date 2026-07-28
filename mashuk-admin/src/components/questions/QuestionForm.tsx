@@ -6,6 +6,7 @@ type Props = {
   draft: QuestionDraft;
   totalDays: number;
   isNew: boolean;
+  currentQuestionId?: number | null;
   answerCount?: number;
   versionNotice?: string | null;
   formTab: 'main' | 'versions';
@@ -30,6 +31,7 @@ export function QuestionForm({
   draft,
   totalDays,
   isNew,
+  currentQuestionId = null,
   answerCount,
   versionNotice,
   formTab,
@@ -104,6 +106,9 @@ export function QuestionForm({
             {versions.map(v => (
               <li key={v.id} style={{ marginBottom: 6 }}>
                 <strong>#{v.id}</strong> {v.title}
+                {currentQuestionId != null && v.id === currentQuestionId && (
+                  <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: '#B8621A' }}>текущая</span>
+                )}
                 <span className="adm-muted" style={{ marginLeft: 8, fontSize: 11 }}>
                   {v.status} · {v.answerCount ?? 0} отв. · {v.createdAt ? new Date(v.createdAt).toLocaleString('ru-RU') : '—'}
                 </span>

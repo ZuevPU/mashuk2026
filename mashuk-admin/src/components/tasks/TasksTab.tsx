@@ -67,6 +67,17 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     [tab, search, categoryFilter, dayFilter, methodFilter],
   );
 
+  const listQueryHasFilters = useMemo(
+    () => Boolean(
+      search.trim()
+      || categoryFilter
+      || dayFilter
+      || methodFilter
+      || tab !== 'active',
+    ),
+    [search, categoryFilter, dayFilter, methodFilter, tab],
+  );
+
   const categoriesById = useMemo(
     () => new Map(categories.map(c => [c.id, c.name])),
     [categories],
@@ -237,7 +248,11 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   return (
     <div className="adm-forum adm-tasks">
       <AdminPageHero
-        title={`Задания · ${totalAll} всего`}
+        title={
+          listQueryHasFilters
+            ? `Задания · ${tasks.length} в списке · ${totalAll} всего`
+            : `Задания · ${totalAll} всего`
+        }
         hint="Список заданий форума. Справочник категорий — ниже. Модерация ответов — в меню строки."
       >
         <div className="adm-seg" style={{ marginBottom: 12 }}>
