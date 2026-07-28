@@ -20,7 +20,7 @@ type AdminUser = {
 
 type Direction = { id: number; name: string };
 
-const ROLE_FILTER = ['', 'admin', 'director', 'analyst', 'curator', 'moderator', 'volunteer', 'organizer'];
+const ROLE_FILTER = ['', 'admin', 'director', 'analyst', 'curator', 'moderator', 'volunteer', 'organizer', 'gamification'];
 
 export function AdminsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);

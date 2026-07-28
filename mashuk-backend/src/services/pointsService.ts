@@ -1,6 +1,7 @@
 import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { pointsLog, levelsConfig, participants } from '../db/schema.js';
+import { env } from '../config/env.js';
 
 export type PointTrack = 'path' | 'experience';
 
@@ -24,7 +25,7 @@ const PATH_ACTIONS = new Set([
 
 const BONUS_ACTIONS = new Set(['bonus_regularity', 'bonus_diversity']);
 
-const EXP_ACTIONS = new Set(['task_complete', 'piggybank_entry', 'admin_manual_experience']);
+const EXP_ACTIONS = new Set(['task_complete', 'piggybank_entry', 'admin_manual_experience', 'admin_manual_task']);
 
 export function pointsTrackForAction(actionType: string): PointTrack | 'bonus' {
   if (actionType === 'admin_manual_path') return 'path';
@@ -93,11 +94,44 @@ export async function awardPoints(
     actionType,
   });
 
+  await syncForumPoints(participantId);
+
   return { awarded: points, track };
 }
 
 export function totalRatingScore(path: number, experience: number, bonus: number): number {
   return path + experience + bonus;
+}
+
+export function isUnifiedRatingEnabled(): boolean {
+  return env.UNIFIED_RATING;
+}
+
+export function participantRatingScore(p: {
+  pathPoints?: number | null;
+  experiencePoints?: number | null;
+  bonusPoints?: number | null;
+  forumPoints?: number | null;
+}): number {
+  if (isUnifiedRatingEnabled()) {
+    if (p.forumPoints != null) return p.forumPoints;
+    return totalRatingScore(p.pathPoints ?? 0, p.experiencePoints ?? 0, p.bonusPoints ?? 0);
+  }
+  return totalRatingScore(p.pathPoints ?? 0, p.experiencePoints ?? 0, p.bonusPoints ?? 0);
+}
+
+export async function syncForumPoints(participantId: number): Promise<void> {
+  if (!isUnifiedRatingEnabled()) return;
+  const [row] = await db.select({
+    pathPoints: participants.pathPoints,
+    experiencePoints: participants.experiencePoints,
+    bonusPoints: participants.bonusPoints,
+  }).from(participants).where(eq(participants.id, participantId)).limit(1);
+  if (!row) return;
+  const total = totalRatingScore(row.pathPoints ?? 0, row.experiencePoints ?? 0, row.bonusPoints ?? 0);
+  await db.update(participants)
+    .set({ forumPoints: total })
+    .where(eq(participants.id, participantId));
 }
 
 export async function getLevelThresholds(track: PointTrack): Promise<number[]> {
@@ -191,6 +225,8 @@ export async function revokePointsLogEntry(
       .set({ experiencePoints: sql`GREATEST(0, ${participants.experiencePoints} + ${neg})` })
       .where(eq(participants.id, participantId));
   }
+
+  await syncForumPoints(participantId);
 
   return { ok: true, reversalId: reversal.id };
 }

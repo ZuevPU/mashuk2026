@@ -54,6 +54,7 @@ type InsightsContextValue = {
   setTab: (t: Tab) => void;
   activeSection: 'analytics' | 'exports';
   adminFetch: (path: string, init?: RequestInit) => Promise<unknown>;
+  analyticsDashboardAllowlist?: string[] | null;
 };
 
 const STORAGE_KEY = 'mashuk_insights_filters';
@@ -82,12 +83,14 @@ export function InsightsProvider({
   setTab,
   reloadKey,
   activeSection,
+  analyticsDashboardAllowlist = null,
 }: {
   children: ReactNode;
   adminFetch: (path: string, init?: RequestInit) => Promise<unknown>;
   setTab: (t: Tab) => void;
   reloadKey: number;
   activeSection: 'analytics' | 'exports';
+  analyticsDashboardAllowlist?: string[] | null;
 }) {
   const stored = useMemo(() => readStored(), []);
   const [forumDay, setForumDayState] = useState(stored.forumDay);
@@ -128,6 +131,13 @@ export function InsightsProvider({
   useEffect(() => { reloadMeta(); }, [reloadMeta, reloadKey]);
 
   useEffect(() => {
+    if (!analyticsDashboardAllowlist?.length) return;
+    if (!analyticsDashboardAllowlist.includes(activeDashboardId)) {
+      setActiveDashboardIdState(analyticsDashboardAllowlist[0] as DashboardId);
+    }
+  }, [analyticsDashboardAllowlist, activeDashboardId]);
+
+  useEffect(() => {
     if (meta?.currentForumDay && forumDay === '1' && stored.forumDay === '1') {
       setForumDayState(String(meta.currentForumDay));
     }
@@ -148,9 +158,10 @@ export function InsightsProvider({
     setTab,
     activeSection,
     adminFetch,
+    analyticsDashboardAllowlist,
   }), [
     forumDay, direction, group, activeDashboardId, meta, metaLoading, reloadMeta,
-    setTab, activeSection, adminFetch,
+    setTab, activeSection, adminFetch, analyticsDashboardAllowlist,
   ]);
 
   return <InsightsContext.Provider value={value}>{children}</InsightsContext.Provider>;

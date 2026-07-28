@@ -5,4 +5,5 @@ export type AdminTabProps = {
   act: (fn: () => Promise<unknown>, msg?: string) => void;
   reloadKey: number;
   setTab?: (tab: Tab) => void;
+  adminRole?: string;
 };

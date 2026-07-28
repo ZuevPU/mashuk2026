@@ -397,9 +397,18 @@ export const ProfilePanel: React.FC<{
             </div>
 
             <div className="m-stats">
-              <div className="m-st"><div className="m-sv">📍 {p.points.path}</div><div className="m-sl">Путь · ур. {p.points.pathLevel}</div></div>
-              <div className="m-st"><div className="m-sv">⚡ {p.points.experience}</div><div className="m-sl">Опыт · ур. {p.points.experienceLevel}</div></div>
-              <div className="m-st"><div className="m-sv">✦ {p.points.total ?? ((p.points.path ?? 0) + (p.points.experience ?? 0))}</div><div className="m-sl">Общий рейтинг</div></div>
+              {p.points?.unified ? (
+                <div className="m-st">
+                  <div className="m-sv">✦ {p.points.rating ?? p.points.total}</div>
+                  <div className="m-sl">Баллы · ур. {p.points.ratingLevel ?? p.points.experienceLevel ?? 1}</div>
+                </div>
+              ) : (
+                <>
+                  <div className="m-st"><div className="m-sv">📍 {p.points.path}</div><div className="m-sl">Путь · ур. {p.points.pathLevel}</div></div>
+                  <div className="m-st"><div className="m-sv">⚡ {p.points.experience}</div><div className="m-sl">Опыт · ур. {p.points.experienceLevel}</div></div>
+                  <div className="m-st"><div className="m-sv">✦ {p.points.total ?? ((p.points.path ?? 0) + (p.points.experience ?? 0))}</div><div className="m-sl">Общий рейтинг</div></div>
+                </>
+              )}
             </div>
 
             {(p.goalAnswers?.length > 0 || p.myRequest || p.goalSetting) && (

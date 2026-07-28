@@ -696,3 +696,14 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   object-fit: cover;
   display: block;
 }
+
+.leaderboard-screen {
+  min-height: 100vh;
+  padding: 24px 32px;
+  background: #0f172a;
+  color: #f8fafc;
+}
+.leaderboard-screen-header h1 { margin: 0 0 8px; font-size: 28px; }
+.leaderboard-screen-table { margin-top: 24px; background: #1e293b; }
+.leaderboard-screen-table th,
+.leaderboard-screen-table td { color: #f1f5f9; border-color: #334155; }

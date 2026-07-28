@@ -85,6 +85,37 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       <AdminPageHero title="Выгрузки" hint="Пресеты XLSX · кастомный конструктор · история с повторным скачиванием" />
 
       <div className="card adm-forum-block">
+        <h3>Рейтинг (игропатики)</h3>
+        <p className="adm-forum-hint">Быстрые выгрузки лидеров, заявок и журнала модерации.</p>
+        <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <button type="button" className="adm-btn adm-btn-primary" onClick={() => {
+            downloadXlsx(`/exports/rating/day?day=${forumDay}`, `rating_day_${forumDay}.xlsx`);
+            logPreset('Рейтинг за день', 'rating_day', { day: Number(forumDay) });
+          }}>
+            Рейтинг за день D{forumDay}
+          </button>
+          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => {
+            downloadCsv('/exports/rating/shift', 'leaderboard_shift.csv');
+            logPreset('Рейтинг смены', 'rating_shift', {});
+          }}>
+            Рейтинг смены (CSV)
+          </button>
+          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadXlsx('/exports/task-submissions', 'task_submissions.xlsx')}>
+            Заявки на задания
+          </button>
+          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadXlsx('/exports/medals', 'medals.xlsx')}>
+            Медали
+          </button>
+          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadCsv('/exports/points-log', 'points_log.csv')}>
+            Журнал баллов
+          </button>
+          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadCsv('/exports/moderation-log', 'moderation_log.csv')}>
+            Журнал модерации
+          </button>
+        </div>
+      </div>
+
+      <div className="card adm-forum-block">
         <h3>Сквозные поля</h3>
         <p className="adm-forum-hint">Во всех текстовых выгрузках (§10):</p>
         <ul className="adm-cross-fields">

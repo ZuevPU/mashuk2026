@@ -34,11 +34,39 @@ function permFromRow(row: typeof adminRolePermissions.$inferSelect): SectionPerm
 
 export async function ensureAdminPermissionsSeeded(): Promise<void> {
   const [existing] = await db.select({ id: adminRolePermissions.id }).from(adminRolePermissions).limit(1);
-  if (existing) return;
+  if (existing) {
+    await ensureGamificationRolePermissions();
+    return;
+  }
   const rows = buildDefaultPermissionRows();
   if (rows.length === 0) return;
   await db.insert(adminRolePermissions).values(
     rows.map(r => ({
+      role: r.role,
+      section: r.section,
+      canRead: r.canRead,
+      canCreate: r.canCreate,
+      canUpdate: r.canUpdate,
+      canDelete: r.canDelete,
+      canConfirm: r.canConfirm,
+      canExport: r.canExport,
+    })),
+  );
+  invalidatePermissionsCache();
+}
+
+/** Insert gamification matrix rows on DBs seeded before the role existed. */
+export async function ensureGamificationRolePermissions(): Promise<void> {
+  const [existing] = await db.select({ id: adminRolePermissions.id })
+    .from(adminRolePermissions)
+    .where(and(eq(adminRolePermissions.role, 'gamification'), eq(adminRolePermissions.section, 'tasks')))
+    .limit(1);
+  if (existing) return;
+
+  const defaults = buildDefaultPermissionRows().filter(r => r.role === 'gamification');
+  if (defaults.length === 0) return;
+  await db.insert(adminRolePermissions).values(
+    defaults.map(r => ({
       role: r.role,
       section: r.section,
       canRead: r.canRead,

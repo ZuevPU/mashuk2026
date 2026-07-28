@@ -29,10 +29,25 @@ import { PushTab } from './components/push/PushTab';
 import { RecommendationTagsTab } from './components/tags/RecommendationTagsTab';
 import { QuestionsTab } from './components/questions/QuestionsTab';
 import { TasksTab } from './components/tasks/TasksTab';
+import { LeaderboardScreen, RatingTab } from './components/rating/RatingTab';
 import { TAB_LABELS, TAB_ORDER, type Tab } from './tabs';
+
+type AdminMe = {
+  role?: string;
+  allowedTabs?: string[];
+  defaultTab?: string;
+  analyticsDashboards?: string[] | null;
+};
+
+function isLeaderboardHash(): boolean {
+  return typeof window !== 'undefined' && window.location.hash.startsWith('#/leaderboard-screen');
+}
 
 export const App = () => {
   const [tab, setTab] = useState<Tab>('participants');
+  const [allowedTabs, setAllowedTabs] = useState<Tab[]>([...TAB_ORDER]);
+  const [analyticsDashboardAllowlist, setAnalyticsDashboardAllowlist] = useState<string[] | null>(null);
+  const [adminRole, setAdminRole] = useState<string>('admin');
   const [reloadKey, setReloadKey] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const reload = () => setReloadKey(k => k + 1);
@@ -67,6 +82,23 @@ export const App = () => {
   }, []);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+    adminFetch('/auth/me')
+      .then((me: AdminMe) => {
+        setAdminRole(me.role ?? 'admin');
+        const tabs = (me.allowedTabs ?? TAB_ORDER) as Tab[];
+        setAllowedTabs(tabs.length ? tabs : [...TAB_ORDER]);
+        if (me.defaultTab && tabs.includes(me.defaultTab as Tab)) {
+          setTab(me.defaultTab as Tab);
+        }
+        setAnalyticsDashboardAllowlist(me.analyticsDashboards ?? null);
+      })
+      .catch(() => {
+        setAllowedTabs([...TAB_ORDER]);
+      });
+  }, [isAuthenticated, reloadKey]);
+
+  useEffect(() => {
     const handleApiError = (e: Event) => {
       setToast((e as CustomEvent<string>).detail);
     };
@@ -92,7 +124,11 @@ export const App = () => {
     setLoginPassword('');
   };
 
-  const tabProps = { adminFetch, act, reloadKey, setTab };
+  const tabProps = { adminFetch, act, reloadKey, setTab, adminRole };
+
+  if (isAuthenticated && isLeaderboardHash()) {
+    return <LeaderboardScreen adminFetch={adminFetch} />;
+  }
 
   if (!isAuthenticated) {
     return (
@@ -131,13 +167,14 @@ export const App = () => {
         </button>
       </header>
       <nav className="admin-nav">
-        {TAB_ORDER.map(t => (
+        {allowedTabs.map(t => (
           <button key={t} type="button" className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
             {TAB_LABELS[t]}
           </button>
         ))}
       </nav>
       <main className="admin-main">
+        {tab === 'rating' && <RatingTab {...tabProps} />}
         {tab === 'participants' && (
           <ParticipantsTab {...tabProps} onOpenCard={openParticipantCard} />
         )}
@@ -166,6 +203,7 @@ export const App = () => {
             setTab={setTab}
             reloadKey={reloadKey}
             activeSection={tab === 'exports' ? 'exports' : 'analytics'}
+            analyticsDashboardAllowlist={analyticsDashboardAllowlist}
           >
             <InsightsChrome>
               {tab === 'analytics' && (

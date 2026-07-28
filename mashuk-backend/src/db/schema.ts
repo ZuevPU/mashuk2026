@@ -314,6 +314,7 @@ export const participants = pgTable('participants', {
   pathPoints: integer('path_points').default(0),
   experiencePoints: integer('experience_points').default(0),
   bonusPoints: integer('bonus_points').default(0),
+  forumPoints: integer('forum_points').default(0),
   hideFromLeaderboard: boolean('hide_from_leaderboard').default(false),
   qrToken: varchar('qr_token', { length: 64 }),
   groupId: integer('group_id'),

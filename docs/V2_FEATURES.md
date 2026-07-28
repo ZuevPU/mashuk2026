@@ -4,13 +4,14 @@
 
 | Переменная | Назначение |
 |------------|------------|
-| `SEMANTIC_ANALYTICS_V2=true` | Ночной `clubMatchNightly`, дашборд «Смысловая аналитика», расширенный semantic refresh |
-| `GIGACHAT_API_KEY` + `GIGACHAT_SCOPE` | LLM для semantic v2 (обязателен при включённой смысловой аналитике) |
+| `SEMANTIC_ANALYTICS_V2=true` | Дашборды «Смысловая аналитика» и «Материал для клубов», ночной прогон `clubFragmentMatchNightly` (keyword по фрагментам) |
+| `SEMANTIC_ANALYTICS_V2_HEURISTICS_ONLY=true` | По умолчанию эвристики без GigaChat для v2 (LLM отложен). Установите `false`, когда подключите GigaChat |
+| `GIGACHAT_API_KEY` + `GIGACHAT_SCOPE` | LLM-слой (кластеризация, embeddings) — **отдельный этап**, сейчас не обязателен |
 | `LLM_PROFILE_V2=true` | Генерация outcomes/маршрута в `GET /profile` через GigaChat (fallback — эвристики) |
 | `LLM_REFLECTION_BONUS_V2=true` | Бонус XP за содержательность рефлексии (+0/+3/+5) в `questionsController` |
 
 Пример: [`mashuk-backend/.env.production.example`](../mashuk-backend/.env.production.example).
 
-Планировщик: [`refreshScheduler.ts`](../mashuk-backend/src/services/analytics/refreshScheduler.ts) — semantic и LLM-флаги читаются при старте и в cron.
+Планировщик: [`refreshScheduler.ts`](../mashuk-backend/src/services/analytics/refreshScheduler.ts) — semantic v2 и клубы при `SEMANTIC_ANALYTICS_V2=true`.
 
-**Рекомендуемый порядок включения:** сначала `SEMANTIC_ANALYTICS_V2` + GigaChat на staging → затем `LLM_PROFILE_V2` → затем `LLM_REFLECTION_BONUS_V2`.
+**Рекомендуемый порядок включения сейчас:** `SEMANTIC_ANALYTICS_V2=true` на staging/prod **без** GigaChat → проверить дашборды 6–7 → позже LLM-флаги по отдельному решению.

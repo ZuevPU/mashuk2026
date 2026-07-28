@@ -121,7 +121,7 @@ export const seedTouchpointsSchema = z.object({
 }).strict();
 
 export const ADMIN_USER_ROLES = [
-  'admin', 'director', 'analyst', 'curator', 'moderator', 'volunteer', 'organizer',
+  'admin', 'director', 'analyst', 'curator', 'moderator', 'volunteer', 'organizer', 'gamification',
 ] as const;
 
 export const adminUserCreateSchema = z.object({

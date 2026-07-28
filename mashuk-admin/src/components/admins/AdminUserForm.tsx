@@ -11,7 +11,7 @@ export type AdminUserDraft = {
 };
 
 const ROLES = [
-  'admin', 'director', 'analyst', 'curator', 'moderator', 'volunteer', 'organizer',
+  'admin', 'director', 'analyst', 'curator', 'moderator', 'volunteer', 'organizer', 'gamification',
 ] as const;
 
 const ROLE_LABELS: Record<string, string> = {
@@ -22,6 +22,7 @@ const ROLE_LABELS: Record<string, string> = {
   moderator: 'модератор',
   volunteer: 'волонтёр',
   organizer: 'организатор',
+  gamification: 'игропатика',
 };
 
 type Direction = { id: number; name: string };

@@ -20,6 +20,11 @@ export function llmReflectionBonusEnabled(): boolean {
   return process.env.LLM_REFLECTION_BONUS_V2 === 'true';
 }
 
+export function semanticHeuristicsOnly(): boolean {
+  return process.env.SEMANTIC_ANALYTICS_V2_HEURISTICS_ONLY === 'true'
+    || process.env.SEMANTIC_ANALYTICS_V2_HEURISTICS_ONLY !== 'false';
+}
+
 export async function refreshAllAnalytics(): Promise<void> {
   await recalculateDailyStats();
 }
@@ -31,12 +36,12 @@ export function startAnalyticsRefreshScheduler(): void {
     refreshAllAnalytics().catch(err => console.error('[analytics] scheduled refresh', err));
   }, ms);
   if (semanticV2Enabled()) {
-    void import('../gigachatService.js').then(({ clubMatchNightly }) =>
-      clubMatchNightly().catch(err => console.error('[analytics] club match', err)),
+    void import('./clubMatchService.js').then(({ clubFragmentMatchNightly }) =>
+      clubFragmentMatchNightly().catch(err => console.error('[analytics] club match', err)),
     );
     setInterval(() => {
-      void import('../gigachatService.js').then(({ clubMatchNightly }) =>
-        clubMatchNightly().catch(err => console.error('[analytics] club match', err)),
+      void import('./clubMatchService.js').then(({ clubFragmentMatchNightly }) =>
+        clubFragmentMatchNightly().catch(err => console.error('[analytics] club match', err)),
       );
     }, 24 * 60 * 60 * 1000);
   }

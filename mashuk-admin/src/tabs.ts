@@ -1,4 +1,5 @@
 export type Tab =
+  | 'rating'
   | 'participants'
   | 'directions'
   | 'onboarding'
@@ -25,6 +26,7 @@ export const TAB_ORDER: Tab[] = [
 ];
 
 export const TAB_LABELS: Record<Tab, string> = {
+  rating: 'Рейтинг',
   participants: 'Участники',
   directions: 'Направления',
   onboarding: 'Онбординг',

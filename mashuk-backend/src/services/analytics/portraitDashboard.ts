@@ -41,9 +41,22 @@ export async function buildPortraitDashboard(filters: AnalyticsFilters, req?: Ad
     else if (g && typeof g === 'object') goalTexts.push(...Object.values(g as Record<string, unknown>).map(String));
   }
 
+  const interestsByDirection: { direction: string; top: { key: string; count: number }[] }[] = [];
+  const dirInterest = new Map<string, string[]>();
+  for (const p of onboarded) {
+    const d = p.direction || '—';
+    const ints = Array.isArray(p.interests) ? (p.interests as string[]) : [];
+    if (!dirInterest.has(d)) dirInterest.set(d, []);
+    dirInterest.get(d)!.push(...ints);
+  }
+  for (const [direction, tags] of dirInterest) {
+    interestsByDirection.push({ direction, top: countMap(tags).slice(0, 10) });
+  }
+
   const preStart = {
     goalTopTokens: topReasonTokens(goalTexts, 15),
     interestTop: countMap(interestTags).slice(0, 20),
+    interestsByDirection,
     roleDistribution: roleDist,
     byDirection: countMap(onboarded.map(p => p.direction || '—')),
     byGroup: countMap(onboarded.map(p => p.groupName || 'без группы')),
@@ -64,14 +77,27 @@ export async function buildPortraitDashboard(filters: AnalyticsFilters, req?: Ad
     ? await db.select().from(participantDayState).where(inArray(participantDayState.participantId, ids))
     : [];
 
-  const experimentByDay: { day: number; role: string; count: number }[] = [];
+  const experimentDaySeries: { day: number; role: string; label: string; count: number }[] = [];
+  const dayRoleMap = new Map<string, number>();
   const expFreq = new Map<string, number>();
   for (const s of states) {
     if (s.dayNumber >= 2 && s.dayNumber <= 7 && s.activeRoleKey) {
-      experimentByDay.push({ day: s.dayNumber, role: s.activeRoleKey, count: 1 });
+      const key = `${s.dayNumber}:${s.activeRoleKey}`;
+      dayRoleMap.set(key, (dayRoleMap.get(key) || 0) + 1);
       expFreq.set(s.activeRoleKey, (expFreq.get(s.activeRoleKey) || 0) + 1);
     }
   }
+  for (const [key, count] of dayRoleMap) {
+    const [dayStr, role] = key.split(':');
+    experimentDaySeries.push({
+      day: Number(dayStr),
+      role,
+      label: getRoleMeta(role)?.name ?? role,
+      count,
+    });
+  }
+  experimentDaySeries.sort((a, b) => a.day - b.day || b.count - a.count);
+
   const experimentTop = [...expFreq.entries()].sort((a, b) => b[1] - a[1]).map(([role, count]) => ({
     role,
     label: getRoleMeta(role)?.name ?? role,
@@ -104,23 +130,70 @@ export async function buildPortraitDashboard(filters: AnalyticsFilters, req?: Ad
     growthRole: p.growthRole,
   }));
 
+  let roleChangedAtExit = 0;
+  let roleSameAtExit = 0;
+  for (const p of onboarded) {
+    if (!p.strongRole && !p.growthRole) continue;
+    const start = p.pedagogicalRole || '';
+    if (p.strongRole && start && p.strongRole !== start) roleChangedAtExit += 1;
+    else if (p.strongRole && start) roleSameAtExit += 1;
+  }
+
+  const departureByDirection: {
+    direction: string;
+    total: number;
+    bothPoints: number;
+    pointATokens: { token: string; count: number }[];
+    pointBTokens: { token: string; count: number }[];
+  }[] = [];
+  const depDir = new Map<string, typeof onboarded>();
+  for (const p of onboarded) {
+    const d = p.direction || '—';
+    if (!depDir.has(d)) depDir.set(d, []);
+    depDir.get(d)!.push(p);
+  }
+  for (const [direction, list] of depDir) {
+    const aTexts: string[] = [];
+    const bTexts: string[] = [];
+    for (const p of list) {
+      const ga = p.goalAnswers;
+      if (Array.isArray(ga)) aTexts.push(...ga.map(String));
+      else if (ga && typeof ga === 'object') aTexts.push(...Object.values(ga as Record<string, unknown>).map(String));
+      const gb = p.pointBAnswers;
+      if (Array.isArray(gb)) bTexts.push(...gb.map(String));
+      else if (gb && typeof gb === 'object') bTexts.push(...Object.values(gb as Record<string, unknown>).map(String));
+    }
+    departureByDirection.push({
+      direction,
+      total: list.length,
+      bothPoints: list.filter(p => p.goalAnswers && p.pointBAnswers).length,
+      pointATokens: topReasonTokens(aTexts, 12),
+      pointBTokens: topReasonTokens(bTexts, 12),
+    });
+  }
+
   return {
     filters,
     preStart,
     histograms,
     roleDynamics: {
       experimentTop,
-      experimentByDay: countMap(experimentByDay.map(e => `D${e.day}:${e.role}`)),
+      experimentDaySeries,
+      roleExitSummary: { changed: roleChangedAtExit, same: roleSameAtExit },
       matrixSample: matrixRows.slice(0, 100),
     },
     departure: {
       participants: departure,
       completedBoth: departure.filter(r => r.hasPointA && r.hasPointB).length,
+      byDirection: departureByDirection,
     },
   };
 }
 
 export async function buildDeparturePortrait(filters: AnalyticsFilters, req?: AdminRequest) {
   const d = await buildPortraitDashboard(filters, req);
-  return d.departure;
+  return {
+    ...d.departure,
+    byDirection: d.departure.byDirection,
+  };
 }

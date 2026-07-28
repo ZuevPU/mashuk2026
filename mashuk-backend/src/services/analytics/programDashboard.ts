@@ -86,7 +86,10 @@ export async function buildProgramDashboard(filters: AnalyticsFilters, req?: Adm
     if (typeof fav === 'string' && fav.trim()) eveningTexts.push(fav.trim());
   }
 
-  const divergence = eventsRanked
+  const mentionCounts = topReasonTokens(eveningTexts, 30);
+  const mentionMap = new Map(mentionCounts.map(m => [m.token.toLowerCase(), m.count]));
+
+  const divergenceHighAttLowRating = eventsRanked
     .filter(e => e.attendance > 0)
     .map(e => {
       const ratingProxy = workshops.find(w => w.responses > 0)?.avg ?? 0;
@@ -101,6 +104,29 @@ export async function buildProgramDashboard(filters: AnalyticsFilters, req?: Adm
     .filter(x => x.flagHighRatingLowAttendance)
     .slice(0, 10);
 
+  const divergencePopularLowRating = eventsRanked
+    .map(e => {
+      const titleTokens = e.title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      let mentions = 0;
+      for (const t of titleTokens) mentions += mentionMap.get(t) || 0;
+      const ratingProxy = workshops.find(w => w.responses > 0)?.avg ?? 0;
+      return {
+        eventId: e.id,
+        title: e.title,
+        attendance: e.attendance,
+        mentionScore: mentions,
+        avgRating: ratingProxy,
+        flagPopularLowRating: mentions >= 3 && ratingProxy > 0 && ratingProxy < 3.5,
+        flagHighRatingLowAttendance: e.attendance < 5 && ratingProxy >= 4,
+      };
+    })
+    .filter(x => x.flagPopularLowRating || x.flagHighRatingLowAttendance)
+    .slice(0, 15);
+
+  const shiftPracticeRank = eventsRanked
+    .filter(e => e.tags.some(t => t.toLowerCase().includes('практ') || t.toLowerCase().includes('workshop')))
+    .slice(0, 20);
+
   const allMats = (await db.select().from(materials)).filter(m => isPublishedStatus(m.status));
 
   return {
@@ -112,15 +138,20 @@ export async function buildProgramDashboard(filters: AnalyticsFilters, req?: Adm
       clubs: clubs.slice(0, 10),
       workshops,
       materialsPublished: allMats.length,
+      materialsList: allMats.slice(0, 30).map(m => ({ id: m.id, title: m.title })),
     },
     dayEvents: {
-      topMentions: topReasonTokens(eveningTexts, 15),
+      topMentions: mentionCounts.slice(0, 15),
       topEvents: eventsRanked.slice(0, 15),
+      llmReflectionMentionsDeferred: 'Неспровоцированные упоминания в рефлексиях — отложено (LLM)',
     },
-    divergence,
+    divergence: divergenceHighAttLowRating,
+    divergenceExtended: divergencePopularLowRating,
     practicesByDay: days.map(day => ({
       day,
       top: eventsRanked.filter(e => e.dayNumber === day).slice(0, 5),
     })),
+    practicesShiftRank: shiftPracticeRank,
+    nps: { available: false, note: 'NPS по практикам — нет отдельного поля в eveningRatings' },
   };
 }

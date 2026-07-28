@@ -30,13 +30,17 @@ export async function buildPiggybankDashboard(filters: AnalyticsFilters, req?: A
     entries = entries.filter(e => e.forumDay === filters.day);
   }
 
-  const byTag: Record<string, { count: number; series: { day: number; count: number }[]; entries: unknown[] }> = {};
+  const byTag: Record<string, { count: number; series: { day: number; count: number }[]; entries: unknown[]; byDirection: { direction: string; count: number }[]; topThemes: { token: string; count: number }[] }> = {};
   for (const tag of PIGGYBANK_TAGS) {
     const tagged = rows.filter(e => entryTags(e).includes(tag));
     const dayMap = new Map<number, number>();
+    const dirMap = new Map<string, number>();
     for (const e of tagged) {
       const d = e.forumDay ?? 0;
       dayMap.set(d, (dayMap.get(d) || 0) + 1);
+      const p = cohort.find(c => c.id === e.participantId);
+      const dir = p?.direction || '—';
+      dirMap.set(dir, (dirMap.get(dir) || 0) + 1);
     }
     byTag[tag] = {
       count: tagged.length,
@@ -49,19 +53,25 @@ export async function buildPiggybankDashboard(filters: AnalyticsFilters, req?: A
         source: e.source,
         createdAt: e.createdAt,
       })),
+      byDirection: [...dirMap.entries()].map(([direction, count]) => ({ direction, count })),
+      topThemes: topReasonTokens(tagged.map(e => e.text), 10),
     };
   }
 
-  const bySource: Record<string, { count: number; tagMix: { tag: string; count: number }[] }> = {};
+  const bySource: Record<string, { count: number; tagMix: { tag: string; count: number }[]; series: { day: number; count: number }[] }> = {};
   for (const src of PIGGYBANK_SOURCES) {
     const sourced = rows.filter(e => normalizePiggybankSource(e.source) === src);
     const tagMix = new Map<string, number>();
+    const dayMap = new Map<number, number>();
     for (const e of sourced) {
       for (const t of entryTags(e)) tagMix.set(t, (tagMix.get(t) || 0) + 1);
+      const d = e.forumDay ?? 0;
+      dayMap.set(d, (dayMap.get(d) || 0) + 1);
     }
     bySource[src] = {
       count: sourced.length,
       tagMix: [...tagMix.entries()].map(([tag, count]) => ({ tag, count })),
+      series: [...dayMap.entries()].sort((a, b) => a[0] - b[0]).map(([day, count]) => ({ day, count })),
     };
   }
 
@@ -82,6 +92,8 @@ export async function buildPiggybankDashboard(filters: AnalyticsFilters, req?: A
     byTag,
     bySource,
     topThemes: topReasonTokens(rows.map(e => e.text), 20),
+    recurringTools: topReasonTokens(rows.map(e => e.text), 15),
+    llmClusterDeferred: 'LLM-кластеризация внутри тега — отложено',
     vRabota: {
       total: vRabota.length,
       byDirection: [...vRabotaByDirection.entries()].map(([direction, count]) => ({ direction, count })),

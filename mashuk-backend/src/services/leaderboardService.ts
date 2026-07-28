@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { participants, pointsLog, userMedals, tasks, taskSubmissions } from '../db/schema.js';
-import { pointsTrackForAction, totalRatingScore } from './pointsService.js';
+import { pointsTrackForAction, totalRatingScore, isUnifiedRatingEnabled, participantRatingScore } from './pointsService.js';
 
 export type LeaderboardScope = 'total' | 'day' | 'shift';
 
@@ -49,7 +49,7 @@ export function isLeaderboardScopeEnabled(
 }
 
 function scoreForTrack(
-  p: { pathPoints: number | null; experiencePoints: number | null; bonusPoints: number | null },
+  p: { pathPoints: number | null; experiencePoints: number | null; bonusPoints: number | null; forumPoints?: number | null },
   track: string,
 ): number {
   const path = p.pathPoints ?? 0;
@@ -58,6 +58,9 @@ function scoreForTrack(
   if (track === 'path') return path;
   if (track === 'experience') return exp;
   if (track === 'bonus') return bonus;
+  if (isUnifiedRatingEnabled()) {
+    return participantRatingScore(p);
+  }
   return totalRatingScore(path, exp, bonus);
 }
 
@@ -85,6 +88,7 @@ export async function computeLeaderboardScores(
       pathPoints: participants.pathPoints,
       experiencePoints: participants.experiencePoints,
       bonusPoints: participants.bonusPoints,
+      forumPoints: participants.forumPoints,
     }).from(participants).where(inArray(participants.id, participantIds));
     for (const p of rows) {
       map.set(p.id, scoreForTrack(p, opts.track));

@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from 'recharts';
 import { downloadCsv, adminDownloadBinary } from '../../admin/client';
 import { useInsights, type DashboardId } from '../insights/InsightsContext';
 import type { AnalyticsTabProps } from './AnalyticsTab';
+import {
+  ActivityView,
+  ClubsView,
+  DepartureView,
+  OverviewView,
+  PiggybankView,
+  PortraitView,
+  ProgramView,
+  PulseView,
+  SemanticView,
+} from './analyticsDashboardViews';
 
 type ViewMode = 'today' | 'day' | 'shift' | 'compare';
 
@@ -24,6 +32,13 @@ function dashboardApiPath(id: DashboardId): string | null {
   return `/analytics/dashboards/${id}`;
 }
 
+function xlsxExportPath(dash: DashboardId): string | null {
+  if (dash === 'piggybank') return '/exports/piggybank';
+  if (dash === 'pulse' || dash === 'portrait' || dash === 'semantic') return '/exports/reflections';
+  if (dash === 'activity') return '/exports/task-submissions';
+  return '/exports/participants';
+}
+
 export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: AnalyticsTabProps) {
   const {
     forumDay,
@@ -37,6 +52,10 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
   const [mode, setMode] = useState<ViewMode>('day');
   const [compareDays, setCompareDays] = useState('2,5');
   const [roleKey, setRoleKey] = useState('');
+  const [piggyTag, setPiggyTag] = useState('');
+  const [piggySource, setPiggySource] = useState('');
+  const [clubFilter, setClubFilter] = useState('');
+  const [clubEditDraft, setClubEditDraft] = useState<Record<string, string>>({});
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -45,14 +64,19 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
 
   const effectiveDay = mode === 'today' ? String(meta?.currentForumDay ?? forumDay) : forumDay;
 
+  const apiMode = dash === 'overview' ? mode : mode;
+
   const filterQuery = useMemo(() => qs({
-    mode: dash === 'overview' ? mode : (mode === 'today' ? 'today' : 'day'),
+    mode: apiMode,
     day: effectiveDay,
     days: mode === 'compare' ? compareDays : undefined,
     direction: direction || undefined,
     group: group || undefined,
     roleKey: roleKey || undefined,
-  }), [mode, effectiveDay, compareDays, direction, group, roleKey, dash]);
+    tag: dash === 'piggybank' && piggyTag ? piggyTag : undefined,
+    source: dash === 'piggybank' && piggySource ? piggySource : undefined,
+    clubId: dash === 'clubs' && clubFilter ? clubFilter : undefined,
+  }), [apiMode, effectiveDay, compareDays, direction, group, roleKey, dash, piggyTag, piggySource, clubFilter]);
 
   const catalogEntry = meta?.dashboardCatalog?.find(c => c.id === dash);
   const showEarlyWarning = catalogEntry && (meta?.currentForumDay ?? 1) < catalogEntry.minForumDay;
@@ -84,6 +108,16 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
     return () => clearInterval(t);
   }, [meta?.refreshMs, loadDash, dash]);
 
+  useEffect(() => {
+    if (dash === 'clubs' && data?.clubs) {
+      const draft: Record<string, string> = {};
+      for (const c of data.clubs as { id: string; description?: string }[]) {
+        draft[c.id] = c.description ?? '';
+      }
+      setClubEditDraft(prev => ({ ...draft, ...prev }));
+    }
+  }, [dash, data?.clubs]);
+
   const exportPng = async () => {
     if (!chartRef.current) return;
     const { toPng } = await import('html-to-image');
@@ -94,8 +128,20 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
     a.click();
   };
 
+  const saveClub = async (id: string, description: string) => {
+    act(async () => {
+      await adminFetch(`/analytics/forum-clubs/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description }),
+      });
+      await loadDash();
+    }, 'Описание клуба сохранено');
+  };
+
   const matrix = meta?.roleTaxonomy?.matrix;
   const catalog = meta?.roleTaxonomy?.catalog ?? [];
+  const xlsxPath = xlsxExportPath(dash);
 
   return (
     <div className="adm-forum adm-analytics">
@@ -112,6 +158,15 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
           >
             Скачать CSV
           </button>
+          {xlsxPath && (
+            <button
+              type="button"
+              className="adm-btn adm-btn-secondary"
+              onClick={() => adminDownloadBinary(`${xlsxPath}${filterQuery}`, `export_${dash}.xlsx`)}
+            >
+              Скачать XLSX
+            </button>
+          )}
           <button type="button" className="adm-btn adm-btn-ghost" onClick={() => setAdvancedOpen(v => !v)}>
             {advancedOpen ? 'Скрыть расширенные' : 'Расширенные фильтры'}
           </button>
@@ -138,6 +193,9 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
         {catalogEntry && (
           <p className="adm-insights-availability">
             <span className="adm-insights-badge">Доступен с {catalogEntry.availabilityTier}</span>
+            {meta?.semanticV2 === false && (dash === 'semantic' || dash === 'clubs') && (
+              <span className="adm-insights-warn" style={{ marginLeft: 8 }}>SEMANTIC_ANALYTICS_V2=false на сервере</span>
+            )}
             {updatedAt && (
               <span className="adm-muted" style={{ marginLeft: 8, fontSize: 12 }}>
                 Обновлено: {updatedAt.toLocaleTimeString('ru-RU')}
@@ -184,219 +242,30 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
           {dash === 'portrait' && <PortraitView data={data} onOpenCard={onOpenCard} />}
           {dash === 'program' && <ProgramView data={data} />}
           {dash === 'activity' && <ActivityView data={data} />}
-          {dash === 'piggybank' && <PiggybankView data={data} />}
+          {dash === 'piggybank' && (
+            <PiggybankView
+              data={data}
+              tagFilter={piggyTag}
+              sourceFilter={piggySource}
+              onTagFilter={setPiggyTag}
+              onSourceFilter={setPiggySource}
+            />
+          )}
           {dash === 'semantic' && <SemanticView data={data} />}
-          {dash === 'clubs' && <ClubsView data={data} />}
+          {dash === 'clubs' && (
+            <ClubsView
+              data={data}
+              clubFilter={clubFilter}
+              onClubFilter={setClubFilter}
+              onSaveClub={saveClub}
+              editDraft={clubEditDraft}
+              onEditDraft={(id, text) => setClubEditDraft(d => ({ ...d, [id]: text }))}
+            />
+          )}
           {dash === 'departure' && <DepartureView data={data} onOpenCard={onOpenCard} />}
           {dash === 'overview' && <OverviewView data={data} />}
         </div>
       )}
-    </div>
-  );
-}
-
-function OverviewView({ data }: { data: any }) {
-  return (
-    <>
-      <div className="card">
-        <h3>Обзор форума</h3>
-        <p>Зарегистрировано: {data.pulse?.registered} · Ответов (серия): {data.pulse?.totalAnswers}</p>
-        <p>Событий в программе: {data.program?.eventsCount}</p>
-        <p>Записей копилки: {data.piggybank?.total}</p>
-      </div>
-      <div className="card">
-        <h3>Топ событий</h3>
-        <ul>{(data.program?.topEvents ?? []).slice(0, 8).map((e: { id?: number; title?: string }) => (
-          <li key={e.id ?? e.title}>{e.title}</li>
-        ))}</ul>
-      </div>
-    </>
-  );
-}
-
-function DepartureView({ data, onOpenCard }: { data: any; onOpenCard: AnalyticsTabProps['onOpenCard'] }) {
-  return (
-    <div className="card">
-      <h3>Заезд → выезд</h3>
-      <p>Заполнили обе точки: {data.completedBoth ?? data.departure?.completedBoth}</p>
-      <table className="adm-table">
-        <thead><tr><th>Участник</th><th>А</th><th>Б</th></tr></thead>
-        <tbody>
-          {(data.participants ?? data.departure?.participants ?? []).slice(0, 50).map((r: { id: number; name: string; hasPointA?: boolean; hasPointB?: boolean }) => (
-            <tr key={r.id}>
-              <td><button type="button" className="adm-link" onClick={() => onOpenCard(r.id)}>{r.name}</button></td>
-              <td>{r.hasPointA ? '✓' : '—'}</td>
-              <td>{r.hasPointB ? '✓' : '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function PulseView({ data }: { data: any }) {
-  const zones = data.emotionalPulse?.zonesPercent ?? {};
-  const zoneChart = Object.entries(zones).map(([name, value]) => ({ name, value }));
-  const series = data.activity?.activitySeries ?? [];
-  return (
-    <>
-      <div className="card">
-        <h3>Активность</h3>
-        <p>Зарегистрировано: {data.activity?.registered} · Активны сегодня: {data.activity?.activeToday}</p>
-        <p style={{ fontSize: 12 }}>Итоги дня: {data.activity?.eveningCompleted} · Check-in: {JSON.stringify(data.activity?.stateChecks)}</p>
-      </div>
-      {zoneChart.length > 0 && (
-        <div className="card chart-card">
-          <h3>5 зон (%, не среднее)</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={zoneChart}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis domain={[0, 100]} />
-              <Tooltip />
-              <Bar dataKey="value" fill="#805AD5" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-      {series.length > 0 && (
-        <div className="card chart-card">
-          <h3>Динамика активности</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={series}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="answers" stroke="#3182CE" name="Ответы" />
-              <Line type="monotone" dataKey="touchpoints" stroke="#38A169" name="Touchpoints" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-      {data.stateReasons?.topTokens?.length > 0 && (
-        <div className="card">
-          <h3>Причины состояния (топ слов)</h3>
-          <ul>{data.stateReasons.topTokens.map((t: { token: string; count: number }) => <li key={t.token}>{t.token}: {t.count}</li>)}</ul>
-          {data.stateReasons.v2Placeholder && <p className="adm-muted">{data.stateReasons.v2Placeholder}</p>}
-        </div>
-      )}
-    </>
-  );
-}
-
-function PortraitView({ data, onOpenCard }: { data: any; onOpenCard: AnalyticsTabProps['onOpenCard'] }) {
-  const roles = data.preStart?.roleDistribution ?? [];
-  return (
-    <>
-      <div className="card chart-card">
-        <h3>Роли на входе</h3>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={roles}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="key" />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="count" fill="#805AD5" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="card">
-        <h3>Регионы</h3>
-        <ul>{(data.preStart?.byRegion ?? []).map((r: { key: string; count: number }) => <li key={r.key}>{r.key}: {r.count}</li>)}</ul>
-      </div>
-      <div className="card">
-        <h3>Точка А → Б</h3>
-        <p>Заполнили обе: {data.departure?.completedBoth}</p>
-        <table className="adm-table">
-          <thead><tr><th>Участник</th><th>А</th><th>Б</th></tr></thead>
-          <tbody>
-            {(data.departure?.participants ?? []).slice(0, 30).map((r: { id: number; name: string; hasPointA?: boolean; hasPointB?: boolean }) => (
-              <tr key={r.id}>
-                <td><button type="button" className="adm-link" onClick={() => onOpenCard(r.id)}>{r.name}</button></td>
-                <td>{r.hasPointA ? '✓' : '—'}</td>
-                <td>{r.hasPointB ? '✓' : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-}
-
-function ProgramView({ data }: { data: any }) {
-  const scales = data.blocks?.workshops ?? [];
-  return (
-    <div className="card">
-      <h3>Практики / программа</h3>
-      <table className="adm-table">
-        <thead><tr><th>Блок</th><th>Средняя</th><th>Ответов</th></tr></thead>
-        <tbody>
-          {scales.map((s: { key: string; label: string; avg: number; responses: number }) => (
-            <tr key={s.key}><td>{s.label}</td><td>{s.avg}</td><td>{s.responses}</td></tr>
-          ))}
-        </tbody>
-      </table>
-      <h4 style={{ marginTop: 16 }}>Расхождения (мало посещений + высокая оценка)</h4>
-      <ul>{(data.divergence ?? []).map((d: { eventId: number; title: string; attendance: number }) => <li key={d.eventId}>{d.title} · {d.attendance}</li>)}</ul>
-    </div>
-  );
-}
-
-function ActivityView({ data }: { data: any }) {
-  return (
-    <div className="card">
-      <h3>Рейтинг (смена)</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-        {(['path', 'experience', 'total'] as const).map(track => (
-          <div key={track}>
-            <h4>{track}</h4>
-            <ol>{(data.ratings?.[track] ?? []).slice(0, 10).map((r: { id: number; rank: number; name: string; points: number }) => (
-              <li key={r.id}>{r.rank}. {r.name} — {r.points}</li>
-            ))}</ol>
-          </div>
-        ))}
-      </div>
-      <p style={{ marginTop: 12 }}>На модерации: {data.tasks?.pendingModeration}</p>
-    </div>
-  );
-}
-
-function PiggybankView({ data }: { data: any }) {
-  return (
-    <div className="card">
-      <h3>Копилка · записей: {data.navigation?.total}</h3>
-      <h4>По тегам</h4>
-      <ul>{Object.entries(data.byTag ?? {}).map(([tag, v]) => (
-        <li key={tag}>{tag}: {(v as { count: number }).count}</li>
-      ))}</ul>
-      <h4>«В работу»</h4>
-      <p>Всего: {data.vRabota?.total}</p>
-    </div>
-  );
-}
-
-function SemanticView({ data }: { data: any }) {
-  if (!data.enabled) return <div className="card"><p>{data.message}</p></div>;
-  return (
-    <div className="card">
-      <h3>Смысловая аналитика</h3>
-      <p>{data.professionalShift?.summary}</p>
-      <ul>{(data.languageTracker?.topTerms ?? []).map((t: { token: string }) => <li key={t.token}>{t.token}</li>)}</ul>
-    </div>
-  );
-}
-
-function ClubsView({ data }: { data: any }) {
-  if (!data.enabled) return <div className="card"><p>Клубы v2 — включите SEMANTIC_ANALYTICS_V2</p></div>;
-  return (
-    <div className="card">
-      <h3>Клубы</h3>
-      <ul>{(data.clubs ?? []).map((c: { id: string; name: string }) => <li key={c.id}><strong>{c.name}</strong></li>)}</ul>
-      <p>Matches: {(data.matches ?? []).length}</p>
     </div>
   );
 }

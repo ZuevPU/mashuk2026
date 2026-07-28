@@ -475,6 +475,8 @@ export const generateEntityQr = async (req: AdminRequest, res: Response): Promis
 
 export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<void> => {
   const track = (req.query.track as string) || 'total';
+  const scope = ((req.query.scope as string) || 'total') as 'total' | 'day' | 'shift';
+  const day = req.query.day != null ? Number(req.query.day) : undefined;
   const list = await db.select({
     id: participants.id,
     firstName: participants.firstName,
@@ -482,22 +484,52 @@ export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<
     direction: participants.direction,
     pathPoints: participants.pathPoints,
     experiencePoints: participants.experiencePoints,
+    bonusPoints: participants.bonusPoints,
+    forumPoints: participants.forumPoints,
     hideFromLeaderboard: participants.hideFromLeaderboard,
   }).from(participants);
 
-  const rows = list
-    .filter(p => !p.hideFromLeaderboard)
+  const visible = list.filter(p => !p.hideFromLeaderboard);
+  const ids = visible.map(p => p.id);
+  const { computeLeaderboardScores } = await import('../services/leaderboardService.js');
+  const { participantRatingScore: ratingScoreFn } = await import('../services/pointsService.js');
+
+  let scoreMap: Map<number, number>;
+  if (scope === 'total' && track === 'total') {
+    scoreMap = new Map(ids.map(id => {
+      const p = visible.find(x => x.id === id)!;
+      return [id, ratingScoreFn(p)];
+    }));
+  } else {
+    scoreMap = await computeLeaderboardScores(ids, {
+      scope: scope === 'day' ? 'day' : scope === 'shift' ? 'shift' : 'total',
+      day: Number.isFinite(day) ? day : undefined,
+      track,
+    });
+  }
+
+  const rows = visible
     .map(p => ({
       ...p,
-      total: (p.pathPoints ?? 0) + (p.experiencePoints ?? 0),
-      score: track === 'path' ? (p.pathPoints ?? 0)
-        : track === 'experience' ? (p.experiencePoints ?? 0)
-          : (p.pathPoints ?? 0) + (p.experiencePoints ?? 0),
+      score: scoreMap.get(p.id) ?? 0,
     }))
     .sort((a, b) => b.score - a.score)
-    .map((p, i) => ({ rank: i + 1, ...p }));
+    .map((p, i) => ({
+      rank: i + 1,
+      id: p.id,
+      firstName: p.firstName,
+      lastName: p.lastName,
+      direction: p.direction,
+      score: p.score,
+    }));
 
-  res.json({ track, leaders: rows });
+  res.json({
+    track,
+    scope,
+    day: day ?? null,
+    participantCount: rows.length,
+    leaders: rows,
+  });
 };
 
 export const setPdfWhitelist = async (req: AdminRequest, res: Response): Promise<void> => {

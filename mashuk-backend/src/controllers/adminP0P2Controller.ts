@@ -495,6 +495,7 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
     })),
     submissions: userSubs.map(r => ({
       id: r.s.id,
+      taskId: r.s.taskId,
       taskTitle: r.t?.title,
       status: r.s.status,
       answerText: r.s.answerText,
@@ -982,4 +983,45 @@ export const runMedalEvaluation = async (req: AdminRequest, res: Response): Prom
 
 export const listClubMatches = async (_req: AdminRequest, res: Response): Promise<void> => {
   res.json({ matches: await db.select().from(clubMatches).orderBy(desc(clubMatches.createdAt)).limit(200) });
+};
+
+export const adminCompleteParticipantTaskHandler = async (req: AdminRequest, res: Response): Promise<void> => {
+  const participantId = Number(req.params.id);
+  const taskId = Number(req.params.taskId);
+  const comment = typeof req.body?.comment === 'string' ? req.body.comment : undefined;
+  const { adminCompleteParticipantTask } = await import('../services/adminManualTaskService.js');
+  const result = await adminCompleteParticipantTask(participantId, taskId, comment);
+  if (!result.ok) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  await logAdminAction({
+    req,
+    actionType: 'admin_manual_task',
+    section: 'participants',
+    objectId: String(result.submission.id),
+    newValue: { participantId, taskId, submissionId: result.submission.id },
+    isCritical: true,
+  });
+  res.json({ submission: result.submission });
+};
+
+export const adminRevokeTaskSubmissionHandler = async (req: AdminRequest, res: Response): Promise<void> => {
+  const submissionId = Number(req.params.submissionId);
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
+  const { adminRevokeTaskSubmission } = await import('../services/adminManualTaskService.js');
+  const result = await adminRevokeTaskSubmission(submissionId, reason);
+  if (!result.ok) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  await logAdminAction({
+    req,
+    actionType: 'task_submission_revoke',
+    section: 'moderation',
+    objectId: String(submissionId),
+    newValue: { revokedLogIds: result.revokedLogIds, reason },
+    isCritical: true,
+  });
+  res.json({ submission: result.submission, revokedLogIds: result.revokedLogIds });
 };

@@ -51,6 +51,7 @@ export async function recalculateAllParticipantTotals(adminId?: number): Promise
           pathPoints: Math.max(0, path),
           experiencePoints: Math.max(0, experience),
           bonusPoints: Math.max(0, bonus),
+          forumPoints: Math.max(0, path + experience + bonus),
         })
         .where(eq(participants.id, id));
       processed += 1;

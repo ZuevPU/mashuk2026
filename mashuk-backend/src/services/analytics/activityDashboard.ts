@@ -71,6 +71,42 @@ export async function buildActivityDashboard(filters: AnalyticsFilters, req?: Ad
       awardedAt: r.um.awardedAt,
     }));
 
+  const medalsOpen = medalsList.filter(m => !m.hidden);
+  const medalsHidden = medalsList.filter(m => m.hidden);
+
+  const dirMap = new Map<string, typeof allP>();
+  for (const p of allP) {
+    const d = p.direction || '—';
+    if (!dirMap.has(d)) dirMap.set(d, []);
+    dirMap.get(d)!.push(p);
+  }
+  const ratingsByDirection: { direction: string; top: ReturnType<typeof rankList> }[] = [];
+  for (const [direction, list] of dirMap) {
+    const subIds = new Set(list.map(p => p.id));
+    const subScores = new Map<number, number>();
+    for (const [pid, pts] of totalScores) {
+      if (subIds.has(pid)) subScores.set(pid, pts);
+    }
+    ratingsByDirection.push({
+      direction,
+      top: list
+        .map(p => ({ id: p.id, name: `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim(), direction: p.direction, points: subScores.get(p.id) ?? 0 }))
+        .sort((a, b) => b.points - a.points)
+        .slice(0, 5)
+        .map((r, i) => ({ rank: i + 1, ...r })),
+    });
+  }
+
+  const tasksByDay = days.map(d => ({
+    day: d,
+    approved: filteredSubs.filter(r => {
+      if (r.s.status !== 'approved') return false;
+      const dn = r.t?.dayNumber;
+      const dns = Array.isArray(r.t?.dayNumbers) ? (r.t!.dayNumbers as number[]) : [];
+      return dn === d || dns.includes(d);
+    }).length,
+  }));
+
   return {
     filters,
     days,
@@ -79,13 +115,16 @@ export async function buildActivityDashboard(filters: AnalyticsFilters, req?: Ad
       experience: rankList(expScores),
       total: rankList(totalScores),
       day: rankList(dayTotal),
+      byDirection: ratingsByDirection,
     },
     tasks: {
       popular: popularTasks,
       byCategory: [...byCategory.entries()].map(([category, count]) => ({ category, count })),
       pendingModeration: filteredSubs.filter(r => r.s.status === 'pending').length,
       pendingTeam: filteredSubs.filter(r => r.s.status === 'pending_team').length,
+      byDay: tasksByDay,
     },
     medals: medalsList.slice(0, 100),
+    medalsSummary: { open: medalsOpen.length, hidden: medalsHidden.length },
   };
 }

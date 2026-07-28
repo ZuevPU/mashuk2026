@@ -248,10 +248,10 @@
       "breakpoints": true
     },
     {
-      "idx": 35,
+      "idx": 36,
       "version": "7",
-      "when": 1815000000000,
-      "tag": "0035_participant_avatar_url",
+      "when": 1816000000000,
+      "tag": "0036_forum_points_unified_rating",
       "breakpoints": true
     }
   ]

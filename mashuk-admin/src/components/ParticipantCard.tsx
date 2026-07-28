@@ -158,6 +158,17 @@ export function ParticipantCardModal({
 }) {
 
   const p = card.participant!;
+  const [taskCatalog, setTaskCatalog] = useState<{ id: number; title?: string }[]>([]);
+  const [manualTaskId, setManualTaskId] = useState('');
+
+  useEffect(() => {
+    if (tab !== 'tasks' || !p?.id) return;
+    adminFetch('/tasks')
+      .then((res: { tasks?: { id: number; title?: string }[] }) => {
+        setTaskCatalog(res.tasks ?? []);
+      })
+      .catch(() => setTaskCatalog([]));
+  }, [tab, p?.id, adminFetch]);
 
   const avatarDisplayUrl = card.participant?.avatarUrl || card.avatarUrl || null;
   const leadingRole = p.strongRole || p.pedagogicalRole;
@@ -859,9 +870,37 @@ export function ParticipantCardModal({
 
           {tab === 'tasks' && (
 
+            <>
+            <div className="adm-forum-toolbar" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+              <select
+                className="adm-input"
+                value={manualTaskId}
+                onChange={e => setManualTaskId(e.target.value)}
+              >
+                <option value="">— задание для ручной отметки —</option>
+                {taskCatalog.map(t => (
+                  <option key={t.id} value={String(t.id)}>{t.title || `Задание #${t.id}`}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="adm-btn adm-btn-primary"
+                disabled={!manualTaskId}
+                onClick={() => act(
+                  () => adminFetch(`/participants/${p.id}/tasks/${manualTaskId}/complete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ comment: 'Отмечено в карточке участника' }),
+                  }).then(() => { onReloadCard(); }),
+                  'Задание отмечено',
+                )}
+              >
+                Отметить выполненным
+              </button>
+            </div>
             <table className="adm-table">
 
-              <thead><tr><th>Задание</th><th>Статус</th><th>Ответ</th><th>XP</th><th>Команда</th></tr></thead>
+              <thead><tr><th>Задание</th><th>Статус</th><th>Ответ</th><th>XP</th><th>Команда</th><th /></tr></thead>
 
               <tbody>
 
@@ -894,6 +933,26 @@ export function ParticipantCardModal({
 
                     </td>
 
+                    <td>
+                      {(s.status === 'approved' || s.status === 'pending' || s.status === 'pending_team') && (
+                        <button
+                          type="button"
+                          className="adm-btn adm-btn-secondary"
+                          style={{ fontSize: 11 }}
+                          onClick={() => act(
+                            () => adminFetch(`/participants/${p.id}/task-submissions/${s.id}/revoke`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ reason: 'Отмена выполнения администратором' }),
+                            }).then(() => { onReloadCard(); }),
+                            'Выполнение отменено',
+                          )}
+                        >
+                          Отменить
+                        </button>
+                      )}
+                    </td>
+
                   </tr>
 
                 ))}
@@ -901,7 +960,7 @@ export function ParticipantCardModal({
               </tbody>
 
             </table>
-
+            </>
           )}
 
           {tab === 'points' && (

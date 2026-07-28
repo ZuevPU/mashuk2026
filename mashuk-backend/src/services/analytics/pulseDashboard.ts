@@ -23,8 +23,6 @@ import {
   stateCheckPhaseForAnswer,
   touchpointCompletionByType,
 } from './touchpointMetrics.js';
-import { semanticV2Enabled } from './refreshScheduler.js';
-
 function startOfTodayUtc(): Date {
   const d = new Date();
   d.setUTCHours(0, 0, 0, 0);
@@ -62,6 +60,8 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
     evening: emptyZoneDistribution(),
   };
   const reasons: string[] = [];
+  const reasonByDay = new Map<number, string[]>();
+  const pidToParticipant = new Map(cohort.map(p => [p.id, p]));
 
   for (const a of allAns) {
     if (!checkQIds.has(a.questionId)) continue;
@@ -69,7 +69,13 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
     const phase = stateCheckPhaseForAnswer(a.createdAt);
     accumulateZoneFromAnswer(zonesByPhase[phase], a.answerData);
     const p = parseCheckinPayload(a.answerData);
-    if (p.reason?.trim()) reasons.push(p.reason.trim());
+    if (p.reason?.trim()) {
+      reasons.push(p.reason.trim());
+      const qDay = publishedQ.find(q => q.id === a.questionId)?.dayNumber ?? filters.day ?? currentDay;
+      const d = qDay && qDay >= 1 ? qDay : currentDay;
+      if (!reasonByDay.has(d)) reasonByDay.set(d, []);
+      reasonByDay.get(d)!.push(p.reason.trim());
+    }
   }
 
   const zoneByDay: { day: number; zones: Record<string, number> }[] = [];
@@ -88,6 +94,7 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
   }
 
   const byDirection: { direction: string; zones: Record<string, number> }[] = [];
+  const byGroup: { direction: string; group: string; zones: Record<string, number> }[] = [];
   if (!filters.direction) {
     const dirMap = new Map<string, typeof cohort>();
     for (const p of cohort) {
@@ -103,8 +110,54 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
         accumulateZoneFromAnswer(z, a.answerData);
       }
       byDirection.push({ direction, zones: zonesToPercent(z) });
+      const grpMap = new Map<string, typeof list>();
+      for (const p of list) {
+        const g = p.groupName || 'без группы';
+        if (!grpMap.has(g)) grpMap.set(g, []);
+        grpMap.get(g)!.push(p);
+      }
+      for (const [group, gList] of grpMap) {
+        const zg = emptyZoneDistribution();
+        const gpids = new Set(gList.map(p => p.id));
+        for (const a of allAns) {
+          if (!gpids.has(a.participantId) || !checkQIds.has(a.questionId)) continue;
+          accumulateZoneFromAnswer(zg, a.answerData);
+        }
+        byGroup.push({ direction, group, zones: zonesToPercent(zg) });
+      }
     }
   }
+
+  const reasonByDirection: { direction: string; topTokens: ReturnType<typeof topReasonTokens> }[] = [];
+  const reasonByGroup: { direction: string; group: string; topTokens: ReturnType<typeof topReasonTokens> }[] = [];
+  if (reasons.length) {
+    const dirReasons = new Map<string, string[]>();
+    const grpReasons = new Map<string, string[]>();
+    for (const a of allAns) {
+      if (!checkQIds.has(a.questionId)) continue;
+      const payload = parseCheckinPayload(a.answerData);
+      if (!payload.reason?.trim()) continue;
+      const part = pidToParticipant.get(a.participantId);
+      const dir = part?.direction || '—';
+      const grp = part?.groupName || 'без группы';
+      if (!dirReasons.has(dir)) dirReasons.set(dir, []);
+      dirReasons.get(dir)!.push(payload.reason.trim());
+      const gk = `${dir}::${grp}`;
+      if (!grpReasons.has(gk)) grpReasons.set(gk, []);
+      grpReasons.get(gk)!.push(payload.reason.trim());
+    }
+    for (const [direction, rs] of dirReasons) {
+      reasonByDirection.push({ direction, topTokens: topReasonTokens(rs, 10) });
+    }
+    for (const [gk, rs] of grpReasons) {
+      const [direction, group] = gk.split('::');
+      reasonByGroup.push({ direction, group, topTokens: topReasonTokens(rs, 8) });
+    }
+  }
+
+  const compareZones = filters.mode === 'compare' && zoneByDay.length > 1
+    ? zoneByDay
+    : [];
 
   return {
     filters,
@@ -127,11 +180,19 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
       },
       byDay: zoneByDay,
       byDirection,
+      byGroup,
+      compareZones,
       note: 'Показываем распределение по 5 зонам, не среднее значение энергии.',
     },
     stateReasons: {
       topTokens: topReasonTokens(reasons),
-      v2Placeholder: !semanticV2Enabled() ? 'LLM-кластеризация причин — этап 2' : null,
+      byDay: [...reasonByDay.entries()].sort((a, b) => a[0] - b[0]).map(([day, rs]) => ({
+        day,
+        topTokens: topReasonTokens(rs, 10),
+      })),
+      byDirection: reasonByDirection,
+      byGroup: reasonByGroup,
+      llmDeferred: 'LLM-кластеризация причин — отложено',
     },
     cohortSize: cohort.length,
   };

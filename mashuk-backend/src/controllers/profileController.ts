@@ -8,7 +8,7 @@ import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { getRoleMeta } from '../services/roleService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { generateQrToken } from '../services/qrService.js';
-import { getLevel } from '../services/pointsService.js';
+import { getLevel, participantRatingScore, isUnifiedRatingEnabled } from '../services/pointsService.js';
 import { buildOutcomesHeuristic } from '../services/profileOutcomes.js';
 import {
   PIGGYBANK_TAGS,
@@ -32,6 +32,14 @@ export const getProfile = async (req: ParticipantRequest, res: Response): Promis
     const pathLevel = await getLevel(p.pathPoints ?? 0, 'path');
     const experienceLevel = await getLevel(p.experiencePoints ?? 0, 'experience');
     const ideas = bundle.allPiggy.filter(e => entryHasTag(e, 'идея'));
+    const unifiedRating = isUnifiedRatingEnabled();
+    const ratingScore = participantRatingScore({
+      pathPoints: p.pathPoints,
+      experiencePoints: p.experiencePoints,
+      bonusPoints: p.bonusPoints,
+      forumPoints: p.forumPoints,
+    });
+    const ratingLevel = await getLevel(ratingScore, 'experience');
 
     res.json({
       user: {
@@ -68,12 +76,15 @@ export const getProfile = async (req: ParticipantRequest, res: Response): Promis
       },
       metrics: bundle.metrics,
       points: {
+        unified: unifiedRating,
+        rating: ratingScore,
         path: p.pathPoints ?? 0,
         experience: p.experiencePoints ?? 0,
         bonus: p.bonusPoints ?? 0,
-        total: (p.pathPoints ?? 0) + (p.experiencePoints ?? 0) + (p.bonusPoints ?? 0),
+        total: ratingScore,
         pathLevel,
         experienceLevel,
+        ratingLevel: unifiedRating ? ratingLevel : undefined,
       },
       trajectory: bundle.trajectory,
       myRequest: bundle.goals[2] || null,

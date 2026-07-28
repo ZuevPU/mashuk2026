@@ -14,9 +14,12 @@ export function InsightsChrome({ children }: { children: ReactNode }) {
     meta,
     setTab,
     activeSection,
+    analyticsDashboardAllowlist,
   } = useInsights();
 
-  const catalog = meta?.dashboardCatalog ?? [];
+  const catalog = (meta?.dashboardCatalog ?? []).filter(
+    item => !analyticsDashboardAllowlist?.length || analyticsDashboardAllowlist.includes(item.id),
+  );
   const dayMeta = meta?.forumDays?.find(d => String(d.day) === forumDay);
   const activeEntry = catalog.find(c => c.id === activeDashboardId);
 

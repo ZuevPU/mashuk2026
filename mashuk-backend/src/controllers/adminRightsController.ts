@@ -52,8 +52,24 @@ export async function resetRightsMatrixHandler(req: AdminRequest, res: Response)
   res.json({ ok: true, matrix: await getFullRightsMatrix() });
 }
 
+import {
+  computeAllowedTabs,
+  defaultTabForRole,
+  allowedSectionsList,
+} from '../services/adminTabAccess.js';
+
 export async function getMyPermissions(req: AdminRequest, res: Response): Promise<void> {
   const role = req.adminRole || 'admin';
   const permissions = await getPermissionsForRole(role);
-  res.json({ role, permissions });
+  const allowedTabs = computeAllowedTabs(role, permissions);
+  const allowedSections = allowedSectionsList(permissions);
+  const defaultTab = defaultTabForRole(role, allowedTabs);
+  res.json({
+    role,
+    permissions,
+    allowedSections,
+    allowedTabs,
+    defaultTab,
+    analyticsDashboards: role === 'gamification' ? ['activity'] : null,
+  });
 }
