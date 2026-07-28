@@ -8,7 +8,7 @@ import { scorePedagogicalRole, getRoleMeta, normalizeOnboardingConfig, interestT
 import { getActiveConsentVersions } from './consentsController.js';
 import { generateQrToken } from '../services/qrService.js';
 import { awardPoints } from '../services/pointsService.js';
-
+import { scheduleParticipantAvatarSync } from '../services/participantAvatarSync.js';
 
 async function getForumOnboardingConfig() {
   const [settings] = await db.select().from(forumSettings).limit(1);
@@ -31,6 +31,7 @@ const onboardingSchema = z.object({
   goalAnswers: z.array(z.string().min(1).max(2000)).length(5),
   interests: z.array(z.string().min(1).max(100)).min(5).max(8),
   roleAnswers: z.array(z.coerce.number().int().min(0).max(3)).length(6),
+  vkPhotoUrl: z.string().url().max(2000).optional(),
 });
 
 async function assignGroup(
@@ -81,6 +82,10 @@ export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> =>
     if (user.selfDeletedAt) {
       res.json({ status: 'self_deleted', deletedAt: user.selfDeletedAt });
       return;
+    }
+
+    if (!user.avatarUrl) {
+      scheduleParticipantAvatarSync(user.id);
     }
 
     res.json({ status: 'ok', user });
@@ -200,6 +205,8 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
 
     await awardPoints(user.id, 'point_a_complete');
 
+    scheduleParticipantAvatarSync(user.id, { vkPhotoUrl: data.vkPhotoUrl });
+
     res.json({ status: 'ok', user, role: getRoleMeta(pedagogicalRole) });
   } catch (error) {
     console.error('completeOnboarding:', error);
@@ -262,6 +269,8 @@ export const register = async (req: VkAuthRequest, res: Response): Promise<void>
     } else {
       [user] = await db.insert(participants).values(values).returning();
     }
+
+    scheduleParticipantAvatarSync(user.id);
 
     res.json({ status: 'ok', user });
   } catch (error) {

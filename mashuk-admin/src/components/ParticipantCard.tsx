@@ -4,6 +4,7 @@ import { adminDownloadBinary } from '../admin/client';
 import { label } from '../labels/ru';
 
 import { VkProfileLink } from './VkProfileLink';
+import { ParticipantAvatar } from './participants/ParticipantAvatar';
 
 
 
@@ -50,6 +51,8 @@ type CardData = {
     age?: number | null;
 
     isBlocked?: boolean | null;
+
+    avatarUrl?: string | null;
 
     outcomesEdited?: unknown;
 
@@ -153,9 +156,7 @@ export function ParticipantCardModal({
 
   const p = card.participant!;
 
-  const initials = `${(p.firstName || '?')[0]}${(p.lastName || '?')[0]}`.toUpperCase();
-  const [avatarFailed, setAvatarFailed] = useState(false);
-  const avatarSrc = !avatarFailed && card.avatarUrl ? card.avatarUrl : null;
+  const avatarDisplayUrl = card.participant?.avatarUrl || card.avatarUrl || null;
   const leadingRole = p.strongRole || p.pedagogicalRole;
   const leadingRoleLabel = leadingRole ? label(leadingRole) : 'роль не задана';
 
@@ -214,10 +215,6 @@ export function ParticipantCardModal({
   const [bulkReason, setBulkReason] = useState('');
   const [medalCatalog, setMedalCatalog] = useState<{ id: number; name: string; level?: string }[]>([]);
   const [awardMedalId, setAwardMedalId] = useState<number | ''>('');
-
-  useEffect(() => {
-    setAvatarFailed(false);
-  }, [card.avatarUrl, p.id]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -324,11 +321,12 @@ export function ParticipantCardModal({
 
         <div className="adm-pc-header">
           <div className="adm-pc-hero-strip">
-            <div className="adm-pc-avatar adm-pc-avatar-sm">
-              {avatarSrc ? (
-                <img src={avatarSrc} alt="" className="adm-pc-avatar-img" onError={() => setAvatarFailed(true)} />
-              ) : initials}
-            </div>
+            <ParticipantAvatar
+                firstName={p.firstName}
+                lastName={p.lastName}
+                avatarUrl={avatarDisplayUrl}
+                size="md"
+              />
             <div className="adm-pc-hero-main">
               <div className="adm-pc-meta adm-pc-meta-light">
                 <VkProfileLink vkId={p.vkId} /> · {p.direction || '—'}

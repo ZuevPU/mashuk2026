@@ -324,6 +324,8 @@ export const participants = pgTable('participants', {
   /** Участник удалил себя из программы через настройки профиля; строка и связанные данные сохраняются */
   selfDeletedAt: timestamp('self_deleted_at'),
   lastActiveAt: timestamp('last_active_at'),
+  avatarUrl: varchar('avatar_url', { length: 500 }),
+  avatarSyncedAt: timestamp('avatar_synced_at'),
   isBlocked: boolean('is_blocked').default(false),
   blockedAt: timestamp('blocked_at'),
   blockReason: varchar('block_reason', { length: 500 }),

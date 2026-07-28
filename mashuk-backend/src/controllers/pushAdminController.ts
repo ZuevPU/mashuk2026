@@ -16,7 +16,7 @@ import {
   fireAdminPushNow,
 } from '../services/pushCampaignExecutor.js';
 import {
-  refreshNotificationStats, sendTestCampaignToParticipant,
+  refreshNotificationStats, sendTestCampaignToParticipant, describeDeliveryStatus,
 } from '../services/pushService.js';
 import { pushNotificationCreateSchema, pushNotificationUpdateSchema } from '../validation/adminSchemas.js';
 
@@ -210,8 +210,13 @@ export const testPushNotification = async (req: AdminRequest, res: Response): Pr
   const [p] = await db.select().from(participants).where(eq(participants.vkId, admin.vkId)).limit(1);
   if (!p) { res.status(400).json({ error: 'Нет участника с вашим VK ID для теста' }); return; }
 
-  const text = await sendTestCampaignToParticipant(n, p.id);
-  res.json({ ok: true, previewBody: text });
+  const { personalizedBody, deliveryStatus } = await sendTestCampaignToParticipant(n, p.id);
+  res.json({
+    ok: true,
+    previewBody: personalizedBody,
+    deliveryStatus,
+    deliveryStatusHint: describeDeliveryStatus(deliveryStatus),
+  });
 };
 
 export const sendPushNotificationAction = async (req: AdminRequest, res: Response): Promise<void> => {

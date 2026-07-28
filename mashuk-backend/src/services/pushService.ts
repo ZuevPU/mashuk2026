@@ -7,6 +7,9 @@ import {
 import { optOutCategoryForNotificationType, triggerTypeForCampaign } from './pushNotificationTypes.js';
 import { expandPushPlaceholders, type PlaceholderContext } from './pushPlaceholderExpand.js';
 import { resolvePushAudience, type AudiencePayload } from './pushAudienceResolve.js';
+import { isPushDeliveredOk, shouldLogPushDeliveryIssue } from './pushDeliveryStatus.js';
+
+export { describeDeliveryStatus } from './pushDeliveryStatus.js';
 
 const VK_API = 'https://api.vk.com/method';
 const VK_VERSION = '5.199';
@@ -93,7 +96,7 @@ function shouldTryCommunity(mini: VkApiResult): boolean {
     || mini.status === 'skipped_no_token';
 }
 
-export async function deliverToVkUser(vkId: number, text: string): Promise<string> {
+export async function deliverToVkUser(vkId: number, text: string, logContext?: string): Promise<string> {
   if (!vkId) return 'skipped_no_vk_id';
 
   const mini = await sendMiniAppNotification(vkId, text);
@@ -101,22 +104,32 @@ export async function deliverToVkUser(vkId: number, text: string): Promise<strin
 
   if (shouldTryCommunity(mini)) {
     const comm = await sendCommunityMessage(vkId, text);
-    if (comm.ok) return comm.status;
-    if (mini.status !== 'skipped_no_service_token') {
-      return `${mini.status}; ${comm.status}`;
+    const status = comm.ok
+      ? comm.status
+      : (mini.status !== 'skipped_no_service_token'
+        ? `${mini.status}; ${comm.status}`
+        : comm.status);
+    if (shouldLogPushDeliveryIssue(status)) {
+      console.warn(`[push] deliver vkId=${vkId}${logContext ? ` ${logContext}` : ''} status=${status}`);
     }
-    return comm.status;
+    return status;
   }
 
-  return mini.status;
+  const status = mini.status;
+  if (shouldLogPushDeliveryIssue(status)) {
+    console.warn(`[push] deliver vkId=${vkId}${logContext ? ` ${logContext}` : ''} status=${status}`);
+  }
+  return status;
 }
 
+/** При одном participantId возвращает итоговый delivery_status. */
 export async function sendPushNotification(
   participantIds: number[],
   text: string,
   triggerType: string,
-): Promise<void> {
+): Promise<string | undefined> {
   const hasAnyToken = !!(env.VK_SERVICE_TOKEN || env.VK_COMMUNITY_TOKEN);
+  let lastStatus: string | undefined;
 
   for (const participantId of participantIds) {
     const [p] = await db.select().from(participants).where(eq(participants.id, participantId)).limit(1);
@@ -125,12 +138,13 @@ export async function sendPushNotification(
     const optOut = (p.pushOptOut as Record<string, boolean> | null) ?? {};
     const cat = pushCategoryOf(triggerType);
     if (optOut.all === true || optOut[triggerType] === true || optOut[cat] === true) {
+      lastStatus = 'skipped_opt_out';
       await db.insert(pushLog).values({
         participantId,
         text,
         triggerType,
         sentAt: new Date(),
-        deliveryStatus: 'skipped_opt_out',
+        deliveryStatus: lastStatus,
       });
       continue;
     }
@@ -139,10 +153,12 @@ export async function sendPushNotification(
     if (!hasAnyToken) {
       deliveryStatus = 'skipped_no_token';
     } else if (p.vkId) {
-      deliveryStatus = await deliverToVkUser(p.vkId, text);
+      deliveryStatus = await deliverToVkUser(p.vkId, text, `trigger=${triggerType}`);
     } else {
       deliveryStatus = 'skipped_no_vk_id';
     }
+
+    lastStatus = deliveryStatus;
 
     await db.insert(pushLog).values({
       participantId,
@@ -152,6 +168,8 @@ export async function sendPushNotification(
       deliveryStatus,
     });
   }
+
+  return participantIds.length === 1 ? lastStatus : undefined;
 }
 
 export async function notifyAllParticipants(text: string, triggerType: string): Promise<void> {
@@ -163,7 +181,7 @@ export async function notifyAllParticipants(text: string, triggerType: string): 
 export type AdminPushRow = typeof adminPushNotifications.$inferSelect;
 
 function isDeliveredOk(status: string): boolean {
-  return status === 'sent_mini' || status === 'sent_community' || status === 'ok';
+  return isPushDeliveredOk(status);
 }
 
 /** VK text: title + body for mini-app (254 char limit on notifications.send) */
@@ -206,7 +224,11 @@ export async function executeAdminPushCampaign(
     } else if (!hasAnyToken) {
       vkDeliveryStatus = 'skipped_no_token';
     } else if (p.vkId) {
-      vkDeliveryStatus = await deliverToVkUser(p.vkId, vkText);
+      vkDeliveryStatus = await deliverToVkUser(
+        p.vkId,
+        vkText,
+        `campaign=${notification.id} participant=${participantId}`,
+      );
     } else {
       vkDeliveryStatus = 'skipped_no_vk_id';
     }
@@ -255,7 +277,7 @@ export async function sendTestCampaignToParticipant(
   notification: AdminPushRow,
   participantId: number,
   ctx: PlaceholderContext = {},
-): Promise<string> {
+): Promise<{ personalizedBody: string; deliveryStatus: string }> {
   const [p] = await db.select().from(participants).where(eq(participants.id, participantId)).limit(1);
   if (!p) throw new Error('Participant not found');
   const personalizedBody = expandPushPlaceholders(notification.body, p, {
@@ -264,8 +286,8 @@ export async function sendTestCampaignToParticipant(
   });
   const vkText = formatVkPushText(notification.pushTitle, personalizedBody);
   const triggerType = `admin_test_${notification.id}`;
-  await sendPushNotification([participantId], vkText, triggerType);
-  return personalizedBody;
+  const deliveryStatus = await sendPushNotification([participantId], vkText, triggerType) ?? 'unknown';
+  return { personalizedBody, deliveryStatus };
 }
 
 export async function refreshNotificationStats(notificationId: number): Promise<void> {

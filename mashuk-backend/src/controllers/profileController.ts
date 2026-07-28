@@ -58,6 +58,7 @@ export const getProfile = async (req: ParticipantRequest, res: Response): Promis
         qrToken: p.qrToken || null,
         hideFromLeaderboard: !!p.hideFromLeaderboard,
         pushOptOut: (p.pushOptOut as Record<string, boolean>) || {},
+        avatarUrl: p.avatarUrl || null,
       },
       stats: {
         activities: bundle.userAnswers.length + bundle.userTasks.length,
@@ -268,6 +269,7 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       bonusPoints: participants.bonusPoints,
       hideFromLeaderboard: participants.hideFromLeaderboard,
       selfDeletedAt: participants.selfDeletedAt,
+      avatarUrl: participants.avatarUrl,
     }).from(participants);
 
     const me = req.participant!.id;
@@ -303,6 +305,7 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
         direction: p.direction,
         score: scoreMap.get(p.id) ?? 0,
         isMe: p.id === me,
+        avatarUrl: p.avatarUrl || null,
       }))
       .sort((a, b) => b.score - a.score)
       .map((p, i) => ({ rank: i + 1, ...p }));

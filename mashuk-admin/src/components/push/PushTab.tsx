@@ -164,7 +164,11 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
           }, 'Черновик сохранён')}
           onTest={() => act(async () => {
             const id = await persist('draft');
-            await adminFetch(`/push/notifications/${id}/test`, { method: 'POST', body: '{}' });
+            const res = await adminFetch(`/push/notifications/${id}/test`, { method: 'POST', body: '{}' }) as {
+              deliveryStatusHint?: string;
+              deliveryStatus?: string;
+            };
+            return res.deliveryStatusHint || res.deliveryStatus || 'Тест отправлен';
           }, 'Тест отправлен')}
           onTogglePreview={() => {
             setShowPreview(v => !v);

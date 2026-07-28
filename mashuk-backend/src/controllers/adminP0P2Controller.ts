@@ -18,7 +18,7 @@ import { env } from '../config/env.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { EVENING_SCALE_KEYS } from '../services/touchpointTemplates.js';
 import { emptyZoneDistribution } from '../services/emotionZones.js';
-import { fetchVkAvatarUrl } from '../services/vkUserProfile.js';
+import { resolveParticipantAvatarUrl } from '../services/participantAvatarSync.js';
 
 // ─── Consents CRUD ───────────────────────────────────────────
 
@@ -479,7 +479,7 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
     confBySub.get(c.submissionId)!.push(c);
   }
 
-  const avatarUrl = await fetchVkAvatarUrl(p.vkId);
+  const avatarUrl = await resolveParticipantAvatarUrl(p);
 
   res.json({
     participant: p,

@@ -208,6 +208,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         goalAnswers: goalAnswers.map(a => a.trim()),
         interests,
         roleAnswers,
+        vkPhotoUrl: fetchedUser?.photo_200 || fetchedUser?.photo_100 || undefined,
       });
       void import('../utils/pushNotifications.js').then(m => m.requestVkPushPermission());
       onRegistered?.();

@@ -7,6 +7,7 @@ import { Pagination } from '../admin/Pagination';
 import type { AdminTabProps } from '../admin/types';
 import { VkProfileLink } from '../VkProfileLink';
 import { RowActionsMenu, formatParticipantActivity } from './RowActionsMenu';
+import { ParticipantAvatar } from './ParticipantAvatar';
 
 type ParticipantCardTab = 'profile' | 'answers' | 'tasks' | 'medals' | 'points' | 'piggybank' | 'activity' | 'logs';
 
@@ -28,6 +29,7 @@ type ParticipantRow = {
   lastActiveAt?: string | null;
   isBlocked?: boolean | null;
   selfDeletedAt?: string | null;
+  avatarUrl?: string | null;
 };
 
 function buildListQuery(params: {
@@ -260,6 +262,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
               }} aria-label="Выбрать все" />
             </th>
             {showIdColumn && <th>ID</th>}
+            <th aria-label="Аватар" />
             <th>VK ID</th>
             <th>ФИО</th>
             <th>Направление</th>
@@ -288,6 +291,14 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
                 <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
               </td>
               {showIdColumn && <td className="adm-muted">{p.id}</td>}
+              <td>
+                <ParticipantAvatar
+                  firstName={p.firstName}
+                  lastName={p.lastName}
+                  avatarUrl={p.avatarUrl}
+                  size="sm"
+                />
+              </td>
               <td><VkProfileLink vkId={p.vkId} /></td>
               <td>{p.firstName} {p.lastName}{p.isBlocked ? ' · заблок.' : ''}</td>
               <td onClick={e => e.stopPropagation()}>

@@ -8,6 +8,7 @@ import { EmptyState } from '../components/EmptyState';
 import { PIGGYBANK_TAGS, PIGGYBANK_SOURCES } from '../data/piggybank';
 import { buildParticipantVolunteerUrl } from '../utils/qrDeepLink';
 import { requestVkPushPermission } from '../utils/pushNotifications';
+import { ParticipantAvatarCircle } from '../components/ParticipantAvatarCircle';
 
 const TAGS = ['', ...PIGGYBANK_TAGS];
 const SOURCES = ['', ...PIGGYBANK_SOURCES];
@@ -174,8 +175,7 @@ export const ProfilePanel: React.FC<{
   }
 
   const p = profile;
-  const photo = fetchedUser?.photo_100 || fetchedUser?.photo_200;
-  const initials = `${(p.user.firstName?.[0] || '')}${(p.user.lastName?.[0] || '')}`;
+  const avatarUrl = p.user?.avatarUrl || fetchedUser?.photo_200 || fetchedUser?.photo_100 || null;
   const m = p.metrics ?? {};
   const abPct = m.abProgress ?? p.trajectory?.progressPercent ?? 0;
   const finalCard = p.finalCard;
@@ -300,9 +300,12 @@ export const ProfilePanel: React.FC<{
         {section === 'overview' ? (
           <>
             <div className="pf-hdr">
-              <div className="pf-av">
-                {photo ? <img src={photo} alt="" /> : initials}
-              </div>
+              <ParticipantAvatarCircle
+                firstName={p.user.firstName}
+                lastName={p.user.lastName}
+                avatarUrl={avatarUrl}
+                size="md"
+              />
               <div style={{ flex: 1 }}>
                 <div className="pf-n">{p.user.firstName} {p.user.lastName}</div>
                 <div className="pf-r">{shiftLine || p.user.direction}</div>
@@ -743,6 +746,12 @@ export const ProfilePanel: React.FC<{
                   <div style={{ fontWeight: 800, width: 28, color: row.rank <= 3 ? '#B8621A' : '#888' }}>
                     {row.rank}
                   </div>
+                  <ParticipantAvatarCircle
+                    firstName={row.name.split(' ')[0]}
+                    lastName={row.name.split(' ').slice(1).join(' ')}
+                    avatarUrl={row.avatarUrl}
+                    size="sm"
+                  />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: row.isMe ? 800 : 600 }}>
                       {row.name}{row.isMe ? ' · вы' : ''}
