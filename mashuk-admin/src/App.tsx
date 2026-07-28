@@ -35,7 +35,7 @@ import { QuestionsTab } from './components/questions/QuestionsTab';
 import { ShiftsTab } from './components/shifts/ShiftsTab';
 import { TasksTab } from './components/tasks/TasksTab';
 import { LeaderboardScreen, RatingTab } from './components/rating/RatingTab';
-import { TAB_LABELS, TAB_ORDER, type Tab } from './tabs';
+import { TAB_LABELS, TAB_ORDER, groupedAllowedTabs, type Tab } from './tabs';
 
 type AdminMe = {
   role?: string;
@@ -84,6 +84,7 @@ export const App = () => {
   const [shiftOptions, setShiftOptions] = useState<{ id: number; name: string; code: string }[]>([]);
   const [editingShiftId, setEditingShiftId] = useState<number | null>(() => getAdminEditingShiftId());
   const [activeShiftId, setActiveShiftId] = useState<number | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
   /** Не сбрасывать вкладку на defaultTab после каждого act()/reloadKey */
   const appliedDefaultTabRef = useRef(false);
 
@@ -203,91 +204,142 @@ export const App = () => {
     );
   }
 
+  const navGroups = groupedAllowedTabs(allowedTabs);
+
   return (
-    <div className="admin">
-      <header className="admin-header">
-        <h1>Машук 2026 · Админ-панель</h1>
-        <button type="button" className="admin-logout-btn adm-btn adm-btn-secondary" onClick={handleLogout}>
-          Выйти
-        </button>
-      </header>
-      {shiftOptions.length > 0 && (
-        <div className="adm-forum-toolbar" style={{ padding: '8px 16px', flexWrap: 'wrap', gap: 8, borderBottom: '1px solid var(--m-border)', background: '#FAFAF8' }}>
-          <label className="adm-forum-inline" style={{ fontSize: 13 }}>
-            Редактируем смену
-            <select
-              className="adm-input"
-              style={{ minWidth: 200, marginLeft: 8 }}
-              value={editingShiftId ?? ''}
-              onChange={e => {
-                const id = e.target.value ? Number(e.target.value) : null;
-                setAdminEditingShiftId(id);
-              }}
-            >
-              {shiftOptions.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.code}){s.id === activeShiftId ? ' · для участников' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+    <div className={`admin admin-shell${navOpen ? ' admin-shell--nav-open' : ''}`}>
+      {navOpen && (
+        <button
+          type="button"
+          className="admin-nav-backdrop"
+          aria-label="Закрыть меню"
+          onClick={() => setNavOpen(false)}
+        />
       )}
-      <nav className="admin-nav">
-        {allowedTabs.map(t => (
-          <button key={t} type="button" className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
-            {TAB_LABELS[t]}
+
+      <aside className="admin-sidebar" aria-label="Навигация">
+        <div className="admin-sidebar-brand">
+          <span className="admin-sidebar-mark" aria-hidden>M</span>
+          <div className="admin-sidebar-brand-text">
+            <strong>Машук 2026</strong>
+            <span>Админ-панель</span>
+          </div>
+        </div>
+
+        <nav className="admin-nav">
+          {navGroups.map(group => (
+            <div key={group.id} className="admin-nav-group">
+              <div className="admin-nav-group-label">{group.label}</div>
+              {group.tabs.map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  className={tab === t ? 'on' : ''}
+                  onClick={() => {
+                    setTab(t);
+                    setNavOpen(false);
+                  }}
+                >
+                  {TAB_LABELS[t]}
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        <div className="admin-sidebar-footer">
+          <button type="button" className="admin-logout-btn" onClick={handleLogout}>
+            Выйти
           </button>
-        ))}
-      </nav>
-      <main className="admin-main">
-        {tab === 'rating' && <RatingTab {...tabProps} />}
-        {tab === 'participants' && (
-          <ParticipantsTab {...tabProps} onOpenCard={openParticipantCard} />
-        )}
-        {tab === 'directions' && <DirectionsTab {...tabProps} />}
-        {tab === 'onboarding' && (
-          <OnboardingTab {...tabProps} onOpenProgram={() => setTab('events')} />
-        )}
-        {tab === 'forum' && <ForumTab {...tabProps} />}
-        {tab === 'shifts' && <ShiftsTab {...tabProps} />}
-        {tab === 'events' && <ProgramTab {...tabProps} />}
-        {tab === 'speakers' && <SpeakersTab {...tabProps} />}
-        {tab === 'knowledge' && <KnowledgeTab {...tabProps} onOpenCard={openParticipantCard} />}
-        {tab === 'tasks' && <TasksTab {...tabProps} />}
-        {tab === 'questions' && (
-          <QuestionsTab {...tabProps} />
-        )}
-        {tab === 'moderation' && (
-          <ModerationTab {...tabProps} onOpenCard={openParticipantCard} />
-        )}
-        {tab === 'piggybank' && (
-          <PiggybankTab {...tabProps} onOpenCard={openParticipantCard} />
-        )}
-        {tab === 'data' && <DataTab {...tabProps} />}
-        {tab === 'levels' && <LevelsTab {...tabProps} />}
-        {(tab === 'analytics' || tab === 'exports') && (
-          <InsightsProvider
-            adminFetch={adminFetch}
-            setTab={setTab}
-            reloadKey={reloadKey}
-            activeSection={tab === 'exports' ? 'exports' : 'analytics'}
-            analyticsDashboardAllowlist={analyticsDashboardAllowlist}
+        </div>
+      </aside>
+
+      <div className="admin-workspace">
+        <header className="admin-topbar">
+          <button
+            type="button"
+            className="admin-nav-toggle"
+            aria-label="Меню"
+            aria-expanded={navOpen}
+            onClick={() => setNavOpen(o => !o)}
           >
-            <InsightsChrome>
-              {tab === 'analytics' && (
-                <AnalyticsTab {...tabProps} onOpenCard={openParticipantCard} />
-              )}
-              {tab === 'exports' && <ExportsTab {...tabProps} />}
-            </InsightsChrome>
-          </InsightsProvider>
-        )}
-        {tab === 'push' && <PushTab {...tabProps} />}
-        {tab === 'recommendation-tags' && <RecommendationTagsTab {...tabProps} />}
-        {tab === 'admins' && <AdminsTab {...tabProps} />}
-        {tab === 'journal' && <JournalTab {...tabProps} />}
-        {tab === 'medals' && <MedalsTab {...tabProps} />}
-      </main>
+            <span />
+            <span />
+            <span />
+          </button>
+          <div className="admin-topbar-title">
+            <h1>{TAB_LABELS[tab]}</h1>
+          </div>
+          {shiftOptions.length > 0 && (
+            <label className="admin-shift-select">
+              <span>Смена</span>
+              <select
+                className="adm-input"
+                value={editingShiftId ?? ''}
+                onChange={e => {
+                  const id = e.target.value ? Number(e.target.value) : null;
+                  setAdminEditingShiftId(id);
+                }}
+              >
+                {shiftOptions.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}{s.id === activeShiftId ? ' · участники' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </header>
+
+        <main className="admin-main">
+          {tab === 'rating' && <RatingTab {...tabProps} />}
+          {tab === 'participants' && (
+            <ParticipantsTab {...tabProps} onOpenCard={openParticipantCard} />
+          )}
+          {tab === 'directions' && <DirectionsTab {...tabProps} />}
+          {tab === 'onboarding' && (
+            <OnboardingTab {...tabProps} onOpenProgram={() => setTab('events')} />
+          )}
+          {tab === 'forum' && <ForumTab {...tabProps} />}
+          {tab === 'shifts' && <ShiftsTab {...tabProps} />}
+          {tab === 'events' && <ProgramTab {...tabProps} />}
+          {tab === 'speakers' && <SpeakersTab {...tabProps} />}
+          {tab === 'knowledge' && <KnowledgeTab {...tabProps} onOpenCard={openParticipantCard} />}
+          {tab === 'tasks' && <TasksTab {...tabProps} />}
+          {tab === 'questions' && (
+            <QuestionsTab {...tabProps} />
+          )}
+          {tab === 'moderation' && (
+            <ModerationTab {...tabProps} onOpenCard={openParticipantCard} />
+          )}
+          {tab === 'piggybank' && (
+            <PiggybankTab {...tabProps} onOpenCard={openParticipantCard} />
+          )}
+          {tab === 'data' && <DataTab {...tabProps} />}
+          {tab === 'levels' && <LevelsTab {...tabProps} />}
+          {(tab === 'analytics' || tab === 'exports') && (
+            <InsightsProvider
+              adminFetch={adminFetch}
+              setTab={setTab}
+              reloadKey={reloadKey}
+              activeSection={tab === 'exports' ? 'exports' : 'analytics'}
+              analyticsDashboardAllowlist={analyticsDashboardAllowlist}
+            >
+              <InsightsChrome>
+                {tab === 'analytics' && (
+                  <AnalyticsTab {...tabProps} onOpenCard={openParticipantCard} />
+                )}
+                {tab === 'exports' && <ExportsTab {...tabProps} />}
+              </InsightsChrome>
+            </InsightsProvider>
+          )}
+          {tab === 'push' && <PushTab {...tabProps} />}
+          {tab === 'recommendation-tags' && <RecommendationTagsTab {...tabProps} />}
+          {tab === 'admins' && <AdminsTab {...tabProps} />}
+          {tab === 'journal' && <JournalTab {...tabProps} />}
+          {tab === 'medals' && <MedalsTab {...tabProps} />}
+        </main>
+      </div>
 
       {participantCard && (
         <ParticipantCardModal

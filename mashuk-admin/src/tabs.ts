@@ -51,3 +51,39 @@ export const TAB_LABELS: Record<Tab, string> = {
   journal: 'Журнал',
   medals: 'Медали',
 };
+
+/** Группы боковой навигации (Apple Settings–style) */
+export const NAV_GROUPS: { id: string; label: string; tabs: Tab[] }[] = [
+  {
+    id: 'people',
+    label: 'Участники',
+    tabs: ['participants', 'directions', 'onboarding'],
+  },
+  {
+    id: 'program',
+    label: 'Программа',
+    tabs: ['forum', 'shifts', 'events', 'speakers', 'knowledge', 'tasks', 'questions'],
+  },
+  {
+    id: 'engagement',
+    label: 'Вовлечённость',
+    tabs: ['moderation', 'piggybank', 'levels', 'medals', 'rating'],
+  },
+  {
+    id: 'insights',
+    label: 'Аналитика',
+    tabs: ['analytics', 'exports', 'data'],
+  },
+  {
+    id: 'system',
+    label: 'Система',
+    tabs: ['push', 'recommendation-tags', 'admins', 'journal'],
+  },
+];
+
+export function groupedAllowedTabs(allowed: Tab[]): { id: string; label: string; tabs: Tab[] }[] {
+  const allow = new Set(allowed);
+  return NAV_GROUPS
+    .map(g => ({ ...g, tabs: g.tabs.filter(t => allow.has(t)) }))
+    .filter(g => g.tabs.length > 0);
+}
