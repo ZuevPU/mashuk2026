@@ -22,7 +22,7 @@ export function createApp() {
         ? corsOrigins
         : true,
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Shift-Id'],
   }));
 
   app.use(express.json({ limit: '6mb' }));
