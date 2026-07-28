@@ -264,6 +264,7 @@ router.post('/admin-users/:id/reset-password', P('admins', 'update'), wrap(ops.r
 router.delete('/admin-users/:id', P('admins', 'delete'), wrap(ops.deleteAdminUser));
 
 router.get('/piggybank-entries', P('piggybank', 'read'), wrap(piggyAdmin.listPiggybankEntries));
+router.get('/piggybank-entries/export', P('piggybank', 'export'), wrap(piggyAdmin.exportPiggybankEntries));
 router.patch('/piggybank-entries/:id', P('piggybank', 'update'), wrap(piggyAdmin.patchPiggybankEntry));
 router.delete('/piggybank-entries/:id', P('piggybank', 'delete'), wrap(piggyAdmin.deletePiggybankEntry));
 

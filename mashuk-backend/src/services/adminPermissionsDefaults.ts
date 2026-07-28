@@ -95,7 +95,12 @@ export function buildDefaultPermissionRows(): RoleSectionRow[] {
   for (const section of ADMIN_SECTIONS) {
     const base = readOnly();
     if (['moderation', 'tasks', 'participants', 'piggybank'].includes(section)) {
-      rows.push(row('moderator', section, { ...base, canConfirm: true, canUpdate: section === 'tasks' || section === 'piggybank' }));
+      rows.push(row('moderator', section, {
+        ...base,
+        canConfirm: true,
+        canUpdate: section === 'tasks' || section === 'piggybank',
+        canExport: section === 'piggybank',
+      }));
     } else {
       rows.push(row('moderator', section, base));
     }
