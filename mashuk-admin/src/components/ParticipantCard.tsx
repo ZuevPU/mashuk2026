@@ -219,7 +219,13 @@ export function ParticipantCardModal({
     setAvatarFailed(false);
   }, [card.avatarUrl, p.id]);
 
-
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   useEffect(() => {
 
@@ -288,42 +294,62 @@ export function ParticipantCardModal({
 
 
 
+  const displayName = `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Участник';
+
   return (
 
-    <div className="adm-modal-backdrop" onClick={onClose} role="presentation">
+    <div className="adm-modal-backdrop adm-participant-card-backdrop" onClick={onClose} role="presentation">
 
-      <div className="adm-modal adm-participant-card" onClick={e => e.stopPropagation()}>
+      <div
+        className="adm-modal adm-participant-card"
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="adm-pc-dialog-title"
+      >
 
-        <div className="adm-pc-hero">
+        <header className="adm-pc-topbar">
+          <button
+            type="button"
+            className="adm-pc-close-btn"
+            onClick={onClose}
+            aria-label="Закрыть карточку участника"
+          >
+            <span className="adm-pc-close-icon" aria-hidden>←</span>
+            Закрыть
+          </button>
+          <h2 className="adm-pc-topbar-title" id="adm-pc-dialog-title">{displayName}</h2>
+          <span className="adm-pc-topbar-id">ID {p.id}</span>
+        </header>
 
-          <button type="button" className="adm-btn adm-btn-ghost adm-pc-close" onClick={onClose}>✕</button>
-
-          <div className="adm-pc-avatar">
-            {avatarSrc ? (
-              <img src={avatarSrc} alt="" className="adm-pc-avatar-img" onError={() => setAvatarFailed(true)} />
-            ) : initials}
+        <div className="adm-pc-header">
+          <div className="adm-pc-hero-strip">
+            <div className="adm-pc-avatar adm-pc-avatar-sm">
+              {avatarSrc ? (
+                <img src={avatarSrc} alt="" className="adm-pc-avatar-img" onError={() => setAvatarFailed(true)} />
+              ) : initials}
+            </div>
+            <div className="adm-pc-hero-main">
+              <div className="adm-pc-meta adm-pc-meta-light">
+                <VkProfileLink vkId={p.vkId} /> · {p.direction || '—'}
+                {p.groupName ? ` · ${p.groupName}` : ''} · {leadingRoleLabel}
+              </div>
+              <div className="adm-pc-chips adm-pc-chips-inline">
+                <span className="adm-chip adm-chip-light">Путь {p.pathPoints ?? 0}</span>
+                <span className="adm-chip adm-chip-light adm-chip-accent">Опыт {p.experiencePoints ?? 0}</span>
+              </div>
+            </div>
           </div>
 
-          <div className="adm-pc-name">{p.firstName} {p.lastName}</div>
-
-          <div className="adm-pc-meta">
-            <VkProfileLink vkId={p.vkId} /> · {p.direction || '—'}{p.groupName ? ` · Группа: ${p.groupName}` : ''} · Ведущая роль: {leadingRoleLabel}
-          </div>
-
-          <div className="adm-forum-toolbar" style={{ justifyContent: 'center', marginTop: 10, flexWrap: 'wrap' }}>
-
+          <div className="adm-pc-toolbar adm-forum-toolbar">
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setTab('profile')}>Скорректировать роль</button>
-
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setTab('points')}>Начислить/снять баллы</button>
-
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => {
               const text = prompt('Текст пуша');
               if (!text?.trim()) return;
               act(() => adminFetch(`/participants/${p.id}/push`, { method: 'POST', body: JSON.stringify({ text: text.trim() }) }), 'Пуш отправлен');
             }}>Отправить пуш</button>
-
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF')}>Выгрузить всё</button>
-
             {p.isBlocked
               ? (
                 <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => act(async () => {
@@ -340,20 +366,10 @@ export function ParticipantCardModal({
                   }, 'Заблокирован');
                 }}>Заблокировать</button>
               )}
-
           </div>
-
-          <div className="adm-pc-chips">
-
-            <span className="adm-chip">📍 {p.pathPoints ?? 0}</span>
-
-            <span className="adm-chip adm-chip-accent">⚡ {p.experiencePoints ?? 0}</span>
-
-          </div>
-
         </div>
 
-        <div className="adm-seg">
+        <div className="adm-seg adm-pc-seg">
 
           {tabs.map(t => (
 
