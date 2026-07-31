@@ -24,6 +24,13 @@ describe('repeatable task submit flow', { skip: !process.env.DATABASE_URL }, () 
       const dirs = await request(app).get('/api/directions');
       const directionId = dirs.body.directions?.[0]?.id;
       assert.ok(directionId);
+      const meta = await request(app)
+        .get('/api/auth/onboarding-meta')
+        .set('X-Test-Vk-Id', String(E2E_VK_ID));
+      assert.equal(meta.status, 200);
+      const groupId = meta.body.groups?.[0]?.id ?? null;
+      const consents = await request(app).get('/api/consents/active');
+      assert.equal(consents.status, 200);
       const onboarding = await request(app)
         .post('/api/auth/onboarding')
         .set('X-Test-Vk-Id', String(E2E_VK_ID))
@@ -33,9 +40,22 @@ describe('repeatable task submit flow', { skip: !process.env.DATABASE_URL }, () 
           age: 25,
           directionId,
           workplace: 'E2E',
-          pedagogicalRole: 'teacher',
-          groupId: null,
-          consentIds: [],
+          position: 'Учитель',
+          region: 'КЧР',
+          consentPd: true,
+          consentAnalytics: true,
+          consentPdVersion: consents.body.pd?.version ?? 1,
+          consentAnalyticsVersion: consents.body.analytics?.version ?? 1,
+          groupId,
+          goalAnswers: ['g1', 'g2', 'g3', 'g4', 'g5'],
+          interests: [
+            'проектная работа',
+            'подростки',
+            'осмысленность обучения',
+            'командная работа учителей',
+            'открытые уроки',
+          ],
+          roleAnswers: [1, 1, 0, 1, 1, 2],
         });
       assert.equal(onboarding.status, 200, JSON.stringify(onboarding.body));
       const list2 = await request(app).get('/api/admin/participants').set(adminAuth);
