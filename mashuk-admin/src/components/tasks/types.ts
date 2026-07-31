@@ -21,6 +21,7 @@ export type AdminTask = {
   isHidden?: boolean;
   scopeType?: string;
   answerType?: string;
+  answerOptions?: Array<{ label: string; value: string }>;
   confirmationType?: string;
   confirmationMethods?: string[];
   allowRetry?: boolean;
@@ -66,6 +67,8 @@ export type TaskDraft = {
   status: string;
   scopeType: string;
   confirmationMethods: string[];
+  answerType: string;
+  answerOptions: Array<{ label: string; value: string }>;
   requiresModeration: boolean;
   executionType: string;
   dailyRepeatLimit: number;
@@ -93,7 +96,15 @@ export const CONFIRMATION_METHOD_OPTIONS = [
   { key: 'link', label: 'Ссылка' },
   { key: 'volunteer', label: 'Волонтёр' },
   { key: 'team', label: 'Команда' },
-  { key: 'moderator', label: 'Модератор' },
+  { key: 'moderator', label: 'Играпрактик' },
+] as const;
+
+export const TASK_ANSWER_FORMAT_OPTIONS = [
+  { key: 'text', label: 'Текстовый ответ' },
+  { key: 'choice', label: 'Выбор одного варианта' },
+  { key: 'multi', label: 'Множественный выбор' },
+  { key: 'text_and_photo', label: 'Фото + текст (необяз.)' },
+  { key: 'photo', label: 'Только фото' },
 ] as const;
 
 export const NOMINATION_OPTIONS = [
@@ -136,6 +147,8 @@ export function emptyDraft(day = 1): TaskDraft {
     status: 'draft',
     scopeType: 'individual',
     confirmationMethods: ['photo'],
+    answerType: 'text_and_photo',
+    answerOptions: [],
     requiresModeration: true,
     executionType: 'once',
     dailyRepeatLimit: 1,
@@ -181,6 +194,11 @@ export function draftFromTask(t: AdminTask): TaskDraft {
     status: t.status || 'draft',
     scopeType: t.scopeType || 'individual',
     confirmationMethods: methods,
+    answerType: t.answerType || (methods.includes('photo') ? 'text_and_photo' : 'text'),
+    answerOptions: (t.answerOptions || []).map((o, i) => ({
+      label: o.label,
+      value: o.value || String(i),
+    })),
     requiresModeration: methods.includes('moderator') || t.autoConfirm === false,
     executionType: t.executionType || 'once',
     dailyRepeatLimit: t.dailyRepeatLimit ?? 1,
@@ -217,6 +235,10 @@ export function patchBodyFromDraft(draft: TaskDraft, publish = false): Record<st
     status,
     scopeType: draft.scopeType,
     confirmationMethods: draft.confirmationMethods,
+    answerType: draft.answerType,
+    answerOptions: draft.answerOptions
+      .map((o, i) => ({ label: o.label.trim(), value: o.value || String(i) }))
+      .filter(o => o.label),
     requiresModeration: draft.requiresModeration,
     executionType: draft.executionType,
     dailyRepeatLimit: Number(draft.dailyRepeatLimit),
@@ -246,6 +268,11 @@ export function statusLabel(t: AdminTask): string {
   return 'Опубликовано';
 }
 
+export function answerFormatLabel(answerType?: string | null): string {
+  return TASK_ANSWER_FORMAT_OPTIONS.find(o => o.key === answerType)?.label
+    ?? (answerType || '—');
+}
+
 export function methodsLabel(methods?: string[]): string {
   if (!methods?.length) return 'Авто';
   const map: Record<string, string> = {
@@ -254,7 +281,7 @@ export function methodsLabel(methods?: string[]): string {
     link: 'Ссылка',
     volunteer: 'Волонтёр',
     team: 'Команда',
-    moderator: 'Модератор',
+    moderator: 'Играпрактик',
   };
   return methods.map(m => map[m] || m).join(', ');
 }

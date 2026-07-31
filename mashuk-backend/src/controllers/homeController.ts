@@ -24,7 +24,6 @@ import { resolveQuestionDayForAccess } from '../services/questionEligibility.js'
 import { getLevelProgress, totalRatingScore } from '../services/pointsService.js';
 import { loadDayContext } from './dayStateController.js';
 import { resolveHomeActiveCard } from '../services/homeActiveCard.js';
-import { entryHasTag } from '../services/piggybankDict.js';
 import { resolveActiveShiftId } from '../services/shiftService.js';
 
 export const getHome = async (req: ParticipantRequest, res: Response): Promise<void> => {
@@ -91,7 +90,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
 
     const piggyRows = await db.select().from(piggybank)
       .where(eq(piggybank.participantId, participant.id));
-    const ideasCount = piggyRows.filter(e => entryHasTag(e, 'идея')).length;
+    const piggybankCount = piggyRows.length;
 
     const stateCheckOrder = stateCheckTimePointOrder(now);
     let priorityQuestion: typeof publishedQuestions[0] | undefined;
@@ -257,6 +256,21 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const pathProg = await getLevelProgress(participant.pathPoints ?? 0, 'path');
     const expProg = await getLevelProgress(participant.experiencePoints ?? 0, 'experience');
 
+    let delayedSurveyCard: { id: number; title: string; subtitle: string } | null = null;
+    try {
+      const { getPendingDelayedSurvey } = await import('../services/exports/delayedMeasureService.js');
+      const pending = await getPendingDelayedSurvey(participant.id);
+      if (pending) {
+        delayedSurveyCard = {
+          id: pending.id,
+          title: 'Как вы после форума?',
+          subtitle: 'Короткий опрос через 6–8 недель — 3 вопроса, ~2 минуты',
+        };
+      }
+    } catch {
+      /* migration pending */
+    }
+
     const activeCard = resolveHomeActiveCard({
       now,
       eveningWrap,
@@ -270,6 +284,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         title: i.title,
         state: i.state,
       })),
+      delayedSurvey: delayedSurveyCard,
     });
 
     let activePushBanners: {
@@ -308,6 +323,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       } : null,
       priorityAction,
       activeCard,
+      delayedSurvey: delayedSurveyCard,
       roleOfDay: dayContext.roleOfDay,
       experiment: currentDay === 8 ? null : dayContext.experiment,
       eveningQuestionnaire: dayContext.eveningQuestionnaire,
@@ -331,7 +347,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
           participant.experiencePoints ?? 0,
           participant.bonusPoints ?? 0,
         ),
-        ideas: ideasCount,
+        ideas: piggybankCount,
         pathLevel: pathProg.level,
         experienceLevel: expProg.level,
         pathProgress: pathProg.progress,

@@ -10,6 +10,7 @@ import {
   getEventLiveStatus,
   calendarDateKeyFromTimestamp,
   recommendationSubtitle,
+  resolveProgramRecEmptyTexts,
   resolveEventInterval,
 } from '../services/eventSchedule.js';
 import { cache } from '../services/cache.js';
@@ -398,6 +399,7 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
       })),
       interests,
       publishedEventsCount: eventList.length,
+      ...resolveProgramRecEmptyTexts(settings),
     });
   } catch (error) {
     console.error('getRecommendations:', error);

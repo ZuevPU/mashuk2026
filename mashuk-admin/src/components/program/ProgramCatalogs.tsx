@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { SearchMultiPick } from '../admin/SearchMultiPick';
 import type { ProgramBlockType, ProgramSpeaker } from './types';
 import { speakerFullLabel, speakerSearchHaystack, speakerShortLabel } from '../speakers/speakerFormat';
 
@@ -13,13 +14,14 @@ type ChipProps = {
   onEditingChange: (v: { id: number; name: string } | null) => void;
   onSaveEdit: () => void;
   onDelete: (id: number) => void;
+  embedded?: boolean;
 };
 
 function CatalogChipBlock(p: ChipProps) {
-  return (
-    <div className="card adm-forum-block">
-      <h3>{p.title}</h3>
-      <p className="adm-forum-hint">{p.hint}</p>
+  const inner = (
+    <>
+      {!p.embedded && <h3>{p.title}</h3>}
+      {!p.embedded && <p className="adm-forum-hint">{p.hint}</p>}
       <div className="adm-forum-toolbar">
         <input className="adm-input" value={p.newName} onChange={e => p.onNewNameChange(e.target.value)} placeholder="Название" style={{ maxWidth: 220 }} />
         <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={p.onAdd}>Добавить</button>
@@ -43,8 +45,9 @@ function CatalogChipBlock(p: ChipProps) {
           </span>
         ))}
       </div>
-    </div>
+    </>
   );
+  return p.embedded ? inner : <div className="card adm-forum-block">{inner}</div>;
 }
 
 export function ProgramBlockTypesBlock({
@@ -56,6 +59,7 @@ export function ProgramBlockTypesBlock({
   onAdd,
   onSaveEdit,
   onDelete,
+  embedded = false,
 }: {
   blockTypes: ProgramBlockType[];
   newName: string;
@@ -65,6 +69,7 @@ export function ProgramBlockTypesBlock({
   onAdd: () => void;
   onSaveEdit: () => void;
   onDelete: (id: number) => void;
+  embedded?: boolean;
 }) {
   return (
     <CatalogChipBlock
@@ -78,6 +83,7 @@ export function ProgramBlockTypesBlock({
       onEditingChange={onEditingChange}
       onSaveEdit={onSaveEdit}
       onDelete={onDelete}
+      embedded={embedded}
     />
   );
 }
@@ -91,17 +97,14 @@ export function SpeakerMultiPick({
   selectedIds: number[];
   onChange: (ids: number[]) => void;
 }) {
-  const [q, setQ] = useState('');
-
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return speakers;
-    return speakers.filter(s => speakerSearchHaystack(s).includes(needle));
-  }, [speakers, q]);
-
-  const toggle = (id: number) => {
-    onChange(selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id]);
-  };
+  const items = useMemo(
+    () => speakers.map(s => ({
+      id: s.id,
+      label: speakerShortLabel(s),
+      sublabel: s.credentials?.trim() || speakerFullLabel(s),
+    })),
+    [speakers],
+  );
 
   if (speakers.length === 0) {
     return (
@@ -111,50 +114,17 @@ export function SpeakerMultiPick({
     );
   }
 
-  const selected = speakers.filter(s => selectedIds.includes(s.id));
-
   return (
-    <div className="adm-speaker-pick">
-      {selected.length > 0 && (
-        <div className="adm-speaker-pick-selected">
-          {selected.map(s => (
-            <span key={s.id} className="adm-speaker-pick-chip" title={speakerFullLabel(s)}>
-              {speakerShortLabel(s)}
-              <button type="button" className="adm-speaker-pick-chip-x" aria-label="Убрать" onClick={() => toggle(s.id)}>×</button>
-            </span>
-          ))}
-        </div>
-      )}
-      <input
-        className="adm-input adm-input-sm"
-        value={q}
-        onChange={e => setQ(e.target.value)}
-        placeholder={`Поиск среди ${speakers.length} спикеров…`}
-      />
-      <div className="adm-speaker-pick-list" role="listbox" aria-multiselectable>
-        {filtered.map(s => {
-          const on = selectedIds.includes(s.id);
-          return (
-            <button
-              key={s.id}
-              type="button"
-              role="option"
-              aria-selected={on}
-              className={`adm-speaker-pick-row ${on ? 'on' : ''}`}
-              onClick={() => toggle(s.id)}
-            >
-              <span className="adm-speaker-pick-check">{on ? '✓' : ''}</span>
-              <span className="adm-speaker-pick-main">
-                <span className="adm-speaker-pick-name">{s.name}</span>
-                {s.credentials?.trim() && (
-                  <span className="adm-speaker-pick-cred">{s.credentials.trim()}</span>
-                )}
-              </span>
-            </button>
-          );
-        })}
-        {filtered.length === 0 && <div className="adm-muted adm-speaker-pick-empty">Никого не найдено</div>}
-      </div>
-    </div>
+    <SearchMultiPick
+      items={items}
+      selectedIds={selectedIds}
+      onChange={onChange}
+      placeholder="Поиск ФИО спикера…"
+      emptyHint="Введите 2+ символа ФИО"
+      filterItem={(item, needle) => {
+        const sp = speakers.find(s => s.id === item.id);
+        return sp ? speakerSearchHaystack(sp).includes(needle) : item.label.toLowerCase().includes(needle);
+      }}
+    />
   );
 }

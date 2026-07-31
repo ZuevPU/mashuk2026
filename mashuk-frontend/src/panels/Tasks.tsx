@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Panel, PanelHeader, Group, Spinner, Button, Textarea, ModalRoot, ModalPage, ModalPageHeader, Snackbar, Input } from '@vkontakte/vkui';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Panel, PanelHeader, Group, Spinner, Button, Textarea, ModalRoot, ModalPage, ModalPageHeader, Snackbar, Input, Radio, Checkbox } from '@vkontakte/vkui';
 import { useActiveVkuiLocation } from '@vkontakte/vk-mini-apps-router';
 import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { uploadTaskPhoto } from '../utils/uploadPhoto';
 import { openCodeReader } from '../utils/vkBridgeClient';
 import { extractTaskQrToken, parseTaskQrScan } from '../utils/qrDeepLink';
+import { getDeviceKey } from '../utils/deviceKey';
 import { useAppModal } from '../App';
 import { EmptyState } from '../components/EmptyState';
 import {
@@ -37,15 +38,6 @@ const STATUS_LABEL: Record<string, string> = {
   rejected: '🔴 Не принято',
 };
 
-const CONFIRM_HINT: Record<string, string> = {
-  photo: 'Нужно фото',
-  post_url: 'Нужна ссылка на пост',
-  qr: 'QR на площадке',
-  auto: 'Автоподтверждение',
-  team: 'Командное задание',
-  text_photo: 'Текст и/или фото',
-};
-
 function taskMethodsFromMeta(meta: { confirmationMethods?: string[]; confirmationType?: string } | null): string[] {
   if (meta?.confirmationMethods?.length) return meta.confirmationMethods;
   const ct = meta?.confirmationType || 'text_photo';
@@ -59,17 +51,26 @@ function taskMethodsFromMeta(meta: { confirmationMethods?: string[]; confirmatio
 
 function taskConfirmLabel(task: { confirmationMethods?: string[]; confirmationType?: string; answerType?: string | null }): string {
   const methods = taskMethodsFromMeta(task);
-  if (methods.length === 0) return CONFIRM_HINT.auto;
+  const at = task.answerType || (methods.includes('photo') ? 'text_and_photo' : 'text');
+  const formatMap: Record<string, string> = {
+    text: 'Текст',
+    choice: 'Выбор',
+    multi: 'Несколько вариантов',
+    photo: 'Фото',
+    text_and_photo: 'Фото + текст',
+  };
+  const format = formatMap[at] || at;
+  if (methods.length === 0) return `${format} · автоподтверждение`;
   const parts = methods.map(m => {
     if (m === 'photo') return 'Фото до 5 МБ';
     if (m === 'link') return 'Ссылка';
     if (m === 'qr') return 'QR';
     if (m === 'volunteer') return 'Волонтёр';
     if (m === 'team') return 'Команда';
-    if (m === 'moderator') return 'на проверке у модератора';
+    if (m === 'moderator') return 'на проверке у играпрактика';
     return m;
   });
-  return parts.join(' · ');
+  return `${format} · ${parts.join(' · ')}`;
 }
 
 function isTaskAlreadySubmittedError(message: string): boolean {
@@ -77,7 +78,8 @@ function isTaskAlreadySubmittedError(message: string): boolean {
   return m.includes('already submitted')
     || m.includes('уже выполн')
     || m.includes('одноразовое')
-    || m.includes('лимит выполнений');
+    || m.includes('лимит выполнений')
+    || m.includes('этого устройства');
 }
 
 function repeatableProgressLabel(task: {
@@ -124,20 +126,75 @@ const TaskSubmitModal = ({
   const [teamResults, setTeamResults] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
   const [scannedQr, setScannedQr] = useState('');
+  const [selectedChoice, setSelectedChoice] = useState('');
+  const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
+  const autoQrSubmitRef = useRef(false);
   const methods = taskMethodsFromMeta(meta);
+  const answerType = meta?.answerType || (methods.includes('photo') ? 'text_and_photo' : 'text');
+  const answerOptions: Array<{ label: string; value: string }> = meta?.answerOptions || [];
   const qrFromHash = getHashSearchParams().get('qr');
   const effectiveQr = scannedQr || qrFromHash || meta?._scannedQr || '';
 
   useEffect(() => {
     setScannedQr(meta?._scannedQr || '');
+    setSelectedChoice('');
+    setSelectedMulti([]);
+    setAnswerText('');
+    setPhotoUrl(null);
+    autoQrSubmitRef.current = false;
   }, [taskId, meta?._scannedQr]);
 
-  const needsText = methods.includes('photo') && meta?.answerType !== 'photo';
-  const needsPhoto = methods.includes('photo');
+  const submitAnswerText = useCallback(() => {
+    if (answerType === 'choice') return selectedChoice;
+    if (answerType === 'multi') return JSON.stringify(selectedMulti);
+    return answerText.trim();
+  }, [answerType, selectedChoice, selectedMulti, answerText]);
+
+  const submitQrTask = useCallback(async (qrValue: string) => {
+    if (!taskId || !qrValue) return;
+    try {
+      const res = await apiPost<{ xpAwarded?: number; track?: 'path' | 'experience' }>(`/tasks/${taskId}/submit`, {
+        answerText: 'Готово',
+        qrToken: qrValue,
+        deviceKey: getDeviceKey(),
+      });
+      const xp = res.xpAwarded ?? 0;
+      onSubmitSuccess({
+        confirm: {
+          ...TASK_SUBMIT_CONFIRM,
+          titleTemplate: 'QR-задание выполнено',
+          showPoints: xp > 0,
+        },
+        xpAwarded: xp,
+        track: res.track ?? 'experience',
+      });
+      onSuccess();
+      onClose();
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Ошибка отправки';
+      setSnackbar(msg);
+      if (err instanceof ApiError && isTaskAlreadySubmittedError(msg)) {
+        onSuccess();
+        onClose();
+      }
+    }
+  }, [taskId, onSubmitSuccess, onSuccess, onClose, setSnackbar]);
+
+  const needsFreeText = answerType === 'text' || answerType === 'text_and_photo';
+  const needsPhoto = answerType === 'photo' || answerType === 'text_and_photo';
+  const isChoice = answerType === 'choice';
+  const isMulti = answerType === 'multi';
   const needsPostUrl = methods.includes('link');
   const needsTeam = methods.includes('team');
   const isQr = methods.includes('qr');
   const isAuto = methods.length === 0;
+
+  useEffect(() => {
+    if (!isQr || !effectiveQr || needsPhoto || needsPostUrl || needsTeam || needsFreeText || isChoice || isMulti) return;
+    if (autoQrSubmitRef.current) return;
+    autoQrSubmitRef.current = true;
+    void submitQrTask(effectiveQr);
+  }, [isQr, effectiveQr, needsPhoto, needsPostUrl, needsTeam, needsFreeText, isChoice, isMulti, submitQrTask]);
 
   useEffect(() => {
     if (!needsTeam || teamSearch.trim().length < 2) {
@@ -170,8 +227,16 @@ const TaskSubmitModal = ({
 
   const handleSubmit = async () => {
     if (!taskId) return;
-    if (needsText && !answerText.trim()) {
+    if (answerType === 'text' && !answerText.trim()) {
       setSnackbar('Введите текст ответа');
+      return;
+    }
+    if (isChoice && !selectedChoice) {
+      setSnackbar('Выберите вариант ответа');
+      return;
+    }
+    if (isMulti && selectedMulti.length === 0) {
+      setSnackbar('Выберите хотя бы один вариант');
       return;
     }
     if (needsPhoto && !photoUrl) {
@@ -193,11 +258,12 @@ const TaskSubmitModal = ({
     try {
       const teamIds = selectedTeam.map(p => p.id);
       const res = await apiPost<{ xpAwarded?: number; track?: 'path' | 'experience' }>(`/tasks/${taskId}/submit`, {
-        answerText: answerText || (isAuto || isQr ? 'Готово' : undefined),
+        answerText: submitAnswerText() || (isAuto || isQr ? 'Готово' : undefined),
         photoUrl,
         postUrl: postUrl || undefined,
         teamMemberIds: teamIds.length ? teamIds : undefined,
         qrToken: effectiveQr || undefined,
+        deviceKey: isQr ? getDeviceKey() : undefined,
       });
       const xp = res.xpAwarded ?? 0;
       const teamPending = methods.includes('team');
@@ -235,7 +301,7 @@ const TaskSubmitModal = ({
         {isQr && (
           <div style={{ fontSize: 13, marginBottom: 8 }}>
             {effectiveQr
-              ? 'QR распознан — можно подтвердить выполнение.'
+              ? 'QR распознан — начисляем баллы…'
               : 'Отсканируйте QR задания камерой VK или откройте ссылку с площадки.'}
             <Button
               size="m"
@@ -261,8 +327,34 @@ const TaskSubmitModal = ({
             </Button>
           </div>
         )}
-        {needsText && (
-          <Textarea value={answerText} onChange={e => setAnswerText(e.target.value)} placeholder="Ваш ответ..." />
+        {isChoice && answerOptions.map(opt => (
+          <Radio
+            key={opt.value}
+            checked={selectedChoice === opt.value}
+            onChange={() => setSelectedChoice(opt.value)}
+            style={{ marginBottom: 6 }}
+          >
+            {opt.label}
+          </Radio>
+        ))}
+        {isMulti && answerOptions.map(opt => (
+          <Checkbox
+            key={opt.value}
+            checked={selectedMulti.includes(opt.value)}
+            onChange={() => setSelectedMulti(prev => (
+              prev.includes(opt.value) ? prev.filter(v => v !== opt.value) : [...prev, opt.value]
+            ))}
+            style={{ marginBottom: 6 }}
+          >
+            {opt.label}
+          </Checkbox>
+        ))}
+        {needsFreeText && (
+          <Textarea
+            value={answerText}
+            onChange={e => setAnswerText(e.target.value)}
+            placeholder={answerType === 'text_and_photo' ? 'Комментарий (необязательно)...' : 'Ваш ответ...'}
+          />
         )}
         {needsPhoto && (
           <Button mode="secondary" onClick={handlePhoto} style={{ marginTop: 8 }}>
@@ -314,7 +406,7 @@ const TaskSubmitModal = ({
           stretched
           onClick={handleSubmit}
           style={{ marginTop: 12 }}
-          disabled={isQr && !effectiveQr}
+          disabled={(isChoice && !selectedChoice) || (isMulti && selectedMulti.length === 0) || (answerType === 'text' && !answerText.trim()) || (needsPhoto && !photoUrl) || (isQr && !effectiveQr)}
         >
           {isAuto || (isQr && effectiveQr) ? 'Подтвердить' : 'Отправить на проверку'}
         </Button>

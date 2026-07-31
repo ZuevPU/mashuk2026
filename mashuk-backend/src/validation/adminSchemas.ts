@@ -38,7 +38,11 @@ export const taskCreateSchema = z.object({
   points: z.coerce.number().int().min(0).optional(),
   dayNumber: z.coerce.number().int().positive().optional(),
   dayNumbers: z.array(z.coerce.number().int().min(1).max(8)).optional(),
-  answerType: z.enum(['text', 'photo', 'text_and_photo']).optional(),
+  answerType: z.enum(['text', 'photo', 'text_and_photo', 'choice', 'multi']).optional(),
+  answerOptions: z.array(z.object({
+    label: z.string().min(1),
+    value: z.string().optional(),
+  })).optional(),
   confirmationType: z.enum(['photo', 'post_url', 'qr', 'auto', 'team', 'text_photo']).optional(),
   confirmationMethods: z.array(confirmationMethodEnum).optional(),
   scopeType: z.enum(['individual', 'team']).optional(),

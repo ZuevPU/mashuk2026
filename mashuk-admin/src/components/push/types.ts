@@ -16,17 +16,16 @@ export const PUSH_PRESET_CATEGORY_OPTIONS = [
 ] as const;
 
 export const PUSH_AUDIENCE_OPTIONS = [
-  { key: 'all', label: 'Все' },
-  { key: 'direction', label: 'Направление' },
-  { key: 'group', label: 'Группа' },
-  { key: 'ids', label: 'Список ID' },
-  { key: 'rule', label: 'Правило' },
+  { key: 'all', label: 'Все участники смены' },
+  { key: 'direction', label: 'Одно направление' },
+  { key: 'group', label: 'Одна группа' },
+  { key: 'ids', label: 'Выбранные участники (по ID)' },
 ] as const;
 
 export const PUSH_SEND_MODE_OPTIONS = [
-  { key: 'now', label: 'Сейчас' },
-  { key: 'scheduled', label: 'По расписанию' },
-  { key: 'trigger', label: 'По триггеру' },
+  { key: 'now', label: 'Отправить сразу' },
+  { key: 'scheduled', label: 'Отправить в указанное время' },
+  { key: 'trigger', label: 'По событию (для опытных)' },
 ] as const;
 
 export type PushNotificationRow = {
@@ -101,7 +100,7 @@ export function emptyPushDraft(): PushDraft {
     publishAt: '',
     visibleUntil: '',
     sendMode: 'now',
-    triggerConfig: { kind: 'webhook', token: '' },
+    triggerConfig: { kind: 'task_publish' },
     audienceType: 'all',
     audiencePayload: {},
     templateId: '',

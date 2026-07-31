@@ -261,7 +261,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             ? `Задания · ${tasks.length} в списке · ${totalAll} всего`
             : `Задания · ${totalAll} всего`
         }
-        hint="Список заданий форума. Справочник категорий — ниже. Модерация ответов — в меню строки."
+        hint="Список заданий форума. Справочник категорий — ниже. Проверка ответов играпрактиком — в меню строки."
       >
         <div className="adm-seg" style={{ marginBottom: 12 }}>
           {tabs.map(t => (

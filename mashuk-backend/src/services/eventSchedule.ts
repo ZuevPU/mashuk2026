@@ -146,3 +146,21 @@ export function recommendationSubtitle(score: number, threshold: number): string
   if (score >= threshold + 1) return 'по интересам';
   return 'для кругозора';
 }
+
+export const DEFAULT_PROGRAM_REC_EMPTY_NO_MATCH =
+  'Здесь будут отображаться события программы, которые совпадают с вашими интересами. Когда такие совпадения появятся, мы покажем их в этом разделе.';
+
+export const DEFAULT_PROGRAM_REC_EMPTY_NO_EVENTS =
+  'На этот день ещё нет опубликованных событий — блок появится, когда расписание выйдет.';
+
+export function resolveProgramRecEmptyTexts(settings: {
+  programRecEmptyNoMatchText?: string | null;
+  programRecEmptyNoEventsText?: string | null;
+} | null | undefined): { noMatch: string; noEvents: string } {
+  const noMatch = settings?.programRecEmptyNoMatchText?.trim();
+  const noEvents = settings?.programRecEmptyNoEventsText?.trim();
+  return {
+    noMatch: noMatch || DEFAULT_PROGRAM_REC_EMPTY_NO_MATCH,
+    noEvents: noEvents || DEFAULT_PROGRAM_REC_EMPTY_NO_EVENTS,
+  };
+}

@@ -9,6 +9,10 @@ export function InsightsChrome({ children }: { children: ReactNode }) {
     setDirection,
     group,
     setGroup,
+    ageCategory,
+    setAgeCategory,
+    activity,
+    setActivity,
     activeDashboardId,
     setActiveDashboardId,
     meta,
@@ -89,6 +93,24 @@ export function InsightsChrome({ children }: { children: ReactNode }) {
                 <option value="">Все</option>
                 {(meta?.filters?.groups ?? []).map(g => (
                   <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            </label>
+            <label className="adm-insights-filter">
+              Возраст
+              <select className="adm-input" value={ageCategory} onChange={e => setAgeCategory(e.target.value)}>
+                <option value="">Все</option>
+                {(meta?.filters?.ageCategories ?? []).map(a => (
+                  <option key={a.id} value={a.id}>{a.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="adm-insights-filter">
+              Деятельность
+              <select className="adm-input" value={activity} onChange={e => setActivity(e.target.value)}>
+                <option value="">Все</option>
+                {(meta?.filters?.activities ?? []).map(a => (
+                  <option key={a} value={a}>{a}</option>
                 ))}
               </select>
             </label>

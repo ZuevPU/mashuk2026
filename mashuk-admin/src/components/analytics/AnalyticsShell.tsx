@@ -168,6 +168,8 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
     forumDay,
     direction,
     group,
+    ageCategory,
+    activity,
     activeDashboardId,
     meta,
     setTab,
@@ -198,11 +200,13 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
     days: mode === 'compare' ? compareDays : undefined,
     direction: direction || undefined,
     group: group || undefined,
+    ageCategory: ageCategory || undefined,
+    activity: activity || undefined,
     roleKey: roleKey || undefined,
     tag: dash === 'piggybank' && piggyTag ? piggyTag : undefined,
     source: dash === 'piggybank' && piggySource ? piggySource : undefined,
     clubId: dash === 'clubs' && clubFilter ? clubFilter : undefined,
-  }), [apiMode, effectiveDay, compareDays, direction, group, roleKey, dash, piggyTag, piggySource, clubFilter]);
+  }), [apiMode, effectiveDay, compareDays, direction, group, ageCategory, activity, roleKey, dash, piggyTag, piggySource, clubFilter]);
 
   const catalogEntry = meta?.dashboardCatalog?.find(c => c.id === dash);
   const showEarlyWarning = catalogEntry && (meta?.currentForumDay ?? 1) < catalogEntry.minForumDay;

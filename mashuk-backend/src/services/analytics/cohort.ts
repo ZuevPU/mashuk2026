@@ -4,6 +4,7 @@ import { participants } from '../../db/schema.js';
 import { buildParticipantWhere, type ParticipantListQuery } from '../participantsList.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
+import { matchesActivity, matchesAgeCategory, AGE_CATEGORY_BUCKETS } from './cohortFilters.js';
 
 export async function loadCohortParticipants(filters: AnalyticsFilters, req?: AdminRequest) {
   const q: ParticipantListQuery = { includeDeleted: false };
@@ -24,6 +25,12 @@ export async function loadCohortParticipants(filters: AnalyticsFilters, req?: Ad
   if (filters.roleKey) {
     rows = rows.filter(p => p.pedagogicalRole === filters.roleKey || p.strongRole === filters.roleKey);
   }
+  if (filters.ageCategory) {
+    rows = rows.filter(p => matchesAgeCategory(p.age, filters.ageCategory));
+  }
+  if (filters.activity) {
+    rows = rows.filter(p => matchesActivity(p.position, filters.activity));
+  }
   return rows;
 }
 
@@ -37,11 +44,20 @@ export async function listFilterOptions() {
     direction: participants.direction,
     groupName: participants.groupName,
     role: participants.pedagogicalRole,
+    position: participants.position,
   }).from(participants).where(isNull(participants.selfDeletedAt));
   const directions = [...new Set(rows.map(r => r.direction).filter(Boolean))] as string[];
   const groups = [...new Set(rows.map(r => r.groupName || 'без группы'))];
   const roles = [...new Set(rows.map(r => r.role).filter(Boolean))] as string[];
-  return { directions, groups, roles };
+  const activities = [...new Set(rows.map(r => r.position).filter(Boolean))] as string[];
+  activities.sort((a, b) => a.localeCompare(b, 'ru'));
+  return {
+    directions,
+    groups,
+    roles,
+    ageCategories: AGE_CATEGORY_BUCKETS.map(b => ({ id: b.id, label: b.label })),
+    activities,
+  };
 }
 
 export function filterAnswersByCohort<T extends { participantId: number }>(

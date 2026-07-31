@@ -15,6 +15,7 @@ import { QuestionsPanel } from './panels/Questions';
 import { ProfilePanel } from './panels/Profile';
 import { RegistrationPanel } from './panels/Registration';
 import { VolunteerPanel } from './panels/Volunteer';
+import { DelayedSurveyPanel } from './panels/DelayedSurvey';
 import { apiGet, getApiUrl, getHashSearchParams, initAuth } from './api/client';
 
 export const ModalContext = createContext<{ setModal: (modal: ReactNode | null) => void }>({ setModal: () => {} });
@@ -259,7 +260,12 @@ export const App = () => {
             {showTab('program') && (
               <TabbarItem
                 selected={activePanel === 'program'}
-                onClick={() => routeNavigator.push('/program')}
+                onClick={() => {
+                  if (activePanel === 'program') {
+                    window.dispatchEvent(new CustomEvent('mashuk-program-reset-day'));
+                  }
+                  routeNavigator.push('/program');
+                }}
                 aria-label={TAB_LABELS.program}
               >
                 <span className="tab-item-inner">
@@ -335,6 +341,7 @@ export const App = () => {
         <ProfilePanel id="profile" fetchedUser={fetchedUser} onSelfDeleted={handleSelfDeleted} />
         <RegistrationPanel id="registration" fetchedUser={fetchedUser} isRegistered={isRegistered} onRegistered={handleRegistered} />
         <VolunteerPanel id="volunteer" />
+        <DelayedSurveyPanel id="delayed-survey" />
       </View>
     </Epic>
       </SplitCol>

@@ -29,6 +29,8 @@ describe('shiftOpsToForumShape', () => {
       shiftLabel: 'Смена 1',
       pdfTemplate: null,
       recommendationTemplates: null,
+      programRecEmptyNoMatchText: null,
+      programRecEmptyNoEventsText: null,
       roleDiagnosticsConfig: null,
       leaderboardScopes: null,
       createdAt: null,

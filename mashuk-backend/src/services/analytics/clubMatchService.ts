@@ -107,11 +107,24 @@ async function collectFragments(): Promise<TextFragment[]> {
   return fragments;
 }
 
-/** Nightly fragment × club keyword match (no LLM). */
-export async function clubFragmentMatchNightly(): Promise<{ inserted: number }> {
+/** Nightly fragment × club keyword match; optional GigaChat embeddings when LLM enabled. */
+export async function clubFragmentMatchNightly(): Promise<{ inserted: number; usedEmbeddings?: boolean }> {
   await ensureDefaultForumClubs();
   const clubs = await db.select().from(forumClubs).where(eq(forumClubs.isActive, true));
   if (!clubs.length) return { inserted: 0 };
+
+  const useEmbeddings = process.env.SEMANTIC_ANALYTICS_V2 === 'true'
+    && process.env.SEMANTIC_ANALYTICS_V2_HEURISTICS_ONLY === 'false';
+  let clubVectors: Map<string, number[]> | null = null;
+  if (useEmbeddings) {
+    const { gigachatEmbed, isGigachatConfigured } = await import('../gigachatService.js');
+    if (isGigachatConfigured()) {
+      clubVectors = new Map();
+      for (const c of clubs) {
+        clubVectors.set(c.id, await gigachatEmbed(c.description || c.name));
+      }
+    }
+  }
 
   const clubKw = clubs.map(c => ({
     id: c.id,
@@ -126,9 +139,16 @@ export async function clubFragmentMatchNightly(): Promise<{ inserted: number }> 
 
   for (const frag of fragments) {
     for (const club of clubKw) {
-      const score = scoreFragment(frag.text, club.keywords);
+      let score = scoreFragment(frag.text, club.keywords);
+      if (clubVectors) {
+        const { gigachatEmbed, cosineSimilarity } = await import('../gigachatService.js');
+        const fragVec = await gigachatEmbed(frag.text);
+        const clubVec = clubVectors.get(club.id);
+        if (clubVec) {
+          score = Math.max(score, Math.round(cosineSimilarity(fragVec, clubVec) * 10));
+        }
+      }
       if (score < 1) continue;
-      const sim = Math.min(99, 35 + score * 12);
       const list = topPerClub.get(club.id) || [];
       list.push({ frag, score, clubId: club.id, clubName: club.name });
       topPerClub.set(club.id, list);
@@ -144,7 +164,9 @@ export async function clubFragmentMatchNightly(): Promise<{ inserted: number }> 
         answerId: item.frag.answerId,
         clubId,
         similarity: Math.min(99, 35 + item.score * 12),
-        verdict: `Совпадение с «${item.clubName}» (${item.score} ключ.)`,
+        verdict: clubVectors
+          ? `Семантика + ключи «${item.clubName}» (${item.score})`
+          : `Совпадение с «${item.clubName}» (${item.score} ключ.)`,
         sourceType: item.frag.sourceType,
         snippet: item.frag.snippet,
       });
@@ -152,7 +174,7 @@ export async function clubFragmentMatchNightly(): Promise<{ inserted: number }> 
     }
   }
 
-  return { inserted };
+  return { inserted, usedEmbeddings: !!clubVectors };
 }
 
 export async function listClubMatchesForDashboard(clubId?: string | null, limit = 100) {

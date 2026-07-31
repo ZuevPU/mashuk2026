@@ -6,6 +6,7 @@ type Props = {
   draft: MedalDraft;
   metrics: RuleMetricOption[];
   editing: boolean;
+  saving?: boolean;
   onChange: (patch: Partial<MedalDraft>) => void;
   onSave: () => void;
   onBack: () => void;
@@ -18,6 +19,7 @@ export function MedalForm({
   draft,
   metrics,
   editing,
+  saving = false,
   onChange,
   onSave,
   onBack,
@@ -26,6 +28,24 @@ export function MedalForm({
   act,
 }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const canSave = draft.name.trim().length > 0;
+  const saveLabel = editing ? 'Сохранить медаль' : 'Создать медаль';
+
+  const toolbarActions = (
+    <>
+      <button
+        type="button"
+        className="adm-btn adm-btn-primary"
+        disabled={!canSave || saving}
+        onClick={onSave}
+      >
+        {saving ? 'Сохранение…' : saveLabel}
+      </button>
+      <button type="button" className="adm-btn adm-btn-secondary" onClick={onEvaluate} disabled={saving}>
+        Авто-оценка
+      </button>
+    </>
+  );
 
   const uploadIcon = (file: File) => {
     const reader = new FileReader();
@@ -43,15 +63,15 @@ export function MedalForm({
   };
 
   return (
-    <div className="card adm-forum-block">
+    <div className="card adm-forum-block adm-medal-form">
       <div className="adm-forum-toolbar" style={{ marginBottom: 12 }}>
-        <button type="button" className="adm-btn adm-btn-secondary" onClick={onBack}>← К списку</button>
-        <button type="button" className="adm-btn adm-btn-primary" onClick={onSave}>
-          {editing ? 'Сохранить' : 'Создать'}
-        </button>
-        <button type="button" className="adm-btn adm-btn-secondary" onClick={onEvaluate}>
-          Авто-оценка
-        </button>
+        <h3 style={{ margin: 0 }}>{editing ? 'Редактирование медали' : 'Новая медаль'}</h3>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {toolbarActions}
+          <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onBack}>
+            ← К списку
+          </button>
+        </div>
       </div>
 
       <label className="adm-field">
@@ -192,6 +212,16 @@ export function MedalForm({
             Черновик
           </button>
         </div>
+      </div>
+
+      <div className="adm-forum-toolbar adm-medal-form-footer">
+        {toolbarActions}
+        {!canSave && (
+          <span className="adm-muted" style={{ fontSize: 12 }}>Укажите название, чтобы сохранить</span>
+        )}
+        <span className="adm-muted" style={{ fontSize: 12 }}>
+          Статус: {draft.isActive ? 'Активна' : 'Черновик'}
+        </span>
       </div>
     </div>
   );

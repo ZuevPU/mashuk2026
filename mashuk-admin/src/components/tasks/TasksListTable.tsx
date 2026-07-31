@@ -55,7 +55,7 @@ export function TasksListTable({
             <th>Медаль</th>
             <th>Подтверждение</th>
             <th>Заявка до</th>
-            <th>Модерация</th>
+            <th>Проверка</th>
             <th>Статус</th>
             <th>Вып.</th>
             <th></th>
@@ -84,7 +84,7 @@ export function TasksListTable({
                 <td>{medalLabel(t)}</td>
                 <td>{methodsLabel(t.confirmationMethods)}</td>
                 <td>{formatTaskDateTime(t.applicationDeadline)}</td>
-                <td title={t.pendingModerationCount ? `${t.pendingModerationCount} заявок ждут модерации` : undefined}>
+                <td title={t.pendingModerationCount ? `${t.pendingModerationCount} заявок ждут играпрактика` : undefined}>
                   {t.pendingModerationCount ? `${t.pendingModerationCount}` : '—'}
                 </td>
                 <td>{statusLabel(t)}</td>
@@ -95,7 +95,7 @@ export function TasksListTable({
                       { label: 'Редактировать', onClick: () => onEdit(t) },
                       { label: 'Дублировать', onClick: () => onDuplicate(t.id) },
                       { label: 'Скачать QR', onClick: () => onQr(t.id) },
-                      { label: 'Модерация ответов', onClick: () => onModerate(t) },
+                      { label: 'Проверка играпрактиком', onClick: () => onModerate(t) },
                       { label: 'Скрыть', onClick: () => onHide(t.id) },
                       { label: 'В архив', onClick: () => onArchive(t.id) },
                       { label: 'Удалить', onClick: () => onDelete(t.id), danger: true },

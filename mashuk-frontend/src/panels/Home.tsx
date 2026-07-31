@@ -172,11 +172,20 @@ export const HomePanel: React.FC<{
   const showEveningCard = !!d.eveningCard && (d.timeSlot === 'evening' || d.eveningWrap);
   const showQuick = d.currentDay !== 8 && (d.ui?.showQuickCapture ?? true);
   const card = d.activeCard;
+  const nowEvents = schedule.filter(ev => ev.kind === 'now');
+  const parallelNow = nowEvents.length > 1;
+  const showProgramNowCards = card?.kind === 'program_now' && parallelNow;
+  const showSingleActiveCard = card && !showProgramNowCards;
   const hidePriorityDup = card && d.priorityAction && card.route === d.priorityAction.route;
   const hideEveningDup = card?.kind === 'evening_survey';
-  const nowCount = schedule.filter(ev => ev.kind === 'now').length;
-  // Keep schedule list visible when several blocks run in parallel
-  const hideNowSchedule = (card?.kind === 'program_now' && nowCount <= 1) || card?.kind === 'program_soon';
+  // «Сейчас» / «Скоро» уже в активной карточке — не дублируем в «Расписании»
+  let scheduleList = schedule;
+  if (card?.kind === 'program_now' || showProgramNowCards) {
+    scheduleList = scheduleList.filter(ev => ev.kind !== 'now');
+  }
+  if (card?.kind === 'program_soon') {
+    scheduleList = scheduleList.filter(ev => ev.kind !== 'soon');
+  }
   const pushBanners = (d.activePushBanners ?? []).filter(b => !dismissedBanners.includes(b.id));
 
   const eveningQuestionnaireBlock = showEvening ? (
@@ -224,15 +233,26 @@ export const HomePanel: React.FC<{
           onDismiss={id => setDismissedBanners(prev => [...prev, id])}
         />
 
-        {card && (
+        {showProgramNowCards && nowEvents.map((ev, i) => (
           <PriorityAction
-            tag={card.tag}
-            title={card.title}
-            subtitle={card.subtitle}
-            buttonText={card.cta}
+            key={`now-${ev.title}-${ev.time}-${i}`}
+            tag={i === 0 ? 'СЕЙЧАС · параллельно' : 'СЕЙЧАС · программа'}
+            title={ev.title}
+            subtitle={`${ev.time}${ev.place ? ` · ${ev.place}` : ''}`}
+            buttonText="Расписание →"
+            onClick={() => routeNavigator.push('/program')}
+          />
+        ))}
+
+        {showSingleActiveCard && (
+          <PriorityAction
+            tag={card!.tag}
+            title={card!.title}
+            subtitle={card!.subtitle}
+            buttonText={card!.cta}
             onClick={() => {
-              if (card.route.includes('evening=1')) setShowEvening(true);
-              else routeNavigator.push(card.route);
+              if (card!.route.includes('evening=1')) setShowEvening(true);
+              else routeNavigator.push(card!.route);
             }}
           />
         )}
@@ -258,11 +278,6 @@ export const HomePanel: React.FC<{
               hint: d.experiment.hint,
               roleName: d.experiment.roleName,
             } : null}
-            onSaveExperimentFixation={d.experiment ? () => openQuickCapture(setModal, {
-              initialTags: ['мысль'],
-              prefillText: [d.experiment!.title, d.experiment!.body].filter(Boolean).join('\n\n'),
-              ...piggyCaptureOpts(() => setSnackbar('Фиксация сохранена в копилку')),
-            }) : undefined}
           />
         )}
 
@@ -280,10 +295,10 @@ export const HomePanel: React.FC<{
           />
         )}
 
-        {schedule.length > 0 && d.currentDay !== 8 && !hideNowSchedule && (
+        {scheduleList.length > 0 && d.currentDay !== 8 && (
           <div className="m-nxt">
             <div className="m-nxt-lbl">Расписание</div>
-            {schedule.map((ev, i) => (
+            {scheduleList.map((ev, i) => (
               <div key={i} className={ev.kind === 'now' ? 'm-now-pulse m-nxt-item' : 'm-nxt-item'}>
                 <NextEventCard
                   title={ev.title}

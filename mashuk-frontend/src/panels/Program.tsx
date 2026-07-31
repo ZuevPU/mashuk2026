@@ -1,44 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Panel, PanelHeader, Group, Div, Spinner, Button, ModalRoot, ModalPage, ModalPageHeader } from '@vkontakte/vkui';
 import { useActiveVkuiLocation } from '@vkontakte/vk-mini-apps-router';
 import { ProgramTabs } from '../components/program/ProgramTabs';
 import { useAppModal } from '../App';
 import { DaySwitcher } from '../components/program/DaySwitcher';
-import { TimelineEvent } from '../components/program/TimelineEvent';
+import { ProgramTimeline, type ProgramEvent, type ProgramSlot } from '../components/program/ProgramTimeline';
 import { KnowledgeBasePanel } from '../components/program/KnowledgeBase';
 import { EmptyState } from '../components/EmptyState';
 import { apiGet, apiPost, ApiError } from '../api/client';
 type DayStatus = 'done' | 'today' | 'future' | 'locked';
-
-interface ProgramChildEvent {
-  id: number;
-  title: string;
-  place?: string | null;
-  time: string;
-  endTime?: string;
-  hasSubSessions?: boolean;
-  children?: ProgramChildEvent[];
-}
-
-interface ProgramEvent {
-  id: number;
-  time: string;
-  endTime?: string;
-  title: string;
-  subtitle: string;
-  description?: string;
-  place?: string;
-  tags?: string[];
-  status: 'past' | 'now' | 'future';
-  hasSubSessions?: boolean;
-  children?: ProgramChildEvent[];
-}
-
-interface ProgramSlot {
-  timeSlot: string;
-  parallel: boolean;
-  events: ProgramEvent[];
-}
 
 export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   const { setModal } = useAppModal();
@@ -50,7 +20,12 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   const [liveDay, setLiveDay] = useState(1);
   const [slots, setSlots] = useState<ProgramSlot[]>([]);
   const [recommendations, setRecommendations] = useState<any[]>([]);
-  const [recMeta, setRecMeta] = useState<{ interests: string[]; publishedEventsCount: number } | null>(null);
+  const [recMeta, setRecMeta] = useState<{
+    interests: string[];
+    publishedEventsCount: number;
+    noMatch: string;
+    noEvents: string;
+  } | null>(null);
   const [kb, setKb] = useState<any>(null);
   const [kbDays, setKbDays] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +35,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   const [selectedEvent, setSelectedEvent] = useState<ProgramEvent | null>(null);
   const [expandedParents, setExpandedParents] = useState<Record<number, boolean>>({});
   const [settingsReady, setSettingsReady] = useState(false);
+  const programVisitRef = useRef(0);
 
   const toggleParent = (id: number) => {
     setExpandedParents(prev => ({ ...prev, [id]: !prev[id] }));
@@ -79,14 +55,13 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
         setTotalDays(s.totalDays);
         setPublishedDays(s.publishedDays || []);
         if (jumpToToday) setActiveDay(today);
-        setSettingsReady(true);
         return today;
       })
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : 'Не удалось загрузить настройки программы');
-        setActiveDay(prev => prev ?? 1);
-        setSettingsReady(true);
-        return 1;
+        const fallback = 1;
+        if (jumpToToday) setActiveDay(fallback);
+        return fallback;
       });
   }, []);
 
@@ -96,7 +71,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
     setError(null);
     Promise.all([
       apiGet<{ slots: ProgramSlot[]; dayPublished?: boolean }>(`/program?day=${activeDay}`),
-      apiGet<{ recommendations: any[]; interests?: string[]; publishedEventsCount?: number }>(`/program/recommendations?day=${activeDay}`),
+      apiGet<{ recommendations: any[]; interests?: string[]; publishedEventsCount?: number; noMatch?: string; noEvents?: string }>(`/program/recommendations?day=${activeDay}`),
       apiGet<any>(`/program/knowledge-base?day=${activeDay}`),
     ]).then(([prog, rec, knowledge]) => {
       setSlots(prog.slots || []);
@@ -105,6 +80,8 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
       setRecMeta({
         interests: rec.interests || [],
         publishedEventsCount: rec.publishedEventsCount ?? 0,
+        noMatch: rec.noMatch || '',
+        noEvents: rec.noEvents || '',
       });
       setKb(knowledge);
     }).catch((err) => {
@@ -112,14 +89,38 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
     }).finally(() => setLoading(false));
   }, [activeDay]);
 
-  // On each open of Program tab — jump to today's forum day
+  const openOnForumToday = useCallback(() => {
+    programVisitRef.current += 1;
+    const visit = programVisitRef.current;
+    setActiveDay(null);
+    setSettingsReady(false);
+    loadSettings(true)
+      .then(today => {
+        if (visit !== programVisitRef.current) return;
+        setActiveDay(today);
+      })
+      .finally(() => {
+        if (visit === programVisitRef.current) setSettingsReady(true);
+      });
+  }, [loadSettings]);
+
+  // Каждый вход на вкладку «Программа» — текущий день форума (как на главной)
   useEffect(() => {
     if (activePanel !== id) return;
-    loadSettings(true);
+    openOnForumToday();
     apiGet<{ days: any[] }>('/program/knowledge-base/days')
       .then(r => setKbDays(r.days || []))
       .catch(() => setKbDays([]));
-  }, [activePanel, id, loadSettings]);
+  }, [activePanel, id, openOnForumToday]);
+
+  useEffect(() => {
+    const onReset = () => {
+      if (activePanel !== id) return;
+      openOnForumToday();
+    };
+    window.addEventListener('mashuk-program-reset-day', onReset);
+    return () => window.removeEventListener('mashuk-program-reset-day', onReset);
+  }, [activePanel, id, openOnForumToday]);
 
   useEffect(() => {
     if (!settingsReady || activeDay == null) return;
@@ -148,89 +149,6 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
       status: activeTab === 'kb' && kbMeta?.kbStatus === 'locked' && dayNum > currentDay ? 'locked' as const : status,
     };
   });
-
-  const countNested = (nodes: ProgramChildEvent[] | undefined): number => {
-    if (!nodes?.length) return 0;
-    return nodes.reduce((n, ch) => n + 1 + countNested(ch.children), 0);
-  };
-
-  const renderChildTree = (ch: ProgramChildEvent, root: ProgramEvent, depth: number) => {
-    const hasKids = (ch.children?.length ?? 0) > 0;
-    const expanded = expandedParents[ch.id];
-    const timeLabel = ch.time || (ch.endTime ? `–${ch.endTime}` : '·');
-    return (
-      <React.Fragment key={ch.id}>
-        <div
-          className="m-tl-row future"
-          style={{
-            padding: '8px 12px',
-            marginTop: 4,
-            marginLeft: Math.max(0, (depth - 1) * 12),
-            background: depth >= 2 ? '#F5F0E8' : '#FAFAF8',
-            borderRadius: 8,
-            cursor: 'pointer',
-          }}
-          onClick={() => {
-            if (hasKids) toggleParent(ch.id);
-            else {
-              setSelectedEvent({
-                ...root,
-                id: ch.id,
-                title: ch.title,
-                place: ch.place || undefined,
-                time: ch.time,
-                endTime: ch.endTime,
-                subtitle: [ch.place, ch.title].filter(Boolean).join(' · '),
-                hasSubSessions: false,
-                children: [],
-              });
-            }
-          }}
-        >
-          <div className="m-tl-time" style={{ fontSize: 11 }}>{timeLabel}</div>
-          <div className="m-tl-body">
-            <div className="m-tl-title" style={{ fontSize: depth >= 2 ? 12 : 13 }}>
-              {ch.title}
-              {hasKids && !expanded ? ` · ${ch.children!.length}` : ''}
-            </div>
-            {ch.place && <div className="m-tl-sub">{ch.place}</div>}
-          </div>
-          <div className="m-tl-arr">{hasKids ? (expanded ? '▼' : '▶') : '›'}</div>
-        </div>
-        {hasKids && expanded && ch.children!.map(grand => renderChildTree(grand, root, depth + 1))}
-      </React.Fragment>
-    );
-  };
-
-  const renderEvent = (e: ProgramEvent, nested?: boolean) => {
-    const hasChildren = (e.children?.length ?? 0) > 0;
-    const expanded = expandedParents[e.id];
-    const nestedCount = countNested(e.children);
-    return (
-      <React.Fragment key={e.id}>
-        <TimelineEvent
-          time={e.time}
-          title={e.title}
-          subtitle={hasChildren && !expanded ? `${e.subtitle} · ${nestedCount} тем` : e.subtitle}
-          tags={e.tags}
-          status={e.status}
-          expandState={hasChildren ? (expanded ? 'expanded' : 'collapsed') : null}
-          onClick={() => {
-            if (hasChildren) {
-              toggleParent(e.id);
-            } else {
-              setSelectedEvent(e);
-            }
-          }}
-        />
-        {hasChildren && expanded && (
-          <div className="m-tl-children" style={{ marginLeft: nested ? 8 : 24, marginBottom: 8 }}>
-            {e.children!.map(ch => renderChildTree(ch, e, 1))}
-          </div>
-        )}
-      </React.Fragment>
-    );
-  };
 
   const handleRecClick = async (eventId: number) => {
     const ev = slots.flatMap(s => s.events).find(e => e.id === eventId);
@@ -330,46 +248,30 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
                 <div className="m-card" style={{ marginBottom: 12, fontSize: 12, color: '#5D4B37', lineHeight: 1.45 }}>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>Персональные рекомендации</div>
                   {recMeta.publishedEventsCount === 0 ? (
-                    <span>На этот день ещё нет опубликованных событий — блок появится, когда расписание выйдет.</span>
+                    <span>{recMeta.noEvents}</span>
                   ) : (
-                    <span>
-                      Здесь будут отображаться события программы, которые совпадают с вашими интересами.
-                      Когда такие совпадения появятся, мы покажем их в этом разделе.
-                    </span>
+                    <span>{recMeta.noMatch}</span>
                   )}
                 </div>
               )}
-              <div className="m-tl-wrap">
-                {slots.map(slot => (
-                  <div key={slot.timeSlot} className="m-tl-slot-group">
-                    {slot.parallel && (
-                      <div className="m-tl-slot-label">{slot.timeSlot} · параллельно</div>
-                    )}
-                    {slot.parallel ? (
-                      <div className="m-parallel-scroll">
-                        {slot.events.map(e => (
-                          <div key={e.id} className="m-parallel-item">
-                            {renderEvent(e)}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      slot.events.map(e => renderEvent(e))
-                    )}
-                  </div>
-                ))}
-                {slots.length === 0 && (
-                  <EmptyState
-                    icon="📅"
-                    title={!dayPublished ? 'Расписание ещё не опубликовано' : 'Расписание пусто'}
-                    subtitle={
-                      !dayPublished
-                        ? 'Организаторы уже готовят программу — откроем расписание этого дня, когда оно будет опубликовано.'
-                        : `События для дня ${activeDay} появятся позже`
-                    }
-                  />
-                )}
-              </div>
+              {slots.length > 0 ? (
+                <ProgramTimeline
+                  slots={slots}
+                  expandedParents={expandedParents}
+                  onToggleParent={toggleParent}
+                  onSelectEvent={setSelectedEvent}
+                />
+              ) : (
+                <EmptyState
+                  icon="📅"
+                  title={!dayPublished ? 'Расписание ещё не опубликовано' : 'Расписание пусто'}
+                  subtitle={
+                    !dayPublished
+                      ? 'Организаторы уже готовят программу — откроем расписание этого дня, когда оно будет опубликовано.'
+                      : `События для дня ${activeDay} появятся позже`
+                  }
+                />
+              )}
               </>
               )}
             </div>

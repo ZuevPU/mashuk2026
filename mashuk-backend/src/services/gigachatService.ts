@@ -216,3 +216,54 @@ export async function clubMatchNightly(): Promise<{ matched: number; usedLlm: bo
 export function isGigachatConfigured(): boolean {
   return !!getCredentials();
 }
+
+const EMBED_API_URL = 'https://gigachat.devices.sberbank.ru/api/v1/embeddings';
+
+export function tokenVector(text: string, dim = 64): number[] {
+  const vec = new Array(dim).fill(0);
+  for (const token of text.toLowerCase().split(/[\s,.;:!?«»"()\-—/]+/).filter(w => w.length > 2)) {
+    let h = 0;
+    for (let i = 0; i < token.length; i++) h = (h * 31 + token.charCodeAt(i)) % dim;
+    vec[h] += 1;
+  }
+  const norm = Math.sqrt(vec.reduce((s, v) => s + v * v, 0)) || 1;
+  return vec.map(v => v / norm);
+}
+
+export function cosineSimilarity(a: number[], b: number[]): number {
+  const n = Math.min(a.length, b.length);
+  let dot = 0;
+  for (let i = 0; i < n; i++) dot += a[i] * b[i];
+  return Math.max(0, Math.min(1, dot));
+}
+
+/** Embeddings via GigaChat API when configured; otherwise token-frequency vector. */
+export async function gigachatEmbed(text: string): Promise<number[]> {
+  const trimmed = text.trim().slice(0, 4000);
+  if (!trimmed) return tokenVector('');
+
+  const token = await getAccessToken();
+  if (!token) return tokenVector(trimmed);
+
+  try {
+    const res = await fetch(EMBED_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        model: 'Embeddings',
+        input: trimmed,
+      }),
+    });
+    if (!res.ok) return tokenVector(trimmed);
+    const data = await res.json() as { data?: { embedding?: number[] }[] };
+    const emb = data.data?.[0]?.embedding;
+    if (emb?.length) return emb;
+  } catch (err) {
+    console.error('GigaChat embed error:', err);
+  }
+  return tokenVector(trimmed);
+}

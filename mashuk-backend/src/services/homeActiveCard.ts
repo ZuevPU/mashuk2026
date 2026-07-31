@@ -2,6 +2,7 @@ import { getMoscowPhase } from './timePhase.js';
 
 export type HomeActiveCardKind =
   | 'evening_survey'
+  | 'delayed_survey'
   | 'program_now'
   | 'program_soon'
   | 'state_check'
@@ -27,6 +28,7 @@ export interface ResolveHomeActiveCardInput {
   eveningQuestionnaire: { available: boolean; completed: boolean };
   schedule: { kind: string; title: string; time: string; place?: string | null }[];
   touchpointItems: { id: number; title?: string; state: string }[];
+  delayedSurvey?: { id: number; title: string; subtitle: string } | null;
 }
 
 const phaseTag = (phase: ReturnType<typeof getMoscowPhase>): string => {
@@ -41,7 +43,20 @@ export function resolveHomeActiveCard(input: ResolveHomeActiveCardInput): HomeAc
   const phase = getMoscowPhase(now);
   const {
     eveningWrap, currentDay, priorityAction, eveningCard, eveningQuestionnaire, schedule, touchpointItems,
+    delayedSurvey,
   } = input;
+
+  if (delayedSurvey) {
+    return {
+      kind: 'delayed_survey',
+      phase,
+      tag: '📋 Отложенный замер',
+      title: delayedSurvey.title,
+      subtitle: delayedSurvey.subtitle,
+      route: '/delayed-survey',
+      cta: 'Пройти опрос →',
+    };
+  }
 
   if (currentDay === 8 && priorityAction?.type === 'question') {
     return {

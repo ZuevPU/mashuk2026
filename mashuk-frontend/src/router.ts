@@ -9,6 +9,7 @@ export const PAGE_QUESTIONS = '/questions';
 export const PAGE_PROFILE = '/profile';
 export const PAGE_REGISTRATION = '/registration';
 export const PAGE_VOLUNTEER = '/volunteer';
+export const PAGE_DELAYED_SURVEY = '/delayed-survey';
 
 export const router = createHashRouter([
   {
@@ -44,6 +45,11 @@ export const router = createHashRouter([
   {
     path: PAGE_VOLUNTEER,
     panel: 'volunteer',
+    view: 'main',
+  },
+  {
+    path: PAGE_DELAYED_SURVEY,
+    panel: 'delayed-survey',
     view: 'main',
   },
 ]);

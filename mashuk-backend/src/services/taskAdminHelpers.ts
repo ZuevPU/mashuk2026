@@ -1,5 +1,75 @@
 import type { tasks } from '../db/schema.js';
 
+export const TASK_ANSWER_TYPES = ['text', 'choice', 'multi', 'photo', 'text_and_photo'] as const;
+export type TaskAnswerType = (typeof TASK_ANSWER_TYPES)[number];
+
+export type TaskAnswerOption = { label: string; value: string };
+
+export function normalizeTaskAnswerOptions(raw: unknown): TaskAnswerOption[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TaskAnswerOption[] = [];
+  raw.forEach((item, i) => {
+    if (typeof item === 'string') {
+      const label = item.trim();
+      if (label) out.push({ label, value: String(i) });
+      return;
+    }
+    if (item && typeof item === 'object') {
+      const label = String((item as { label?: string }).label || '').trim();
+      if (!label) return;
+      const value = String((item as { value?: string }).value ?? label).trim() || String(i);
+      out.push({ label, value });
+    }
+  });
+  return out;
+}
+
+export function answerTypeNeedsPhoto(answerType: string | null | undefined): boolean {
+  return answerType === 'photo' || answerType === 'text_and_photo';
+}
+
+export function syncMethodsForAnswerType(
+  answerType: string | null | undefined,
+  methods: string[],
+): string[] {
+  const next = [...methods];
+  if (answerTypeNeedsPhoto(answerType)) {
+    if (!next.includes('photo')) next.push('photo');
+    return next;
+  }
+  return next.filter(m => m !== 'photo');
+}
+
+export function parseTaskMultiAnswer(raw?: string | null): string[] {
+  if (!raw?.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) return parsed.map(v => String(v)).filter(Boolean);
+  } catch {
+    // fall through
+  }
+  return raw.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+export function formatTaskAnswerForDisplay(
+  task: { answerType?: string | null; answerOptions?: TaskAnswerOption[] | null },
+  answerText?: string | null,
+): string {
+  const at = task.answerType || 'text';
+  if (at === 'multi') {
+    const labels = parseTaskMultiAnswer(answerText);
+    if (!labels.length) return answerText || '—';
+    const opts = normalizeTaskAnswerOptions(task.answerOptions);
+    return labels.map(v => opts.find(o => o.value === v)?.label ?? v).join(', ');
+  }
+  if (at === 'choice') {
+    const opts = normalizeTaskAnswerOptions(task.answerOptions);
+    const hit = opts.find(o => o.value === answerText || o.label === answerText);
+    return hit?.label ?? answerText ?? '—';
+  }
+  return answerText?.trim() || '—';
+}
+
 export const TASK_CONFIRMATION_METHODS = [
   'qr',
   'photo',
@@ -130,6 +200,30 @@ export function enrichTaskWritePayload(
     patch.confirmationType = 'team';
   }
 
+  if ('answerType' in body || 'answerOptions' in body) {
+    const answerType = String(
+      patch.answerType ?? existing?.answerType ?? 'text_and_photo',
+    );
+    patch.answerType = answerType;
+    if ('answerOptions' in body) {
+      patch.answerOptions = normalizeTaskAnswerOptions(body.answerOptions);
+    } else if (existing?.answerOptions) {
+      patch.answerOptions = normalizeTaskAnswerOptions(existing.answerOptions);
+    }
+    if (answerType === 'choice' || answerType === 'multi') {
+      const opts = normalizeTaskAnswerOptions(patch.answerOptions);
+      patch.answerOptions = opts;
+    }
+    const methods = syncMethodsForAnswerType(
+      answerType,
+      normalizeConfirmationMethods(
+        patch.confirmationMethods ?? existing?.confirmationMethods ?? methodsFromLegacy(existing ?? {}),
+      ),
+    );
+    patch.confirmationMethods = methods;
+    patch.confirmationType = legacyConfirmationType(methods);
+  }
+
   return patch;
 }
 
@@ -176,15 +270,37 @@ export function validateTaskSubmissionPayload(
 ): { ok: true } | { ok: false; error: string } {
   const methods = taskMethodsForParticipant(task);
   const answerType = task.answerType || 'text_and_photo';
+  const options = normalizeTaskAnswerOptions(task.answerOptions);
 
-  if (methods.includes('photo')) {
-    if ((answerType === 'photo' || answerType === 'text_and_photo') && !body.photoUrl) {
-      return { ok: false, error: 'Требуется фото' };
-    }
-    if (answerType === 'text' && !body.answerText?.trim() && !body.photoUrl) {
-      return { ok: false, error: 'Требуется ответ' };
+  if (answerType === 'text' && !body.answerText?.trim()) {
+    return { ok: false, error: 'Введите текст ответа' };
+  }
+  if (answerType === 'choice') {
+    const val = body.answerText?.trim();
+    if (!val) return { ok: false, error: 'Выберите вариант ответа' };
+    const allowed = new Set(options.map(o => o.value));
+    const allowedLabels = new Set(options.map(o => o.label));
+    if (options.length && !allowed.has(val) && !allowedLabels.has(val)) {
+      return { ok: false, error: 'Некорректный вариант ответа' };
     }
   }
+  if (answerType === 'multi') {
+    const selected = parseTaskMultiAnswer(body.answerText);
+    if (!selected.length) return { ok: false, error: 'Выберите хотя бы один вариант' };
+    if (options.length) {
+      const allowed = new Set(options.flatMap(o => [o.value, o.label]));
+      if (selected.some(v => !allowed.has(v))) {
+        return { ok: false, error: 'Некорректный вариант ответа' };
+      }
+    }
+  }
+  if (answerType === 'photo' && !body.photoUrl) {
+    return { ok: false, error: 'Прикрепите фото' };
+  }
+  if (answerType === 'text_and_photo') {
+    if (!body.photoUrl) return { ok: false, error: 'Прикрепите фото' };
+  }
+
   if (methods.includes('link') && !body.postUrl?.trim()) {
     return { ok: false, error: 'Требуется ссылка на пост' };
   }

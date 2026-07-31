@@ -82,6 +82,7 @@ router.delete('/program-speakers/:id', requireAdminRole('delete'), wrap(admin.cr
 router.get('/schedule/days', wrap(p0.crudScheduleDays.list));
 router.post('/schedule/days', requireAdminRole('settings'), wrap(p0.crudScheduleDays.create));
 router.patch('/schedule/days/:id', requireAdminRole('settings'), wrap(p0.crudScheduleDays.update));
+router.delete('/schedule/days/:id', requireAdminRole('delete'), wrap(p0.crudScheduleDays.delete));
 router.post('/schedule/draft', requireAdminRole('settings'), wrap(p0.draftScheduleDay));
 
 router.get('/shifts', P('forum', 'read'), wrap(shiftsCtrl.listAdminShifts));

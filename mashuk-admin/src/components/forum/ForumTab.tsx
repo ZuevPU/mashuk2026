@@ -13,6 +13,8 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [forumSegment, setForumSegment] = useState<ForumSegment>('settings');
   const [forumSettings, setForumSettings] = useState<any>(null);
   const [recThreshold, setRecThreshold] = useState(1);
+  const [recEmptyNoMatchText, setRecEmptyNoMatchText] = useState('');
+  const [recEmptyNoEventsText, setRecEmptyNoEventsText] = useState('');
   const [totalDaysDraft, setTotalDaysDraft] = useState(8);
   const [kbThreshold, setKbThreshold] = useState(4);
   const [sectionsVis, setSectionsVis] = useState<Record<string, boolean>>({});
@@ -35,6 +37,8 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       const fs = (await adminFetch('/forum-settings')).settings;
       setForumSettings(fs);
       setRecThreshold(fs?.recommendationThreshold ?? 1);
+      setRecEmptyNoMatchText(fs?.programRecEmptyNoMatchText ?? '');
+      setRecEmptyNoEventsText(fs?.programRecEmptyNoEventsText ?? '');
       setTotalDaysDraft(fs?.totalDays ?? 8);
       setKbThreshold(fs?.kbUnlockThreshold ?? 4);
       setSectionsVis((fs?.sectionsVisibility as Record<string, boolean>) || {});
@@ -72,6 +76,12 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       const res = await adminFetch('/forum-settings', { method: 'PATCH', body: JSON.stringify(patch) });
       setForumSettings(res.settings);
       if (patch.recommendationThreshold != null) setRecThreshold(Number(patch.recommendationThreshold));
+      if (patch.programRecEmptyNoMatchText !== undefined) {
+        setRecEmptyNoMatchText((patch.programRecEmptyNoMatchText as string | null) ?? '');
+      }
+      if (patch.programRecEmptyNoEventsText !== undefined) {
+        setRecEmptyNoEventsText((patch.programRecEmptyNoEventsText as string | null) ?? '');
+      }
       if (patch.totalDays != null) setTotalDaysDraft(Number(patch.totalDays));
       if (patch.kbUnlockThreshold != null) setKbThreshold(Number(patch.kbUnlockThreshold));
       if (patch.sectionsVisibility) setSectionsVis(patch.sectionsVisibility as Record<string, boolean>);
@@ -202,9 +212,42 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             <span className="adm-muted">Сколько общих тегов с интересами нужно для рекомендации события</span>
           </label>
         </div>
+        <div className="adm-forum-grid-2" style={{ marginTop: 12 }}>
+          <label className="adm-field">
+            <span className="adm-label">Плашка «Персональные рекомендации» — нет совпадений</span>
+            <textarea
+              className="adm-input"
+              rows={4}
+              value={recEmptyNoMatchText}
+              onChange={e => setRecEmptyNoMatchText(e.target.value)}
+              placeholder="Здесь будут отображаться события программы, которые совпадают с вашими интересами. Когда такие совпадения появятся, мы покажем их в этом разделе."
+            />
+            <span className="adm-muted">Показывается участнику, если интересы выбраны, но подходящих событий пока нет</span>
+          </label>
+          <label className="adm-field">
+            <span className="adm-label">Плашка «Персональные рекомендации» — день без событий</span>
+            <textarea
+              className="adm-input"
+              rows={4}
+              value={recEmptyNoEventsText}
+              onChange={e => setRecEmptyNoEventsText(e.target.value)}
+              placeholder="На этот день ещё нет опубликованных событий — блок появится, когда расписание выйдет."
+            />
+            <span className="adm-muted">Показывается, если на выбранный день ещё нет опубликованных событий</span>
+          </label>
+        </div>
         <div className="adm-forum-toolbar">
-          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => saveForumSettings({ totalDays: totalDaysDraft, recommendationThreshold: recThreshold })}>
-            Сохранить календарь и порог
+          <button
+            type="button"
+            className="adm-btn adm-btn-secondary"
+            onClick={() => saveForumSettings({
+              totalDays: totalDaysDraft,
+              recommendationThreshold: recThreshold,
+              programRecEmptyNoMatchText: recEmptyNoMatchText.trim() || null,
+              programRecEmptyNoEventsText: recEmptyNoEventsText.trim() || null,
+            })}
+          >
+            Сохранить календарь и рекомендации
           </button>
         </div>
 

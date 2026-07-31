@@ -10,7 +10,7 @@ export function qTitle(title: string | null | undefined, fallback = 'без на
 
 export const pushCopy = {
   taskPendingModerator: (title: string) =>
-    `Задание «${qTitle(title)}» отправлено на проверку. Напишем, когда модератор ответит.`,
+    `Задание «${qTitle(title)}» отправлено на проверку. Напишем, когда играпрактик ответит.`,
 
   taskPendingTeam: (title: string) =>
     `Командное задание «${qTitle(title)}» ждёт подтверждения участников команды.`,

@@ -29,6 +29,7 @@ export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [view, setView] = useState<'list' | 'form'>('list');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<MedalDraft>(() => emptyMedalDraft());
+  const [saving, setSaving] = useState(false);
 
   const listQuery = useMemo(
     () => buildMedalsQuery({
@@ -84,17 +85,31 @@ export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     setView('form');
   };
 
-  const save = () =>
+  const save = () => {
+    if (!draft.name.trim()) {
+      void act(async () => { throw new Error('Укажите название медали'); }, '');
+      return;
+    }
+    if (draft.awardType === 'auto' && (!draft.ruleMetric || draft.ruleValue < 1)) {
+      void act(async () => { throw new Error('Для автоматической медали укажите метрику и порог ≥ 1'); }, '');
+      return;
+    }
+    setSaving(true);
     act(async () => {
-      const body = bodyFromDraft(draft);
-      if (editingId) {
-        await adminFetch(`/medals/${editingId}`, { method: 'PATCH', body: JSON.stringify(body) });
-      } else {
-        await adminFetch('/medals', { method: 'POST', body: JSON.stringify(body) });
+      try {
+        const body = bodyFromDraft(draft);
+        if (editingId) {
+          await adminFetch(`/medals/${editingId}`, { method: 'PATCH', body: JSON.stringify(body) });
+        } else {
+          await adminFetch('/medals', { method: 'POST', body: JSON.stringify(body) });
+        }
+        setView('list');
+        await load();
+      } finally {
+        setSaving(false);
       }
-      setView('list');
-      await load();
     }, editingId ? 'Медаль сохранена' : 'Медаль создана');
+  };
 
   const hideMedal = (m: Medal) =>
     act(async () => {
@@ -131,6 +146,7 @@ export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           draft={draft}
           metrics={metrics}
           editing={!!editingId}
+          saving={saving}
           onChange={patch => setDraft(d => ({ ...d, ...patch }))}
           onSave={save}
           onBack={() => setView('list')}

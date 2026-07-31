@@ -159,6 +159,41 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
     ? zoneByDay
     : [];
 
+  function completionSlice(list: typeof cohort) {
+    const reg = list.filter(p => p.onboardingCompletedAt).length;
+    const withActivity = list.filter(p => p.lastActiveAt).length;
+    return {
+      registered: reg,
+      activeParticipants: withActivity,
+      activityRatePct: reg ? Math.round((withActivity / reg) * 100) : 0,
+    };
+  }
+
+  const completionByDirection: { direction: string; registered: number; activeParticipants: number; activityRatePct: number }[] = [];
+  const completionByGroup: { direction: string; group: string; registered: number; activeParticipants: number; activityRatePct: number }[] = [];
+  if (!filters.direction) {
+    const dirMap = new Map<string, typeof cohort>();
+    for (const p of cohort) {
+      const d = p.direction || '—';
+      if (!dirMap.has(d)) dirMap.set(d, []);
+      dirMap.get(d)!.push(p);
+    }
+    for (const [direction, list] of dirMap) {
+      completionByDirection.push({ direction, ...completionSlice(list) });
+    }
+    for (const [direction, list] of dirMap) {
+      const grpMap = new Map<string, typeof cohort>();
+      for (const p of list) {
+        const g = p.groupName || 'без группы';
+        if (!grpMap.has(g)) grpMap.set(g, []);
+        grpMap.get(g)!.push(p);
+      }
+      for (const [group, gList] of grpMap) {
+        completionByGroup.push({ direction, group, ...completionSlice(gList) });
+      }
+    }
+  }
+
   return {
     filters,
     currentForumDay: currentDay,
@@ -169,6 +204,8 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
       stateChecks,
       eveningCompleted: eveningDone,
       activitySeries,
+      completionByDirection,
+      completionByGroup,
     },
     emotionalPulse: {
       zoneLabels: EMOTION_ZONE_LABELS,

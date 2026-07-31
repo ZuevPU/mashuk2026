@@ -110,7 +110,7 @@ export function TaskSubmissionsModeration({ taskId, taskTitle, adminFetch, act, 
       >
         <div className="adm-forum-toolbar" style={{ marginBottom: 12 }}>
           <div>
-            <h2 id="task-mod-title" style={{ margin: 0, fontSize: 18 }}>Модерация ответов</h2>
+            <h2 id="task-mod-title" style={{ margin: 0, fontSize: 18 }}>Проверка играпрактиком</h2>
             <p className="adm-muted" style={{ margin: '4px 0 0', fontSize: 12 }}>{taskTitle} · id {taskId}</p>
           </div>
           <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={onClose}>Закрыть</button>

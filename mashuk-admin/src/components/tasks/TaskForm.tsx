@@ -4,6 +4,7 @@ import { TaskParticipantPreview } from './TaskParticipantPreview';
 import {
   CONFIRMATION_METHOD_OPTIONS,
   NOMINATION_OPTIONS,
+  TASK_ANSWER_FORMAT_OPTIONS,
   type TaskCategory,
   type TaskDraft,
   type MedalOption,
@@ -68,6 +69,47 @@ export function TaskForm({
 
   const execExec = (executionType: string) => onChange({ executionType });
 
+  const setAnswerFormat = (format: string) => {
+    let methods = [...draft.confirmationMethods];
+    if (format === 'photo' || format === 'text_and_photo') {
+      if (!methods.includes('photo')) methods.push('photo');
+    } else {
+      methods = methods.filter(m => m !== 'photo');
+    }
+    onChange({
+      answerType: format,
+      confirmationMethods: methods,
+      answerOptions: (format === 'choice' || format === 'multi')
+        ? (draft.answerOptions.length >= 2
+          ? draft.answerOptions
+          : [
+            { label: '', value: '0' },
+            { label: '', value: '1' },
+          ])
+        : [],
+    });
+  };
+
+  const setOptionLabel = (index: number, label: string) => {
+    const next = draft.answerOptions.map((o, i) => (
+      i === index ? { label, value: o.value || String(i) } : o
+    ));
+    onChange({ answerOptions: next });
+  };
+
+  const addOption = () => {
+    const i = draft.answerOptions.length;
+    onChange({ answerOptions: [...draft.answerOptions, { label: '', value: String(i) }] });
+  };
+
+  const removeOption = (index: number) => {
+    onChange({
+      answerOptions: draft.answerOptions
+        .filter((_, i) => i !== index)
+        .map((o, i) => ({ ...o, value: String(i) })),
+    });
+  };
+
   return (
     <div className="card adm-task-form">
       <div className="adm-forum-toolbar" style={{ marginBottom: 12 }}>
@@ -82,7 +124,7 @@ export function TaskForm({
             </button>
           )}
           <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onCancel}>
-            К списку
+            ← К списку
           </button>
         </div>
       </div>
@@ -174,9 +216,54 @@ export function TaskForm({
       </div>
 
       <div className="adm-field">
+        <span className="adm-label">Формат ответа участника</span>
+        <div className="adm-seg adm-seg-sm" style={{ flexWrap: 'wrap' }}>
+          {TASK_ANSWER_FORMAT_OPTIONS.map(opt => (
+            <button
+              key={opt.key}
+              type="button"
+              className={draft.answerType === opt.key ? 'on' : ''}
+              onClick={() => setAnswerFormat(opt.key)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <span className="adm-muted" style={{ fontSize: 11, display: 'block', marginTop: 6 }}>
+          {draft.answerType === 'text' && 'Участник пишет текстовый ответ.'}
+          {draft.answerType === 'choice' && 'Участник выбирает один вариант из списка ниже.'}
+          {draft.answerType === 'multi' && 'Участник может отметить несколько вариантов.'}
+          {draft.answerType === 'photo' && 'Нужно прикрепить фото, текст не требуется.'}
+          {draft.answerType === 'text_and_photo' && 'Обязательно фото, текст — по желанию.'}
+        </span>
+      </div>
+
+      {(draft.answerType === 'choice' || draft.answerType === 'multi') && (
+        <div className="adm-field">
+          <span className="adm-label">Варианты ответа</span>
+          {draft.answerOptions.map((opt, i) => (
+            <div key={i} className="adm-forum-toolbar" style={{ marginBottom: 6 }}>
+              <input
+                className="adm-input"
+                value={opt.label}
+                onChange={e => setOptionLabel(i, e.target.value)}
+                placeholder={`Вариант ${i + 1}`}
+              />
+              <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => removeOption(i)}>×</button>
+            </div>
+          ))}
+          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={addOption}>
+            + Добавить вариант
+          </button>
+        </div>
+      )}
+
+      <div className="adm-field">
         <span className="adm-label">Способ подтверждения (мультивыбор)</span>
         <div className="adm-program-tag-pick">
-          {CONFIRMATION_METHOD_OPTIONS.map(m => (
+          {CONFIRMATION_METHOD_OPTIONS.filter(m => (
+            m.key !== 'photo' || !(draft.answerType === 'photo' || draft.answerType === 'text_and_photo')
+          )).map(m => (
             <button
               key={m.key}
               type="button"
@@ -202,7 +289,7 @@ export function TaskForm({
               onChange({ requiresModeration: req, confirmationMethods: methods });
             }}
           />
-          Требует модерации
+          Проверка играпрактиком
         </label>
         <label className="adm-forum-check">
           <input type="checkbox" checked={draft.medalTask} onChange={e => onChange({ medalTask: e.target.checked })} />

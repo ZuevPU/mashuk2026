@@ -13,6 +13,8 @@ export type AnalyticsFilters = {
   tag: string | null;
   source: string | null;
   clubId: string | null;
+  ageCategory: string | null;
+  activity: string | null;
   page: number;
   limit: number;
 };
@@ -46,6 +48,10 @@ export function parseAnalyticsQuery(req: AdminRequest): AnalyticsFilters {
     source: typeof req.query.source === 'string' ? req.query.source : null,
     clubId: typeof req.query.clubId === 'string' && req.query.clubId.trim()
       ? req.query.clubId.trim() : null,
+    ageCategory: typeof req.query.ageCategory === 'string' && req.query.ageCategory.trim()
+      ? req.query.ageCategory.trim() : null,
+    activity: typeof req.query.activity === 'string' && req.query.activity.trim()
+      ? req.query.activity.trim() : null,
     page: Math.max(1, Number(req.query.page) || 1),
     limit: Math.min(200, Math.max(10, Number(req.query.limit) || 50)),
   };

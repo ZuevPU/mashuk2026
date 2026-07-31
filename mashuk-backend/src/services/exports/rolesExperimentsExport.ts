@@ -77,9 +77,14 @@ export async function writeRolesExperimentsExport(res: Response): Promise<void> 
   }
 
   const fin = wb.addWorksheet('Способ действия D7');
-  fin.addRow(['participant_id', 'name', 'start_role', 'strong_role', 'growth_role', 'next_experiment']);
+  fin.addRow(['participant_id', 'name', 'start_role', 'explored_roles_count', 'explored_roles', 'strong_role', 'growth_role', 'next_experiment']);
   for (const p of allP) {
-    fin.addRow([p.id, fullName(p), p.pedagogicalRole, p.strongRole, p.growthRole, p.nextExperiment]);
+    const states = byParticipant.get(p.id) || [];
+    const explored = [...new Set(states.filter(s => s.s.activeRoleKey).map(s => s.s.activeRoleKey!))];
+    fin.addRow([
+      p.id, fullName(p), p.pedagogicalRole, explored.length, explored.join(', '),
+      p.strongRole, p.growthRole, p.nextExperiment,
+    ]);
   }
 
   await sendWorkbook(res, wb, 'roles_experiments.xlsx');

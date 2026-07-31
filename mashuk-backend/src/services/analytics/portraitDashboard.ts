@@ -110,10 +110,39 @@ export async function buildPortraitDashboard(filters: AnalyticsFilters, req?: Ad
     matrixRows.push({
       participantId: p.id,
       start: p.pedagogicalRole || '—',
-      experiments: pStates.filter(s => s.activeRoleKey).map(s => s.activeRoleKey!),
+      experiments: [...new Set(pStates.filter(s => s.activeRoleKey).map(s => s.activeRoleKey!))],
       finalStrong: p.strongRole || '—',
       finalGrowth: p.growthRole || '—',
     });
+  }
+
+  const matrixAggregate = new Map<string, number>();
+  for (const row of matrixRows) {
+    const exps = row.experiments.length ? row.experiments : ['—'];
+    for (const exp of exps) {
+      const key = `${row.start}|${exp}|${row.finalStrong}`;
+      matrixAggregate.set(key, (matrixAggregate.get(key) || 0) + 1);
+    }
+  }
+  const roleMatrix = [...matrixAggregate.entries()]
+    .map(([key, count]) => {
+      const [startRole, experimentRole, finalRole] = key.split('|');
+      return {
+        startRole,
+        startLabel: getRoleMeta(startRole)?.name ?? startRole,
+        experimentRole,
+        experimentLabel: getRoleMeta(experimentRole)?.name ?? experimentRole,
+        finalRole,
+        finalLabel: getRoleMeta(finalRole)?.name ?? finalRole,
+        count,
+      };
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 200);
+
+  let exploredRolesTotal = 0;
+  for (const row of matrixRows) {
+    exploredRolesTotal += row.experiments.length;
   }
 
   const departure = onboarded.map(p => ({
@@ -181,6 +210,9 @@ export async function buildPortraitDashboard(filters: AnalyticsFilters, req?: Ad
       experimentDaySeries,
       roleExitSummary: { changed: roleChangedAtExit, same: roleSameAtExit },
       matrixSample: matrixRows.slice(0, 100),
+      roleMatrix,
+      exploredRolesTotal,
+      exploredRolesAvg: matrixRows.length ? Math.round((exploredRolesTotal / matrixRows.length) * 10) / 10 : 0,
     },
     departure: {
       participants: departure,

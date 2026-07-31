@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
-import { PushAutoSettingsCard } from './PushAutoSettingsCard';
+import { PushAutoSchedulePanel } from './PushAutoSchedulePanel';
+import { PushLogPanel } from './PushLogPanel';
 import { PushListTable } from './PushListTable';
 import { PushNotificationForm } from './PushNotificationForm';
 import { PushTemplatesPanel } from './PushTemplatesPanel';
@@ -17,7 +18,7 @@ import {
   PUSH_AUDIENCE_OPTIONS,
 } from './types';
 
-type ListTab = 'sent' | 'queued' | 'drafts' | 'templates';
+type ListTab = 'sent' | 'queued' | 'drafts' | 'auto' | 'templates' | 'journal';
 type View = 'list' | 'form';
 
 export type PushTabProps = AdminTabProps;
@@ -195,14 +196,16 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
     { key: 'sent', label: 'Отправлено' },
     { key: 'queued', label: 'В очереди' },
     { key: 'drafts', label: 'Черновики' },
+    { key: 'auto', label: 'Автоматические' },
     { key: 'templates', label: 'Шаблоны' },
+    { key: 'journal', label: 'Журнал' },
   ];
 
   return (
     <div className="adm-forum">
       <AdminPageHero
-        title={`Пуши · ${summary.total} всего · ${summary.queued} в очереди`}
-        hint="Ручные и авто-уведомления. В ЛС сообщества в конце всегда ссылка на мини-приложение (vk.ru/app…), не на backend. Баннер в приложении — до времени окончания."
+        title={`Уведомления · ${summary.total} рассылок · ${summary.queued} в очереди`}
+        hint="Ручные рассылки — вкладка «Рассылки». Автоматические сообщения по расписанию и по событиям — «Автоматические». Участник видит push во VK и баннер в приложении."
       >
         <div className="adm-seg" style={{ marginBottom: 12 }}>
           {tabs.map(t => (
@@ -211,7 +214,7 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
             </button>
           ))}
         </div>
-        {listTab !== 'templates' && (
+        {(listTab === 'sent' || listTab === 'queued' || listTab === 'drafts') && (
           <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
             <select className="adm-input" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
               <option value="">Тип</option>
@@ -237,6 +240,10 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
 
       {listTab === 'templates' ? (
         <PushTemplatesPanel adminFetch={adminFetch} act={act} templates={templates} onReload={() => load()} />
+      ) : listTab === 'auto' ? (
+        <PushAutoSchedulePanel adminFetch={adminFetch} act={act} />
+      ) : listTab === 'journal' ? (
+        <PushLogPanel adminFetch={adminFetch} />
       ) : (
         <div className="card">
           <PushListTable
@@ -257,8 +264,6 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
           />
         </div>
       )}
-
-      <PushAutoSettingsCard adminFetch={adminFetch} act={act} />
     </div>
   );
 }

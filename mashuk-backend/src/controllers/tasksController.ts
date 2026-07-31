@@ -23,6 +23,7 @@ import {
   resolveSubmissionOutcome,
   taskMethodsForParticipant,
   validateTaskSubmissionPayload,
+  normalizeTaskAnswerOptions,
 } from '../services/taskAdminHelpers.js';
 import {
   createTeamConfirmations,
@@ -123,6 +124,7 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
       categoryIconKey: string | null;
       deadline: Date | null;
       answerType: string | null;
+      answerOptions: Array<{ label: string; value: string }>;
       confirmationType: string;
       confirmationMethods: string[];
       autoConfirm: boolean | null;
@@ -164,6 +166,7 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
         categoryIconKey: t.iconKey ?? null,
         deadline: t.deadline ?? t.availableTo,
         answerType: t.answerType,
+        answerOptions: normalizeTaskAnswerOptions(t.answerOptions),
         confirmationType: t.confirmationType || 'text_photo',
         confirmationMethods: methods,
         autoConfirm: t.autoConfirm,
@@ -259,7 +262,14 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
 export const submitTask = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const taskId = Number(req.params.id);
-    const { answerText, photoUrl, postUrl, teamMemberIds, qrToken } = req.body;
+    const { answerText, photoUrl, postUrl, teamMemberIds, qrToken, deviceKey } = req.body as {
+      answerText?: string;
+      photoUrl?: string;
+      postUrl?: string;
+      teamMemberIds?: number[];
+      qrToken?: string;
+      deviceKey?: string;
+    };
 
     const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
     if (!task) {
@@ -269,6 +279,28 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
 
     const now = new Date();
     const methods = taskMethodsForParticipant(task);
+    const isQrSubmit = methods.includes('qr') || !!qrToken;
+    const requestDeviceKey = isQrSubmit
+      ? (await import('../services/qrScanGuard.js')).resolveRequestDeviceKey(req, deviceKey)
+      : null;
+    const ipAddress = req.ip
+      || (typeof req.headers['x-forwarded-for'] === 'string' ? req.headers['x-forwarded-for'].split(',')[0]?.trim() : null)
+      || null;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null;
+
+    const recordBlockedQr = async (outcome: 'blocked_duplicate' | 'blocked_device') => {
+      if (!requestDeviceKey) return;
+      const { recordQrScan } = await import('../services/qrScanGuard.js');
+      await recordQrScan({
+        taskId,
+        participantId: req.participant!.id,
+        vkUserId: req.participant!.vkId ?? null,
+        deviceKey: requestDeviceKey,
+        ipAddress,
+        userAgent,
+        outcome,
+      });
+    };
     if ((methods.includes('qr') || qrToken) && !isQrInValidWindow(task, now)) {
       res.status(400).json({ error: 'QR-код задания сейчас не активен' });
       return;
@@ -281,6 +313,22 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
     if (task.qrToken && qrToken && qrToken !== task.qrToken) {
       res.status(400).json({ error: 'Invalid QR token' });
       return;
+    }
+
+    if (isQrSubmit && qrToken && task.qrToken === qrToken && requestDeviceKey) {
+      const { assertQrScanAllowed } = await import('../services/qrScanGuard.js');
+      const qrGuard = await assertQrScanAllowed({
+        taskId,
+        participantId: req.participant!.id,
+        deviceKey: requestDeviceKey,
+      });
+      if (!qrGuard.ok) {
+        if (qrGuard.outcome === 'blocked_duplicate' || qrGuard.outcome === 'blocked_device') {
+          await recordBlockedQr(qrGuard.outcome);
+        }
+        res.status(400).json({ error: qrGuard.error });
+        return;
+      }
     }
 
     const payloadCheck = validateTaskSubmissionPayload(task, { answerText, photoUrl, postUrl, teamMemberIds, qrToken });
@@ -388,6 +436,19 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
       xpAwarded = (await resolveTaskAwardPoints(task)) || 0;
       [submission] = await db.select().from(taskSubmissions).where(eq(taskSubmissions.id, submission.id)).limit(1);
       void rewards;
+      if (isQrSubmit && qrToken && requestDeviceKey) {
+        const { recordQrScan } = await import('../services/qrScanGuard.js');
+        await recordQrScan({
+          taskId,
+          participantId: req.participant!.id,
+          vkUserId: req.participant!.vkId ?? null,
+          deviceKey: requestDeviceKey,
+          ipAddress,
+          userAgent,
+          outcome: 'success',
+          submissionId: submission?.id ?? null,
+        });
+      }
     } else if (submission && (status === 'pending' || status === 'pending_team')) {
       const { pushCopy } = await import('../services/pushCopy.js');
       await sendPushNotification(

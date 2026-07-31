@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { label } from '../../labels/ru';
 import { confirmDelete, CONFIRM_DELETE_EVENT } from '../../admin/confirmDelete';
 import { ParticipantPreviewModal } from '../admin/ParticipantPreviewModal';
-import { RichHtmlEditor } from '../admin/RichHtmlEditor';
+import { DescriptionEditor } from '../admin/DescriptionEditor';
 import { PlaceSelect } from './ProgramPlacesBlock';
 import { SpeakerMultiPick } from './ProgramCatalogs';
+import { ThematicTagPick } from './ThematicTagPick';
 import { speakerFullLabel } from '../speakers/speakerFormat';
 import { NestedEventNode } from './NestedEventNode';
 import { EventParticipantPreview } from './EventParticipantPreview';
@@ -125,13 +126,6 @@ export function EventCard({
     || speakers.filter(s => draft.speakerIds.includes(s.id)).map(speakerFullLabel).join('; ')
   );
 
-  const toggleTag = (name: string) => {
-    setDraft(d => ({
-      ...d,
-      tagNames: d.tagNames.includes(name) ? d.tagNames.filter(t => t !== name) : [...d.tagNames, name],
-    }));
-  };
-
   const patchBody = () => {
     const blockType = draft.blockType;
     const isKeyBlock = blockType === 'key_block';
@@ -250,15 +244,11 @@ export function EventCard({
               <input type="time" className="adm-input" value={draft.timeEnd} onChange={e => setDraft({ ...draft, timeEnd: e.target.value })} />
             </label>
           </div>
-          <label className="adm-field">
-            <span className="adm-label">Описание (текст)</span>
-            <textarea className="adm-input" rows={2} value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} />
-          </label>
-          <RichHtmlEditor
-            label="Описание (HTML / rich)"
-            value={draft.descriptionHtml}
-            onChange={html => setDraft({ ...draft, descriptionHtml: html })}
-            resetKey={event.id}
+          <DescriptionEditor
+            description={draft.description}
+            descriptionHtml={draft.descriptionHtml}
+            onChange={patch => setDraft(d => ({ ...d, ...patch }))}
+            editingKey={event.id}
           />
           <label className="adm-field">
             <span className="adm-label">Тип блока</span>
@@ -292,15 +282,7 @@ export function EventCard({
           </div>
           <div className="adm-field">
             <span className="adm-label">Тематические теги</span>
-            <div className="adm-program-tag-pick">
-              {allTags.length === 0 && <span className="adm-muted">Создайте теги выше</span>}
-              {allTags.map(t => (
-                <label key={t.id} className={`adm-chip-btn ${draft.tagNames.includes(t.name) ? 'on' : ''}`} style={{ cursor: 'pointer' }}>
-                  <input type="checkbox" checked={draft.tagNames.includes(t.name)} onChange={() => toggleTag(t.name)} style={{ display: 'none' }} />
-                  {t.name}
-                </label>
-              ))}
-            </div>
+            <ThematicTagPick tags={allTags} selectedNames={draft.tagNames} onChange={names => setDraft({ ...draft, tagNames: names })} />
           </div>
           <label className="adm-forum-check">
             <input type="checkbox" checked={draft.pushReminder} onChange={e => setDraft({ ...draft, pushReminder: e.target.checked })} />

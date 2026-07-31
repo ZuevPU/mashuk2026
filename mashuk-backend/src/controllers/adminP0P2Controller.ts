@@ -12,12 +12,13 @@ import { getForumSettings } from '../services/helpers.js';
 import { deactivateOtherConsents } from './consentsController.js';
 import { evaluateAllMedals, getMedalRuleProgress, parseMedalRule } from '../services/medalEvaluator.js';
 import { clubMatchNightly, isGigachatConfigured, synthesizeOutcomes } from '../services/gigachatService.js';
-import { generateQrToken, buildTaskQrUrl, buildEventQrUrl, buildParticipantQrUrl } from '../services/qrService.js';
+import { generateQrToken, buildTaskQrUrl, buildEventQrUrl, buildParticipantQrUrl, buildQrDataUrl, resolveParticipantAppBase } from '../services/qrService.js';
 import { logAdminAction } from '../services/adminActionsLog.js';
 import { env } from '../config/env.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { EVENING_SCALE_KEYS } from '../services/touchpointTemplates.js';
 import { emptyZoneDistribution } from '../services/emotionZones.js';
+import { taskMethodsForParticipant } from '../services/taskAdminHelpers.js';
 import { resolveParticipantAvatarUrl } from '../services/participantAvatarSync.js';
 
 // ─── Consents CRUD ───────────────────────────────────────────
@@ -210,6 +211,59 @@ export const crudScheduleDays = {
     const [updated] = await db.update(scheduleDays).set(patch).where(eq(scheduleDays.id, id)).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ day: updated });
+  },
+  delete: async (req: AdminRequest, res: Response) => {
+    const id = Number(req.params.id);
+    const force = req.query.force === '1' || req.query.force === 'true';
+    const { resolveAdminShiftId, updateShift } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
+    const [day] = await db.select().from(scheduleDays).where(and(
+      eq(scheduleDays.id, id),
+      eq(scheduleDays.shiftId, shiftId),
+    )).limit(1);
+    if (!day) { res.status(404).json({ error: 'Not found' }); return; }
+
+    const eventRows = await db.select({ id: events.id }).from(events).where(and(
+      eq(events.dayNumber, day.dayNumber),
+      eq(events.shiftId, shiftId),
+    ));
+    if (eventRows.length > 0 && !force) {
+      res.status(409).json({
+        error: 'Day has events',
+        eventCount: eventRows.length,
+        hint: 'Add ?force=1 to delete day and all its events',
+      });
+      return;
+    }
+
+    if (force && eventRows.length > 0) {
+      const eventIds = eventRows.map(e => e.id);
+      await db.delete(eventAttendance).where(inArray(eventAttendance.eventId, eventIds));
+      await db.delete(events).where(inArray(events.id, eventIds));
+    }
+
+    await db.delete(scheduleDays).where(eq(scheduleDays.id, id));
+
+    const remaining = await db.select({ dayNumber: scheduleDays.dayNumber })
+      .from(scheduleDays)
+      .where(eq(scheduleDays.shiftId, shiftId))
+      .orderBy(asc(scheduleDays.dayNumber));
+    const maxDay = remaining.length ? Math.max(...remaining.map(d => d.dayNumber)) : 0;
+    const settings = await getForumSettings();
+    if ((settings.totalDays ?? 8) > maxDay && maxDay > 0) {
+      await updateShift(shiftId, { totalDays: maxDay });
+    }
+
+    await logAdminAction({
+      req,
+      actionType: 'schedule_day_delete',
+      section: 'program',
+      objectId: id,
+      comment: JSON.stringify({ dayNumber: day.dayNumber, force, eventsRemoved: eventRows.length }),
+      isCritical: force && eventRows.length > 0,
+    });
+
+    res.json({ ok: true, dayNumber: day.dayNumber, eventsRemoved: force ? eventRows.length : 0 });
   },
 };
 
@@ -710,10 +764,23 @@ export const revokeSuspiciousParticipantPoints = async (req: AdminRequest, res: 
 
 export const getQrPack = async (req: AdminRequest, res: Response): Promise<void> => {
   const day = Number(req.query.day) || 1;
-  const base = env.PUBLIC_URL || 'https://example.com';
-  const dayTasks = await db.select().from(tasks).where(eq(tasks.dayNumber, day));
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
+  const base = resolveParticipantAppBase();
+  const dayTasks = await db.select().from(tasks).where(and(
+    eq(tasks.shiftId, shiftId),
+    eq(tasks.dayNumber, day),
+    eq(tasks.status, 'published'),
+    or(
+      sql`${tasks.confirmationMethods} @> ${JSON.stringify(['qr'])}::jsonb`,
+      eq(tasks.confirmationType, 'qr'),
+    ),
+  ));
+
   const items: { title: string; url: string; qrImageUrl: string }[] = [];
   for (const t of dayTasks) {
+    const methods = taskMethodsForParticipant(t);
+    if (!methods.includes('qr') && t.confirmationType !== 'qr') continue;
     let token = t.qrToken;
     if (!token) {
       token = generateQrToken();
@@ -723,16 +790,29 @@ export const getQrPack = async (req: AdminRequest, res: Response): Promise<void>
     items.push({
       title: t.title,
       url,
-      qrImageUrl: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`,
+      qrImageUrl: await buildQrDataUrl(url, 200),
     });
   }
+
+  if (items.length === 0) {
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>QR День ${day}</title>
+<style>body{font-family:-apple-system,sans-serif;padding:24px;background:#E8E2D8;color:#1A1714;}
+.box{max-width:520px;margin:40px auto;background:#fff;border-radius:16px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,.08);}</style></head>
+<body><div class="box"><h1>QR задания · День ${day}</h1>
+<p>Нет опубликованных QR-заданий на этот день. Проверьте вкладку «Задания»: тип подтверждения QR и статус «Опубликовано».</p></div></body></html>`;
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+    return;
+  }
+
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>QR День ${day}</title>
 <style>body{font-family:-apple-system,sans-serif;padding:24px;background:#E8E2D8;}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:20px;}
 .cell{background:#fff;border-radius:16px;padding:16px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.08);}
-.cell img{width:160px;height:160px;} h1{font-size:18px;color:#1A1714;}</style></head>
+.cell img{width:160px;height:160px;display:block;margin:0 auto 8px;} h1{font-size:18px;color:#1A1714;}
+.cell-title{font-size:12px;font-weight:700;line-height:1.35;word-break:break-word;}</style></head>
 <body><h1>QR задания · День ${day}</h1><div class="grid">${items.map(i =>
-    `<div class="cell"><img src="${i.qrImageUrl}" alt=""/><div>${i.title.replace(/</g, '')}</div></div>`,
+    `<div class="cell"><img src="${i.qrImageUrl}" alt="QR ${i.title.replace(/"/g, '')}"/><div class="cell-title">${i.title.replace(/</g, '')}</div></div>`,
   ).join('')}</div><script>window.onload=()=>window.print()</script></body></html>`;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(html);
@@ -741,7 +821,7 @@ export const getQrPack = async (req: AdminRequest, res: Response): Promise<void>
 export const generateAndDownloadQr = async (req: AdminRequest, res: Response): Promise<void> => {
   const { type, id } = req.body as { type: 'task' | 'event' | 'participant'; id: number };
   const token = generateQrToken();
-  const base = env.PUBLIC_URL || 'https://example.com';
+  const base = resolveParticipantAppBase();
   let url = '';
   if (type === 'task') {
     await db.update(tasks).set({ qrToken: token }).where(eq(tasks.id, id));
@@ -756,11 +836,12 @@ export const generateAndDownloadQr = async (req: AdminRequest, res: Response): P
     res.status(400).json({ error: 'type must be task|event|participant' });
     return;
   }
+  const qrImageUrl = await buildQrDataUrl(url, 300);
   res.json({
     token,
     url,
-    downloadHint: `Откройте URL или сгенерируйте QR-картинку по ссылке: https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`,
-    qrImageUrl: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`,
+    downloadHint: 'QR встроен в data URL — можно сохранить картинку или распечатать.',
+    qrImageUrl,
   });
 };
 

@@ -9,7 +9,7 @@ import {
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { hashPassword } from '../utils/password.js';
 import { logAdminAction } from '../services/adminActionsLog.js';
-import { generateQrToken, buildParticipantQrUrl, buildTaskQrUrl, buildEventQrUrl } from '../services/qrService.js';
+import { generateQrToken, buildParticipantQrUrl, buildTaskQrUrl, buildEventQrUrl, resolveParticipantAppBase } from '../services/qrService.js';
 import { env } from '../config/env.js';
 import { sendPushNotification } from '../services/pushService.js';
 import { synthesizeOutcomes, isGigachatConfigured } from '../services/gigachatService.js';
@@ -478,7 +478,7 @@ export const awardMedal = async (req: AdminRequest, res: Response): Promise<void
 export const generateEntityQr = async (req: AdminRequest, res: Response): Promise<void> => {
   const { type, id } = req.body as { type: 'task' | 'event' | 'participant'; id: number };
   const token = generateQrToken();
-  const base = env.PUBLIC_URL || 'https://example.com';
+  const base = resolveParticipantAppBase();
   if (type === 'task') {
     await db.update(tasks).set({ qrToken: token }).where(eq(tasks.id, id));
     res.json({ token, url: buildTaskQrUrl(base, id, token) });

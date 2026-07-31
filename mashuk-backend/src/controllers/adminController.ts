@@ -1122,8 +1122,13 @@ export const crudEvents = {
       parsed.data.dayPublished,
       existing.shiftId,
     );
+    let tagValues = values;
+    if (parsed.data.tags && Array.isArray(parsed.data.tags)) {
+      const { ensureThematicTagRegistry } = await import('../services/thematicTagRegistry.js');
+      tagValues = { ...values, tags: await ensureThematicTagRegistry(parsed.data.tags as string[]) };
+    }
     const [updated] = await db.update(events).set({
-      ...values,
+      ...tagValues,
       ...(parsed.data.place !== undefined ? { place: parsed.data.place } : {}),
       ...(parsed.data.descriptionHtml !== undefined ? { descriptionHtml: parsed.data.descriptionHtml } : {}),
       ...(dayPublished !== undefined ? { dayPublished } : {}),
@@ -2376,9 +2381,23 @@ export const sendManualPush = async (req: AdminRequest, res: Response): Promise<
   res.json({ ok: true });
 };
 
-export const listPushLog = async (_req: AdminRequest, res: Response): Promise<void> => {
-  const log = await db.select().from(pushLog).orderBy(desc(pushLog.sentAt)).limit(50);
-  res.json({ log });
+export const listPushLog = async (req: AdminRequest, res: Response): Promise<void> => {
+  const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
+  const rows = await db.select({
+    log: pushLog,
+    p: participants,
+  }).from(pushLog)
+    .leftJoin(participants, eq(pushLog.participantId, participants.id))
+    .orderBy(desc(pushLog.sentAt))
+    .limit(limit);
+  const { describeDeliveryStatus } = await import('../services/pushDeliveryStatus.js');
+  res.json({
+    log: rows.map(r => ({
+      ...r.log,
+      participantName: r.p ? `${r.p.firstName ?? ''} ${r.p.lastName ?? ''}`.trim() : null,
+      deliveryStatusHint: describeDeliveryStatus(r.log.deliveryStatus ?? ''),
+    })),
+  });
 };
 
 export const listPointsLog = async (req: AdminRequest, res: Response): Promise<void> => {

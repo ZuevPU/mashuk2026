@@ -26,7 +26,13 @@ export type InsightsMeta = {
   forumDays?: { day: number; label: string; calendarDate: string | null }[];
   refreshMs?: number;
   semanticV2?: boolean;
-  filters?: { directions: string[]; groups: string[]; roles: string[] };
+  filters?: {
+    directions: string[];
+    groups: string[];
+    roles: string[];
+    ageCategories?: { id: string; label: string }[];
+    activities?: string[];
+  };
   roleTaxonomy?: { matrix?: unknown; catalog?: { roleKey: string; name: string }[] };
   dashboardCatalog?: {
     id: string;
@@ -46,6 +52,10 @@ type InsightsContextValue = {
   setDirection: (v: string) => void;
   group: string;
   setGroup: (v: string) => void;
+  ageCategory: string;
+  setAgeCategory: (v: string) => void;
+  activity: string;
+  setActivity: (v: string) => void;
   activeDashboardId: DashboardId;
   setActiveDashboardId: (id: DashboardId) => void;
   meta: InsightsMeta | null;
@@ -61,19 +71,23 @@ const STORAGE_KEY = 'mashuk_insights_filters';
 
 const InsightsContext = createContext<InsightsContextValue | null>(null);
 
-function readStored(): { forumDay: string; direction: string; group: string; dash: DashboardId } {
+function readStored(): {
+  forumDay: string; direction: string; group: string; ageCategory: string; activity: string; dash: DashboardId;
+} {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return { forumDay: '1', direction: '', group: '', dash: 'pulse' };
+    if (!raw) return { forumDay: '1', direction: '', group: '', ageCategory: '', activity: '', dash: 'pulse' };
     const p = JSON.parse(raw);
     return {
       forumDay: String(p.forumDay ?? '1'),
       direction: String(p.direction ?? ''),
       group: String(p.group ?? ''),
+      ageCategory: String(p.ageCategory ?? ''),
+      activity: String(p.activity ?? ''),
       dash: (p.dash as DashboardId) || 'pulse',
     };
   } catch {
-    return { forumDay: '1', direction: '', group: '', dash: 'pulse' };
+    return { forumDay: '1', direction: '', group: '', ageCategory: '', activity: '', dash: 'pulse' };
   }
 }
 
@@ -96,24 +110,32 @@ export function InsightsProvider({
   const [forumDay, setForumDayState] = useState(stored.forumDay);
   const [direction, setDirectionState] = useState(stored.direction);
   const [group, setGroupState] = useState(stored.group);
+  const [ageCategory, setAgeCategoryState] = useState(stored.ageCategory);
+  const [activity, setActivityState] = useState(stored.activity);
   const [activeDashboardId, setActiveDashboardIdState] = useState<DashboardId>(stored.dash);
   const [meta, setMeta] = useState<InsightsMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(true);
 
-  const persist = useCallback((patch: Partial<{ forumDay: string; direction: string; group: string; dash: DashboardId }>) => {
+  const persist = useCallback((patch: Partial<{
+    forumDay: string; direction: string; group: string; ageCategory: string; activity: string; dash: DashboardId;
+  }>) => {
     const next = {
       forumDay,
       direction,
       group,
+      ageCategory,
+      activity,
       dash: activeDashboardId,
       ...patch,
     };
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  }, [forumDay, direction, group, activeDashboardId]);
+  }, [forumDay, direction, group, ageCategory, activity, activeDashboardId]);
 
   const setForumDay = (d: string) => { setForumDayState(d); persist({ forumDay: d }); };
   const setDirection = (v: string) => { setDirectionState(v); persist({ direction: v }); };
   const setGroup = (v: string) => { setGroupState(v); persist({ group: v }); };
+  const setAgeCategory = (v: string) => { setAgeCategoryState(v); persist({ ageCategory: v }); };
+  const setActivity = (v: string) => { setActivityState(v); persist({ activity: v }); };
   const setActiveDashboardId = (id: DashboardId) => {
     setActiveDashboardIdState(id);
     persist({ dash: id });
@@ -150,6 +172,10 @@ export function InsightsProvider({
     setDirection,
     group,
     setGroup,
+    ageCategory,
+    setAgeCategory,
+    activity,
+    setActivity,
     activeDashboardId,
     setActiveDashboardId,
     meta,
@@ -160,7 +186,7 @@ export function InsightsProvider({
     adminFetch,
     analyticsDashboardAllowlist,
   }), [
-    forumDay, direction, group, activeDashboardId, meta, metaLoading, reloadMeta,
+    forumDay, direction, group, ageCategory, activity, activeDashboardId, meta, metaLoading, reloadMeta,
     setTab, activeSection, adminFetch, analyticsDashboardAllowlist,
   ]);
 

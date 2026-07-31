@@ -59,6 +59,8 @@ export const shifts = pgTable('shifts', {
   shiftLabel: varchar('shift_label', { length: 100 }),
   pdfTemplate: jsonb('pdf_template'),
   recommendationTemplates: jsonb('recommendation_templates'),
+  programRecEmptyNoMatchText: text('program_rec_empty_no_match_text'),
+  programRecEmptyNoEventsText: text('program_rec_empty_no_events_text'),
   roleDiagnosticsConfig: jsonb('role_diagnostics_config'),
   leaderboardScopes: jsonb('leaderboard_scopes'),
   createdAt: timestamp('created_at').defaultNow(),
@@ -86,6 +88,8 @@ export const forumSettings = pgTable('forum_settings', {
   shiftLabel: varchar('shift_label', { length: 100 }),
   pdfTemplate: jsonb('pdf_template'),
   recommendationTemplates: jsonb('recommendation_templates'),
+  programRecEmptyNoMatchText: text('program_rec_empty_no_match_text'),
+  programRecEmptyNoEventsText: text('program_rec_empty_no_events_text'),
   /** Онбординг: goalQuestions, interestGroups, questions, optionToRole */
   roleDiagnosticsConfig: jsonb('role_diagnostics_config'),
   leaderboardScopes: jsonb('leaderboard_scopes').default({
@@ -582,6 +586,7 @@ export const tasks = pgTable('tasks', {
   confirmationMethods: jsonb('confirmation_methods').$type<string[]>().default([]),
   executionType: varchar('execution_type', { length: 50 }).default('once'),
   answerType: varchar('answer_type', { length: 50 }),
+  answerOptions: jsonb('answer_options').$type<Array<{ label: string; value: string }>>().default([]),
   autoConfirm: boolean('auto_confirm').default(true),
   pushOnPublish: boolean('push_on_publish').default(false),
   hideUntilPublish: boolean('hide_until_publish').default(true),
@@ -634,6 +639,24 @@ export const taskSubmissions = pgTable('task_submissions', {
   index('task_submissions_task_id_idx').on(table.taskId),
   index('task_submissions_status_idx').on(table.status),
   index('task_submissions_lifecycle_stage_idx').on(table.lifecycleStage),
+]);
+
+export const taskQrScans = pgTable('task_qr_scans', {
+  id: serial('id').primaryKey(),
+  taskId: integer('task_id').references(() => tasks.id, { onDelete: 'cascade' }).notNull(),
+  participantId: integer('participant_id').references(() => participants.id, { onDelete: 'cascade' }).notNull(),
+  vkUserId: integer('vk_user_id'),
+  deviceKey: varchar('device_key', { length: 64 }).notNull(),
+  ipAddress: varchar('ip_address', { length: 64 }),
+  userAgent: text('user_agent'),
+  outcome: varchar('outcome', { length: 32 }).notNull(),
+  submissionId: integer('submission_id').references(() => taskSubmissions.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index('task_qr_scans_task_id_idx').on(table.taskId),
+  index('task_qr_scans_participant_id_idx').on(table.participantId),
+  index('task_qr_scans_device_key_idx').on(table.deviceKey),
+  index('task_qr_scans_outcome_idx').on(table.outcome),
 ]);
 
 export const taskTeamConfirmations = pgTable('task_team_confirmations', {
@@ -707,6 +730,7 @@ export const pointsLog = pgTable('points_log', {
 
 export const levelsConfig = pgTable('levels_config', {
   id: serial('id').primaryKey(),
+  shiftId: integer('shift_id'),
   actionType: varchar('action_type', { length: 100 }).notNull(),
   pointsPerUnit: integer('points_per_unit'),
   maxAccruals: integer('max_accruals'),
@@ -806,6 +830,7 @@ export const adminActionsLog = pgTable('admin_actions_log', {
 
 export const medals = pgTable('medals', {
   id: serial('id').primaryKey(),
+  shiftId: integer('shift_id'),
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   conditionRule: text('condition_rule'),
@@ -869,6 +894,8 @@ export const delayedSurvey = pgTable('delayed_survey', {
   sentAt: timestamp('sent_at'),
   status: varchar('status', { length: 50 }).default('pending'),
   payload: jsonb('payload'),
+  response: jsonb('response'),
+  completedAt: timestamp('completed_at'),
 });
 
 export const exportHistory = pgTable('export_history', {

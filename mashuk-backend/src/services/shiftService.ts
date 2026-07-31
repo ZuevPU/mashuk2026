@@ -50,6 +50,8 @@ const SHIFT_OP_KEYS = [
   'shiftLabel',
   'pdfTemplate',
   'recommendationTemplates',
+  'programRecEmptyNoMatchText',
+  'programRecEmptyNoEventsText',
   'roleDiagnosticsConfig',
   'leaderboardScopes',
 ] as const;
@@ -129,6 +131,8 @@ export function shiftOpsToForumShape(shift: ShiftRow) {
     shiftLabel: shift.shiftLabel ?? null,
     pdfTemplate: shift.pdfTemplate ?? null,
     recommendationTemplates: shift.recommendationTemplates ?? null,
+    programRecEmptyNoMatchText: shift.programRecEmptyNoMatchText ?? null,
+    programRecEmptyNoEventsText: shift.programRecEmptyNoEventsText ?? null,
     roleDiagnosticsConfig: shift.roleDiagnosticsConfig ?? null,
     leaderboardScopes: shift.leaderboardScopes ?? {
       total: true, path: true, experience: true, day: true, shift: true,
@@ -164,6 +168,8 @@ export async function mirrorShiftToForumSettings(shift: ShiftRow): Promise<void>
     shiftLabel: shift.shiftLabel,
     pdfTemplate: shift.pdfTemplate,
     recommendationTemplates: shift.recommendationTemplates,
+    programRecEmptyNoMatchText: shift.programRecEmptyNoMatchText,
+    programRecEmptyNoEventsText: shift.programRecEmptyNoEventsText,
     roleDiagnosticsConfig: shift.roleDiagnosticsConfig,
     leaderboardScopes: shift.leaderboardScopes,
     activeShiftId: shift.id,
@@ -335,6 +341,8 @@ export async function copyShiftProgram(opts: {
     shiftLabel: opts.name,
     pdfTemplate: source.pdfTemplate,
     recommendationTemplates: source.recommendationTemplates,
+    programRecEmptyNoMatchText: source.programRecEmptyNoMatchText,
+    programRecEmptyNoEventsText: source.programRecEmptyNoEventsText,
     roleDiagnosticsConfig: source.roleDiagnosticsConfig,
     leaderboardScopes: source.leaderboardScopes,
     currentDay: 1,
@@ -500,4 +508,33 @@ export async function findParticipantByVkInActiveShift(vkId: number) {
     .where(and(eq(participants.vkId, vkId), eq(participants.shiftId, shiftId)))
     .limit(1);
   return user ?? null;
+}
+
+/**
+ * Auto-activate next draft shift when active shift calendar end has passed.
+ * Enable with SHIFT_AUTO_ROTATE=true and set startDate/totalDays on shifts.
+ */
+export async function autoRotateShiftIfDue(now = new Date()): Promise<{ rotated: boolean; fromId?: number; toId?: number }> {
+  if (process.env.SHIFT_AUTO_ROTATE !== 'true') return { rotated: false };
+
+  const active = await resolveActiveShift();
+  if (!active?.startDate || !active.totalDays) return { rotated: false };
+
+  const { computeShiftEndDate } = await import('./exports/delayedMeasureService.js');
+  const endDate = computeShiftEndDate(active.startDate, active.totalDays);
+  if (!endDate) return { rotated: false };
+
+  const endOfShift = new Date(endDate.getTime());
+  endOfShift.setUTCDate(endOfShift.getUTCDate() + 1);
+  if (now < endOfShift) return { rotated: false };
+
+  const [next] = await db.select().from(shifts)
+    .where(and(eq(shifts.status, 'draft'), eq(shifts.isSandbox, false)))
+    .orderBy(asc(shifts.startDate), asc(shifts.id))
+    .limit(1);
+  if (!next || next.id === active.id) return { rotated: false };
+
+  await activateShift(next.id);
+  console.log(`[shift] auto-rotated ${active.id} → ${next.id}`);
+  return { rotated: true, fromId: active.id, toId: next.id };
 }

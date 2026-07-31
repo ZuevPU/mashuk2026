@@ -1,4 +1,4 @@
-import { and, count, eq, isNotNull, isNull, lte } from 'drizzle-orm';
+import { and, count, desc, eq, isNotNull, isNull, lte } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { delayedSurvey, participants, pushQueue } from '../../db/schema.js';
 import { resolveActiveShift } from '../shiftService.js';
@@ -111,4 +111,41 @@ export async function processDueDelayedSurveys(now = new Date()): Promise<number
     n += 1;
   }
   return n;
+}
+
+export async function getPendingDelayedSurvey(participantId: number) {
+  const [row] = await db.select().from(delayedSurvey)
+    .where(and(
+      eq(delayedSurvey.participantId, participantId),
+      eq(delayedSurvey.status, 'sent'),
+    ))
+    .orderBy(desc(delayedSurvey.scheduledAt))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function submitDelayedSurveyResponse(
+  participantId: number,
+  surveyId: number,
+  response: Record<string, unknown>,
+) {
+  const [row] = await db.select().from(delayedSurvey)
+    .where(and(
+      eq(delayedSurvey.id, surveyId),
+      eq(delayedSurvey.participantId, participantId),
+    ))
+    .limit(1);
+  if (!row) throw new Error('Survey not found');
+  if (row.status === 'completed') throw new Error('Already completed');
+  if (row.status !== 'sent' && row.status !== 'pending') {
+    throw new Error('Survey not available');
+  }
+  const now = new Date();
+  const [updated] = await db.update(delayedSurvey).set({
+    status: 'completed',
+    response,
+    completedAt: now,
+    ...(row.status === 'pending' ? { sentAt: now } : {}),
+  }).where(eq(delayedSurvey.id, surveyId)).returning();
+  return updated;
 }

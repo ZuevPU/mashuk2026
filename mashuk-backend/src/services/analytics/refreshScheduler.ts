@@ -35,6 +35,14 @@ export function startAnalyticsRefreshScheduler(): void {
   setInterval(() => {
     refreshAllAnalytics().catch(err => console.error('[analytics] scheduled refresh', err));
   }, ms);
+  void import('../shiftService.js').then(({ autoRotateShiftIfDue }) =>
+    autoRotateShiftIfDue().catch(err => console.error('[shift] auto rotate', err)),
+  );
+  setInterval(() => {
+    void import('../shiftService.js').then(({ autoRotateShiftIfDue }) =>
+      autoRotateShiftIfDue().catch(err => console.error('[shift] auto rotate', err)),
+    );
+  }, 6 * 60 * 60 * 1000);
   if (semanticV2Enabled()) {
     void import('./clubMatchService.js').then(({ clubFragmentMatchNightly }) =>
       clubFragmentMatchNightly().catch(err => console.error('[analytics] club match', err)),

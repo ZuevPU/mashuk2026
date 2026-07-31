@@ -208,7 +208,7 @@ export const StatsRow: React.FC<{
         style={onIdeasClick ? { cursor: 'pointer' } : undefined}
       >
         <div className="m-sv">✦ {ideas}</div>
-        <div className="m-sl">Идей</div>
+        <div className="m-sl">Копилка</div>
       </div>
     </div>
   );
@@ -224,8 +224,7 @@ export const RoleOfDayCard: React.FC<{
     hint?: string | null;
     roleName?: string | null;
   } | null;
-  onSaveExperimentFixation?: () => void;
-}> = ({ name, quadrant, essence, experiment, onSaveExperimentFixation }) => {
+}> = ({ name, quadrant, essence, experiment }) => {
   const [expOpen, setExpOpen] = React.useState(false);
   const toggleExp = () => setExpOpen(o => !o);
 
@@ -257,11 +256,6 @@ export const RoleOfDayCard: React.FC<{
               )}
               {experiment.hint && (
                 <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>{experiment.hint}</div>
-              )}
-              {onSaveExperimentFixation && (
-                <Button size="m" stretched mode="secondary" onClick={onSaveExperimentFixation}>
-                  Сохранить фиксацию в копилку
-                </Button>
               )}
             </div>
           )}

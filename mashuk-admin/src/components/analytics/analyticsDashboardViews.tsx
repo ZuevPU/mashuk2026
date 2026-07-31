@@ -67,6 +67,18 @@ export function PulseView({ data }: { data: any }) {
             {Object.entries(tp).map(([k, v]) => <li key={k}>{formatTouchpointKey(k)}: {String(v)}</li>)}
           </ul>
         )}
+        {(data.activity?.completionByDirection ?? []).length > 0 && (
+          <table className="adm-table" style={{ marginTop: 12 }}>
+            <thead><tr><th>Направление</th><th>Зарег.</th><th>Активны</th><th>% активности</th></tr></thead>
+            <tbody>
+              {(data.activity.completionByDirection as { direction: string; registered: number; activeParticipants: number; activityRatePct: number }[]).map(row => (
+                <tr key={row.direction}>
+                  <td>{row.direction}</td><td>{row.registered}</td><td>{row.activeParticipants}</td><td>{row.activityRatePct}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
       {zoneChart.length > 0 && (
         <ZoneBarChart
@@ -178,6 +190,11 @@ export function PortraitView({ data, onOpenCard }: { data: any; onOpenCard: Anal
         <h3>Ролевая динамика</h3>
         <ul>{(data.roleDynamics?.experimentTop ?? []).map((r: { label: string; count: number }) => <li key={r.label}>{r.label}: {r.count}</li>)}</ul>
         <p>На выходе изменили роль: {data.roleDynamics?.roleExitSummary?.changed} · без изменений: {data.roleDynamics?.roleExitSummary?.same}</p>
+        <p className="adm-muted" style={{ fontSize: 12 }}>
+          Исследовано ролей (сумма): {data.roleDynamics?.exploredRolesTotal ?? 0}
+          {' · '}
+          в среднем на участника: {data.roleDynamics?.exploredRolesAvg ?? 0}
+        </p>
         <table className="adm-table">
           <thead><tr><th>День</th><th>Роль</th><th>Выборов</th></tr></thead>
           <tbody>
@@ -187,6 +204,21 @@ export function PortraitView({ data, onOpenCard }: { data: any; onOpenCard: Anal
           </tbody>
         </table>
       </div>
+      {(data.roleDynamics?.roleMatrix ?? []).length > 0 && (
+        <div className="card">
+          <h3>Матрица старт × эксперимент × финал</h3>
+          <table className="adm-table">
+            <thead><tr><th>Старт</th><th>Эксперимент</th><th>Финал</th><th>N</th></tr></thead>
+            <tbody>
+              {(data.roleDynamics.roleMatrix as { startLabel: string; experimentLabel: string; finalLabel: string; count: number }[]).slice(0, 30).map((r, i) => (
+                <tr key={i}>
+                  <td>{r.startLabel}</td><td>{r.experimentLabel}</td><td>{r.finalLabel}</td><td>{r.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <div className="card">
         <h3>Матрица ролей (выборка)</h3>
         <table className="adm-table">

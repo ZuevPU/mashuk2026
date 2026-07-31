@@ -3,20 +3,31 @@ import '../../style.css';
 
 interface TimelineEventProps {
   time: string;
+  endTime?: string;
   title: string;
   subtitle: string;
   tags?: string[];
   status: 'past' | 'now' | 'future';
   onClick?: () => void;
   expandState?: 'collapsed' | 'expanded' | null;
+  /** When events are grouped under one time header, show time inside the card */
+  showTime?: boolean;
 }
 
 export const TimelineEvent: React.FC<TimelineEventProps> = ({
-  time, title, subtitle, tags, status, onClick, expandState = null,
+  time,
+  endTime,
+  title,
+  subtitle,
+  tags,
+  status,
+  onClick,
+  expandState = null,
+  showTime = false,
 }) => {
-  let rowClass = 'm-tl-row';
-  if (status === 'past') rowClass += ' past';
-  if (status === 'now') rowClass += ' now-row';
+  let rowClass = 'm-prog-card';
+  if (status === 'past') rowClass += ' m-prog-card--past';
+  if (status === 'now') rowClass += ' m-prog-card--now';
 
   const trailing = expandState === 'expanded'
     ? '▼'
@@ -26,31 +37,33 @@ export const TimelineEvent: React.FC<TimelineEventProps> = ({
         ? '✓'
         : '›';
 
+  const timeRange = endTime && endTime !== time ? `${time}–${endTime}` : time;
+
   return (
-    <div className={rowClass} onClick={onClick} role={onClick ? 'button' : undefined}>
-      <div className="m-tl-time">{time}</div>
-      <div className="m-tl-body">
-        <div className="m-tl-title">{title}</div>
-        <div className="m-tl-sub">{subtitle}</div>
+    <button type="button" className={rowClass} onClick={onClick}>
+      <div className="m-prog-card-main">
+        {showTime && time && (
+          <div className="m-prog-card-time-pill">{timeRange}</div>
+        )}
+        <div className="m-prog-card-title">{title}</div>
+        {subtitle && <div className="m-prog-card-sub">{subtitle}</div>}
         {tags && tags.length > 0 && (
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+          <div className="m-prog-card-tags">
             {tags.map(tag => (
-              <span key={tag} style={{ fontSize: 9, background: '#F5F0E8', padding: '2px 6px', borderRadius: 4 }}>{tag}</span>
+              <span key={tag} className="m-prog-card-tag">{tag}</span>
             ))}
           </div>
         )}
-        {status === 'now' && <div className="m-tl-badge" title="По московскому времени">Сейчас</div>}
+        {status === 'now' && (
+          <div className="m-prog-card-live" title="По московскому времени">Сейчас</div>
+        )}
       </div>
-      {status === 'past' && !expandState ? (
-        <div className="m-tl-check">✓</div>
-      ) : (
-        <div
-          className="m-tl-arr"
-          style={status === 'now' && !expandState ? { color: 'rgba(255,255,255,.6)' } : undefined}
-        >
-          {trailing}
-        </div>
-      )}
-    </div>
+      <span
+        className={`m-prog-card-arr${status === 'past' && !expandState ? ' m-prog-card-arr--done' : ''}`}
+        aria-hidden
+      >
+        {trailing}
+      </span>
+    </button>
   );
 };

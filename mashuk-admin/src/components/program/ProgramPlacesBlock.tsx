@@ -9,6 +9,7 @@ type Props = {
   onAdd: () => void;
   onSaveEdit: () => void;
   onDelete: (id: number) => void;
+  embedded?: boolean;
 };
 
 export function ProgramPlacesBlock({
@@ -20,11 +21,14 @@ export function ProgramPlacesBlock({
   onAdd,
   onSaveEdit,
   onDelete,
+  embedded = false,
 }: Props) {
-  return (
-    <div className="card adm-forum-block">
-      <h3>Места проведения</h3>
-      <p className="adm-forum-hint">Справочник площадок. В событии можно выбрать из списка или ввести место вручную.</p>
+  const inner = (
+    <>
+      {!embedded && <h3>Места проведения</h3>}
+      {!embedded && (
+        <p className="adm-forum-hint">Справочник площадок. В событии можно выбрать из списка или ввести место вручную.</p>
+      )}
       {places.length === 0 && <p className="adm-muted">Справочник пуст — в карточке события всё равно можно вписать место вручную.</p>}
       <div className="adm-forum-toolbar">
         <input
@@ -77,8 +81,9 @@ export function ProgramPlacesBlock({
           </span>
         ))}
       </div>
-    </div>
+    </>
   );
+  return embedded ? inner : <div className="card adm-forum-block">{inner}</div>;
 }
 
 export function PlaceSelect({

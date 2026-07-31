@@ -25,6 +25,7 @@ import { dismissPushBanner, openPushBanner, pushWebhookTrigger } from '../contro
 import { getActiveConsents } from '../controllers/consentsController.js';
 import { listMyOrgThreads, getMyOrgThread, createOrgThread, replyOrgThread } from '../controllers/orgController.js';
 import { volunteerConfirm } from '../controllers/volunteerController.js';
+import { getMyDelayedSurvey, respondDelayedSurvey } from '../controllers/delayedSurveyController.js';
 
 const router = Router();
 
@@ -43,6 +44,8 @@ router.post('/auth/onboarding', authLimiter, vkAuthMiddleware, completeOnboardin
 router.get('/auth/onboarding-meta', authLimiter, vkAuthMiddleware, listOnboardingMeta);
 
 router.get('/home', vkAuthMiddleware, requireParticipant, getHome);
+router.get('/delayed-survey/pending', vkAuthMiddleware, requireParticipant, getMyDelayedSurvey);
+router.post('/delayed-survey/:id/respond', vkAuthMiddleware, requireParticipant, respondDelayedSurvey);
 router.post('/piggybank/quick', vkAuthMiddleware, requireParticipant, quickPiggybank);
 router.post('/day-state/experiment', vkAuthMiddleware, requireParticipant, updateExperimentStatus);
 router.post('/day-state/evening', vkAuthMiddleware, requireParticipant, submitEveningQuestionnaire);

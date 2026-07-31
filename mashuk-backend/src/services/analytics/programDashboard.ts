@@ -3,7 +3,7 @@ import { db } from '../../db/index.js';
 import { eventAttendance, events, materials, participantDayState } from '../../db/schema.js';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { EVENING_SCALE_KEYS } from '../touchpointTemplates.js';
-import { isPublishedStatus } from '../publishStatus.js';
+import { materialIncludedInAnalytics } from '../publishStatus.js';
 import { loadCohortParticipants } from './cohort.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import { resolveDayRange } from './analyticsQuery.js';
@@ -155,7 +155,7 @@ export async function buildProgramDashboard(filters: AnalyticsFilters, req?: Adm
     }))
     .sort((a, b) => b.responses - a.responses);
 
-  const allMats = (await db.select().from(materials)).filter(m => isPublishedStatus(m.status));
+  const allMats = (await db.select().from(materials)).filter(m => materialIncludedInAnalytics(m));
 
   return {
     filters,
