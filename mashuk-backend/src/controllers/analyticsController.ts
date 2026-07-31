@@ -1,7 +1,7 @@
 import type { Response } from 'express';
 import type { AdminRequest } from '../middlewares/adminAuth.js';
 import { recalculateDailyStats } from '../services/analyticsService.js';
-import { parseAnalyticsQuery } from '../services/analytics/analyticsQuery.js';
+import { resolveAnalyticsFilters } from '../services/analytics/analyticsQuery.js';
 import {
   buildAnalyticsMeta,
   composeLegacyDashboards,
@@ -22,37 +22,37 @@ export async function getAnalyticsMetaHandler(req: AdminRequest, res: Response):
 }
 
 export async function getPulseDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
-  const filters = parseAnalyticsQuery(req);
+  const filters = await resolveAnalyticsFilters(req);
   res.json(await buildPulseDashboard(filters, req));
 }
 
 export async function getPortraitDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
-  const filters = parseAnalyticsQuery(req);
+  const filters = await resolveAnalyticsFilters(req);
   res.json(await buildPortraitDashboard(filters, req));
 }
 
 export async function getProgramDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
-  const filters = parseAnalyticsQuery(req);
+  const filters = await resolveAnalyticsFilters(req);
   res.json(await buildProgramDashboard(filters, req));
 }
 
 export async function getActivityDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
-  const filters = parseAnalyticsQuery(req);
+  const filters = await resolveAnalyticsFilters(req);
   res.json(await buildActivityDashboard(filters, req));
 }
 
 export async function getPiggybankDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
-  const filters = parseAnalyticsQuery(req);
+  const filters = await resolveAnalyticsFilters(req);
   res.json(await buildPiggybankDashboard(filters, req));
 }
 
 export async function getSemanticDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
-  const filters = parseAnalyticsQuery(req);
+  const filters = await resolveAnalyticsFilters(req);
   res.json(await buildSemanticDashboard(filters, req));
 }
 
 export async function getClubsDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
-  const filters = parseAnalyticsQuery(req);
+  const filters = await resolveAnalyticsFilters(req);
   res.json(await buildClubsDashboard(filters, req));
 }
 
@@ -61,7 +61,7 @@ export async function getLegacyDashboardsHandler(req: AdminRequest, res: Respons
 }
 
 export async function getDeparturePortraitHandler(req: AdminRequest, res: Response): Promise<void> {
-  const filters = parseAnalyticsQuery(req);
+  const filters = await resolveAnalyticsFilters(req);
   res.json(await buildDeparturePortrait(filters, req));
 }
 

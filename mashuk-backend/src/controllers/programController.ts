@@ -410,28 +410,21 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
 export const markAttendance = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const eventId = Number(req.params.eventId);
-    const [existing] = await db.select().from(eventAttendance)
-      .where(and(
-        eq(eventAttendance.participantId, req.participant!.id),
-        eq(eventAttendance.eventId, eventId),
-      )).limit(1);
-    if (existing) {
-      res.json({ ok: true, record: existing, duplicate: true });
+    const qrToken = typeof req.body?.qrToken === 'string' ? req.body.qrToken
+      : typeof req.query.qr === 'string' ? req.query.qr
+      : undefined;
+    const { recordEventAttendance } = await import('../services/eventAttendanceService.js');
+    const result = await recordEventAttendance(req.participant!.id, eventId, { qrToken });
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
       return;
     }
-    const [record] = await db.insert(eventAttendance).values({
-      participantId: req.participant!.id,
-      eventId,
-    }).returning();
-
-    const { awardPoints } = await import('../services/pointsService.js');
-    const pointsResult = await awardPoints(req.participant!.id, 'attendance');
-
     res.json({
       ok: true,
-      record,
-      xpAwarded: pointsResult?.awarded ?? 0,
-      track: pointsResult?.track ?? 'path',
+      record: result.record,
+      duplicate: result.duplicate,
+      xpAwarded: result.xpAwarded,
+      track: result.track,
     });
   } catch (error) {
     console.error('markAttendance:', error);

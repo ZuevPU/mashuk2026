@@ -12,6 +12,10 @@ export const env = {
   VK_SERVICE_TOKEN: process.env.VK_SERVICE_TOKEN || '',
   VK_GROUP_ID: process.env.VK_GROUP_ID || '',
   VK_COMMUNITY_TOKEN: process.env.VK_COMMUNITY_TOKEN || '',
+  /** Confirmation string from VK Callback API settings */
+  VK_CALLBACK_CONFIRMATION: process.env.VK_CALLBACK_CONFIRMATION || '',
+  /** Optional Callback API secret */
+  VK_CALLBACK_SECRET: process.env.VK_CALLBACK_SECRET || '',
   /** Публичный URL API/загрузок (фото, QR) — не путать со ссылкой в push */
   PUBLIC_URL: process.env.PUBLIC_URL || '',
   /**

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import QRCode from 'qrcode';
 import { env } from '../config/env.js';
+import { buildEventAttendanceRef } from './eventAttendanceService.js';
 
 /** Генерация токена для QR deep-link */
 export function generateQrToken(): string {
@@ -20,7 +21,17 @@ export function buildTaskQrUrl(baseUrl: string, taskId: number, token: string): 
   return `${baseUrl.replace(/\/$/, '')}/#/tasks?task=${taskId}&qr=${token}`;
 }
 
+/**
+ * Event QR: with VK_GROUP_ID → community write-link (phone camera → bot).
+ * Otherwise mini-app deep link #/program?event=&qr=.
+ */
 export function buildEventQrUrl(baseUrl: string, eventId: number, token: string): string {
+  const groupId = env.VK_GROUP_ID?.trim();
+  if (groupId) {
+    const ref = buildEventAttendanceRef(eventId, token);
+    const numeric = groupId.replace(/^club/i, '');
+    return `https://vk.me/club${numeric}?ref=${encodeURIComponent(ref)}`;
+  }
   return `${baseUrl.replace(/\/$/, '')}/#/program?event=${eventId}&qr=${token}`;
 }
 

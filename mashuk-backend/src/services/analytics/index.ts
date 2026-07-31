@@ -1,6 +1,6 @@
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { getForumSettings } from '../helpers.js';
-import { parseAnalyticsQuery } from './analyticsQuery.js';
+import { resolveAnalyticsFilters } from './analyticsQuery.js';
 import { listFilterOptions } from './cohort.js';
 import { getRoleTaxonomyPayload } from './roleTaxonomy.js';
 import { analyticsRefreshMs, semanticV2Enabled } from './refreshScheduler.js';
@@ -11,10 +11,12 @@ import { buildActivityDashboard } from './activityDashboard.js';
 import { buildPiggybankDashboard } from './piggybankDashboard.js';
 import { buildSemanticDashboard, buildClubsDashboard } from './semanticDashboard.js';
 import { DASHBOARD_CATALOG, forumDayCalendarDate } from './dashboardCatalog.js';
+import { resolveAdminShiftId } from '../shiftService.js';
 
-export async function buildAnalyticsMeta(_req: AdminRequest) {
+export async function buildAnalyticsMeta(req: AdminRequest) {
   const settings = await getForumSettings();
-  const filters = await listFilterOptions();
+  const shiftId = await resolveAdminShiftId(req);
+  const filters = await listFilterOptions(shiftId);
   const roleTaxonomy = await getRoleTaxonomyPayload();
   const currentForumDay = settings.currentDay ?? 1;
   const forumDays = Array.from({ length: settings.totalDays ?? 8 }, (_, i) => {
@@ -39,7 +41,7 @@ export async function buildAnalyticsMeta(_req: AdminRequest) {
 }
 
 export async function composeLegacyDashboards(req: AdminRequest) {
-  const filters = parseAnalyticsQuery(req);
+  const filters = await resolveAnalyticsFilters(req);
   const [pulse, portrait, program, activity, piggybank, semantic] = await Promise.all([
     buildPulseDashboard(filters, req),
     buildPortraitDashboard(filters, req),

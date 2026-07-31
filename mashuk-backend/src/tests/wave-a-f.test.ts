@@ -4,7 +4,8 @@ import { matchPushSlot, matchRetrySlot, PUSH_SLOTS } from '../services/pushSched
 import { pushCategoryOf } from '../services/pushService.js';
 import { roleCan } from '../utils/adminToken.js';
 import { generateQrToken } from '../services/qrService.js';
-import { isGigachatConfigured } from '../services/gigachatService.js';
+import { isGigachatConfigured, tokenVector, cosineSimilarity } from '../services/gigachatService.js';
+import { parseEventAttendanceRef } from '../services/eventAttendanceService.js';
 
 describe('pushScheduler slots', () => {
   it('matches 08:00 and retry +30', () => {
@@ -56,12 +57,21 @@ describe('admin role matrix', () => {
   });
 });
 
-describe('qr and gigachat stubs', () => {
+describe('qr and heuristics', () => {
   it('generates qr token', () => {
     assert.equal(generateQrToken().length, 32);
   });
-  it('gigachat not configured without env', () => {
-    // may be true if env set — just assert boolean
-    assert.equal(typeof isGigachatConfigured(), 'boolean');
+  it('LLM client permanently disabled', () => {
+    assert.equal(isGigachatConfigured(), false);
+  });
+  it('parses event attendance ref', () => {
+    const token = 'a'.repeat(32);
+    const parsed = parseEventAttendanceRef(`event_42_${token}`);
+    assert.equal(parsed?.eventId, 42);
+    assert.equal(parsed?.qrToken, token);
+  });
+  it('token vector cosine self-similarity', () => {
+    const v = tokenVector('образование школа');
+    assert.ok(cosineSimilarity(v, v) > 0.99);
   });
 });

@@ -113,6 +113,7 @@ export const exportDailySummaryHandler = async (req: AdminRequest, res: Response
     group: typeof req.query.group === 'string' ? req.query.group : undefined,
     ageMin: req.query.ageMin ? Number(req.query.ageMin) : undefined,
     ageMax: req.query.ageMax ? Number(req.query.ageMax) : undefined,
+    ageCategory: typeof req.query.ageCategory === 'string' ? req.query.ageCategory : undefined,
     activityQ: typeof req.query.activity === 'string' ? req.query.activity : undefined,
   });
 };

@@ -1,4 +1,4 @@
-import { inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { answers, questions } from '../../db/schema.js';
 import { isPublishedStatus } from '../publishStatus.js';
@@ -40,19 +40,31 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
   const todayStart = startOfTodayUtc();
   const activeToday = cohort.filter(p => p.lastActiveAt && p.lastActiveAt >= todayStart).length;
 
-  const touchpoints = await touchpointCompletionByType(ids, days);
-  const stateChecks = await countStateChecksByPhase(ids, days);
+  const touchpoints = await touchpointCompletionByType(ids, days, filters.shiftId);
+  const stateChecks = await countStateChecksByPhase(ids, days, filters.shiftId);
   const eveningDone = await countEveningCompleted(ids, days);
-  const activitySeries = await activityByDaySeries(ids, days.length > 1 ? days : [1, 2, 3, 4, 5, 6, 7]);
-
-  const publishedQ = (await db.select().from(questions)).filter(q => isPublishedStatus(q.status));
-  const checkQIds = new Set(
-    publishedQ.filter(q => reflectionKindFromQuestion(q) === 'state_check' && (q.dayNumber == null || days.includes(q.dayNumber ?? 0))).map(q => q.id),
+  const activitySeries = await activityByDaySeries(
+    ids,
+    days.length > 1 ? days : [1, 2, 3, 4, 5, 6, 7],
+    filters.shiftId,
   );
-  const allAns = ids.length
-    ? await db.select().from(answers).where(inArray(answers.participantId, ids))
-    : [];
 
+  const qRows = filters.shiftId != null
+    ? await db.select().from(questions).where(eq(questions.shiftId, filters.shiftId))
+    : await db.select().from(questions);
+  const publishedQ = qRows.filter(q => isPublishedStatus(q.status));
+  const checkQIds = [
+    ...publishedQ.filter(q =>
+      reflectionKindFromQuestion(q) === 'state_check'
+      && (q.dayNumber == null || days.includes(q.dayNumber ?? 0)),
+    ).map(q => q.id),
+  ];
+  const checkAns = ids.length && checkQIds.length
+    ? await db.select().from(answers).where(and(
+      inArray(answers.participantId, ids),
+      inArray(answers.questionId, checkQIds),
+    ))
+    : [];
   const zonesOverall = emptyZoneDistribution();
   const zonesByPhase: Record<'morning' | 'day' | 'evening', ReturnType<typeof emptyZoneDistribution>> = {
     morning: emptyZoneDistribution(),
@@ -63,8 +75,7 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
   const reasonByDay = new Map<number, string[]>();
   const pidToParticipant = new Map(cohort.map(p => [p.id, p]));
 
-  for (const a of allAns) {
-    if (!checkQIds.has(a.questionId)) continue;
+  for (const a of checkAns) {
     accumulateZoneFromAnswer(zonesOverall, a.answerData);
     const phase = stateCheckPhaseForAnswer(a.createdAt);
     accumulateZoneFromAnswer(zonesByPhase[phase], a.answerData);
@@ -85,7 +96,7 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
       const dayCheckIds = new Set(
         publishedQ.filter(q => q.dayNumber === d && reflectionKindFromQuestion(q) === 'state_check').map(q => q.id),
       );
-      for (const a of allAns) {
+      for (const a of checkAns) {
         if (!dayCheckIds.has(a.questionId)) continue;
         accumulateZoneFromAnswer(z, a.answerData);
       }
@@ -105,8 +116,8 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
     for (const [direction, list] of dirMap) {
       const z = emptyZoneDistribution();
       const pids = new Set(list.map(p => p.id));
-      for (const a of allAns) {
-        if (!pids.has(a.participantId) || !checkQIds.has(a.questionId)) continue;
+      for (const a of checkAns) {
+        if (!pids.has(a.participantId)) continue;
         accumulateZoneFromAnswer(z, a.answerData);
       }
       byDirection.push({ direction, zones: zonesToPercent(z) });
@@ -119,8 +130,8 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
       for (const [group, gList] of grpMap) {
         const zg = emptyZoneDistribution();
         const gpids = new Set(gList.map(p => p.id));
-        for (const a of allAns) {
-          if (!gpids.has(a.participantId) || !checkQIds.has(a.questionId)) continue;
+        for (const a of checkAns) {
+          if (!gpids.has(a.participantId)) continue;
           accumulateZoneFromAnswer(zg, a.answerData);
         }
         byGroup.push({ direction, group, zones: zonesToPercent(zg) });
@@ -133,8 +144,7 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
   if (reasons.length) {
     const dirReasons = new Map<string, string[]>();
     const grpReasons = new Map<string, string[]>();
-    for (const a of allAns) {
-      if (!checkQIds.has(a.questionId)) continue;
+    for (const a of checkAns) {
       const payload = parseCheckinPayload(a.answerData);
       if (!payload.reason?.trim()) continue;
       const part = pidToParticipant.get(a.participantId);
@@ -229,7 +239,6 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
       })),
       byDirection: reasonByDirection,
       byGroup: reasonByGroup,
-      llmDeferred: 'LLM-кластеризация причин — отложено',
     },
     cohortSize: cohort.length,
   };

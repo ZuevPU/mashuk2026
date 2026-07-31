@@ -1,4 +1,5 @@
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
+import { resolveAdminShiftId } from '../shiftService.js';
 
 export type AnalyticsViewMode = 'today' | 'day' | 'shift' | 'compare';
 
@@ -17,6 +18,8 @@ export type AnalyticsFilters = {
   activity: string | null;
   page: number;
   limit: number;
+  /** Active admin shift; set by resolveAnalyticsFilters */
+  shiftId: number | null;
 };
 
 function parseDays(raw: unknown): number[] {
@@ -54,7 +57,15 @@ export function parseAnalyticsQuery(req: AdminRequest): AnalyticsFilters {
       ? req.query.activity.trim() : null,
     page: Math.max(1, Number(req.query.page) || 1),
     limit: Math.min(200, Math.max(10, Number(req.query.limit) || 50)),
+    shiftId: null,
   };
+}
+
+/** Parse query filters and bind the active admin shift. */
+export async function resolveAnalyticsFilters(req: AdminRequest): Promise<AnalyticsFilters> {
+  const filters = parseAnalyticsQuery(req);
+  filters.shiftId = await resolveAdminShiftId(req);
+  return filters;
 }
 
 export function resolveDayRange(filters: AnalyticsFilters, currentForumDay: number): number[] {

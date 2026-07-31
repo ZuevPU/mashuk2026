@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { piggybank } from '../../db/schema.js';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
@@ -15,19 +15,28 @@ import { topReasonTokens } from './zoneDistribution.js';
 export async function buildPiggybankDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
   const cohort = await loadCohortParticipants(filters, req);
   const ids = cohort.map(p => p.id);
-  const rows = ids.length
-    ? await db.select().from(piggybank).where(inArray(piggybank.participantId, ids))
-    : await db.select().from(piggybank);
+  if (!ids.length) {
+    return {
+      filters,
+      navigation: { total: 0, page: filters.page, limit: filters.limit },
+      byTag: Object.fromEntries(PIGGYBANK_TAGS.map(tag => [tag, { count: 0, series: [], entries: [], byDirection: [], topThemes: [] }])),
+      bySource: Object.fromEntries(PIGGYBANK_SOURCES.map(src => [src, { count: 0, tagMix: [], series: [] }])),
+      topThemes: [],
+      recurringTools: [],
+      vRabota: { total: 0, byDirection: [], sample: [] },
+      entries: [],
+    };
+  }
+  const conditions = [inArray(piggybank.participantId, ids)];
+  if (filters.day) conditions.push(eq(piggybank.forumDay, filters.day));
+  const rows = await db.select().from(piggybank).where(and(...conditions));
 
   let entries = rows;
-  if (filters.tag) {
-    entries = entries.filter(e => entryTags(e).includes(filters.tag!));
-  }
   if (filters.source) {
     entries = entries.filter(e => normalizePiggybankSource(e.source) === filters.source);
   }
-  if (filters.day) {
-    entries = entries.filter(e => e.forumDay === filters.day);
+  if (filters.tag) {
+    entries = entries.filter(e => entryTags(e).includes(filters.tag!));
   }
 
   const byTag: Record<string, { count: number; series: { day: number; count: number }[]; entries: unknown[]; byDirection: { direction: string; count: number }[]; topThemes: { token: string; count: number }[] }> = {};
@@ -93,7 +102,6 @@ export async function buildPiggybankDashboard(filters: AnalyticsFilters, req?: A
     bySource,
     topThemes: topReasonTokens(rows.map(e => e.text), 20),
     recurringTools: topReasonTokens(rows.map(e => e.text), 15),
-    llmClusterDeferred: 'LLM-кластеризация внутри тега — отложено',
     vRabota: {
       total: vRabota.length,
       byDirection: [...vRabotaByDirection.entries()].map(([direction, count]) => ({ direction, count })),

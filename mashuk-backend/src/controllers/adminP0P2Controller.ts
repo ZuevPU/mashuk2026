@@ -11,7 +11,7 @@ import { AdminRequest } from '../middlewares/adminAuth.js';
 import { getForumSettings } from '../services/helpers.js';
 import { deactivateOtherConsents } from './consentsController.js';
 import { evaluateAllMedals, getMedalRuleProgress, parseMedalRule } from '../services/medalEvaluator.js';
-import { clubMatchNightly, isGigachatConfigured, synthesizeOutcomes } from '../services/gigachatService.js';
+import { clubMatchNightly, synthesizeOutcomes } from '../services/gigachatService.js';
 import { generateQrToken, buildTaskQrUrl, buildEventQrUrl, buildParticipantQrUrl, buildQrDataUrl, resolveParticipantAppBase } from '../services/qrService.js';
 import { logAdminAction } from '../services/adminActionsLog.js';
 import { env } from '../config/env.js';
@@ -1086,7 +1086,6 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
       summary: semantic.summary,
       source: semantic.source,
     },
-    gigachat: { configured: isGigachatConfigured() },
   });
 };
 

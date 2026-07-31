@@ -27,9 +27,13 @@ export async function buildProgramDashboard(filters: AnalyticsFilters, req?: Adm
   const days = resolveDayRange(filters, settings.currentDay ?? 1);
   const cohort = await loadCohortParticipants(filters, req);
   const ids = new Set(cohort.map(p => p.id));
+  const idList = [...ids];
 
-  const states = (await db.select().from(participantDayState))
-    .filter(s => ids.has(s.participantId) && days.includes(s.dayNumber));
+  const states = idList.length
+    ? (await db.select().from(participantDayState)
+      .where(inArray(participantDayState.participantId, idList)))
+      .filter(s => days.includes(s.dayNumber))
+    : [];
 
   function scaleBlock(keys: string[]) {
     const sums: Record<string, { sum: number; n: number }> = {};
@@ -58,11 +62,17 @@ export async function buildProgramDashboard(filters: AnalyticsFilters, req?: Adm
   const openLessons = scaleBlock(['openLessons']);
   const workshops = scaleBlock(['workshops']);
 
-  const attendance = await db.select().from(eventAttendance);
-  const programEvents = await db.select().from(events);
+  const programEvents = filters.shiftId != null
+    ? await db.select().from(events).where(eq(events.shiftId, filters.shiftId))
+    : await db.select().from(events);
+  const eventIds = programEvents.map(e => e.id);
+  const attendance = idList.length && eventIds.length
+    ? await db.select().from(eventAttendance).where(inArray(eventAttendance.participantId, idList))
+    : [];
   const attendanceByEvent = new Map<number, number>();
   for (const a of attendance) {
     if (!ids.has(a.participantId)) continue;
+    if (eventIds.length && !eventIds.includes(a.eventId)) continue;
     attendanceByEvent.set(a.eventId, (attendanceByEvent.get(a.eventId) || 0) + 1);
   }
 
@@ -155,7 +165,10 @@ export async function buildProgramDashboard(filters: AnalyticsFilters, req?: Adm
     }))
     .sort((a, b) => b.responses - a.responses);
 
-  const allMats = (await db.select().from(materials)).filter(m => materialIncludedInAnalytics(m));
+  const matRows = filters.shiftId != null
+    ? await db.select().from(materials).where(eq(materials.shiftId, filters.shiftId))
+    : await db.select().from(materials);
+  const allMats = matRows.filter(m => materialIncludedInAnalytics(m));
 
   return {
     filters,
@@ -171,7 +184,6 @@ export async function buildProgramDashboard(filters: AnalyticsFilters, req?: Adm
     dayEvents: {
       topMentions: mentionCounts.slice(0, 15),
       topEvents: eventsRanked.slice(0, 15),
-      llmReflectionMentionsDeferred: 'Неспровоцированные упоминания в рефлексиях — отложено (LLM)',
     },
     divergence: divergenceHighAttLowRating,
     divergenceExtended: divergencePopularLowRating,

@@ -160,6 +160,32 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
     }
   };
 
+  // Deep-link from event QR: #/program?event=ID&qr=TOKEN → validate + mark attendance
+  useEffect(() => {
+    if (activePanel !== id) return;
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    const qIdx = hash.indexOf('?');
+    if (qIdx < 0) return;
+    const params = new URLSearchParams(hash.slice(qIdx + 1));
+    const eventId = Number(params.get('event'));
+    const qrToken = params.get('qr');
+    if (!eventId || !qrToken) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await apiPost(`/program/events/${eventId}/attendance`, { qrToken });
+        if (!cancelled) {
+          // Strip qr params so refresh doesn't re-fire; keep panel
+          const clean = hash.slice(0, qIdx);
+          window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${clean || '#/program'}`);
+        }
+      } catch {
+        /* invalid token or already attended */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activePanel, id]);
+
   useEffect(() => {
     if (activePanel !== id) return;
     if (selectedEvent) {

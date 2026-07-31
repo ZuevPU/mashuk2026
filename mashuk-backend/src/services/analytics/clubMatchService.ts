@@ -1,9 +1,10 @@
-import { desc, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import {
   answers, clubMatches, forumClubs, participants, piggybank, questions,
 } from '../../db/schema.js';
 import { isPublishedStatus } from '../publishStatus.js';
+import { resolveActiveShiftId } from '../shiftService.js';
 
 const DEFAULT_CLUBS = [
   {
@@ -52,28 +53,30 @@ export async function ensureDefaultForumClubs(): Promise<void> {
   const existing = await db.select({ id: forumClubs.id }).from(forumClubs);
   if (existing.length > 0) return;
   for (const c of DEFAULT_CLUBS) {
-    const exists = existing.some(e => e.id === c.id);
-    if (!exists) {
-      await db.insert(forumClubs).values({
-        id: c.id,
-        name: c.name,
-        description: c.description,
-        isActive: true,
-        sortOrder: c.sortOrder,
-      });
-    }
+    await db.insert(forumClubs).values({
+      id: c.id,
+      name: c.name,
+      description: c.description,
+      isActive: true,
+      sortOrder: c.sortOrder,
+    });
   }
 }
 
-async function collectFragments(): Promise<TextFragment[]> {
+async function collectFragments(shiftId?: number | null): Promise<TextFragment[]> {
+  const conditions = [isNotNull(participants.onboardingCompletedAt)];
+  if (shiftId != null) conditions.push(eq(participants.shiftId, shiftId));
   const onboarded = await db.select({ id: participants.id })
     .from(participants)
-    .where(isNotNull(participants.onboardingCompletedAt));
+    .where(and(...conditions));
   const ids = onboarded.map(p => p.id);
   if (!ids.length) return [];
 
   const fragments: TextFragment[] = [];
-  const qList = (await db.select().from(questions)).filter(q => isPublishedStatus(q.status));
+  const qRows = shiftId != null
+    ? await db.select().from(questions).where(eq(questions.shiftId, shiftId))
+    : await db.select().from(questions);
+  const qList = qRows.filter(q => isPublishedStatus(q.status));
   const qMap = new Map(qList.map(q => [q.id, q]));
 
   const ansRows = await db.select().from(answers).where(inArray(answers.participantId, ids));
@@ -107,24 +110,11 @@ async function collectFragments(): Promise<TextFragment[]> {
   return fragments;
 }
 
-/** Nightly fragment × club keyword match; optional GigaChat embeddings when LLM enabled. */
-export async function clubFragmentMatchNightly(): Promise<{ inserted: number; usedEmbeddings?: boolean }> {
+/** Nightly fragment × club keyword match (heuristics only). */
+export async function clubFragmentMatchNightly(): Promise<{ inserted: number }> {
   await ensureDefaultForumClubs();
   const clubs = await db.select().from(forumClubs).where(eq(forumClubs.isActive, true));
   if (!clubs.length) return { inserted: 0 };
-
-  const useEmbeddings = process.env.SEMANTIC_ANALYTICS_V2 === 'true'
-    && process.env.SEMANTIC_ANALYTICS_V2_HEURISTICS_ONLY === 'false';
-  let clubVectors: Map<string, number[]> | null = null;
-  if (useEmbeddings) {
-    const { gigachatEmbed, isGigachatConfigured } = await import('../gigachatService.js');
-    if (isGigachatConfigured()) {
-      clubVectors = new Map();
-      for (const c of clubs) {
-        clubVectors.set(c.id, await gigachatEmbed(c.description || c.name));
-      }
-    }
-  }
 
   const clubKw = clubs.map(c => ({
     id: c.id,
@@ -132,22 +122,21 @@ export async function clubFragmentMatchNightly(): Promise<{ inserted: number; us
     keywords: clubKeywords(c.description || '', c.name),
   }));
 
-  const fragments = await collectFragments();
+  let shiftId: number | null = null;
+  try {
+    shiftId = await resolveActiveShiftId();
+  } catch {
+    shiftId = null;
+  }
+
+  const fragments = await collectFragments(shiftId);
   await db.delete(clubMatches);
 
   const topPerClub = new Map<string, { frag: TextFragment; score: number; clubId: string; clubName: string }[]>();
 
   for (const frag of fragments) {
     for (const club of clubKw) {
-      let score = scoreFragment(frag.text, club.keywords);
-      if (clubVectors) {
-        const { gigachatEmbed, cosineSimilarity } = await import('../gigachatService.js');
-        const fragVec = await gigachatEmbed(frag.text);
-        const clubVec = clubVectors.get(club.id);
-        if (clubVec) {
-          score = Math.max(score, Math.round(cosineSimilarity(fragVec, clubVec) * 10));
-        }
-      }
+      const score = scoreFragment(frag.text, club.keywords);
       if (score < 1) continue;
       const list = topPerClub.get(club.id) || [];
       list.push({ frag, score, clubId: club.id, clubName: club.name });
@@ -164,9 +153,7 @@ export async function clubFragmentMatchNightly(): Promise<{ inserted: number; us
         answerId: item.frag.answerId,
         clubId,
         similarity: Math.min(99, 35 + item.score * 12),
-        verdict: clubVectors
-          ? `Семантика + ключи «${item.clubName}» (${item.score})`
-          : `Совпадение с «${item.clubName}» (${item.score} ключ.)`,
+        verdict: `Совпадение с «${item.clubName}» (${item.score} ключ.)`,
         sourceType: item.frag.sourceType,
         snippet: item.frag.snippet,
       });
@@ -174,12 +161,17 @@ export async function clubFragmentMatchNightly(): Promise<{ inserted: number; us
     }
   }
 
-  return { inserted, usedEmbeddings: !!clubVectors };
+  return { inserted };
 }
 
 export async function listClubMatchesForDashboard(clubId?: string | null, limit = 100) {
-  let q = db.select().from(clubMatches).orderBy(desc(clubMatches.similarity)).limit(limit);
-  const rows = await q;
-  if (clubId) return rows.filter(r => r.clubId === clubId);
-  return rows;
+  if (clubId) {
+    return db.select().from(clubMatches)
+      .where(eq(clubMatches.clubId, clubId))
+      .orderBy(desc(clubMatches.similarity))
+      .limit(limit);
+  }
+  return db.select().from(clubMatches)
+    .orderBy(desc(clubMatches.similarity))
+    .limit(limit);
 }

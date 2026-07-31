@@ -38,7 +38,7 @@ Backend применяет drizzle при старте. После деплоя 
 
 ```env
 SEMANTIC_ANALYTICS_V2=true
-SEMANTIC_ANALYTICS_V2_HEURISTICS_ONLY=true
+ANALYTICS_REFRESH_MINUTES=15
 ```
 
 См. [`V2_FEATURES.md`](V2_FEATURES.md).

@@ -12,7 +12,7 @@ import { logAdminAction } from '../services/adminActionsLog.js';
 import { generateQrToken, buildParticipantQrUrl, buildTaskQrUrl, buildEventQrUrl, resolveParticipantAppBase } from '../services/qrService.js';
 import { env } from '../config/env.js';
 import { sendPushNotification } from '../services/pushService.js';
-import { synthesizeOutcomes, isGigachatConfigured } from '../services/gigachatService.js';
+import { synthesizeOutcomes } from '../services/gigachatService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { ADMIN_USER_ROLES, adminUserCreateSchema, adminUserUpdateSchema, medalCreateSchema, medalUpdateSchema, parseBody } from '../validation/adminSchemas.js';
 import { MEDAL_RULE_METRICS } from '../services/medalRuleMetrics.js';
@@ -572,7 +572,7 @@ export const buildParticipantPdfText = async (req: AdminRequest, res: Response):
   let outcomes = Array.isArray(p.outcomesEdited) || typeof p.outcomesEdited === 'object'
     ? JSON.stringify(p.outcomesEdited)
     : null;
-  if (!outcomes && isGigachatConfigured()) {
+  if (!outcomes) {
     const texts = ans.map(a => typeof a.answerData === 'string' ? a.answerData : JSON.stringify(a.answerData)).filter(Boolean);
     outcomes = await synthesizeOutcomes(texts as string[]);
   }
@@ -631,7 +631,6 @@ export const getAnalyticsDashboards = async (req: AdminRequest, res: Response): 
         .sort((a, b) => (b.path ?? 0) - (a.path ?? 0))
         .slice(0, 10),
     },
-    gigachat: { configured: isGigachatConfigured() },
   });
 };
 

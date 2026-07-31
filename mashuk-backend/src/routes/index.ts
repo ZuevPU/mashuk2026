@@ -26,6 +26,7 @@ import { getActiveConsents } from '../controllers/consentsController.js';
 import { listMyOrgThreads, getMyOrgThread, createOrgThread, replyOrgThread } from '../controllers/orgController.js';
 import { volunteerConfirm } from '../controllers/volunteerController.js';
 import { getMyDelayedSurvey, respondDelayedSurvey } from '../controllers/delayedSurveyController.js';
+import { vkBotCallback } from '../controllers/vkBotController.js';
 
 const router = Router();
 
@@ -96,6 +97,7 @@ router.post('/upload', vkAuthMiddleware, requireParticipant, uploadPhoto);
 router.post('/push-banners/:id/open', vkAuthMiddleware, requireParticipant, openPushBanner);
 router.post('/push-banners/:id/dismiss', vkAuthMiddleware, requireParticipant, dismissPushBanner);
 router.post('/push/webhook/:token', pushWebhookTrigger);
+router.post('/bot/vk', vkBotCallback);
 
 // Volunteer confirm: admin token OR vk staff
 router.post('/volunteer/confirm', (req, res, next) => {

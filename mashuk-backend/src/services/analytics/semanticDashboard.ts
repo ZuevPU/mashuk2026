@@ -46,9 +46,14 @@ export async function buildSemanticDashboard(filters: AnalyticsFilters, req?: Ad
 
   const cohort = await loadCohortParticipants(filters, req);
   const ids = new Set(cohort.map(p => p.id));
-  const allAns = await db.select().from(answers);
-  const filtered = allAns.filter(a => ids.has(a.participantId));
-  const qList = (await db.select().from(questions)).filter(q => isPublishedStatus(q.status));
+  const idList = [...ids];
+  const filtered = idList.length
+    ? await db.select().from(answers).where(inArray(answers.participantId, idList))
+    : [];
+  const qRows = filters.shiftId != null
+    ? await db.select().from(questions).where(eq(questions.shiftId, filters.shiftId))
+    : await db.select().from(questions);
+  const qList = qRows.filter(q => isPublishedStatus(q.status));
   const qMap = new Map(qList.map(q => [q.id, q]));
 
   const depths: Record<string, number> = {};
@@ -81,9 +86,9 @@ export async function buildSemanticDashboard(filters: AnalyticsFilters, req?: Ad
     }
   }
 
-  const pigRows = ids.size
-    ? (await db.select().from(piggybank)).filter(e => ids.has(e.participantId))
-    : await db.select().from(piggybank);
+  const pigRows = idList.length
+    ? await db.select().from(piggybank).where(inArray(piggybank.participantId, idList))
+    : [];
   for (const e of pigRows) {
     if (!e.text?.trim()) continue;
     allOpenTexts.push(e.text);
@@ -162,7 +167,6 @@ export async function buildSemanticDashboard(filters: AnalyticsFilters, req?: Ad
   return {
     enabled: true,
     heuristicsOnly: true,
-    llmDeferred: 'LLM-слой отложен; используются эвристики и частотный анализ.',
     professionalShift: {
       summary: `Ранние дни (D1–2) vs поздние (D5–7): смещение тем от «${shiftCompare.earlyTop.slice(0, 3).map(t => t.token).join(', ') || '—'}» к «${shiftCompare.lateTop.slice(0, 3).map(t => t.token).join(', ') || '—'}».`,
       emergingThemes: shiftCompare.emerging,

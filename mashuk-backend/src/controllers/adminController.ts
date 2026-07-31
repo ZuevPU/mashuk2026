@@ -2015,9 +2015,15 @@ export const crudMaterials = {
   create: async (req: AdminRequest, res: Response) => {
     const shiftId = await resolveAdminShiftId(req);
     const kb = normalizeMaterialKbUnlock(req.body as Record<string, unknown>);
+    let tags = req.body.tags;
+    if (Array.isArray(tags)) {
+      const { ensureThematicTagRegistry } = await import('../services/thematicTagRegistry.js');
+      tags = await ensureThematicTagRegistry(tags as string[]);
+    }
     const [m] = await db.insert(materials).values({
       ...req.body,
       ...kb,
+      ...(tags !== undefined ? { tags } : {}),
       shiftId,
       isNew: req.body.isNew !== false,
       status: req.body.status || 'draft',
@@ -2027,7 +2033,12 @@ export const crudMaterials = {
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
     const kb = normalizeMaterialKbUnlock(req.body as Record<string, unknown>);
-    const [updated] = await db.update(materials).set({ ...req.body, ...kb }).where(eq(materials.id, id)).returning();
+    const patch = { ...req.body, ...kb } as Record<string, unknown>;
+    if (Array.isArray(patch.tags)) {
+      const { ensureThematicTagRegistry } = await import('../services/thematicTagRegistry.js');
+      patch.tags = await ensureThematicTagRegistry(patch.tags as string[]);
+    }
+    const [updated] = await db.update(materials).set(patch).where(eq(materials.id, id)).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ material: updated });
   },

@@ -75,3 +75,37 @@ export function extractTaskIdFromInput(input: string): string | null {
   const m = trimmed.match(/[?&]task=(\d+)/i);
   return m?.[1] ?? null;
 }
+
+/** Парсинг QR события: #/program?event=ID&qr=TOKEN или vk.me?ref=event_ID_TOKEN */
+export function parseEventQrScan(raw: string): { eventId: number; qrToken: string } | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const refMatch = trimmed.match(/(?:[?&]ref=|\/)event_(\d+)_([a-f0-9]+)/i)
+    || trimmed.match(/^event_(\d+)_([a-f0-9]+)$/i);
+  if (refMatch) {
+    const eventId = Number(refMatch[1]);
+    if (Number.isFinite(eventId) && eventId > 0) {
+      return { eventId, qrToken: refMatch[2] };
+    }
+  }
+
+  const qrToken = extractParticipantQrToken(trimmed);
+  let eventIdStr: string | null = null;
+  const hashIdx = trimmed.indexOf('#');
+  if (hashIdx >= 0) {
+    const after = trimmed.slice(hashIdx + 1);
+    const qIdx = after.indexOf('?');
+    if (qIdx >= 0) {
+      eventIdStr = new URLSearchParams(after.slice(qIdx + 1)).get('event');
+    }
+  }
+  if (!eventIdStr) {
+    const m = trimmed.match(/[?&]event=(\d+)/i);
+    eventIdStr = m?.[1] ?? null;
+  }
+  if (!qrToken || !eventIdStr) return null;
+  const eventId = Number(eventIdStr);
+  if (!Number.isFinite(eventId) || eventId <= 0) return null;
+  return { eventId, qrToken };
+}

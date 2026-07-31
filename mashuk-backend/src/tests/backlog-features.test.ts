@@ -18,7 +18,7 @@ describe('cohortFilters', () => {
   });
 });
 
-describe('gigachat embeddings fallback', () => {
+describe('heuristic token vectors', () => {
   it('cosineSimilarity identical vectors = 1', () => {
     const v = tokenVector('образование школа будущее');
     assert.ok(cosineSimilarity(v, v) > 0.99);

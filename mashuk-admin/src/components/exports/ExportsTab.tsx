@@ -59,7 +59,7 @@ function buildQuery(params: Record<string, string | undefined>): string {
 }
 
 export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
-  const { forumDay, direction, group } = useInsights();
+  const { forumDay, direction, group, ageCategory, activity } = useInsights();
   const [exportType, setExportType] = useState<string>('all');
   const [participantId, setParticipantId] = useState('');
   const [customOpen, setCustomOpen] = useState(false);
@@ -93,11 +93,15 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const filterQs = buildQuery({
     direction: direction || undefined,
     group: group || undefined,
+    ageCategory: ageCategory || undefined,
+    activity: activity || undefined,
   });
 
   const cohortParams = {
     direction: direction || undefined,
     group: group || undefined,
+    ageCategory: ageCategory || undefined,
+    activity: activity || undefined,
   };
 
   const downloadXlsx = (path: string, filename: string) =>

@@ -477,31 +477,6 @@ export const synthesizeMyOutcomes = async (req: ParticipantRequest, res: Respons
       res.status(404).json({ error: 'Not found' });
       return;
     }
-    const { llmProfileV2Enabled } = await import('../services/analytics/refreshScheduler.js');
-    if (llmProfileV2Enabled()) {
-      const { gigachatComplete, isGigachatConfigured } = await import('../services/gigachatService.js');
-      if (isGigachatConfigured()) {
-        const sample = bundle.userAnswers
-          .map(a => answerText(a.answerData))
-          .filter(Boolean)
-          .slice(0, 8)
-          .join('\n---\n');
-        const llm = await gigachatComplete(
-          `Сформируй 3–5 коротких итогов смены для участника форума по его ответам:\n${sample.slice(0, 2000)}`,
-          'Ты наставник. Буллеты по-русски, без markdown.',
-        );
-        if (llm) {
-          const bullets = llm.split(/\n+/).map(s => s.replace(/^[-*•\d.)]+\s*/, '').trim()).filter(Boolean).slice(0, 5);
-          if (bullets.length) {
-            await db.update(participants)
-              .set({ outcomesEdited: { bullets, generatedAt: new Date().toISOString(), source: 'llm' } })
-              .where(eq(participants.id, req.participant!.id));
-            res.json({ bullets, source: 'llm', configured: true });
-            return;
-          }
-        }
-      }
-    }
     const bullets = buildOutcomesHeuristic({
       answersCount: bundle.userAnswers.length,
       tasksApproved: bundle.userTasks.filter(t => t.status === 'approved').length,

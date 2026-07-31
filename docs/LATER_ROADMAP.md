@@ -4,30 +4,27 @@
 
 ## Multi-shift
 
-См. [`MULTI_SHIFT.md`](MULTI_SHIFT.md). Сделано: таблица `shifts`, resolve active, admin «Смены», copy/activate/sandbox clear, participant `(vkId, shiftId)`.
+См. [`MULTI_SHIFT.md`](MULTI_SHIFT.md). Сделано: таблица `shifts`, resolve active, admin «Смены», copy/activate/sandbox clear, participant `(vkId, shiftId)`, авторотация (`SHIFT_AUTO_ROTATE`), medals/levels `shift_id` в schema.
 
 Later (не в этом треке):
 
-- Авторотация смен по календарю без кнопки Activate.
 - Мульти-тенант нескольких форумов.
-- Каталог медалей / levels_config per-shift (сейчас глобальные).
+- Полный UI-каталог медалей / levels_config строго per-shift (schema есть).
 
-## Admin wave 4
+## Admin wave 4 — статус
 
-- Очередь push, preview шаблонов.
-- Матрица прав админов в UI.
-- Critical log tab.
-- Единый registry `thematic_tags`.
-- Статус «Опубликовано» вместо `includeInAnalytics`.
+Сделано: очередь push + preview, матрица прав, critical log, registry `thematic_tags` (+ upsert при сохранении событий/материалов), статус материалов `draft|published|archived` (analytics по `status`, без `includeInAnalytics`).
 
-## LLM / embeddings (этап 2)
+## Аналитика / QR
 
-- `GIGACHAT_API_KEY`, `LLM_PROFILE_V2`, `LLM_REFLECTION_BONUS_V2`.
-- Embeddings + LLM-фильтр для `club_matches`.
-- LLM-сводки в дашбордах 1–4.
+Сделано:
 
-## Прочее
+- Semantic v2 на **эвристиках** (`SEMANTIC_ANALYTICS_V2=true`) — без LLM.
+- QR участника → бот VK: печать QR события как `vk.me/club…?ref=event_<id>_<token>` при `VK_GROUP_ID`; Callback `POST /api/bot/vk`; мини-app deep link `#/program?event=&qr=` как fallback.
+- Отсроченный замер: шаблон + schedule + ingest ответов.
+- PDF итога смены: `GET /exports/shift-summary.pdf`.
 
-- ~~Автоматизация отсроченного замера 6–8 недель~~ — сделано: шаблон с участниками, schedule от конца смены, push tick; ingest ответов — later.
-- ~~PDF итога смены без построчной детализации~~ — сделано: `GET /exports/shift-summary.pdf`.
-- Полный сценарий QR участника → бот VK (сейчас: волонтёр `/volunteer` + deep link).
+## Прочее (later)
+
+- Среднее время в боте по направлениям/группам — нужна телеметрия сессий (сейчас только completion/activityRate).
+- Расширенная rating-analytics (опционально, фаза 4 геймификации).

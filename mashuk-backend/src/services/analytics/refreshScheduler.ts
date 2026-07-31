@@ -12,19 +12,6 @@ export function semanticV2Enabled(): boolean {
   return process.env.SEMANTIC_ANALYTICS_V2 === 'true';
 }
 
-export function llmProfileV2Enabled(): boolean {
-  return process.env.LLM_PROFILE_V2 === 'true';
-}
-
-export function llmReflectionBonusEnabled(): boolean {
-  return process.env.LLM_REFLECTION_BONUS_V2 === 'true';
-}
-
-export function semanticHeuristicsOnly(): boolean {
-  return process.env.SEMANTIC_ANALYTICS_V2_HEURISTICS_ONLY === 'true'
-    || process.env.SEMANTIC_ANALYTICS_V2_HEURISTICS_ONLY !== 'false';
-}
-
 export async function refreshAllAnalytics(): Promise<void> {
   await recalculateDailyStats();
 }

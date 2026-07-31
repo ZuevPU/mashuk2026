@@ -73,19 +73,7 @@
 
 ## Волна 4 — Пуши, админы, журнал, теги §13, черновики
 
-| Область | Цель |
-|---------|------|
-| **Пуши** | Очередь; шаблоны с плейсхолдерами; preview |
-| **Админы** | Матрица прав в UI |
-| **Журнал** | Critical log tab; фильтры |
-| **Теги §13** | Единый registry thematic tags |
-| **Сквозные черновики** | Убрать `includeInAnalytics` в пользу статуса «Опубликовано» |
-
-**Issue-шаблоны:**
-
-- `[admin-w4] Push queue + template placeholders`
-- `[admin-w4] Admin permissions matrix UI`
-- `[admin-w4] Unified publish status (drop includeInAnalytics)`
+**Принято в коде:** очередь push + preview, матрица прав, critical log, registry `thematic_tags` (события + материалы), analytics по `status` published (без `includeInAnalytics`).
 
 ## Multi-shift
 

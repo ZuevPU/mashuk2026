@@ -9,6 +9,7 @@ describe('analyticsQuery', () => {
     const q = parseAnalyticsQuery({ query: { mode: 'shift' } } as never);
     assert.equal(q.mode, 'shift');
     assert.equal(q.page, 1);
+    assert.equal(q.shiftId, null);
   });
 
   it('parseAnalyticsQuery clubId', () => {
