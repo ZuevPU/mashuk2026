@@ -1226,6 +1226,148 @@ body {
 .myq2 { background: var(--m-surface); border-radius: 10px; padding: 10px; margin-top: 8px; font-size: 11px; }
 .org-btn { background: #1A1714; color: #fff; border-radius: 12px; padding: 12px; text-align: center; font-size: 12px; font-weight: 700; cursor: pointer; margin-top: 12px; }
 
+/* Служба заботы Росмолодёжи — вкладка «Организаторам» */
+.m-rosmol-care {
+  margin-bottom: 16px;
+  padding: 16px;
+  border-radius: 16px;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 247, 242, 0.95) 100%);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 6px 20px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.m-rosmol-care-head {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.m-rosmol-care-logo {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 12px;
+  background: #fff;
+  padding: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.m-rosmol-care-head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.m-rosmol-care-title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--m-text-main);
+  line-height: 1.25;
+}
+
+.m-rosmol-care-lead {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #555;
+}
+
+.m-rosmol-care-contacts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.m-rosmol-contact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.m-rosmol-contact:active {
+  transform: scale(0.99);
+  background: #fff;
+  border-color: rgba(255, 85, 0, 0.25);
+}
+
+.m-rosmol-contact-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #888;
+}
+
+.m-rosmol-contact-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--m-accent);
+  letter-spacing: -0.01em;
+}
+
+.m-rosmol-care-details {
+  margin-top: 12px;
+  border-radius: 12px;
+  background: rgba(245, 240, 232, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.m-rosmol-care-summary {
+  padding: 12px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--m-text-main);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.m-rosmol-care-summary::-webkit-details-marker {
+  display: none;
+}
+
+.m-rosmol-care-summary::after {
+  content: '›';
+  float: right;
+  color: #aaa;
+  font-size: 16px;
+  transform: rotate(90deg);
+  transition: transform 0.2s ease;
+}
+
+.m-rosmol-care-details[open] .m-rosmol-care-summary::after {
+  transform: rotate(-90deg);
+}
+
+.m-rosmol-care-details-body {
+  padding: 0 14px 14px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #555;
+}
+
+.m-rosmol-care-details-body p {
+  margin: 0 0 10px;
+}
+
+.m-rosmol-care-details-body p:last-child {
+  margin-bottom: 0;
+}
+
 .ab-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
 .ab-track { flex: 1; background: var(--m-surface-alt); border-radius: 4px; height: 8px; }
 .ab-track-fill { background: var(--m-accent); height: 8px; border-radius: 4px; }

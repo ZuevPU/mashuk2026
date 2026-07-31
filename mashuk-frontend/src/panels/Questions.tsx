@@ -6,6 +6,7 @@ import { useAppModal } from '../App';
 import { QuestionAnswerForm } from '../components/questions/QuestionAnswerForm';
 import { EmptyState } from '../components/EmptyState';
 import { AnswerSuccessOverlay, type SubmitSuccessPayload, type AnswerConfirmationConfig } from '../components/questions/AnswerSuccessOverlay';
+import { RosmolCareServiceCard } from '../components/org/RosmolCareServiceCard';
 
 type ChatTab = 'reflect' | 'peer' | 'org';
 
@@ -610,6 +611,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
             <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
               Прямая линия к дирекции. Вопрос по программе, предложение, обратная связь — дирекция отвечает лично
             </div>
+            <RosmolCareServiceCard />
             {orgThreads.length > 0 ? (
               <>
                 <div className="rq-hdr"><span className="rq-hdr-t">Твои переписки · {orgThreads.length}</span></div>

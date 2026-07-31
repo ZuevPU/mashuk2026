@@ -14,6 +14,7 @@ import {
   SemanticView,
 } from './analyticsDashboardViews';
 import { CHART_HELP_RU, formatForumDay } from './chartRu';
+import { DashCard, DashScreenTitle, RoleMatrixGrid } from './dashboardUi';
 import { roleName } from '../onboarding/roleOptions';
 
 type ViewMode = 'today' | 'day' | 'shift' | 'compare';
@@ -379,7 +380,7 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
           <p className="adm-insights-availability">
             <span className="adm-insights-badge">Доступен с {catalogEntry.availabilityTier}</span>
             {meta?.semanticV2 === false && (dash === 'semantic' || dash === 'clubs') && (
-              <span className="adm-insights-warn" style={{ marginLeft: 8 }}>SEMANTIC_ANALYTICS_V2=false на сервере</span>
+              <span className="adm-insights-warn" style={{ marginLeft: 8 }}>Раздел ограничен настройками сервера</span>
             )}
             {updatedAt && (
               <span className="adm-muted" style={{ marginLeft: 8, fontSize: 12 }}>
@@ -396,26 +397,31 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
       </div>
 
       {dash === 'roles' && (
-        <div className="card adm-forum-block">
-          <h3>6-ролевая модель (2×3)</h3>
-          <p className="adm-muted" style={{ fontSize: 12 }}>
-            Единственная типология: Мышление · Действия · Люди × лидерский / организационный вектор.
-          </p>
-          {matrix != null ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, fontSize: 12 }}>
-              <div />
-              <div><strong>Мышление</strong></div>
-              <div><strong>Действия</strong></div>
-              <div><strong>Люди</strong></div>
-              <div>{catalog.find((r: { roleKey: string; name: string }) => r.roleKey === (matrix as any).leader?.thinking)?.name}</div>
-              <div>{catalog.find((r: { roleKey: string; name: string }) => r.roleKey === (matrix as any).leader?.actions)?.name}</div>
-              <div>{catalog.find((r: { roleKey: string; name: string }) => r.roleKey === (matrix as any).leader?.people)?.name}</div>
-              <div><em>Орг.</em></div>
-              <div>{catalog.find((r: { roleKey: string; name: string }) => r.roleKey === (matrix as any).org?.thinking)?.name}</div>
-              <div>{catalog.find((r: { roleKey: string; name: string }) => r.roleKey === (matrix as any).org?.actions)?.name}</div>
-              <div>{catalog.find((r: { roleKey: string; name: string }) => r.roleKey === (matrix as any).org?.people)?.name}</div>
-            </div>
-          ) : null}
+        <div className="adm-dash-stack">
+          <DashScreenTitle
+            title="Роли 2×3"
+            hint="Единственная типология: Мышление · Действия · Люди × лидерский / организационный вектор."
+          />
+          <DashCard title="6-ролевая модель">
+            {matrix != null ? (
+              <RoleMatrixGrid
+                cells={{
+                  leader: {
+                    thinking: catalog.find((r: { roleKey: string; name: string }) => r.roleKey === (matrix as any).leader?.thinking)?.name,
+                    actions: catalog.find((r: { roleKey: string; name: string }) => r.roleKey === (matrix as any).leader?.actions)?.name,
+                    people: catalog.find((r: { roleKey: string; name: string }) => r.roleKey === (matrix as any).leader?.people)?.name,
+                  },
+                  org: {
+                    thinking: catalog.find((r: { roleKey: string; name: string }) => r.roleKey === (matrix as any).org?.thinking)?.name,
+                    actions: catalog.find((r: { roleKey: string; name: string }) => r.roleKey === (matrix as any).org?.actions)?.name,
+                    people: catalog.find((r: { roleKey: string; name: string }) => r.roleKey === (matrix as any).org?.people)?.name,
+                  },
+                }}
+              />
+            ) : (
+              <p className="adm-muted" style={{ fontSize: 12 }}>Матрица ролей ещё не загружена из meta.</p>
+            )}
+          </DashCard>
         </div>
       )}
 

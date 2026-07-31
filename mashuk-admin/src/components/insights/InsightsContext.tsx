@@ -76,7 +76,9 @@ function readStored(): {
 } {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return { forumDay: '1', direction: '', group: '', ageCategory: '', activity: '', dash: 'pulse' };
+    if (!raw) {
+      return { forumDay: '1', direction: '', group: '', ageCategory: '', activity: '', dash: 'overview' };
+    }
     const p = JSON.parse(raw);
     return {
       forumDay: String(p.forumDay ?? '1'),
@@ -84,10 +86,10 @@ function readStored(): {
       group: String(p.group ?? ''),
       ageCategory: String(p.ageCategory ?? ''),
       activity: String(p.activity ?? ''),
-      dash: (p.dash as DashboardId) || 'pulse',
+      dash: (p.dash as DashboardId) || 'overview',
     };
   } catch {
-    return { forumDay: '1', direction: '', group: '', ageCategory: '', activity: '', dash: 'pulse' };
+    return { forumDay: '1', direction: '', group: '', ageCategory: '', activity: '', dash: 'overview' };
   }
 }
 
