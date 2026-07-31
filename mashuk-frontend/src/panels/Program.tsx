@@ -8,7 +8,17 @@ import { TimelineEvent } from '../components/program/TimelineEvent';
 import { KnowledgeBasePanel } from '../components/program/KnowledgeBase';
 import { EmptyState } from '../components/EmptyState';
 import { apiGet, apiPost, ApiError } from '../api/client';
-type DayStatus = 'done' | 'today' | 'future';
+type DayStatus = 'done' | 'today' | 'future' | 'locked';
+
+interface ProgramChildEvent {
+  id: number;
+  title: string;
+  place?: string | null;
+  time: string;
+  endTime?: string;
+  hasSubSessions?: boolean;
+  children?: ProgramChildEvent[];
+}
 
 interface ProgramEvent {
   id: number;
@@ -21,7 +31,7 @@ interface ProgramEvent {
   tags?: string[];
   status: 'past' | 'now' | 'future';
   hasSubSessions?: boolean;
-  children?: { id: number; title: string; place?: string; time: string; endTime?: string }[];
+  children?: ProgramChildEvent[];
 }
 
 interface ProgramSlot {
@@ -45,6 +55,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dayPublished, setDayPublished] = useState(true);
+  const [publishedDays, setPublishedDays] = useState<number[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<ProgramEvent | null>(null);
   const [expandedParents, setExpandedParents] = useState<Record<number, boolean>>({});
 
@@ -61,7 +72,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
       apiGet<any>(`/program/knowledge-base?day=${activeDay}`),
     ]).then(([prog, rec, knowledge]) => {
       setSlots(prog.slots || []);
-      setDayPublished(prog.dayPublished !== false);
+      setDayPublished(prog.dayPublished === true);
       setRecommendations(rec.recommendations || []);
       setRecMeta({
         interests: rec.interests || [],
@@ -74,11 +85,12 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   }, [activeDay]);
 
   useEffect(() => {
-    apiGet<{ currentDay: number; totalDays: number }>('/program/settings')
+    apiGet<{ currentDay: number; totalDays: number; publishedDays?: number[] }>('/program/settings')
       .then(s => {
         setCurrentDay(s.currentDay);
         setTotalDays(s.totalDays);
         setActiveDay(s.currentDay);
+        setPublishedDays(s.publishedDays || []);
       })
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : 'Не удалось загрузить настройки программы');
@@ -91,33 +103,93 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   useEffect(() => {
     loadProgram();
   }, [loadProgram]);
+  const publishedSet = new Set(publishedDays);
   const days = Array.from({ length: totalDays }, (_, i) => {
     const dayNum = i + 1;
     let status: DayStatus = 'future';
     if (dayNum < currentDay) status = 'done';
     else if (dayNum === currentDay) status = 'today';
+    const scheduleLocked = activeTab === 'sched' && dayNum > currentDay && !publishedSet.has(dayNum);
+    if (scheduleLocked) status = 'locked';
     const kbMeta = kbDays.find(d => d.day === dayNum);
     const kbSub = activeTab === 'kb' && kbMeta?.switcherLabel
       ? kbMeta.switcherLabel
       : (dayNum < currentDay ? '✓' : dayNum === currentDay ? '→' : '🔒');
     const weekday = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс', 'пн · отъезд'][i] || '';
+    const schedSub = scheduleLocked
+      ? 'скоро'
+      : (dayNum < currentDay ? `✓ ${weekday}` : weekday);
     return {
       id: dayNum,
       title: `День ${dayNum}`,
-      subtitle: activeTab === 'kb' ? kbSub : (dayNum < currentDay ? `✓ ${weekday}` : weekday),
+      subtitle: activeTab === 'kb' ? kbSub : schedSub,
       status: activeTab === 'kb' && kbMeta?.kbStatus === 'locked' && dayNum > currentDay ? 'locked' as const : status,
     };
   });
 
+  const countNested = (nodes: ProgramChildEvent[] | undefined): number => {
+    if (!nodes?.length) return 0;
+    return nodes.reduce((n, ch) => n + 1 + countNested(ch.children), 0);
+  };
+
+  const renderChildTree = (ch: ProgramChildEvent, root: ProgramEvent, depth: number) => {
+    const hasKids = (ch.children?.length ?? 0) > 0;
+    const expanded = expandedParents[ch.id];
+    const timeLabel = ch.time || (ch.endTime ? `–${ch.endTime}` : '·');
+    return (
+      <React.Fragment key={ch.id}>
+        <div
+          className="m-tl-row future"
+          style={{
+            padding: '8px 12px',
+            marginTop: 4,
+            marginLeft: Math.max(0, (depth - 1) * 12),
+            background: depth >= 2 ? '#F5F0E8' : '#FAFAF8',
+            borderRadius: 8,
+            cursor: 'pointer',
+          }}
+          onClick={() => {
+            if (hasKids) toggleParent(ch.id);
+            else {
+              setSelectedEvent({
+                ...root,
+                id: ch.id,
+                title: ch.title,
+                place: ch.place || undefined,
+                time: ch.time,
+                endTime: ch.endTime,
+                subtitle: [ch.place, ch.title].filter(Boolean).join(' · '),
+                hasSubSessions: false,
+                children: [],
+              });
+            }
+          }}
+        >
+          <div className="m-tl-time" style={{ fontSize: 11 }}>{timeLabel}</div>
+          <div className="m-tl-body">
+            <div className="m-tl-title" style={{ fontSize: depth >= 2 ? 12 : 13 }}>
+              {ch.title}
+              {hasKids && !expanded ? ` · ${ch.children!.length}` : ''}
+            </div>
+            {ch.place && <div className="m-tl-sub">{ch.place}</div>}
+          </div>
+          <div className="m-tl-arr">{hasKids ? (expanded ? '▼' : '▶') : '›'}</div>
+        </div>
+        {hasKids && expanded && ch.children!.map(grand => renderChildTree(grand, root, depth + 1))}
+      </React.Fragment>
+    );
+  };
+
   const renderEvent = (e: ProgramEvent, nested?: boolean) => {
-    const hasChildren = e.hasSubSessions && (e.children?.length ?? 0) > 0;
+    const hasChildren = (e.children?.length ?? 0) > 0;
     const expanded = expandedParents[e.id];
+    const nestedCount = countNested(e.children);
     return (
       <React.Fragment key={e.id}>
         <TimelineEvent
           time={e.time}
           title={e.title}
-          subtitle={hasChildren && !expanded ? `${e.subtitle} · ${e.children!.length} тем` : e.subtitle}
+          subtitle={hasChildren && !expanded ? `${e.subtitle} · ${nestedCount} тем` : e.subtitle}
           tags={e.tags}
           status={e.status}
           onClick={() => {
@@ -130,31 +202,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
         />
         {hasChildren && expanded && (
           <div className="m-tl-children" style={{ marginLeft: nested ? 8 : 24, marginBottom: 8 }}>
-            {e.children!.map(ch => (
-              <div
-                key={ch.id}
-                className="m-tl-row future"
-                style={{ padding: '8px 12px', marginTop: 4, background: '#FAFAF8', borderRadius: 8, cursor: 'pointer' }}
-                onClick={() => setSelectedEvent({
-                  ...e,
-                  id: ch.id,
-                  title: ch.title,
-                  place: ch.place,
-                  time: ch.time,
-                  endTime: ch.endTime,
-                  subtitle: [ch.place, ch.title].filter(Boolean).join(' · '),
-                  hasSubSessions: false,
-                  children: [],
-                })}
-              >
-                <div className="m-tl-time" style={{ fontSize: 11 }}>{ch.time}</div>
-                <div className="m-tl-body">
-                  <div className="m-tl-title" style={{ fontSize: 13 }}>{ch.title}</div>
-                  {ch.place && <div className="m-tl-sub">{ch.place}</div>}
-                </div>
-                <div className="m-tl-arr">›</div>
-              </div>
-            ))}
+            {e.children!.map(ch => renderChildTree(ch, e, 1))}
           </div>
         )}
       </React.Fragment>
@@ -258,8 +306,8 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
                     <span>На этот день ещё нет опубликованных событий — блок появится, когда расписание выйдет.</span>
                   ) : (
                     <span>
-                      Совпадений с вашими интересами пока нет: у событий дня должны быть тематические теги из онбординга
-                      (их проставляет организатор в программе). Ваши темы — в профиле, блок «Мои интересы».
+                      Здесь будут отображаться события программы, которые совпадают с вашими интересами.
+                      Когда такие совпадения появятся, мы покажем их в этом разделе.
                     </span>
                   )}
                 </div>
@@ -282,10 +330,10 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
                 {slots.length === 0 && (
                   <EmptyState
                     icon="📅"
-                    title={!dayPublished && activeDay > currentDay ? 'Расписание ещё не опубликовано' : 'Расписание пусто'}
+                    title={!dayPublished ? 'Расписание ещё не опубликовано' : 'Расписание пусто'}
                     subtitle={
-                      !dayPublished && activeDay > currentDay
-                        ? `Расписание появится в конце дня ${activeDay - 1}`
+                      !dayPublished
+                        ? 'Организаторы уже готовят программу — откроем расписание этого дня, когда оно будет опубликовано.'
                         : `События для дня ${activeDay} появятся позже`
                     }
                   />

@@ -19,15 +19,24 @@ import {
 } from '../services/touchpointProgress.js';
 import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
 import { resolveActiveShiftId } from '../services/shiftService.js';
+import { clusterOverlappingTimedItems, formatSlotLabel } from '../services/programSlots.js';
 
 export const getProgramSettings = async (req: ParticipantRequest, res: Response): Promise<void> => {
   const settings = await getForumSettings();
+  const shiftId = await resolveActiveShiftId();
+  const publishedRows = await db.select({
+    dayNumber: scheduleDays.dayNumber,
+  }).from(scheduleDays).where(and(
+    eq(scheduleDays.shiftId, shiftId),
+    eq(scheduleDays.isPublished, true),
+  ));
   res.json({
     currentDay: settings.currentDay ?? 1,
     totalDays: settings.totalDays ?? 8,
     recommendationThreshold: settings.recommendationThreshold ?? 1,
     sectionsVisibility: settings.sectionsVisibility ?? {},
     startDate: settings.startDate ?? null,
+    publishedDays: publishedRows.map(r => r.dayNumber).sort((a, b) => a - b),
   });
 };
 
@@ -36,13 +45,12 @@ export async function countTouchpointsForDay(participantId: number, dayNumber: n
   completed: number;
   total: number;
 }> {
-  const now = new Date();
   const shiftId = await resolveActiveShiftId();
+  // Include all published day questions (even future windows) so answered twins still count
   const published = await db.select().from(questions)
     .where(and(
       eq(questions.shiftId, shiftId),
       eq(questions.status, 'published'),
-      or(isNull(questions.publishTime), lte(questions.publishTime, now)),
     ));
   const dayQuestions = published.filter(q => isTouchpointQuestionForForumDay(q, dayNumber));
   const participantAnswers = await db.select().from(answers)
@@ -205,31 +213,27 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
       eq(scheduleDays.shiftId, shiftId),
     )).limit(1);
 
+    const dayIsLive = dayMeta?.isPublished === true;
     const cacheKey = `events_day_${shiftId}_${day}_pub`;
     let list = cache.get(cacheKey) as typeof events.$inferSelect[] | undefined;
 
-    if (!list) {
-      // Participant sees events only after schedule day publish (day_published) + isPublished
-      list = await db.select().from(events)
-        .where(and(
-          eq(events.shiftId, shiftId),
-          eq(events.dayNumber, day),
-          eq(events.isPublished, true),
-          eq(events.dayPublished, true),
-        ))
-        .orderBy(asc(events.startTime));
-      // Fallback: if schedule_days row missing (pre-publish workflow), show classic isPublished events
-      if (list.length === 0 && !dayMeta) {
+    if (list === undefined) {
+      // Strict: participants see a day only after Forum/Program «Опубликовать день»
+      if (!dayIsLive) {
+        list = [];
+      } else {
         list = await db.select().from(events)
           .where(and(
             eq(events.shiftId, shiftId),
             eq(events.dayNumber, day),
             eq(events.isPublished, true),
+            eq(events.dayPublished, true),
           ))
           .orderBy(asc(events.startTime));
       }
       cache.set(cacheKey, list);
     }
+    const eventsList = list ?? [];
 
     const attendance = await db.select().from(eventAttendance)
       .where(eq(eventAttendance.participantId, req.participant!.id));
@@ -242,19 +246,53 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
       startDate: settings.startDate ?? null,
       dayCalendarDateKey: calendarDateKeyFromTimestamp(dayMeta?.calendarDate ?? null),
     };
-    const mapEvent = (e: typeof list[0], children: typeof list = []) => {
+    type NestedProgramChild = {
+      id: number;
+      title: string;
+      place: string | null;
+      time: string;
+      endTime: string;
+      hasSubSessions: boolean;
+      children: NestedProgramChild[];
+    };
+
+    const pid = req.participant!.directionId;
+    const visible = eventsList.filter(e => {
+      if (e.audienceType === 'direction' && e.audienceDirectionId && pid && e.audienceDirectionId !== pid) {
+        return false;
+      }
+      return true;
+    });
+    const childByParent = new Map<number, typeof eventsList>();
+    for (const e of visible) {
+      if (e.parentEventId) {
+        const arr = childByParent.get(e.parentEventId) || [];
+        arr.push(e);
+        childByParent.set(e.parentEventId, arr);
+      }
+    }
+    const topLevel = visible.filter(e => !e.parentEventId);
+    const sortEvents = (arr: typeof eventsList) =>
+      [...arr].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id);
+
+    const mapNestedChild = (c: typeof eventsList[0]): NestedProgramChild => {
+      const iv = resolveEventInterval(c, scheduleContext);
+      const nested = sortEvents(childByParent.get(c.id) || []).map(mapNestedChild);
+      return {
+        id: c.id,
+        title: c.title,
+        place: c.place,
+        time: c.timeSlot ? formatTime(iv.start) : '',
+        endTime: c.timeSlot ? formatTime(iv.end) : '',
+        hasSubSessions: nested.length > 0 || c.hasSubSessions === true,
+        children: nested,
+      };
+    };
+
+    const mapEvent = (e: typeof eventsList[0]) => {
       const { start, end } = resolveEventInterval(e, scheduleContext);
       const status = getEventLiveStatus(day, liveScheduleDay, start, end, now);
-      const childMapped = children.map(c => {
-        const iv = resolveEventInterval(c, settings);
-        return {
-          id: c.id,
-          title: c.title,
-          place: c.place,
-          time: formatTime(iv.start),
-          endTime: formatTime(iv.end),
-        };
-      });
+      const childMapped = sortEvents(childByParent.get(e.id) || []).map(mapNestedChild);
 
       return {
         id: e.id,
@@ -268,46 +306,35 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
         timeSlot: e.timeSlot ?? formatTime(start),
         status,
         attended: attendedIds.has(e.id),
-        hasSubSessions: e.hasSubSessions === true,
+        hasSubSessions: childMapped.length > 0 || e.hasSubSessions === true,
         children: childMapped,
       };
     };
 
-    const pid = req.participant!.directionId;
-    const visible = list.filter(e => {
-      if (e.audienceType === 'direction' && e.audienceDirectionId && pid && e.audienceDirectionId !== pid) {
-        return false;
-      }
-      return true;
+    const timed = topLevel.map(e => {
+      const iv = resolveEventInterval(e, scheduleContext);
+      return { item: mapEvent(e), start: iv.start, end: iv.end };
+    }).filter((row): row is { item: ReturnType<typeof mapEvent>; start: Date; end: Date | null } => !!row.start);
+
+    const clusters = clusterOverlappingTimedItems(timed);
+    const slots = clusters.map(cluster => {
+      const events = cluster.map(c => c.item);
+      const starts = cluster.map(c => c.start.getTime());
+      const ends = cluster.map(c => (c.end ? c.end.getTime() : c.start.getTime()));
+      const spanStart = new Date(Math.min(...starts));
+      const spanEnd = new Date(Math.max(...ends));
+      const fallback = events[0]?.timeSlot || events[0]?.time || '';
+      return {
+        timeSlot: formatSlotLabel(spanStart, cluster.length === 1 ? cluster[0].end : spanEnd, fallback),
+        events,
+        parallel: events.length > 1,
+      };
     });
-    const childByParent = new Map<number, typeof list>();
-    for (const e of visible) {
-      if (e.parentEventId) {
-        const arr = childByParent.get(e.parentEventId) || [];
-        arr.push(e);
-        childByParent.set(e.parentEventId, arr);
-      }
-    }
-    const topLevel = visible.filter(e => !e.parentEventId);
-
-    const mapped = topLevel.map(e => mapEvent(e, (childByParent.get(e.id) || []).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))));
-    const slotMap = new Map<string, typeof mapped>();
-    for (const ev of mapped) {
-      const slot = ev.timeSlot || ev.time;
-      if (!slotMap.has(slot)) slotMap.set(slot, []);
-      slotMap.get(slot)!.push(ev);
-    }
-
-    const slots = Array.from(slotMap.entries()).map(([timeSlot, slotEvents]) => ({
-      timeSlot,
-      events: slotEvents,
-      parallel: slotEvents.length > 1,
-    }));
 
     res.json({
       day,
-      dayPublished: dayMeta?.isPublished === true || (!dayMeta && list.length > 0),
-      events: mapped,
+      dayPublished: dayIsLive,
+      events: timed.map(t => t.item),
       slots,
     });
   } catch (error) {
@@ -328,30 +355,20 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
     const interestSet = new Set(interests.map(norm));
 
     const shiftId = await resolveActiveShiftId();
-    const list = await db.select().from(events)
-      .where(and(
-        eq(events.shiftId, shiftId),
-        eq(events.dayNumber, day),
-        eq(events.isPublished, true),
-        eq(events.dayPublished, true),
-      ));
-
-    let eventList = list;
-    if (eventList.length === 0) {
-      const [dayMeta] = await db.select().from(scheduleDays).where(and(
-        eq(scheduleDays.dayNumber, day),
-        eq(scheduleDays.shiftId, shiftId),
-      )).limit(1);
-      if (!dayMeta) {
-        eventList = await db.select().from(events)
-          .where(and(
-            eq(events.shiftId, shiftId),
-            eq(events.dayNumber, day),
-            eq(events.isPublished, true),
-          ))
-          .orderBy(asc(events.startTime));
-      }
-    }
+    const [dayMeta] = await db.select().from(scheduleDays).where(and(
+      eq(scheduleDays.dayNumber, day),
+      eq(scheduleDays.shiftId, shiftId),
+    )).limit(1);
+    const dayIsLive = dayMeta?.isPublished === true;
+    const eventList = dayIsLive
+      ? await db.select().from(events)
+        .where(and(
+          eq(events.shiftId, shiftId),
+          eq(events.dayNumber, day),
+          eq(events.isPublished, true),
+          eq(events.dayPublished, true),
+        ))
+      : [];
 
     const scored = eventList.map(e => {
       const tags = (e.tags as string[]) || [];

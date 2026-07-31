@@ -25,6 +25,17 @@ const NOMINATIONS = [
   'sport', 'creative', 'media', 'education', 'culture', 'volunteer', 'team', 'general',
 ] as const;
 
+const NOMINATION_LABELS: Record<string, string> = {
+  sport: 'Спорт',
+  creative: 'Креатив',
+  media: 'Медиа',
+  education: 'Образование',
+  culture: 'Культура',
+  volunteer: 'Волонтёрство',
+  team: 'Командность',
+  general: 'Общий зачёт',
+};
+
 const CROSS_FIELDS = [
   { ru: 'ФИО', key: 'full_name' },
   { ru: 'Направление', key: 'direction' },
@@ -55,6 +66,8 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [historyKey, setHistoryKey] = useState(0);
   const [textOnly, setTextOnly] = useState(false);
   const [nominationKey, setNominationKey] = useState<string>('sport');
+  const [nomScope, setNomScope] = useState<'shift' | 'day'>('shift');
+  const [medalScope, setMedalScope] = useState<'shift' | 'day'>('shift');
   const [delayedStatus, setDelayedStatus] = useState<string>('');
 
   useEffect(() => {
@@ -288,9 +301,9 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           <tbody>
             <tr>
               <td>Рейтинг за день</td>
-              <td className="adm-muted">Игропрактик · 1 строка = участник</td>
+              <td className="adm-muted">Игропрактик · сводка + участники</td>
               <td>D{forumDay}</td>
-              <td>
+              <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="adm-btn adm-btn-primary"
@@ -303,21 +316,122 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                     }, `rating_day_${forumDay}.xlsx`)
                   }
                 >
-                  Скачать XLSX
+                  XLSX
+                </button>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-secondary"
+                  onClick={() => downloadCsv(`/exports/rating/day?day=${forumDay}&format=csv`, `leaderboard_day${forumDay}.csv`)}
+                >
+                  CSV
                 </button>
               </td>
             </tr>
             <tr>
               <td>Рейтинг смены</td>
-              <td className="adm-muted">Игропрактик · 1 строка = участник</td>
+              <td className="adm-muted">Игропрактик · сводка + участники</td>
               <td><span className="adm-muted">Вся смена</span></td>
-              <td>
+              <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="adm-btn adm-btn-primary"
-                  onClick={() => downloadCsv('/exports/rating/shift', 'leaderboard_shift.csv')}
+                  onClick={() => downloadCsv('/exports/rating/shift?format=csv', 'leaderboard_shift.csv')}
                 >
-                  Скачать CSV
+                  CSV
+                </button>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-secondary"
+                  onClick={() => downloadXlsx('/exports/rating/shift?format=xlsx', 'leaderboard_shift.xlsx')}
+                >
+                  XLSX
+                </button>
+              </td>
+            </tr>
+            <tr>
+              <td>Номинация</td>
+              <td className="adm-muted">Рейтинг по одной номинации</td>
+              <td>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <select className="adm-input" value={nominationKey} onChange={e => setNominationKey(e.target.value)}>
+                    {NOMINATIONS.map(n => <option key={n} value={n}>{NOMINATION_LABELS[n] ?? n}</option>)}
+                  </select>
+                  <select className="adm-input" value={nomScope} onChange={e => setNomScope(e.target.value as 'shift' | 'day')}>
+                    <option value="shift">Смена</option>
+                    <option value="day">День</option>
+                  </select>
+                </div>
+              </td>
+              <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-primary"
+                  onClick={() => {
+                    const q = buildQuery({
+                      scope: nomScope,
+                      day: nomScope === 'day' ? forumDay : undefined,
+                      format: 'csv',
+                    });
+                    downloadCsv(`/exports/rating/nominations/${nominationKey}${q}`, `nomination_${nominationKey}.csv`);
+                  }}
+                >
+                  CSV
+                </button>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-secondary"
+                  onClick={() => {
+                    const q = buildQuery({
+                      scope: nomScope,
+                      day: nomScope === 'day' ? forumDay : undefined,
+                      format: 'xlsx',
+                    });
+                    downloadXlsx(`/exports/rating/nominations/${nominationKey}${q}`, `nomination_${nominationKey}.xlsx`);
+                  }}
+                >
+                  XLSX
+                </button>
+              </td>
+            </tr>
+            <tr>
+              <td>Рейтинг по медалям</td>
+              <td className="adm-muted">Топ по количеству медалей</td>
+              <td>
+                <select className="adm-input" value={medalScope} onChange={e => setMedalScope(e.target.value as 'shift' | 'day')}>
+                  <option value="shift">Смена</option>
+                  <option value="day">День D{forumDay}</option>
+                </select>
+              </td>
+              <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-primary"
+                  onClick={() => {
+                    const q = buildQuery({
+                      scope: medalScope,
+                      day: medalScope === 'day' ? forumDay : undefined,
+                      medalMode: 'count',
+                      format: 'csv',
+                    });
+                    downloadCsv(`/exports/rating/medals${q}`, 'medal_leaderboard.csv');
+                  }}
+                >
+                  CSV
+                </button>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-secondary"
+                  onClick={() => {
+                    const q = buildQuery({
+                      scope: medalScope,
+                      day: medalScope === 'day' ? forumDay : undefined,
+                      medalMode: 'count',
+                      format: 'xlsx',
+                    });
+                    downloadXlsx(`/exports/rating/medals${q}`, 'medal_leaderboard.xlsx');
+                  }}
+                >
+                  XLSX
                 </button>
               </td>
             </tr>
@@ -350,8 +464,8 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                 <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadXlsx('/exports/task-submissions', 'task_submissions.xlsx')}>
                   Заявки
                 </button>
-                <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadXlsx('/exports/medals?format=xlsx', 'medals.xlsx')}>
-                  Медали
+                <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadXlsx('/exports/medals?format=xlsx', 'medals_journal.xlsx')}>
+                  Журнал медалей
                 </button>
                 <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadCsv('/exports/points-log', 'points_log.csv')}>
                   Журнал баллов
@@ -418,12 +532,6 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           </button>
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadXlsx('/exports/tasks-catalog', 'tasks_catalog.xlsx')}>
             Каталог заданий
-          </button>
-          <select className="adm-input" value={nominationKey} onChange={e => setNominationKey(e.target.value)}>
-            {NOMINATIONS.map(n => <option key={n} value={n}>{n}</option>)}
-          </select>
-          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadCsv(`/exports/rating/nominations/${nominationKey}`, `nomination_${nominationKey}.csv`)}>
-            Номинация
           </button>
           <label className="adm-muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <input type="checkbox" checked={textOnly} onChange={e => setTextOnly(e.target.checked)} />

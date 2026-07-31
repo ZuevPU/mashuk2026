@@ -103,25 +103,25 @@ export async function runSeed() {
     ]);
 
     await db.insert(taskCategories).values([
-      { name: 'Образование', iconKey: 'education', sortOrder: 1 },
-      { name: 'Полезные знакомства/общение', iconKey: 'network', sortOrder: 2 },
-      { name: 'Медиа', iconKey: 'media', sortOrder: 3 },
-      { name: 'Рефлексия', iconKey: 'reflection', sortOrder: 4 },
-      { name: 'Командная работа', iconKey: 'team', sortOrder: 5 },
-      { name: 'Организация', iconKey: 'org', sortOrder: 6 },
-      { name: 'Направление', iconKey: 'direction', sortOrder: 7 },
+      { name: 'Образовательная программа', iconKey: 'education', sortOrder: 1 },
+      { name: 'Культурная программа', iconKey: 'culture', sortOrder: 2 },
+      { name: 'Спорт', iconKey: 'sport', sortOrder: 3 },
+      { name: 'Полезные знакомства/общение', iconKey: 'network', sortOrder: 4 },
+      { name: 'Групповые активности', iconKey: 'team', sortOrder: 5 },
+      { name: 'Креатив', iconKey: 'creative', sortOrder: 6 },
+      { name: 'Медиа/соцсети', iconKey: 'media', sortOrder: 7 },
       { name: 'Волонтёрство', iconKey: 'volunteer', sortOrder: 8 },
-      { name: 'Творчество', iconKey: 'creative', sortOrder: 9 },
-      { name: 'Активность', iconKey: 'activity', sortOrder: 10 },
-      { name: 'Прочее', iconKey: 'other', sortOrder: 11 },
+      { name: 'Организация активности', iconKey: 'org', sortOrder: 9 },
+      { name: 'Полезные выезды', iconKey: 'trip', sortOrder: 10 },
+      { name: 'Инсайты и рефлексия', iconKey: 'insight', sortOrder: 11 },
     ]).onConflictDoNothing({ target: taskCategories.name });
 
     const cats = await db.select().from(taskCategories);
     const catByName = (n: string) => cats.find(c => c.name === n)?.id;
     const networkingCat = catByName('Полезные знакомства/общение');
-    const mediaCat = catByName('Медиа');
-    const eduCat = catByName('Образование');
-    const orgCat = catByName('Организация');
+    const mediaCat = catByName('Медиа/соцсети') ?? catByName('Медиа');
+    const eduCat = catByName('Образовательная программа') ?? catByName('Образование');
+    const orgCat = catByName('Организация активности') ?? catByName('Организация');
 
     await db.insert(tasks).values([
       {
@@ -141,7 +141,7 @@ export async function runSeed() {
       {
         shiftId,
         title: 'Напиши пост о форуме',
-        category: 'Медиа',
+        category: 'Медиа/соцсети',
         categoryId: mediaCat,
         points: 30,
         dayNumber: 1,
@@ -156,7 +156,7 @@ export async function runSeed() {
       {
         shiftId,
         title: 'Зафиксируй идею эксперимента',
-        category: 'Образование',
+        category: 'Образовательная программа',
         categoryId: eduCat,
         points: 25,
         dayNumber: 3,
@@ -170,7 +170,7 @@ export async function runSeed() {
       {
         shiftId,
         title: 'Скан QR на площадке',
-        category: 'Организация',
+        category: 'Организация активности',
         categoryId: orgCat,
         points: 15,
         dayNumber: 2,
@@ -317,29 +317,32 @@ export async function runSeed() {
       .where(eq(forumSettings.id, settingsRow.id));
   }
   const existingTouch = await db.select().from(questions);
-  const hasTemplate = existingTouch.some(q => q.title === 'Утренняя проверка состояния' && q.dayNumber === 1);
-  if (!hasTemplate) {
-    for (let day = 1; day <= 7; day++) {
-      for (const slot of TOUCHPOINT_SLOTS) {
-        const already = existingTouch.find(q => q.dayNumber === day && q.title === slot.title);
-        if (already) continue;
-        const { publishTime, closeTime } = windowsForDay(startForWindows, day, slot);
-        await db.insert(questions).values({
-          shiftId,
-          title: slot.title,
-          text: slot.text,
-          type: slot.type,
-          block: slot.block,
-          status: 'published',
-          publishTime,
-          closeTime,
-          points: slot.points,
-          dayNumber: day,
-          timePoint: slot.timePoint,
-        });
-      }
+  let touchFilled = 0;
+  for (let day = 1; day <= 7; day++) {
+    for (const slot of TOUCHPOINT_SLOTS) {
+      const already = existingTouch.find(q =>
+        q.shiftId === shiftId && q.dayNumber === day && q.title === slot.title,
+      );
+      if (already) continue;
+      const { publishTime, closeTime } = windowsForDay(startForWindows, day, slot);
+      await db.insert(questions).values({
+        shiftId,
+        title: slot.title,
+        text: slot.text,
+        type: slot.type,
+        block: slot.block,
+        status: 'published',
+        publishTime,
+        closeTime,
+        points: slot.points,
+        dayNumber: day,
+        timePoint: slot.timePoint,
+      });
+      touchFilled++;
     }
-    console.log('Touchpoint template 7×7 seeded (idempotent).');
+  }
+  if (touchFilled > 0) {
+    console.log(`Touchpoint template 7×7: filled ${touchFilled} missing questions.`);
   }
 
   const [testParticipant] = await db.select().from(participants).where(and(

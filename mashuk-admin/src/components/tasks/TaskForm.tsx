@@ -2,16 +2,21 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { ProgramPlace } from '../program/types';
 import { TaskParticipantPreview } from './TaskParticipantPreview';
 import {
+  CATALOG_STATUS_OPTIONS,
   CONFIRMATION_METHOD_OPTIONS,
   NOMINATION_OPTIONS,
+  TASK_KIND_OPTIONS,
+  type MedalOption,
   type TaskCategory,
   type TaskDraft,
+  type TaskKind,
 } from './types';
 
 type Props = {
   draft: TaskDraft;
   categories: TaskCategory[];
   places: ProgramPlace[];
+  medals: MedalOption[];
   totalDays: number;
   isNew: boolean;
   editingKey: string | number;
@@ -28,6 +33,7 @@ export function TaskForm({
   draft,
   categories,
   places,
+  medals,
   totalDays,
   isNew,
   editingKey,
@@ -60,11 +66,26 @@ export function TaskForm({
     onChange({
       confirmationMethods: next,
       requiresModeration: next.includes('moderator'),
-      scopeType: next.includes('team') ? 'team' : draft.scopeType,
+      taskKind: next.includes('team') ? 'team' : draft.taskKind === 'team' ? 'once' : draft.taskKind,
+      scopeType: next.includes('team') ? 'team' : 'individual',
     });
   };
 
-  const execExec = (executionType: string) => onChange({ executionType });
+  const setTaskKind = (kind: TaskKind) => {
+    if (kind === 'team') {
+      const methods = draft.confirmationMethods.includes('team')
+        ? draft.confirmationMethods
+        : [...draft.confirmationMethods, 'team'];
+      onChange({ taskKind: 'team', scopeType: 'team', executionType: 'once', confirmationMethods: methods });
+      return;
+    }
+    onChange({
+      taskKind: kind,
+      scopeType: 'individual',
+      executionType: kind,
+      confirmationMethods: draft.confirmationMethods.filter(x => x !== 'team'),
+    });
+  };
 
   return (
     <div className="card adm-task-form">
@@ -95,7 +116,18 @@ export function TaskForm({
       </label>
 
       <label className="adm-field">
-        <span className="adm-label">Описание (rich text)</span>
+        <span className="adm-label">Краткое описание</span>
+        <textarea
+          className="adm-input"
+          rows={2}
+          value={draft.shortDescription}
+          onChange={e => onChange({ shortDescription: e.target.value })}
+          placeholder="1–2 предложения для карточки в списке"
+        />
+      </label>
+
+      <label className="adm-field">
+        <span className="adm-label">Полное условие (rich text)</span>
         <div className="adm-rich-toolbar">
           <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => document.execCommand('bold')}>B</button>
           <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => document.execCommand('insertUnorderedList')}>•</button>
@@ -131,10 +163,11 @@ export function TaskForm({
 
       <div className="adm-forum-grid-2">
         <label className="adm-field">
-          <span className="adm-label">Тип</span>
-          <select className="adm-input" value={draft.scopeType} onChange={e => onChange({ scopeType: e.target.value })}>
-            <option value="individual">Индивидуальное</option>
-            <option value="team">Командное</option>
+          <span className="adm-label">Тип задания</span>
+          <select className="adm-input" value={draft.taskKind} onChange={e => setTaskKind(e.target.value as TaskKind)}>
+            {TASK_KIND_OPTIONS.map(o => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
           </select>
         </label>
         <label className="adm-field">
@@ -154,22 +187,12 @@ export function TaskForm({
         </div>
       </div>
 
-      <div className="adm-forum-grid-2">
+      {(draft.taskKind === 'daily' || draft.taskKind === 'repeatable') && (
         <label className="adm-field">
-          <span className="adm-label">Лимит выполнений</span>
-          <select className="adm-input" value={draft.executionType} onChange={e => execExec(e.target.value)}>
-            <option value="once">Одноразовое</option>
-            <option value="daily">Ежедневное</option>
-            <option value="repeatable">Многоразовое</option>
-          </select>
+          <span className="adm-label">Лимит выполнений / день</span>
+          <input type="number" className="adm-input" value={draft.dailyRepeatLimit} onChange={e => onChange({ dailyRepeatLimit: Number(e.target.value) })} />
         </label>
-        {(draft.executionType === 'daily' || draft.executionType === 'repeatable') && (
-          <label className="adm-field">
-            <span className="adm-label">Лимит / день</span>
-            <input type="number" className="adm-input" value={draft.dailyRepeatLimit} onChange={e => onChange({ dailyRepeatLimit: Number(e.target.value) })} />
-          </label>
-        )}
-      </div>
+      )}
 
       <div className="adm-field">
         <span className="adm-label">Способ подтверждения (мультивыбор)</span>
@@ -201,10 +224,6 @@ export function TaskForm({
             }}
           />
           Требует модерации
-        </label>
-        <label className="adm-forum-check">
-          <input type="checkbox" checked={draft.medalTask} onChange={e => onChange({ medalTask: e.target.checked })} />
-          Особое (награда медалью)
         </label>
         <label className="adm-forum-check">
           <input type="checkbox" checked={draft.pushOnPublish} onChange={e => onChange({ pushOnPublish: e.target.checked })} />
@@ -242,6 +261,55 @@ export function TaskForm({
 
       <div className="adm-forum-grid-2">
         <label className="adm-field">
+          <span className="adm-label">Медаль за выполнение</span>
+          <select
+            className="adm-input"
+            value={draft.medalId}
+            onChange={e => {
+              const v = e.target.value;
+              onChange({
+                medalId: v ? Number(v) : '',
+                medalTask: !!v,
+              });
+            }}
+          >
+            <option value="">— без медали —</option>
+            {medals.map(m => (
+              <option key={m.id} value={m.id}>{m.name}{m.level ? ` (${m.level})` : ''}</option>
+            ))}
+          </select>
+        </label>
+        <label className="adm-field">
+          <span className="adm-label">Количество медалей</span>
+          <input
+            type="number"
+            min={1}
+            max={10}
+            className="adm-input"
+            value={draft.medalCount}
+            disabled={draft.medalId === ''}
+            onChange={e => onChange({ medalCount: Number(e.target.value) || 1 })}
+          />
+        </label>
+      </div>
+
+      <div className="adm-forum-grid-2">
+        <label className="adm-field">
+          <span className="adm-label">Статус в каталоге</span>
+          <select className="adm-input" value={draft.catalogStatus} onChange={e => onChange({ catalogStatus: e.target.value as TaskDraft['catalogStatus'] })}>
+            {CATALOG_STATUS_OPTIONS.map(o => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="adm-field">
+          <span className="adm-label">Время проведения</span>
+          <input type="datetime-local" className="adm-input" value={draft.eventTimeLocal} onChange={e => onChange({ eventTimeLocal: e.target.value, availableFromLocal: e.target.value })} />
+        </label>
+      </div>
+
+      <div className="adm-forum-grid-2">
+        <label className="adm-field">
           <span className="adm-label">Время публикации</span>
           <input type="datetime-local" className="adm-input" value={draft.publishTimeLocal} onChange={e => onChange({ publishTimeLocal: e.target.value })} />
         </label>
@@ -264,7 +332,9 @@ export function TaskForm({
       <div className="adm-forum-toolbar" style={{ marginTop: 16 }}>
         <button type="button" className="adm-btn adm-btn-primary" onClick={onSave}>Сохранить черновик</button>
         <button type="button" className="adm-btn adm-btn-secondary" onClick={onPublish}>Опубликовать</button>
-        <span className="adm-muted" style={{ fontSize: 12 }}>Статус: {draft.status === 'published' ? 'Опубликовано' : draft.status === 'archived' ? 'Архив' : 'Черновик'}</span>
+        <span className="adm-muted" style={{ fontSize: 12 }}>
+          Статус: {CATALOG_STATUS_OPTIONS.find(o => o.key === draft.catalogStatus)?.label ?? draft.catalogStatus}
+        </span>
       </div>
     </div>
   );

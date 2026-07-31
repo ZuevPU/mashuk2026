@@ -2,6 +2,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { pointsLog, levelsConfig, participants } from '../db/schema.js';
 import { env } from '../config/env.js';
+import { ACTION_CATALOG } from './levelsActionCatalog.js';
 
 export type PointTrack = 'path' | 'experience';
 
@@ -38,6 +39,102 @@ export function pointsTrackForAction(actionType: string): PointTrack | 'bonus' {
 
 const DEFAULT_THRESHOLDS = [0, 100, 250, 500, 1000];
 
+/** Map a forum question to a path/experience action type for awards. */
+export function pointsActionForQuestion(question: {
+  block?: string | null;
+  reflectionKind?: string | null;
+  questionKind?: string | null;
+  type?: string | null;
+  timePoint?: string | null;
+  title?: string | null;
+}): string {
+  if (question.block === 'Точка Б' || question.reflectionKind === 'point_b') return 'point_b_complete';
+  const isStateCheck = question.type === 'checkin'
+    || question.reflectionKind === 'state_check'
+    || question.questionKind === 'state_check'
+    || (question.block || '').toLowerCase().includes('проверк');
+  if (isStateCheck) {
+    const tp = `${question.timePoint || ''} ${question.title || ''}`.toLowerCase();
+    if (tp.includes('утро')) return 'state_check_morning';
+    if (tp.includes('вечер')) return 'state_check_evening';
+    if (tp.includes('день') || tp.includes('дневн')) return 'state_check_day';
+    return 'state_check_day';
+  }
+  return 'question_answer';
+}
+
+/**
+ * Award path points for past answers that never got a points_log row
+ * (e.g. levels_config was empty when they submitted).
+ */
+export async function backfillPathPointsForAnswers(
+  participantId: number,
+  answered: Array<{ questionId: number; forumDay?: number | null }>,
+  questionById: Map<number, {
+    id: number;
+    block?: string | null;
+    reflectionKind?: string | null;
+    questionKind?: string | null;
+    type?: string | null;
+    timePoint?: string | null;
+    title?: string | null;
+    dayNumber?: number | null;
+    points?: number | null;
+  }>,
+): Promise<number> {
+  if (answered.length === 0) return 0;
+
+  const existing = await db.select({
+    actionType: pointsLog.actionType,
+    forumDay: pointsLog.forumDay,
+  }).from(pointsLog).where(eq(pointsLog.participantId, participantId));
+
+  const logKeyCounts = new Map<string, number>();
+  for (const row of existing) {
+    if (!row.actionType) continue;
+    const key = `${row.actionType}:${row.forumDay ?? ''}`;
+    logKeyCounts.set(key, (logKeyCounts.get(key) ?? 0) + 1);
+  }
+
+  const needed = new Map<string, { actionType: string; forumDay?: number; override?: number; count: number }>();
+  for (const a of answered) {
+    const q = questionById.get(a.questionId);
+    if (!q) continue;
+    const actionType = pointsActionForQuestion(q);
+    // Only repair state-check / point awards — not generic question_answer (too noisy)
+    if (
+      actionType !== 'state_check_morning'
+      && actionType !== 'state_check_day'
+      && actionType !== 'state_check_evening'
+      && actionType !== 'point_b_complete'
+      && actionType !== 'point_a_complete'
+    ) continue;
+    const forumDay = a.forumDay ?? q.dayNumber ?? undefined;
+    const key = `${actionType}:${forumDay ?? ''}`;
+    const cur = needed.get(key);
+    if (cur) cur.count += 1;
+    else {
+      needed.set(key, {
+        actionType,
+        forumDay,
+        override: q.points && q.points > 0 ? q.points : undefined,
+        count: 1,
+      });
+    }
+  }
+
+  let awardedTotal = 0;
+  for (const [key, need] of needed) {
+    const have = logKeyCounts.get(key) ?? 0;
+    const missing = need.count - have;
+    for (let i = 0; i < missing; i++) {
+      const result = await awardPoints(participantId, need.actionType, need.override, need.forumDay);
+      if (result) awardedTotal += result.awarded;
+    }
+  }
+  return awardedTotal;
+}
+
 export async function awardPoints(
   participantId: number,
   actionType: string,
@@ -45,15 +142,18 @@ export async function awardPoints(
   forumDay?: number,
 ): Promise<{ awarded: number; track: PointTrack | 'bonus' } | null> {
   const [config] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, actionType)).limit(1);
-  const points = overridePoints ?? config?.pointsPerUnit ?? 0;
+  const catalog = ACTION_CATALOG.find(a => a.actionType === actionType);
+  // DB row may be missing on fresh/prod shifts — fall back to catalog defaults
+  const points = overridePoints ?? config?.pointsPerUnit ?? catalog?.pointsPerUnit ?? 0;
   if (points <= 0) return null;
 
-  if (config?.maxAccruals) {
+  const maxAccruals = config?.maxAccruals ?? catalog?.maxAccruals ?? null;
+  if (maxAccruals) {
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(pointsLog)
       .where(and(eq(pointsLog.participantId, participantId), eq(pointsLog.actionType, actionType)));
-    if (count >= config.maxAccruals) return null;
+    if (count >= maxAccruals) return null;
   }
 
   const [beforeRow] = await db.select({

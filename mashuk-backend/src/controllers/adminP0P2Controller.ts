@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { asc, count, desc, eq, inArray, isNotNull, and, isNull } from 'drizzle-orm';
+import { asc, count, desc, eq, inArray, isNotNull, and, isNull, or, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   answers, clubMatches, consentTexts, dailyStats, eventAttendance, events, materials,
@@ -157,9 +157,13 @@ export const publishScheduleDay = async (req: AdminRequest, res: Response): Prom
 
 export const listScheduleVersions = async (req: AdminRequest, res: Response): Promise<void> => {
   const day = req.query.day ? Number(req.query.day) : null;
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
   let rows = await db.select().from(scheduleDayVersions).orderBy(desc(scheduleDayVersions.publishedAt));
   if (day) rows = rows.filter(r => r.dayNumber === day);
-  const days = await db.select().from(scheduleDays);
+  const days = await db.select().from(scheduleDays)
+    .where(eq(scheduleDays.shiftId, shiftId))
+    .orderBy(asc(scheduleDays.dayNumber));
   res.json({ versions: rows.slice(0, 20), days });
 };
 
@@ -212,10 +216,19 @@ export const crudScheduleDays = {
 export const draftScheduleDay = async (req: AdminRequest, res: Response): Promise<void> => {
   const dayNumber = Number(req.body.dayNumber);
   if (!dayNumber) { res.status(400).json({ error: 'dayNumber required' }); return; }
-  await db.update(events).set({ isPublished: false, dayPublished: false }).where(eq(events.dayNumber, dayNumber));
-  await db.update(scheduleDays).set({ isPublished: false }).where(eq(scheduleDays.dayNumber, dayNumber));
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
+  // Hide day from participants; keep event drafts ready for re-publish
+  await db.update(events).set({ dayPublished: false })
+    .where(and(eq(events.dayNumber, dayNumber), eq(events.shiftId, shiftId)));
+  await db.update(scheduleDays).set({ isPublished: false })
+    .where(and(eq(scheduleDays.dayNumber, dayNumber), eq(scheduleDays.shiftId, shiftId)));
   const { clearCache } = await import('../services/cache.js');
-  clearCache(`events_day_${dayNumber}`);
+  clearCache(`events_day_${shiftId}_${dayNumber}`);
+  await logAdminAction({
+    req, actionType: 'schedule_draft', section: 'events', objectId: dayNumber,
+    newValue: { shiftId }, isCritical: true,
+  });
   res.json({ ok: true });
 };
 
@@ -287,10 +300,24 @@ export const getParticipantActivity = async (req: AdminRequest, res: Response): 
 export const getParticipantAdminActions = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
   const sid = String(id);
+
+  const subs = await db.select({ id: taskSubmissions.id })
+    .from(taskSubmissions)
+    .where(eq(taskSubmissions.participantId, id));
+  const subIds = subs.map(s => String(s.id));
+
+  const conditions = [
+    eq(adminActionsLog.objectId, sid),
+    sql`${adminActionsLog.newValue}->>'participantId' = ${sid}`,
+  ];
+  if (subIds.length) {
+    conditions.push(inArray(adminActionsLog.objectId, subIds));
+  }
+
   const rows = await db.select().from(adminActionsLog)
-    .where(eq(adminActionsLog.objectId, sid))
+    .where(or(...conditions))
     .orderBy(desc(adminActionsLog.createdAt))
-    .limit(100);
+    .limit(150);
   res.json({ actions: rows });
 };
 
@@ -1060,7 +1087,12 @@ export const adminRevokeTaskSubmissionHandler = async (req: AdminRequest, res: R
     actionType: 'task_submission_revoke',
     section: 'moderation',
     objectId: String(submissionId),
-    newValue: { revokedLogIds: result.revokedLogIds, reason },
+    newValue: {
+      participantId: result.submission.participantId,
+      submissionId,
+      revokedLogIds: result.revokedLogIds,
+      reason,
+    },
     isCritical: true,
   });
   res.json({ submission: result.submission, revokedLogIds: result.revokedLogIds });

@@ -170,6 +170,7 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
     group,
     activeDashboardId,
     meta,
+    setTab,
   } = useInsights();
 
   const dash = activeDashboardId;
@@ -421,7 +422,7 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
           {dash === 'pulse' && <PulseView data={data} />}
           {dash === 'portrait' && <PortraitView data={data} onOpenCard={onOpenCard} />}
           {dash === 'program' && <ProgramView data={data} />}
-          {dash === 'activity' && <ActivityView data={data} />}
+          {dash === 'activity' && <ActivityView data={data} onOpenRating={() => setTab('rating')} />}
           {dash === 'piggybank' && (
             <PiggybankView
               data={data}

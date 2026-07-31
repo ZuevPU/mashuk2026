@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { computeAbProgressPercent, resolveProfileProgressWeights } from '../services/profileProgress.js';
 import { pickProfileRecommendation } from '../services/profileRecommendations.js';
 import { buildOutcomesHeuristic, parseOutcomesForDisplay } from '../services/profileOutcomes.js';
+import { isSubstantiveProfileReflection } from '../services/profilePdfBuilder.js';
 
 describe('profileProgress §7', () => {
   it('computes weighted A→B percent', () => {
@@ -69,5 +70,27 @@ describe('profileOutcomes §7', () => {
   it('prefers edited bullets over heuristic', () => {
     const display = parseOutcomesForDisplay({ bullets: ['Админ правка'] }, ['heuristic']);
     assert.deepEqual(display, ['Админ правка']);
+  });
+});
+
+describe('isSubstantiveProfileReflection', () => {
+  it('keeps open reflections and drops check-ins / scales', () => {
+    assert.equal(isSubstantiveProfileReflection({
+      type: 'open',
+      preview: 'Сегодня поняла, что важно слушать команду дольше',
+    }), true);
+    assert.equal(isSubstantiveProfileReflection({
+      type: 'checkin',
+      block: 'Проверка состояния',
+      preview: 'Радость · энергия 7/10',
+    }), false);
+    assert.equal(isSubstantiveProfileReflection({
+      type: 'scale_10',
+      preview: '8',
+    }), false);
+    assert.equal(isSubstantiveProfileReflection({
+      type: 'open',
+      preview: '7 · 8 · 5 · 9',
+    }), false);
   });
 });

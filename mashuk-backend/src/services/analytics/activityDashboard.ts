@@ -1,12 +1,24 @@
-import { eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '../../db/index.js';
-import { medals, participants, taskSubmissions, tasks, userMedals } from '../../db/schema.js';
+import { medals, participants, pointsLog, taskSubmissions, tasks, userMedals } from '../../db/schema.js';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
-import { computeLeaderboardScores } from '../leaderboardService.js';
+import {
+  computeLeaderboardScores,
+  computeNominationLeaderboard,
+  NOMINATION_LABELS,
+  NOMINATION_LEADERBOARD_KEYS,
+} from '../leaderboardService.js';
 import { getForumSettings } from '../helpers.js';
 import { loadCohortParticipants } from './cohort.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import { resolveDayRange } from './analyticsQuery.js';
+import { activityByDaySeries } from './touchpointMetrics.js';
+
+function startOfTodayUtc(): Date {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
 
 export async function buildActivityDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
   const settings = await getForumSettings();
@@ -107,9 +119,101 @@ export async function buildActivityDashboard(filters: AnalyticsFilters, req?: Ad
     }).length,
   }));
 
+  const cohortIds = ids.length ? ids : allIds;
+  const todayStart = startOfTodayUtc();
+  const approvedSubs = filteredSubs.filter(r => r.s.status === 'approved');
+  const rejectedSubs = filteredSubs.filter(r => r.s.status === 'rejected');
+  const pendingSubs = filteredSubs.filter(r => r.s.status === 'pending' || r.s.status === 'pending_team');
+  const moderatedTotal = approvedSubs.length + rejectedSubs.length;
+
+  const pointsByDayRows = cohortIds.length
+    ? await db.select({
+      forumDay: pointsLog.forumDay,
+      total: sql<number>`coalesce(sum(${pointsLog.points}), 0)::int`,
+      activeParticipants: sql<number>`count(distinct ${pointsLog.participantId})::int`,
+    }).from(pointsLog).where(and(
+      inArray(pointsLog.participantId, cohortIds),
+      isNull(pointsLog.revokedAt),
+      sql`${pointsLog.points} > 0`,
+      sql`${pointsLog.forumDay} IS NOT NULL`,
+    )).groupBy(pointsLog.forumDay)
+    : [];
+  const pointsByDayMap = new Map(pointsByDayRows.map(r => [r.forumDay!, r]));
+  const pointsByDay = days.map(d => ({
+    day: d,
+    points: pointsByDayMap.get(d)?.total ?? 0,
+    activeParticipants: pointsByDayMap.get(d)?.activeParticipants ?? 0,
+  }));
+
+  const pointsByNomination = await Promise.all(
+    NOMINATION_LEADERBOARD_KEYS.map(async key => {
+      const scores = await computeNominationLeaderboard(key, cohortIds, { scope: 'shift' });
+      const total = [...scores.values()].reduce((s, v) => s + v, 0);
+      return { key, label: NOMINATION_LABELS[key] ?? key, points: total };
+    }),
+  );
+
+  const taskStats = new Map<number, { approved: number; rejected: number; pending: number; title?: string; category?: string | null }>();
+  for (const r of filteredSubs) {
+    const tid = r.t?.id;
+    if (!tid) continue;
+    if (!taskStats.has(tid)) {
+      taskStats.set(tid, { approved: 0, rejected: 0, pending: 0, title: r.t?.title, category: r.t?.category });
+    }
+    const st = taskStats.get(tid)!;
+    if (r.s.status === 'approved') st.approved += 1;
+    else if (r.s.status === 'rejected') st.rejected += 1;
+    else if (r.s.status === 'pending' || r.s.status === 'pending_team') st.pending += 1;
+  }
+  const hardestTasks = [...taskStats.entries()]
+    .map(([taskId, st]) => {
+      const decided = st.approved + st.rejected;
+      return {
+        taskId,
+        title: st.title,
+        category: st.category,
+        approved: st.approved,
+        rejected: st.rejected,
+        totalSubmissions: decided + st.pending,
+        approvalRate: decided > 0 ? Math.round((st.approved / decided) * 1000) / 10 : null,
+      };
+    })
+    .sort((a, b) => a.approved - b.approved || (a.approvalRate ?? 100) - (b.approvalRate ?? 100))
+    .slice(0, 15);
+
+  const activitySeries = await activityByDaySeries(cohortIds, days.length > 1 ? days : [1, 2, 3, 4, 5, 6, 7]);
+  const engagementSeries = days.map(d => {
+    const pts = pointsByDay.find(p => p.day === d);
+    const act = activitySeries.find(a => a.day === d);
+    const taskDone = tasksByDay.find(t => t.day === d);
+    return {
+      day: d,
+      points: pts?.points ?? 0,
+      activeParticipants: pts?.activeParticipants ?? 0,
+      answers: act?.answers ?? 0,
+      touchpoints: act?.touchpoints ?? 0,
+      taskCompletions: taskDone?.approved ?? 0,
+    };
+  });
+
   return {
     filters,
     days,
+    participants: {
+      total: allP.length,
+      registered: allP.filter(p => p.onboardingCompletedAt).length,
+      activeToday: allP.filter(p => p.lastActiveAt && p.lastActiveAt >= todayStart).length,
+      completedAtLeastOneTask: new Set(approvedSubs.map(r => r.s.participantId)).size,
+    },
+    pointsByDay,
+    pointsByNomination,
+    engagementSeries,
+    moderation: {
+      approved: approvedSubs.length,
+      rejected: rejectedSubs.length,
+      pending: pendingSubs.length,
+      rejectedPercent: moderatedTotal > 0 ? Math.round((rejectedSubs.length / moderatedTotal) * 1000) / 10 : 0,
+    },
     ratings: {
       path: rankList(pathScores),
       experience: rankList(expScores),
@@ -119,6 +223,7 @@ export async function buildActivityDashboard(filters: AnalyticsFilters, req?: Ad
     },
     tasks: {
       popular: popularTasks,
+      hardest: hardestTasks,
       byCategory: [...byCategory.entries()].map(([category, count]) => ({ category, count })),
       pendingModeration: filteredSubs.filter(r => r.s.status === 'pending').length,
       pendingTeam: filteredSubs.filter(r => r.s.status === 'pending_team').length,

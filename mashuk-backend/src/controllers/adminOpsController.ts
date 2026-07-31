@@ -494,8 +494,34 @@ export const generateEntityQr = async (req: AdminRequest, res: Response): Promis
 
 export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<void> => {
   const track = (req.query.track as string) || 'total';
-  const scope = ((req.query.scope as string) || 'total') as 'total' | 'day' | 'shift';
+  const scopeRaw = (req.query.scope as string) || 'shift';
+  const scope = (scopeRaw === 'day' || scopeRaw === 'shift' || scopeRaw === 'total')
+    ? scopeRaw
+    : 'shift';
   const day = req.query.day != null ? Number(req.query.day) : undefined;
+  const modeRaw = (req.query.mode as string) || 'points';
+  const mode = (modeRaw === 'medals' || modeRaw === 'nomination') ? modeRaw : 'points';
+  const nomination = (req.query.nomination as string) || '';
+  const medalModeRaw = (req.query.medalMode as string) || 'count';
+  const medalMode = medalModeRaw === 'holders' ? 'holders' : 'count';
+  const medalId = req.query.medalId != null ? Number(req.query.medalId) : undefined;
+  const directionFilter = (req.query.direction as string) || '';
+  const sortRaw = (req.query.sort as string) || 'score';
+  const sort = sortRaw === 'name' ? 'name' : 'score';
+
+  const {
+    NOMINATION_LEADERBOARD_KEYS,
+    resolveLeaderboardScoreMap,
+    sortLeaderboardByScore,
+    participantIdsWithMedal,
+  } = await import('../services/leaderboardService.js');
+
+  if (mode === 'nomination' && nomination
+    && !NOMINATION_LEADERBOARD_KEYS.includes(nomination as typeof NOMINATION_LEADERBOARD_KEYS[number])) {
+    res.status(400).json({ error: 'Invalid nomination' });
+    return;
+  }
+
   const list = await db.select({
     id: participants.id,
     firstName: participants.firstName,
@@ -506,48 +532,76 @@ export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<
     bonusPoints: participants.bonusPoints,
     forumPoints: participants.forumPoints,
     hideFromLeaderboard: participants.hideFromLeaderboard,
+    selfDeletedAt: participants.selfDeletedAt,
+    avatarUrl: participants.avatarUrl,
   }).from(participants);
 
-  const visible = list.filter(p => !p.hideFromLeaderboard);
-  const ids = visible.map(p => p.id);
-  const { computeLeaderboardScores } = await import('../services/leaderboardService.js');
-  const { participantRatingScore: ratingScoreFn } = await import('../services/pointsService.js');
+  const directions = [...new Set(list.map(p => p.direction).filter(Boolean))] as string[];
 
-  let scoreMap: Map<number, number>;
-  if (scope === 'total' && track === 'total') {
-    scoreMap = new Map(ids.map(id => {
-      const p = visible.find(x => x.id === id)!;
-      return [id, ratingScoreFn(p)];
-    }));
-  } else {
-    scoreMap = await computeLeaderboardScores(ids, {
-      scope: scope === 'day' ? 'day' : scope === 'shift' ? 'shift' : 'total',
-      day: Number.isFinite(day) ? day : undefined,
-      track,
-    });
+  let medalSet: Set<number> | null = null;
+  if (mode === 'medals' && medalMode === 'holders' && medalId && !Number.isNaN(medalId)) {
+    medalSet = await participantIdsWithMedal(medalId);
   }
 
-  const rows = visible
-    .map(p => ({
-      ...p,
-      score: scoreMap.get(p.id) ?? 0,
-    }))
-    .sort((a, b) => b.score - a.score)
-    .map((p, i) => ({
-      rank: i + 1,
+  const visible = list
+    .filter(p => !p.selfDeletedAt)
+    .filter(p => !p.hideFromLeaderboard)
+    .filter(p => !directionFilter || p.direction === directionFilter)
+    .filter(p => !medalSet || medalSet.has(p.id));
+
+  const ids = visible.map(p => p.id);
+  const effectiveScope = mode === 'nomination' ? scope : scope;
+  const scoreMap = await resolveLeaderboardScoreMap(
+    ids,
+    {
+      mode,
+      track: mode === 'nomination' ? 'total' : track,
+      scope: effectiveScope as 'total' | 'day' | 'shift',
+      day: Number.isFinite(day) ? day : undefined,
+      nomination: mode === 'nomination' ? nomination : undefined,
+      medalMode,
+      medalId: medalId && !Number.isNaN(medalId) ? medalId : undefined,
+    },
+    visible,
+  );
+
+  const ranked = sortLeaderboardByScore(
+    visible.map(p => ({
       id: p.id,
       firstName: p.firstName,
       lastName: p.lastName,
       direction: p.direction,
-      score: p.score,
-    }));
+      avatarUrl: p.avatarUrl,
+      score: scoreMap.get(p.id) ?? 0,
+    })),
+    sort,
+  ).map((p, i) => ({
+    rank: i + 1,
+    id: p.id,
+    firstName: p.firstName,
+    lastName: p.lastName,
+    direction: p.direction,
+    avatarUrl: p.avatarUrl,
+    score: p.score,
+  }));
+
+  const leaders = mode === 'medals' && medalMode === 'holders' && medalId
+    ? ranked.filter(r => r.score > 0).slice(0, 50)
+    : ranked.slice(0, 50);
 
   res.json({
-    track,
+    mode,
+    track: mode === 'nomination' ? 'nomination' : track,
     scope,
-    day: day ?? null,
-    participantCount: rows.length,
-    leaders: rows,
+    day: scope === 'day' ? (day ?? null) : null,
+    nomination: mode === 'nomination' ? (nomination || null) : null,
+    medalMode: mode === 'medals' ? medalMode : null,
+    medalId: mode === 'medals' && medalId && !Number.isNaN(medalId) ? medalId : null,
+    direction: directionFilter || null,
+    sort,
+    directions,
+    participantCount: ranked.length,
+    leaders,
   });
 };
 

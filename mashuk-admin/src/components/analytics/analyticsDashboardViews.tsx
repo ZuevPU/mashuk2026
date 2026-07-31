@@ -3,6 +3,8 @@ import {
 } from 'recharts';
 import type { AnalyticsTabProps } from './AnalyticsTab';
 import { roleName } from '../onboarding/roleOptions';
+import { LeaderboardTable } from '../rating/LeaderboardTable';
+import { DEFAULT_LEADERBOARD_FILTERS, type LeaderboardRow } from '../rating/leaderboardTypes';
 import {
   ChartTooltipRu,
   formatForumDay,
@@ -293,31 +295,192 @@ export function ProgramView({ data }: { data: any }) {
   );
 }
 
-export function ActivityView({ data }: { data: any }) {
+export function ActivityView({
+  data,
+  onOpenRating,
+}: {
+  data: any;
+  onOpenRating?: () => void;
+}) {
   const trackLabel: Record<string, string> = { path: 'Путь', experience: 'Опыт', total: 'Общий', day: 'За день' };
+
+  const toRows = (items: { id: number; rank: number; name: string; direction?: string; points: number }[]): LeaderboardRow[] =>
+    items.map(r => {
+      const parts = r.name.trim().split(/\s+/);
+      const firstName = parts.length > 1 ? parts.slice(1).join(' ') : parts[0];
+      const lastName = parts.length > 1 ? parts[0] : '';
+      return {
+        rank: r.rank,
+        id: r.id,
+        firstName,
+        lastName,
+        direction: r.direction ?? null,
+        score: r.points,
+      };
+    });
+
+  const filtersForTrack = (track: 'total' | 'path' | 'experience') => ({
+    ...DEFAULT_LEADERBOARD_FILTERS,
+    mode: 'points' as const,
+    track,
+    scope: 'shift' as const,
+  });
+
+  const pointsByDayChart = (data.pointsByDay ?? []).map((row: { day: number; points: number }) => ({
+    ...row,
+    dayLabel: formatForumDay(row.day),
+  }));
+  const nominationChart = (data.pointsByNomination ?? []).filter((n: { points: number }) => n.points > 0);
+  const engagementSeries = (data.engagementSeries ?? []).map((row: { day: number; points: number; activeParticipants: number; taskCompletions: number }) => ({
+    ...row,
+    dayLabel: formatForumDay(row.day),
+  }));
+
   return (
     <>
       <div className="card">
-        <h3>Рейтинги</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-          {(['path', 'experience', 'total', 'day'] as const).map(track => (
-            <div key={track}>
+        <h3>Участники</h3>
+        <div className="lb-activity-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+          <div><strong>{data.participants?.total ?? '—'}</strong><br /><span className="adm-muted" style={{ fontSize: 12 }}>всего</span></div>
+          <div><strong>{data.participants?.registered ?? '—'}</strong><br /><span className="adm-muted" style={{ fontSize: 12 }}>зарегистрировались</span></div>
+          <div><strong>{data.participants?.activeToday ?? '—'}</strong><br /><span className="adm-muted" style={{ fontSize: 12 }}>активны сегодня</span></div>
+          <div><strong>{data.participants?.completedAtLeastOneTask ?? '—'}</strong><br /><span className="adm-muted" style={{ fontSize: 12 }}>≥ 1 задание</span></div>
+        </div>
+      </div>
+
+      {pointsByDayChart.length > 0 && (
+        <div className="card chart-card">
+          <h3>Баллы по дням</h3>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={pointsByDayChart}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="dayLabel" />
+              <YAxis allowDecimals={false} label={{ value: 'Баллы', angle: -90, position: 'insideLeft', style: { fontSize: 10 } }} />
+              <Tooltip content={<ChartTooltipRu />} />
+              <Bar dataKey="points" fill="#805AD5" name="points" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {nominationChart.length > 0 && (
+        <div className="card chart-card">
+          <h3>Баллы по номинациям</h3>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={nominationChart} layout="vertical" margin={{ left: 8, right: 16 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" allowDecimals={false} />
+              <YAxis type="category" dataKey="label" width={100} tick={{ fontSize: 11 }} />
+              <Tooltip content={<ChartTooltipRu />} />
+              <Bar dataKey="points" fill="#3182CE" name="points" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {engagementSeries.length > 0 && (
+        <div className="card chart-card">
+          <h3>Динамика вовлечённости</h3>
+          <p className="adm-muted" style={{ fontSize: 12, marginTop: -4 }}>Баллы, активные участники и выполненные задания по дням форума.</p>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={engagementSeries}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="dayLabel" />
+              <YAxis allowDecimals={false} label={{ value: 'Количество', angle: -90, position: 'insideLeft', style: { fontSize: 10 } }} />
+              <Tooltip content={<ChartTooltipRu />} />
+              <Legend />
+              <Line type="monotone" dataKey="points" stroke="#805AD5" name="Баллы" dot />
+              <Line type="monotone" dataKey="activeParticipants" stroke="#3182CE" name="Активные" dot />
+              <Line type="monotone" dataKey="taskCompletions" stroke="#38A169" name="Задания" dot />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ margin: 0 }}>Рейтинги</h3>
+          {onOpenRating && (
+            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={onOpenRating}>
+              Полный рейтинг →
+            </button>
+          )}
+        </div>
+        <p className="adm-muted" style={{ fontSize: 12, marginTop: 6 }}>
+          Топ-10 по смене. Фильтры и медали — во вкладке «Рейтинг».
+        </p>
+        <div className="lb-activity-grid">
+          {(['total', 'day'] as const).map(track => (
+            <div key={track} className="lb-activity-block">
               <h4>{trackLabel[track] ?? track}</h4>
-              <ol>{(data.ratings?.[track] ?? []).slice(0, 10).map((r: { id: number; rank: number; name: string; points: number }) => (
-                <li key={r.id}>{r.rank}. {r.name} — {r.points}</li>
-              ))}</ol>
+              <LeaderboardTable
+                rows={toRows(data.ratings?.[track] ?? [])}
+                filters={{
+                  ...DEFAULT_LEADERBOARD_FILTERS,
+                  mode: 'points',
+                  track: 'total',
+                  scope: track === 'day' ? 'day' : 'shift',
+                }}
+                maxRows={10}
+              />
             </div>
           ))}
         </div>
-        {(data.ratings?.byDirection ?? []).map((row: { direction: string; top: { name: string; points: number }[] }) => (
-          <div key={row.direction}><strong>{row.direction}</strong>: {row.top.map(t => `${t.name} (${t.points})`).join('; ')}</div>
-        ))}
+        {(data.ratings?.byDirection ?? []).length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <h4 style={{ margin: '0 0 8px' }}>По направлениям</h4>
+            {(data.ratings?.byDirection ?? []).map((row: { direction: string; top: { name: string; points: number; rank?: number; id?: number }[] }) => (
+              <div key={row.direction} className="lb-activity-block">
+                <strong>{row.direction}</strong>
+                <LeaderboardTable
+                  rows={toRows((row.top ?? []).map((t, i) => ({
+                    id: t.id ?? i,
+                    rank: t.rank ?? i + 1,
+                    name: t.name,
+                    points: t.points,
+                    direction: row.direction,
+                  })))}
+                  filters={filtersForTrack('total')}
+                  maxRows={5}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <div className="card">
         <h3>Задания</h3>
-        <p>На модерации: {data.tasks?.pendingModeration} · Командные: {data.tasks?.pendingTeam}</p>
-        <ul>{(data.tasks?.popular ?? []).map((t: { title: string; count: number }) => <li key={t.title}>{t.title}: {t.count}</li>)}</ul>
-        <ul>{(data.tasks?.byCategory ?? []).map((c: { category: string; count: number }) => <li key={c.category}>{c.category}: {c.count}</li>)}</ul>
+        <p>
+          На модерации: {data.tasks?.pendingModeration} · Командные: {data.tasks?.pendingTeam}
+          {data.moderation != null && (
+            <> · Отклонено: {data.moderation.rejected} ({data.moderation.rejectedPercent}% от решённых)</>
+          )}
+        </p>
+        {(data.tasks?.popular ?? []).length > 0 && (
+          <>
+            <h4 style={{ margin: '12px 0 6px', fontSize: 13 }}>Популярные</h4>
+            <ul>{(data.tasks?.popular ?? []).map((t: { taskId: number; title: string; count: number }) => (
+              <li key={t.taskId}>{t.title}: {t.count}</li>
+            ))}</ul>
+          </>
+        )}
+        {(data.tasks?.hardest ?? []).length > 0 && (
+          <>
+            <h4 style={{ margin: '12px 0 6px', fontSize: 13 }}>Редко выполняемые</h4>
+            <ul>{(data.tasks?.hardest ?? []).map((t: { taskId: number; title: string; approved: number; approvalRate: number | null }) => (
+              <li key={t.taskId}>
+                {t.title}: {t.approved} одобр.
+                {t.approvalRate != null ? ` (${t.approvalRate}% одобр.)` : ''}
+              </li>
+            ))}</ul>
+          </>
+        )}
+        {(data.tasks?.byCategory ?? []).length > 0 && (
+          <>
+            <h4 style={{ margin: '12px 0 6px', fontSize: 13 }}>По категориям</h4>
+            <ul>{(data.tasks?.byCategory ?? []).map((c: { category: string; count: number }) => <li key={c.category}>{c.category}: {c.count}</li>)}</ul>
+          </>
+        )}
       </div>
       <div className="card">
         <h3>Медали</h3>

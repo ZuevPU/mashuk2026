@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
+import { ADMIN_SHIFT_CHANGED_EVENT, getAdminEditingShiftId } from '../../admin/client';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
 import { AnswerConfirmationSettings, type AnswerConfirmForm } from './AnswerConfirmationSettings';
@@ -25,6 +26,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
   const [questions, setQuestions] = useState<AdminQuestion[]>([]);
   const [totalDays, setTotalDays] = useState(8);
   const [forumDay, setForumDay] = useState(1);
+  const [shiftLabel, setShiftLabel] = useState<string>('');
 
   const [kindTab, setKindTab] = useState<QuestionKindTab>('all');
   const [search, setSearch] = useState('');
@@ -87,12 +89,17 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
     }
     const allRes = await adminFetch('/questions');
     setTotalAll(allRes.totalCount ?? allRes.questions?.length ?? 0);
-    const [dirRes, grpRes] = await Promise.all([
+    const [dirRes, grpRes, shiftsRes] = await Promise.all([
       adminFetch('/directions').catch(() => ({ directions: [] })),
       adminFetch('/participants/groups').catch(() => ({ groups: [] })),
+      adminFetch('/shifts').catch(() => ({ shifts: [] })),
     ]);
     setDirections(dirRes.directions || []);
     setGroups(grpRes.groups || []);
+    const shifts = (shiftsRes.shifts || []) as { id: number; name: string; code?: string }[];
+    const sid = getAdminEditingShiftId();
+    const current = sid != null ? shifts.find(s => s.id === sid) : shifts[0];
+    setShiftLabel(current ? (current.name || current.code || `Смена #${current.id}`) : '');
     return { td, cd };
   }, [adminFetch]);
 
@@ -117,6 +124,15 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
   useEffect(() => {
     load().catch(() => setLoading(false));
   }, [load, reloadKey]);
+
+  useEffect(() => {
+    const onShiftChanged = () => {
+      setDayFilter('');
+      setSelectedIds(new Set());
+    };
+    window.addEventListener(ADMIN_SHIFT_CHANGED_EVENT, onShiftChanged);
+    return () => window.removeEventListener(ADMIN_SHIFT_CHANGED_EVENT, onShiftChanged);
+  }, []);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -284,7 +300,11 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
     <div className="adm-forum">
       <AdminPageHero
         title={`Вопросы · ${questions.length} в списке · ${totalAll} всего`}
-        hint="Touchpoints рефлексии в одном разделе. Обмен и дирекция — просмотр и модерация."
+        hint={
+          shiftLabel
+            ? `Смена «${shiftLabel}» (выбор сверху в шапке). Показаны только вопросы этой смены; ниже можно открыть день.`
+            : 'Выберите смену в шапке сверху — вопросы разделены по сменам. Обмен и дирекция — просмотр и модерация.'
+        }
       />
 
       {view === 'confirm' && (
@@ -399,6 +419,22 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
             ))}
           </div>
 
+          <div className="adm-seg" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
+            <button type="button" className={!dayFilter ? 'on' : ''} onClick={() => setDayFilter('')}>
+              Все дни
+            </button>
+            {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
+              <button
+                key={d}
+                type="button"
+                className={dayFilter === String(d) ? 'on' : ''}
+                onClick={() => setDayFilter(String(d))}
+              >
+                День {d}
+              </button>
+            ))}
+          </div>
+
           <div className="form-row" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
             <input
               className="adm-input"
@@ -407,12 +443,6 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
               onChange={e => setSearch(e.target.value)}
               style={{ minWidth: 160 }}
             />
-            <select className="adm-input" value={dayFilter} onChange={e => setDayFilter(e.target.value)}>
-              <option value="">День: все</option>
-              {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
-                <option key={d} value={String(d)}>День {d}</option>
-              ))}
-            </select>
             <select className="adm-input" value={audienceFilter} onChange={e => setAudienceFilter(e.target.value)}>
               <option value="">Аудитория: все</option>
               <option value="all">Все</option>
@@ -486,6 +516,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
             questions={questions}
             selectedIds={selectedIds}
             readOnly={readOnly}
+            groupByDay={!dayFilter && !readOnly}
             onToggleSelect={toggleSelect}
             onToggleAll={toggleAll}
             onEdit={openEdit}

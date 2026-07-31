@@ -1,9 +1,15 @@
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { participants, pointsLog, userMedals, tasks, taskSubmissions } from '../db/schema.js';
 import { pointsTrackForAction, totalRatingScore, isUnifiedRatingEnabled, participantRatingScore } from './pointsService.js';
+import { resolveActiveShift } from './shiftService.js';
 
 export type LeaderboardScope = 'total' | 'day' | 'shift';
+export type LeaderboardMode = 'points' | 'medals' | 'nomination';
+export type MedalMode = 'count' | 'holders';
+export type LeaderboardSort = 'score' | 'name';
+
+export type LeaderboardPeriodOpts = { scope?: LeaderboardScope; day?: number };
 
 export type LeaderboardScopesConfig = {
   total?: boolean;
@@ -124,16 +130,47 @@ export async function computeLeaderboardScores(
   return map;
 }
 
+function taskMatchesForumDay(
+  task: { dayNumber: number | null; dayNumbers: number[] | null },
+  day: number,
+): boolean {
+  if (task.dayNumber === day) return true;
+  const dns = Array.isArray(task.dayNumbers) ? task.dayNumbers : [];
+  return dns.includes(day);
+}
+
+async function forumDayTimeBounds(day: number): Promise<{ start: Date; end: Date } | null> {
+  const shift = await resolveActiveShift();
+  if (!shift?.startDate) return null;
+  const base = new Date(shift.startDate);
+  const start = new Date(base);
+  start.setUTCDate(start.getUTCDate() + (day - 1));
+  start.setUTCHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start, end };
+}
+
 export async function computeNominationLeaderboard(
   nominationKey: string,
   participantIds: number[],
+  opts?: LeaderboardPeriodOpts,
 ): Promise<Map<number, number>> {
   const map = new Map<number, number>();
   if (!nominationKey || participantIds.length === 0) return map;
-  const allTasks = await db.select({ id: tasks.id, points: tasks.points })
-    .from(tasks)
-    .where(eq(tasks.nomination, nominationKey));
-  const taskIds = new Set(allTasks.map(t => t.id));
+  const allTasks = await db.select({
+    id: tasks.id,
+    points: tasks.points,
+    dayNumber: tasks.dayNumber,
+    dayNumbers: tasks.dayNumbers,
+  }).from(tasks).where(eq(tasks.nomination, nominationKey));
+
+  const scope = opts?.scope ?? 'shift';
+  let filteredTasks = allTasks;
+  if (scope === 'day' && opts?.day) {
+    filteredTasks = allTasks.filter(t => taskMatchesForumDay(t, opts.day!));
+  }
+  const taskIds = new Set(filteredTasks.map(t => t.id));
   if (taskIds.size === 0) {
     for (const id of participantIds) map.set(id, 0);
     return map;
@@ -150,7 +187,7 @@ export async function computeNominationLeaderboard(
     ));
   for (const s of subs) {
     if (!s.taskId || !taskIds.has(s.taskId)) continue;
-    const task = allTasks.find(t => t.id === s.taskId);
+    const task = filteredTasks.find(t => t.id === s.taskId);
     const add = s.pointsAwarded ?? task?.points ?? 0;
     map.set(s.participantId, (map.get(s.participantId) ?? 0) + add);
   }
@@ -158,6 +195,116 @@ export async function computeNominationLeaderboard(
     if (!map.has(id)) map.set(id, 0);
   }
   return map;
+}
+
+export async function computeMedalCountLeaderboard(
+  participantIds: number[],
+  opts: LeaderboardPeriodOpts,
+): Promise<Map<number, number>> {
+  const map = new Map<number, number>();
+  if (participantIds.length === 0) return map;
+  for (const id of participantIds) map.set(id, 0);
+
+  const scope = opts.scope ?? 'shift';
+  const conditions = [inArray(userMedals.participantId, participantIds)];
+  if (scope === 'day' && opts.day) {
+    const bounds = await forumDayTimeBounds(opts.day);
+    if (bounds) {
+      conditions.push(gte(userMedals.awardedAt, bounds.start));
+      conditions.push(lt(userMedals.awardedAt, bounds.end));
+    }
+  }
+
+  const rows = await db.select({
+    participantId: userMedals.participantId,
+    c: sql<number>`count(*)::int`,
+  }).from(userMedals).where(and(...conditions)).groupBy(userMedals.participantId);
+
+  for (const r of rows) {
+    map.set(r.participantId, Number(r.c ?? 0));
+  }
+  return map;
+}
+
+export function sortLeaderboardByScore<T extends {
+  score: number;
+  firstName?: string | null;
+  lastName?: string | null;
+  name?: string | null;
+}>(rows: T[], sort: LeaderboardSort = 'score'): T[] {
+  const copy = [...rows];
+  const fullName = (r: T) => (
+    r.name?.trim()
+    || `${r.firstName ?? ''} ${r.lastName ?? ''}`.trim()
+  ).toLowerCase();
+
+  if (sort === 'name') {
+    copy.sort((a, b) => fullName(a).localeCompare(fullName(b), 'ru'));
+    return copy;
+  }
+  copy.sort((a, b) => b.score - a.score || fullName(a).localeCompare(fullName(b), 'ru'));
+  return copy;
+}
+
+export async function resolveLeaderboardScoreMap(
+  participantIds: number[],
+  opts: {
+    mode: LeaderboardMode;
+    track: string;
+    scope: LeaderboardScope;
+    day?: number;
+    nomination?: string;
+    medalMode?: MedalMode;
+    medalId?: number;
+  },
+  participantsForTotal?: Array<{
+    id: number;
+    pathPoints: number | null;
+    experiencePoints: number | null;
+    bonusPoints: number | null;
+    forumPoints?: number | null;
+  }>,
+): Promise<Map<number, number>> {
+  if (opts.mode === 'nomination' && opts.nomination) {
+    return computeNominationLeaderboard(opts.nomination, participantIds, {
+      scope: opts.scope,
+      day: opts.day,
+    });
+  }
+
+  if (opts.mode === 'medals') {
+    if (opts.medalMode === 'holders' && opts.medalId) {
+      const holders = await participantIdsWithMedal(opts.medalId);
+      const map = new Map<number, number>();
+      for (const id of participantIds) {
+        map.set(id, holders.has(id) ? 1 : 0);
+      }
+      return map;
+    }
+    return computeMedalCountLeaderboard(participantIds, {
+      scope: opts.scope,
+      day: opts.day,
+    });
+  }
+
+  if (opts.scope === 'total' && opts.track === 'total' && participantsForTotal) {
+    const map = new Map<number, number>();
+    for (const p of participantsForTotal) {
+      if (participantIds.includes(p.id)) {
+        map.set(p.id, participantRatingScore(p));
+      }
+    }
+    for (const id of participantIds) {
+      if (!map.has(id)) map.set(id, 0);
+    }
+    return map;
+  }
+
+  return computeLeaderboardScores(participantIds, {
+    scope: opts.scope,
+    day: opts.scope === 'day' ? opts.day : undefined,
+    track: opts.track,
+  });
 }
 
 export const NOMINATION_LEADERBOARD_KEYS = [

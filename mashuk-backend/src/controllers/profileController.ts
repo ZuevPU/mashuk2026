@@ -131,6 +131,32 @@ export const downloadMyProfilePdf = async (req: ParticipantRequest, res: Respons
   }
 };
 
+export const getMyShiftResults = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const format = (req.query.format as string) || 'json';
+    const { gatherShiftResults, streamShiftResultsPdf, shiftResultsToCsv } = await import('../services/shiftResultsService.js');
+    const data = await gatherShiftResults(req.participant!.id);
+    if (!data) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="shift_results.csv"');
+      res.send('\uFEFF' + shiftResultsToCsv(data));
+      return;
+    }
+    if (format === 'pdf') {
+      await streamShiftResultsPdf(data, res);
+      return;
+    }
+    res.json(data);
+  } catch (error) {
+    console.error('getMyShiftResults:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const listPiggybank = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const tag = req.query.tag as string | undefined;
@@ -254,21 +280,30 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
     const scope = (scopeRaw === 'day' || scopeRaw === 'shift') ? scopeRaw : 'total';
     const dayNum = req.query.day != null ? Number(req.query.day) : undefined;
     const medalId = req.query.medalId != null ? Number(req.query.medalId) : undefined;
+    const modeRaw = (req.query.mode as string) || (nomination ? 'nomination' : medalId ? 'medals' : 'points');
+    const mode = (modeRaw === 'medals' || modeRaw === 'nomination') ? modeRaw : 'points';
+    const medalModeRaw = (req.query.medalMode as string) || 'count';
+    const medalMode = medalModeRaw === 'holders' ? 'holders' : 'count';
+    const sortRaw = (req.query.sort as string) || 'score';
+    const sort = sortRaw === 'name' ? 'name' : 'score';
 
     const { getForumSettings } = await import('../services/helpers.js');
     const {
       normalizeLeaderboardScopes,
       isLeaderboardScopeEnabled,
+      NOMINATION_LEADERBOARD_KEYS,
+      resolveLeaderboardScoreMap,
+      sortLeaderboardByScore,
     } = await import('../services/leaderboardService.js');
     const settings = await getForumSettings();
     const scopes = normalizeLeaderboardScopes(settings?.leaderboardScopes);
-    if (nomination) {
-      const { computeNominationLeaderboard, NOMINATION_LEADERBOARD_KEYS } = await import('../services/leaderboardService.js');
-      if (!NOMINATION_LEADERBOARD_KEYS.includes(nomination as typeof NOMINATION_LEADERBOARD_KEYS[number])) {
+    const effectiveNomination = mode === 'nomination' ? nomination : '';
+    if (effectiveNomination) {
+      if (!NOMINATION_LEADERBOARD_KEYS.includes(effectiveNomination as typeof NOMINATION_LEADERBOARD_KEYS[number])) {
         res.status(400).json({ error: 'Invalid nomination' });
         return;
       }
-    } else if (!isLeaderboardScopeEnabled(scopes, scope, track)) {
+    } else if (mode === 'points' && !isLeaderboardScopeEnabled(scopes, scope, track)) {
       res.status(400).json({ error: 'Leaderboard scope disabled' });
       return;
     }
@@ -281,6 +316,7 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       pathPoints: participants.pathPoints,
       experiencePoints: participants.experiencePoints,
       bonusPoints: participants.bonusPoints,
+      forumPoints: participants.forumPoints,
       hideFromLeaderboard: participants.hideFromLeaderboard,
       selfDeletedAt: participants.selfDeletedAt,
       avatarUrl: participants.avatarUrl,
@@ -288,31 +324,27 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
 
     const me = req.participant!.id;
     const directions = [...new Set(list.map(p => p.direction).filter(Boolean))] as string[];
-    let medalSet: Set<number> | null = null;
-    if (medalId && !Number.isNaN(medalId)) {
-      const { participantIdsWithMedal } = await import('../services/leaderboardService.js');
-      medalSet = await participantIdsWithMedal(medalId);
-    }
 
     const eligible = list
       .filter(p => !p.selfDeletedAt)
       .filter(p => !p.hideFromLeaderboard || p.id === me)
-      .filter(p => !directionFilter || p.direction === directionFilter)
-      .filter(p => !medalSet || medalSet.has(p.id));
+      .filter(p => !directionFilter || p.direction === directionFilter);
 
-    const { computeLeaderboardScores, computeNominationLeaderboard } = await import('../services/leaderboardService.js');
-    const scoreMap = nomination
-      ? await computeNominationLeaderboard(nomination, eligible.map(p => p.id))
-      : await computeLeaderboardScores(
-        eligible.map(p => p.id),
-        {
-          scope,
-          day: scope === 'day' ? dayNum : undefined,
-          track,
-        },
-      );
+    const scoreMap = await resolveLeaderboardScoreMap(
+      eligible.map(p => p.id),
+      {
+        mode,
+        track: mode === 'nomination' ? 'total' : track,
+        scope,
+        day: scope === 'day' ? dayNum : undefined,
+        nomination: effectiveNomination || undefined,
+        medalMode,
+        medalId: medalId && !Number.isNaN(medalId) ? medalId : undefined,
+      },
+      eligible,
+    );
 
-    const rows = eligible
+    let rows = eligible
       .map(p => ({
         id: p.id,
         name: `${p.firstName} ${p.lastName}`.trim(),
@@ -320,21 +352,29 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
         score: scoreMap.get(p.id) ?? 0,
         isMe: p.id === me,
         avatarUrl: p.avatarUrl || null,
-      }))
-      .sort((a, b) => b.score - a.score)
+      }));
+
+    if (mode === 'medals' && medalMode === 'holders' && medalId) {
+      rows = rows.filter(r => r.score > 0);
+    }
+
+    const sorted = sortLeaderboardByScore(rows, sort)
       .map((p, i) => ({ rank: i + 1, ...p }));
 
-    const myRank = rows.find(r => r.isMe)?.rank ?? null;
+    const myRank = sorted.find(r => r.isMe)?.rank ?? null;
     res.json({
-      track: nomination ? 'nomination' : track,
-      scope: nomination ? 'nomination' : scope,
-      nomination: nomination || null,
+      mode,
+      track: mode === 'nomination' ? 'nomination' : track,
+      scope: mode === 'nomination' ? scope : scope,
+      nomination: effectiveNomination || null,
       day: scope === 'day' ? (dayNum ?? null) : null,
       direction: directionFilter || null,
       medalId: medalId && !Number.isNaN(medalId) ? medalId : null,
+      medalMode: mode === 'medals' ? medalMode : null,
+      sort,
       directions,
       myRank,
-      leaders: rows.slice(0, 50),
+      leaders: sorted.slice(0, 50),
     });
   } catch (error) {
     console.error('getPublicLeaderboard:', error);

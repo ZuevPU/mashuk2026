@@ -1,7 +1,7 @@
 import { Response } from 'express';
-import { eq, and, lte, or, isNull, ilike, ne, isNotNull } from 'drizzle-orm';
+import { eq, and, or, isNull, ilike, ne, isNotNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { tasks, taskSubmissions, questions, answers, participants, taskTeamConfirmations } from '../db/schema.js';
+import { tasks, taskSubmissions, participants, taskTeamConfirmations } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { getForumSettings } from '../services/helpers.js';
 import { awardPoints } from '../services/pointsService.js';
@@ -81,7 +81,9 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
     type TaskListItem = {
       id: number;
       title: string;
+      shortDescription: string | null;
       description: string | null;
+      descriptionHtml: string | null;
       points: number | null;
       category: string | null;
       categoryIconKey: string | null;
@@ -107,7 +109,9 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
       return {
         id: t.id,
         title: t.title,
-        description: t.descriptionHtml || t.description,
+        shortDescription: t.shortDescription ?? t.description ?? null,
+        description: t.shortDescription ?? t.description ?? null,
+        descriptionHtml: t.descriptionHtml ?? t.description ?? null,
         points: t.points,
         category: t.category,
         categoryIconKey: t.iconKey ?? null,
@@ -141,19 +145,6 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
     const experienceTotal = req.participant!.experiencePoints ?? 0;
 
     const currentDay = settings.currentDay ?? 1;
-    const dayQuestions = await db.select().from(questions)
-      .where(and(
-        eq(questions.status, 'published'),
-        eq(questions.dayNumber, currentDay),
-        or(isNull(questions.publishTime), lte(questions.publishTime, now)),
-      ));
-    const participantAnswers = await db.select().from(answers)
-      .where(eq(answers.participantId, req.participant!.id));
-    const answeredIds = new Set(participantAnswers.map(a => a.questionId));
-    const touchpoints = dayQuestions.filter(q => answeredIds.has(q.id)).length;
-    const touchpointsTotal = dayQuestions.length || 7;
-    const requiredTouchpoints = settings.kbUnlockThreshold ?? 4;
-    const unlockDisabled = settings.kbUnlockDisabled === true;
 
     const pendingTeamInvites = await db.select({
       c: taskTeamConfirmations,
@@ -178,10 +169,6 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
         return { ...t, availableFrom };
       }),
       dayNumber: currentDay,
-      kbLocked: !unlockDisabled && touchpoints < requiredTouchpoints,
-      touchpointsCompleted: touchpoints,
-      touchpointsTotal,
-      requiredTouchpoints,
       pendingTeamInvites: pendingTeamInvites.map(r => ({
         submissionId: r.s.id,
         taskId: r.t.id,
@@ -317,6 +304,8 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
     } else if (forceAuto && pointsAwarded > 0) {
       const awarded = await awardPoints(req.participant!.id, 'task_complete', pointsAwarded, task.dayNumber ?? undefined);
       xpAwarded = awarded?.awarded ?? pointsAwarded;
+      const { awardTaskLinkedMedals } = await import('../services/taskMedalAward.js');
+      await awardTaskLinkedMedals(req.participant!.id, task);
     } else if (submission && (status === 'pending' || status === 'pending_team')) {
       await sendPushNotification(
         [req.participant!.id],

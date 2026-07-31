@@ -56,6 +56,21 @@ export function parseTimeSlot(slot: string | null | undefined): { start: string;
   return { start, end: end || addMinutes(start, 90) };
 }
 
+/** Like parseTimeSlot, but empty slot → empty fields (optional nested time). */
+export function parseOptionalTimeSlot(slot: string | null | undefined): { start: string; end: string } {
+  if (!slot?.trim()) return { start: '', end: '' };
+  return parseTimeSlot(slot);
+}
+
+/** Max nesting: root → section → item */
+export const MAX_PROGRAM_NEST_DEPTH = 3;
+
+export function nestLevelLabel(depth: number): string {
+  if (depth <= 1) return 'Блок';
+  if (depth === 2) return 'Подблок';
+  return 'Пункт';
+}
+
 function addMinutes(hhmm: string, mins: number): string {
   const [h, m] = hhmm.split(':').map(Number);
   const total = h * 60 + m + mins;

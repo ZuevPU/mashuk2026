@@ -40,8 +40,16 @@ export function reflectionKindFromQuestion(q: {
   const block = (q.block || '').toLowerCase();
   if (block.includes('точка а')) return 'point_a';
   if (block.includes('точка б')) return 'point_b';
+  // State checks first — evening checkin must not become evening_summary
+  if (
+    q.type === 'checkin'
+    || block.includes('проверк')
+    || q.timePoint === 'утро'
+    || (q as { questionKind?: string | null }).questionKind === 'state_check'
+  ) {
+    return 'state_check';
+  }
   if (block.includes('итог') || q.timePoint === 'вечер') return 'evening_summary';
-  if (q.type === 'checkin' || block.includes('проверк') || q.timePoint === 'утро') return 'state_check';
   if (isLessonReflectionQuestion(q)) return 'after_event';
   return null;
 }

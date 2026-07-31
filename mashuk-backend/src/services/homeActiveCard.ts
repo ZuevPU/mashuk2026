@@ -73,14 +73,17 @@ export function resolveHomeActiveCard(input: ResolveHomeActiveCardInput): HomeAc
     };
   }
 
-  const nowEvent = schedule.find(s => s.kind === 'now');
-  if (nowEvent && currentDay !== 8 && (phase === 'day' || phase === 'evening')) {
+  const nowEvents = schedule.filter(s => s.kind === 'now');
+  if (nowEvents.length > 0 && currentDay !== 8 && (phase === 'day' || phase === 'evening')) {
+    const parallel = nowEvents.length > 1;
     return {
       kind: 'program_now',
       phase,
-      tag: 'СЕЙЧАС · программа',
-      title: nowEvent.title,
-      subtitle: `${nowEvent.time}${nowEvent.place ? ` · ${nowEvent.place}` : ''}`,
+      tag: parallel ? 'СЕЙЧАС · параллельно' : 'СЕЙЧАС · программа',
+      title: parallel ? nowEvents.map(e => e.title).join(' · ') : nowEvents[0].title,
+      subtitle: parallel
+        ? nowEvents.map(e => `${e.time}${e.place ? ` · ${e.place}` : ''}`).join(' | ')
+        : `${nowEvents[0].time}${nowEvents[0].place ? ` · ${nowEvents[0].place}` : ''}`,
       route: '/program',
       cta: 'Расписание →',
     };

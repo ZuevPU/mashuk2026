@@ -91,7 +91,7 @@ export const TouchpointsCard: React.FC<{
 
   return (
     <div className="m-tp">
-      <div className="m-tp-l">Точки осмысления · {completed} из {total}</div>
+      <div className="m-tp-l">Точки дня · {completed} из {total}</div>
       <div className="m-pdots">
         {points}
       </div>

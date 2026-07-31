@@ -1,6 +1,7 @@
 import type { tasks } from '../db/schema.js';
 
 export const TASK_CONFIRMATION_METHODS = [
+  'text',
   'qr',
   'photo',
   'link',
@@ -27,6 +28,10 @@ export function methodsFromLegacy(task: {
   autoConfirm?: boolean | null;
   answerType?: string | null;
 }): string[] {
+  const answerType = task.answerType || '';
+  if (answerType === 'text') {
+    return task.autoConfirm === false ? ['text', 'moderator'] : ['text'];
+  }
   const ct = task.confirmationType || 'text_photo';
   if (ct === 'qr') return ['qr'];
   if (ct === 'photo') return ['photo'];
@@ -34,21 +39,32 @@ export function methodsFromLegacy(task: {
   if (ct === 'team') return ['team'];
   if (ct === 'auto') return [];
   if (ct === 'text_photo') {
-    if (task.autoConfirm === false) return ['photo', 'moderator'];
-    return ['photo'];
+    if (task.autoConfirm === false) return ['text', 'photo', 'moderator'];
+    return ['text', 'photo'];
   }
-  return ['photo'];
+  return ['text'];
 }
 
 export function legacyConfirmationType(methods: string[] | null | undefined): string {
   const m = methods ?? [];
   if (m.includes('team')) return 'team';
   if (m.includes('qr')) return 'qr';
-  if (m.includes('link') && !m.includes('photo')) return 'post_url';
-  if (m.includes('photo') && m.length === 1) return 'photo';
+  if (m.includes('link') && !m.includes('photo') && !m.includes('text')) return 'post_url';
+  if (m.includes('photo') && !m.includes('text') && m.filter(x => x !== 'moderator').length === 1) return 'photo';
+  if (m.includes('text') && !m.includes('photo') && !m.includes('link')) return 'text_photo';
   if (m.length === 0) return 'auto';
   if (m.includes('link')) return 'post_url';
   return 'text_photo';
+}
+
+export function answerTypeFromMethods(methods: string[] | null | undefined): string {
+  const m = methods ?? [];
+  const hasText = m.includes('text');
+  const hasPhoto = m.includes('photo');
+  if (hasText && hasPhoto) return 'text_and_photo';
+  if (hasPhoto) return 'photo';
+  if (hasText) return 'text';
+  return 'text';
 }
 
 export function normalizeConfirmationMethods(raw: unknown): string[] {
@@ -94,6 +110,7 @@ export function enrichTaskWritePayload(
     const methods = normalizeConfirmationMethods(body.confirmationMethods);
     patch.confirmationMethods = methods;
     patch.confirmationType = legacyConfirmationType(methods);
+    patch.answerType = answerTypeFromMethods(methods);
     if (methods.includes('team')) patch.scopeType = 'team';
     if (methods.includes('moderator')) patch.autoConfirm = false;
     else if (methods.length === 0) patch.autoConfirm = true;
@@ -119,6 +136,7 @@ export function enrichTaskWritePayload(
     if (!req) methods = methods.filter(x => x !== 'moderator');
     patch.confirmationMethods = methods;
     patch.confirmationType = legacyConfirmationType(methods);
+    patch.answerType = answerTypeFromMethods(methods);
   }
 
   if ('scopeType' in body && body.scopeType === 'team') {
@@ -128,6 +146,68 @@ export function enrichTaskWritePayload(
     if (!methods.includes('team')) methods = [...methods, 'team'];
     patch.confirmationMethods = methods;
     patch.confirmationType = 'team';
+  }
+
+  if ('taskKind' in body && typeof body.taskKind === 'string') {
+    const kind = body.taskKind;
+    if (kind === 'team') {
+      patch.scopeType = 'team';
+      patch.executionType = 'once';
+      let methods = normalizeConfirmationMethods(
+        patch.confirmationMethods ?? existing?.confirmationMethods ?? [],
+      );
+      if (!methods.includes('team')) methods = [...methods, 'team'];
+      patch.confirmationMethods = methods;
+      patch.confirmationType = 'team';
+    } else if (kind === 'once' || kind === 'daily' || kind === 'repeatable') {
+      patch.scopeType = 'individual';
+      patch.executionType = kind;
+    }
+  }
+
+  if ('catalogStatus' in body && typeof body.catalogStatus === 'string') {
+    const cs = body.catalogStatus;
+    if (cs === 'completed') {
+      patch.status = 'archived';
+      patch.isHidden = false;
+    } else if (cs === 'hidden') {
+      patch.status = 'published';
+      patch.isHidden = true;
+    } else if (cs === 'draft') {
+      patch.status = 'draft';
+      patch.isHidden = false;
+    } else if (cs === 'active') {
+      patch.status = 'published';
+      patch.isHidden = false;
+    }
+  }
+
+  if ('medalId' in body) {
+    const mid = body.medalId != null ? Number(body.medalId) : null;
+    patch.medalId = mid && !Number.isNaN(mid) ? mid : null;
+    patch.medalTask = !!patch.medalId || (body.medalTask === true);
+  } else if ('medalTask' in body && body.medalTask === false) {
+    patch.medalTask = false;
+  }
+
+  if ('shortDescription' in body || 'descriptionHtml' in body) {
+    const short = typeof body.shortDescription === 'string' ? body.shortDescription.trim() : undefined;
+    const html = typeof body.descriptionHtml === 'string' ? body.descriptionHtml : undefined;
+    if (short != null) patch.shortDescription = short || null;
+    if (html != null) {
+      patch.descriptionHtml = html;
+      patch.description = short || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || null;
+    } else if (short != null) {
+      patch.description = short || null;
+    }
+  }
+
+  if ('eventTime' in body && body.eventTime) {
+    const et = body.eventTime instanceof Date ? body.eventTime : new Date(String(body.eventTime));
+    if (!Number.isNaN(et.getTime())) {
+      patch.eventTime = et;
+      if (!('availableFrom' in body)) patch.availableFrom = et;
+    }
   }
 
   return patch;
@@ -175,15 +255,17 @@ export function validateTaskSubmissionPayload(
   },
 ): { ok: true } | { ok: false; error: string } {
   const methods = taskMethodsForParticipant(task);
-  const answerType = task.answerType || 'text_and_photo';
+  const answerType = task.answerType || '';
 
-  if (methods.includes('photo')) {
-    if ((answerType === 'photo' || answerType === 'text_and_photo') && !body.photoUrl) {
-      return { ok: false, error: 'Требуется фото' };
-    }
-    if (answerType === 'text' && !body.answerText?.trim() && !body.photoUrl) {
-      return { ok: false, error: 'Требуется ответ' };
-    }
+  if (methods.includes('text') && !body.answerText?.trim()) {
+    return { ok: false, error: 'Введите текстовый ответ' };
+  }
+  if (methods.includes('photo') && !body.photoUrl) {
+    return { ok: false, error: 'Требуется фото' };
+  }
+  // Legacy: answerType=text without methods including text
+  if (!methods.includes('text') && !methods.includes('photo') && answerType === 'text') {
+    if (!body.answerText?.trim()) return { ok: false, error: 'Введите текстовый ответ' };
   }
   if (methods.includes('link') && !body.postUrl?.trim()) {
     return { ok: false, error: 'Требуется ссылка на пост' };
@@ -199,7 +281,13 @@ export function validateTaskSubmissionPayload(
     }
   }
   if (methods.length === 0) return { ok: true };
-  if (!methods.includes('photo') && !methods.includes('link') && !methods.includes('team') && !methods.includes('qr')) {
+  if (
+    !methods.includes('text')
+    && !methods.includes('photo')
+    && !methods.includes('link')
+    && !methods.includes('team')
+    && !methods.includes('qr')
+  ) {
     if (!body.answerText?.trim() && !body.photoUrl && !body.postUrl?.trim()) {
       return { ok: false, error: 'Заполните ответ' };
     }

@@ -16,6 +16,7 @@ import {
   type AdminTask,
   type TaskCategory,
   type TaskDraft,
+  type MedalOption,
 } from './types';
 
 type ListTab = 'active' | 'drafts' | 'archive';
@@ -44,6 +45,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [tasks, setTasks] = useState<AdminTask[]>([]);
   const [totalAll, setTotalAll] = useState(0);
   const [categories, setCategories] = useState<TaskCategory[]>([]);
+  const [medals, setMedals] = useState<MedalOption[]>([]);
   const [places, setPlaces] = useState<ProgramPlace[]>([]);
   const [totalDays, setTotalDays] = useState(8);
   const [forumDay, setForumDay] = useState(1);
@@ -90,6 +92,11 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     setTotalDays(td);
     setForumDay(cd);
     setCategories((await adminFetch('/task-categories')).categories || []);
+    setMedals(((await adminFetch('/medals')).medals || []).map((m: { id: number; name: string; level?: string }) => ({
+      id: m.id,
+      name: m.name,
+      level: m.level ?? null,
+    })));
     setPlaces((await adminFetch('/program-places')).places || []);
     const allRes = await adminFetch('/tasks');
     setTotalAll(allRes.totalCount ?? (allRes.tasks?.length || 0));
@@ -224,6 +231,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           draft={draft}
           categories={categories}
           places={places}
+          medals={medals}
           totalDays={totalDays}
           isNew={!editingId}
           editingKey={editingId ?? 'new'}

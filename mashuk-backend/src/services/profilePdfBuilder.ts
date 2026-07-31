@@ -10,8 +10,12 @@ import { getRoleMeta, ROLE_KEYS } from './roleService.js';
 import {
   loadPublishedTouchpointQuestions,
   buildTouchpointItemsForDay,
-  touchpointCompletionRatio,
+  touchpointCompletionRatioCumulative,
+  TOUCHPOINT_BLOCKS,
+  isTouchpointQuestionForForumDay,
 } from './touchpointProgress.js';
+import { resolveActiveShiftId } from './shiftService.js';
+import { backfillPathPointsForAnswers } from './pointsService.js';
 import {
   computeAbProgressPercent,
   resolveProfileProgressWeights,
@@ -27,6 +31,47 @@ import {
 } from './profileRecommendations.js';
 import { PIGGYBANK_TAGS, PIGGYBANK_SOURCES, entryHasTag, entryTags, formatTagsForExport, primaryTag } from './piggybankDict.js';
 import { participantAnswerSummary } from './participantAnswerFormat.js';
+
+const NON_SUBSTANTIVE_TYPES = new Set([
+  'checkin',
+  'scale_5',
+  'scale_10',
+  'choice',
+  'multi',
+  'emotion',
+  'dependent',
+]);
+
+/** Open-text reflections for profile — skip scales, check-ins, short rating dumps. */
+export function isSubstantiveProfileReflection(input: {
+  type?: string | null;
+  questionKind?: string | null;
+  reflectionKind?: string | null;
+  block?: string | null;
+  answerType?: string | null;
+  preview: string;
+}): boolean {
+  const preview = (input.preview || '').trim();
+  if (preview.length < 16) return false;
+  // Pure numeric / rating lists like "7 · 8 · 5"
+  if (/^[\d\s·.,/\-–—]+$/.test(preview)) return false;
+
+  const kind = `${input.questionKind || ''} ${input.reflectionKind || ''}`.toLowerCase();
+  if (kind.includes('state_check')) return false;
+
+  const block = (input.block || '').toLowerCase();
+  if (block.includes('проверк')) return false;
+
+  const type = (input.type || '').toLowerCase();
+  const answerType = (input.answerType || '').toLowerCase();
+  if (NON_SUBSTANTIVE_TYPES.has(type) || NON_SUBSTANTIVE_TYPES.has(answerType)) return false;
+  if (answerType.startsWith('scale') || type.startsWith('scale')) return false;
+
+  // Prefer open / text; allow day_summary open forms with real prose
+  if (type === 'open' || type === 'text' || answerType === 'text' || !type) return true;
+  // Unknown custom types: keep only if preview looks like a sentence
+  return /[а-яёa-z]{4,}/i.test(preview) && preview.split(/\s+/).length >= 3;
+}
 
 function buildRoleRoute(startKey: string | null, dayRoles: string[], growthKey: string | null): string {
   const start = startKey ? getRoleMeta(startKey)?.name : null;
@@ -98,27 +143,41 @@ export async function gatherProfileBundle(participantId: number) {
     ? await db.select().from(questions).where(inArray(questions.id, answerQuestionIds))
     : [];
   const questionById = new Map(answerQuestions.map(q => [q.id, q]));
-  const recentReflections = [...userAnswers]
-    .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
-    .slice(0, 10)
-    .map(a => {
-      const q = questionById.get(a.questionId);
-      const preview = participantAnswerSummary(a.answerData, q?.type);
-      return {
-        questionId: a.questionId,
-        title: q?.title ?? 'Вопрос',
-        block: q?.block ?? null,
-        answeredAt: a.createdAt,
-        preview,
-      };
-    })
-    .filter(r => r.preview.length > 0);
+  const recentReflections: Array<{
+    questionId: number;
+    title: string;
+    block: string | null;
+    answeredAt: Date | null;
+    preview: string;
+  }> = [];
+
+  for (const a of userAnswers) {
+    const q = questionById.get(a.questionId);
+    const preview = participantAnswerSummary(a.answerData, q?.type).slice(0, 320);
+    if (!isSubstantiveProfileReflection({
+      type: q?.type,
+      questionKind: q?.questionKind,
+      reflectionKind: q?.reflectionKind,
+      block: q?.block,
+      answerType: q?.answerType,
+      preview,
+    })) continue;
+    recentReflections.push({
+      questionId: a.questionId,
+      title: q?.title ?? 'Вопрос',
+      block: q?.block ?? null,
+      answeredAt: a.createdAt,
+      preview,
+    });
+  }
+
   const userTasks = await db.select().from(taskSubmissions).where(eq(taskSubmissions.participantId, p.id));
   const allPiggy = await db.select().from(piggybank).where(eq(piggybank.participantId, p.id));
   const dayStates = await db.select().from(participantDayState)
     .where(eq(participantDayState.participantId, p.id))
     .orderBy(asc(participantDayState.dayNumber));
 
+  // Only free-text evening fields — not program scale ratings
   for (const s of dayStates) {
     const r = s.eveningRatings as Record<string, unknown> | null;
     if (!r) continue;
@@ -130,31 +189,61 @@ export async function gatherProfileBundle(participantId: number) {
     };
     for (const [key, label] of Object.entries(labels)) {
       const v = r[key];
-      if (typeof v === 'string' && v.trim()) {
-        recentReflections.push({
-          questionId: 0,
-          title: `Итоговая анкета · день ${s.dayNumber} · ${label}`,
-          block: 'Итоги дня',
-          answeredAt: s.updatedAt ?? s.createdAt,
-          preview: v.trim().slice(0, 320),
-        });
-      }
+      if (typeof v !== 'string' || !v.trim()) continue;
+      const preview = v.trim().slice(0, 320);
+      if (!isSubstantiveProfileReflection({
+        type: 'open',
+        block: 'Итоги дня',
+        preview,
+      })) continue;
+      recentReflections.push({
+        questionId: 0,
+        title: `Итоговая анкета · день ${s.dayNumber} · ${label}`,
+        block: 'Итоги дня',
+        answeredAt: s.updatedAt ?? s.createdAt,
+        preview,
+      });
     }
   }
   recentReflections.sort((a, b) =>
     new Date(b.answeredAt ?? 0).getTime() - new Date(a.answeredAt ?? 0).getTime());
-  const recentReflectionsForClient = recentReflections.slice(0, 12);
+  const recentReflectionsForClient = recentReflections.slice(0, 24);
 
   const answeredIds = new Set(userAnswers.map(a => a.questionId));
 
-  const touchpointQuestions = await loadPublishedTouchpointQuestions(currentDay);
+  // Repair path points if answers were submitted when levels_config was empty
+  await backfillPathPointsForAnswers(
+    p.id,
+    userAnswers.map(a => ({ questionId: a.questionId })),
+    questionById,
+  );
+  const [pFresh] = await db.select().from(participants).where(eq(participants.id, p.id)).limit(1);
+  if (pFresh) Object.assign(p, pFresh);
+
+  const shiftId = await resolveActiveShiftId();
+  const touchpointQuestions = await loadPublishedTouchpointQuestions(currentDay, shiftId);
+  // Include answered touchpoint questions even if from another shift / older twin
+  for (const q of answerQuestions) {
+    if (touchpointQuestions.some(t => t.id === q.id)) continue;
+    if ([1, 2, 3, 4, 5, 6, 7].some(d => isTouchpointQuestionForForumDay(q, d))) {
+      touchpointQuestions.push(q);
+    }
+  }
   const dayForTp = Math.min(currentDay, 7);
-  const { completed: tpDone, expected: tpExpected } = touchpointCompletionRatio(
+  const { completed: tpDone, expected: tpExpected } = touchpointCompletionRatioCumulative(
     touchpointQuestions,
     answeredIds,
     dayForTp,
   );
   const tpRatio = tpDone / tpExpected;
+
+  const touchpointAnswerCount = userAnswers.filter(a => {
+    const q = questionById.get(a.questionId);
+    if (!q) return false;
+    if (!TOUCHPOINT_BLOCKS.has(q.block || '')) return false;
+    return [1, 2, 3, 4, 5, 6, 7].some(d => isTouchpointQuestionForForumDay(q, d));
+  }).length;
+  const eveningDone = eveningCompletedCount(dayStates);
 
   const publishedTasks = await db.select().from(tasks).where(
     or(isNull(tasks.dayNumber), lte(tasks.dayNumber, currentDay)),
@@ -162,9 +251,15 @@ export async function gatherProfileBundle(participantId: number) {
   const tasksApproved = userTasks.filter(t => t.status === 'approved').length;
   const piggyInWork = allPiggy.filter(e => entryHasTag(e, 'в работу')).length;
 
+  // Evening weight: day-state forms + credit for answered touchpoints / state checks
+  const reflectionProgressUnits = Math.min(
+    7,
+    eveningDone + Math.min(7, touchpointAnswerCount),
+  );
+
   const abProgress = computeAbProgressPercent({
     touchpointRatio: tpRatio,
-    eveningDone: eveningCompletedCount(dayStates),
+    eveningDone: reflectionProgressUnits,
     eveningTotal: 7,
     tasksApproved,
     tasksTotal: Math.max(1, publishedTasks.length),
@@ -323,8 +418,10 @@ export async function gatherProfileBundle(participantId: number) {
       activitiesVisited,
       activitiesTotal,
       piggybankTotal: allPiggy.length,
-      eveningReflectionsDone: eveningCompletedCount(dayStates),
-      eveningReflectionsTotal: 7,
+      eveningReflectionsDone: tpDone,
+      eveningReflectionsTotal: tpExpected,
+      touchpointsDone: tpDone,
+      touchpointsExpected: tpExpected,
     },
     trajectory: {
       from: 'Точка А',

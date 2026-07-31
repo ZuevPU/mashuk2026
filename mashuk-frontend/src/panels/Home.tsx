@@ -174,7 +174,9 @@ export const HomePanel: React.FC<{
   const card = d.activeCard;
   const hidePriorityDup = card && d.priorityAction && card.route === d.priorityAction.route;
   const hideEveningDup = card?.kind === 'evening_survey';
-  const hideNowSchedule = card?.kind === 'program_now' || card?.kind === 'program_soon';
+  const nowCount = schedule.filter(ev => ev.kind === 'now').length;
+  // Keep schedule list visible when several blocks run in parallel
+  const hideNowSchedule = (card?.kind === 'program_now' && nowCount <= 1) || card?.kind === 'program_soon';
   const pushBanners = (d.activePushBanners ?? []).filter(b => !dismissedBanners.includes(b.id));
 
   const eveningQuestionnaireBlock = showEvening ? (

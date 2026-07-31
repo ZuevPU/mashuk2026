@@ -102,6 +102,28 @@ describe('home active card', () => {
     });
     assert.equal(card?.kind, 'program_now');
   });
+
+  it('lists parallel now blocks on home card', async () => {
+    const { resolveHomeActiveCard } = await import('../services/homeActiveCard.js');
+    const afternoon = new Date(Date.UTC(2026, 7, 12, 13, 45, 0)); // 16:45 MSK
+    const card = resolveHomeActiveCard({
+      now: afternoon,
+      eveningWrap: false,
+      currentDay: 2,
+      priorityAction: null,
+      eveningCard: null,
+      eveningQuestionnaire: { available: false, completed: false },
+      schedule: [
+        { kind: 'now', title: 'Культурная программа', time: '14:00', place: 'Зал' },
+        { kind: 'now', title: 'Консультации', time: '16:30', place: 'Кабинет' },
+      ],
+      touchpointItems: [],
+    });
+    assert.equal(card?.kind, 'program_now');
+    assert.match(card?.tag || '', /параллельно/i);
+    assert.match(card?.title || '', /Культурная программа/);
+    assert.match(card?.title || '', /Консультации/);
+  });
 });
 
 describe('piggybank dict', () => {

@@ -6,7 +6,7 @@ import {
 } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { countWords, getForumSettings, getTouchpointAccess, resolveEffectiveCurrentDay, toTouchpointUiStatus, isSameMoscowCalendarDay, getMoscowParts, getForumOperationalDateKey } from '../services/helpers.js';
-import { awardPoints } from '../services/pointsService.js';
+import { awardPoints, pointsActionForQuestion } from '../services/pointsService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { emotionIdToZone, EMOTION_ZONE_LABELS } from '../services/emotionZones.js';
 import { filterEventsForLessonSlot, lessonSlotIndexForQuestion } from '../services/lessonSlotEvents.js';
@@ -50,26 +50,6 @@ function participantCanAnswerExchangeQuestion(
     }
   }
   return null;
-}
-
-function isPointBQuestion(question: { block?: string | null; reflectionKind?: string | null }): boolean {
-  return question.block === 'Точка Б' || question.reflectionKind === 'point_b';
-}
-
-function pointsActionForQuestion(question: {
-  block?: string | null;
-  reflectionKind?: string | null;
-  type?: string | null;
-  timePoint?: string | null;
-}): string {
-  if (isPointBQuestion(question)) return 'point_b_complete';
-  if (question.type === 'checkin' || question.reflectionKind === 'state_check') {
-    const tp = (question.timePoint || '').toLowerCase();
-    if (tp.includes('утро')) return 'state_check_morning';
-    if (tp.includes('день')) return 'state_check_day';
-    if (tp.includes('вечер')) return 'state_check_evening';
-  }
-  return 'question_answer';
 }
 
 async function answerSubmitExtras(participantId: number, settings: Awaited<ReturnType<typeof getForumSettings>>) {

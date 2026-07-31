@@ -23,6 +23,8 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [directions, setDirections] = useState<any[]>([]);
   const [consents, setConsents] = useState<any[]>([]);
   const [scheduleVersions, setScheduleVersions] = useState<any[]>([]);
+  const [scheduleDays, setScheduleDays] = useState<{ dayNumber: number; isPublished?: boolean }[]>([]);
+  const [publishDayPick, setPublishDayPick] = useState(1);
   const [newGroup, setNewGroup] = useState({ name: '', capacity: 30, directionId: '' });
   const [newConsent, setNewConsent] = useState({ kind: 'pd', version: 1, title: '', body: '', isActive: true });
   const [loading, setLoading] = useState(true);
@@ -40,6 +42,10 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       setGroups((await adminFetch('/groups')).groups || []);
       setConsents((await adminFetch('/consents')).consents || []);
       setDirections((await adminFetch('/directions')).directions || []);
+      const sched = await adminFetch('/schedule/versions').catch(() => ({ days: [], versions: [] }));
+      setScheduleDays(sched.days || []);
+      setScheduleVersions(sched.versions || []);
+      setPublishDayPick(fs?.currentDay ?? 1);
     } finally {
       setLoading(false);
     }
@@ -85,10 +91,36 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
   const loadScheduleVersions = () =>
     act(async () => {
-      if (!forumSettings) return;
-      const r = await adminFetch(`/schedule/versions?day=${forumSettings.currentDay}`);
+      const r = await adminFetch(`/schedule/versions?day=${publishDayPick}`);
       setScheduleVersions(r.versions || []);
+      setScheduleDays(r.days || []);
     }, 'История загружена');
+
+  const publishScheduleDay = (dayNumber: number) => {
+    if (!confirm(`Опубликовать расписание дня ${dayNumber} для участников?\n\nДо публикации участники не видят этот день, даже если события уже внесены.`)) return;
+    act(async () => {
+      await adminFetch('/schedule/publish', {
+        method: 'POST',
+        body: JSON.stringify({ dayNumber }),
+      });
+      const r = await adminFetch('/schedule/versions');
+      setScheduleDays(r.days || []);
+      setScheduleVersions(r.versions || []);
+    }, `День ${dayNumber} опубликован`);
+  };
+
+  const unpublishScheduleDay = (dayNumber: number) => {
+    if (!confirm(`Скрыть день ${dayNumber} у участников? События останутся в админке как черновик дня.`)) return;
+    act(async () => {
+      await adminFetch('/schedule/draft', {
+        method: 'POST',
+        body: JSON.stringify({ dayNumber }),
+      });
+      const r = await adminFetch('/schedule/versions');
+      setScheduleDays(r.days || []);
+      setScheduleVersions(r.versions || []);
+    }, `День ${dayNumber} скрыт`);
+  };
 
   if (forumSegment === 'settings' && (loading || !forumSettings)) {
     return <p className="adm-muted">Загрузка конструктора форума…</p>;
@@ -96,6 +128,9 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
   const totalDays = forumSettings?.totalDays ?? 8;
   const currentDay = forumSettings?.currentDay ?? 1;
+  const publishedDaySet = new Set(
+    scheduleDays.filter(d => d.isPublished).map(d => d.dayNumber),
+  );
   const focusFilled = new Set(dayFocusList.filter(f => f.title || f.text).map(f => f.dayNumber));
 
   return (
@@ -138,7 +173,10 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
       <div className="card adm-forum-block">
         <h3>Календарь и публикация программы</h3>
-        <p className="adm-forum-hint">Черновик расписания собирается во вкладке «Программа». Здесь вы публикуете день для участников.</p>
+        <p className="adm-forum-hint">
+          Расписание вбиваете во вкладке «Программа» заранее. Участники видят день <strong>только после публикации</strong> здесь
+          (или кнопкой «Опубликовать день» в Программе). Неопубликованные дни в приложении пустые.
+        </p>
         <div className="adm-forum-grid-2">
           <label className="adm-field">
             <span className="adm-label">Всего дней форума</span>
@@ -168,31 +206,66 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => saveForumSettings({ totalDays: totalDaysDraft, recommendationThreshold: recThreshold })}>
             Сохранить календарь и порог
           </button>
-          <button
-            type="button"
-            className="adm-btn adm-btn-primary"
-            onClick={() => {
-              if (!confirm(`Опубликовать расписание дня ${currentDay} для всех участников?`)) return;
-              act(async () => {
-                await adminFetch('/schedule/publish', {
-                  method: 'POST',
-                  body: JSON.stringify({ dayNumber: currentDay }),
-                });
-                await loadScheduleVersions();
-              }, `День ${currentDay} опубликован`);
-            }}
-          >
-            Опубликовать день {currentDay}
-          </button>
+        </div>
+
+        <h4 style={{ margin: '16px 0 8px', fontSize: 14 }}>Статус дней для участников</h4>
+        <table className="adm-table">
+          <thead>
+            <tr>
+              <th>День</th>
+              <th>Статус</th>
+              <th>Действие</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => {
+              const live = publishedDaySet.has(d);
+              return (
+                <tr key={d}>
+                  <td>
+                    День {d}
+                    {d === currentDay ? <span className="adm-muted"> · текущий</span> : null}
+                  </td>
+                  <td>
+                    <span className={live ? 'adm-forum-accent' : 'adm-muted'} style={{ fontWeight: 700 }}>
+                      {live ? 'Опубликован' : 'Черновик (скрыт)'}
+                    </span>
+                  </td>
+                  <td>
+                    {live ? (
+                      <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => unpublishScheduleDay(d)}>
+                        Скрыть
+                      </button>
+                    ) : (
+                      <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={() => publishScheduleDay(d)}>
+                        Опубликовать
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <div className="adm-forum-toolbar" style={{ marginTop: 12, flexWrap: 'wrap' }}>
+          <label className="adm-forum-inline">
+            История публикаций дня
+            <select className="adm-input" style={{ width: 80 }} value={publishDayPick} onChange={e => setPublishDayPick(Number(e.target.value))}>
+              {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </label>
           <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={loadScheduleVersions}>
-            История публикаций
+            Показать историю
           </button>
         </div>
         {scheduleVersions.length > 0 && (
           <table className="adm-table" style={{ marginTop: 12 }}>
             <thead><tr><th>День</th><th>Версия</th><th>Когда</th><th>Событий</th></tr></thead>
             <tbody>
-              {scheduleVersions.slice(0, 8).map((v: any) => (
+              {scheduleVersions.filter((v: any) => v.dayNumber === publishDayPick).slice(0, 8).map((v: any) => (
                 <tr key={v.id}>
                   <td>{v.dayNumber}</td>
                   <td>{v.version}</td>

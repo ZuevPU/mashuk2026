@@ -6,6 +6,7 @@ import { sendPushNotification } from './pushService.js';
 import { getMoscowParts } from './timePhase.js';
 import { loadPublishedTouchpointQuestions } from './touchpointProgress.js';
 import { TOUCHPOINT_SLOTS } from './touchpointTemplates.js';
+import { resolveActiveShiftId } from './shiftService.js';
 
 const RETRY_MS = 30 * 60 * 1000;
 const OPEN_WINDOW_MS = 3 * 60 * 1000;
@@ -74,7 +75,8 @@ export async function runTouchpointPushPlanner(now = new Date()): Promise<string
   if (currentDay < 1 || currentDay > 7) return [];
 
   const dayStart = startOfMoscowDay(now);
-  const touchQs = await loadPublishedTouchpointQuestions(currentDay);
+  const shiftId = await resolveActiveShiftId();
+  const touchQs = await loadPublishedTouchpointQuestions(currentDay, shiftId);
   const dayTouch = touchQs.filter(q => q.dayNumber === currentDay);
   if (dayTouch.length === 0) return [];
 

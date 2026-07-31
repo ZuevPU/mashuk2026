@@ -4,6 +4,7 @@ import {
   normalizePostUrl,
   isQrInValidWindow,
 } from '../services/taskEligibility.js';
+import { validateTaskSubmissionPayload } from '../services/taskAdminHelpers.js';
 
 describe('normalizePostUrl', () => {
   it('lowercases host and strips trailing slash', () => {
@@ -44,5 +45,37 @@ describe('isQrInValidWindow', () => {
       isQrInValidWindow({ qrValidTo: new Date('2026-08-11T00:00:00Z') }, now),
       false,
     );
+  });
+});
+
+describe('validateTaskSubmissionPayload text-only', () => {
+  const textTask = {
+    confirmationMethods: ['text', 'moderator'],
+    confirmationType: 'text_photo',
+    answerType: 'text',
+    autoConfirm: false,
+    qrToken: null,
+  } as never;
+
+  it('accepts text without photo', () => {
+    const r = validateTaskSubmissionPayload(textTask, { answerText: 'Мой ответ' });
+    assert.equal(r.ok, true);
+  });
+
+  it('rejects empty text', () => {
+    const r = validateTaskSubmissionPayload(textTask, { answerText: '  ' });
+    assert.equal(r.ok, false);
+  });
+
+  it('still requires photo when photo method selected', () => {
+    const photoTask = {
+      confirmationMethods: ['photo', 'moderator'],
+      confirmationType: 'photo',
+      answerType: 'photo',
+      autoConfirm: false,
+      qrToken: null,
+    } as never;
+    const r = validateTaskSubmissionPayload(photoTask, { answerText: 'есть текст' });
+    assert.equal(r.ok, false);
   });
 });

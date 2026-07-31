@@ -40,6 +40,14 @@ export async function applyTaskModeration(
       .set({ pointsAwarded: pts })
       .where(eq(taskSubmissions.id, id));
     updated.pointsAwarded = pts;
+    const { awardTaskLinkedMedals } = await import('./taskMedalAward.js');
+    await awardTaskLinkedMedals(existing.participantId, task);
+    if (task.confirmationType === 'team') {
+      const teamIds = (existing.teamMemberIds as number[]) || [];
+      for (const pid of teamIds) {
+        if (pid !== existing.participantId) await awardTaskLinkedMedals(pid, task);
+      }
+    }
   }
 
   try {

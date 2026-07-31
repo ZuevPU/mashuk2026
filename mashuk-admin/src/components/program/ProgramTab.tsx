@@ -224,7 +224,7 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
         return;
       }
       if (!confirm(`Скопировать ${source.length} блок(ов) с дня ${copyFromDay} на день ${selectedDay}?`)) return;
-      for (const e of source) {
+      const copyNode = async (e: ProgramEvent, parentEventId: number | null) => {
         const isKeyBlock = e.blockType === 'key_block' || e.isKeyBlock;
         const created = await adminFetch('/events', {
           method: 'POST',
@@ -233,7 +233,7 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
             place: e.place,
             description: e.description,
             dayNumber: selectedDay,
-            timeSlot: e.timeSlot,
+            timeSlot: e.timeSlot || null,
             tags: e.tags || [],
             blockType: isKeyBlock ? 'key_block' : (e.blockType || 'session'),
             isKeyBlock: !!isKeyBlock,
@@ -243,27 +243,18 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
             audienceType: e.audienceType || 'all',
             audienceDirectionId: e.audienceDirectionId ?? null,
             speakerIds: e.speakerIds || [],
-            hasSubSessions: e.hasSubSessions === true,
+            hasSubSessions: (e.children?.length ?? 0) > 0 || e.hasSubSessions === true,
+            ...(parentEventId ? { parentEventId } : {}),
           }),
         });
-        const parentId = created.event?.id;
+        const newId = created.event?.id as number | undefined;
+        if (!newId) return;
         for (const ch of e.children || []) {
-          await adminFetch('/events', {
-            method: 'POST',
-            body: JSON.stringify({
-              title: ch.title,
-              place: ch.place,
-              description: ch.description,
-              dayNumber: selectedDay,
-              timeSlot: ch.timeSlot || e.timeSlot,
-              parentEventId: parentId,
-              isPublished: false,
-              dayPublished: false,
-              blockType: ch.blockType || 'session',
-              tags: ch.tags || [],
-            }),
-          });
+          await copyNode(ch, newId);
         }
+      };
+      for (const e of source) {
+        await copyNode(e, null);
       }
       await reloadEvents(selectedDay);
     }, 'День скопирован');

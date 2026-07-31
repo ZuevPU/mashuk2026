@@ -369,27 +369,42 @@ export async function copyShiftProgram(opts: {
 
   const eventIdMap = new Map<number, number>();
   const srcEvents = await db.select().from(events).where(eq(events.shiftId, opts.sourceId)).orderBy(asc(events.id));
-  const parents = srcEvents.filter(e => !e.parentEventId);
-  const children = srcEvents.filter(e => e.parentEventId);
-  for (const e of parents) {
-    const { id: oldId, qrToken: _q, ...rest } = e;
-    const [created] = await db.insert(events).values({
-      ...rest,
-      shiftId: newShift.id,
-      parentEventId: null,
-      qrToken: null,
-    }).returning();
-    eventIdMap.set(oldId, created.id);
-  }
-  for (const e of children) {
-    const { id: oldId, qrToken: _q, parentEventId, ...rest } = e;
-    const [created] = await db.insert(events).values({
-      ...rest,
-      shiftId: newShift.id,
-      parentEventId: parentEventId ? (eventIdMap.get(parentEventId) ?? null) : null,
-      qrToken: null,
-    }).returning();
-    eventIdMap.set(oldId, created.id);
+  // Multi-pass so nested parents exist before children (depth > 1).
+  const pending = [...srcEvents];
+  let guard = 0;
+  while (pending.length && guard < srcEvents.length + 5) {
+    guard += 1;
+    const still: typeof pending = [];
+    for (const e of pending) {
+      if (e.parentEventId && !eventIdMap.has(e.parentEventId)) {
+        still.push(e);
+        continue;
+      }
+      const { id: oldId, qrToken: _q, parentEventId, ...rest } = e;
+      const [created] = await db.insert(events).values({
+        ...rest,
+        shiftId: newShift.id,
+        parentEventId: parentEventId ? (eventIdMap.get(parentEventId) ?? null) : null,
+        qrToken: null,
+      }).returning();
+      eventIdMap.set(oldId, created.id);
+    }
+    if (still.length === pending.length) {
+      // Orphaned parent refs — insert remaining as roots
+      for (const e of still) {
+        const { id: oldId, qrToken: _q, parentEventId: _p, ...rest } = e;
+        const [created] = await db.insert(events).values({
+          ...rest,
+          shiftId: newShift.id,
+          parentEventId: null,
+          qrToken: null,
+        }).returning();
+        eventIdMap.set(oldId, created.id);
+      }
+      break;
+    }
+    pending.length = 0;
+    pending.push(...still);
   }
 
   const srcMats = await db.select().from(materials).where(eq(materials.shiftId, opts.sourceId));

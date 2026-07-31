@@ -2,24 +2,30 @@ import { Response } from 'express';
 import { eq, and, lte, or, isNull, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  dayFocus, questions, answers, tasks, taskSubmissions, piggybank, events,
+  dayFocus, questions, answers, tasks, taskSubmissions, piggybank, events, scheduleDays,
 } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
   getForumSettings, formatTime, getMoscowPhase, isEveningWrapWindow,
   getTouchpointAccess, resolveEffectiveCurrentDay, resolveLiveScheduleDay, stateCheckTimePointOrder,
 } from '../services/helpers.js';
-import { getEventLiveStatus, resolveEventInterval } from '../services/eventSchedule.js';
+import {
+  calendarDateKeyFromTimestamp,
+  getEventLiveStatus,
+  resolveEventInterval,
+} from '../services/eventSchedule.js';
 import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
 import {
   buildTouchpointItemsForDay,
   isTouchpointQuestionForForumDay,
 } from '../services/touchpointProgress.js';
 import { questionMatchesDay } from '../services/questionAdminHelpers.js';
+import { resolveQuestionDayForAccess } from '../services/questionEligibility.js';
 import { getLevelProgress, totalRatingScore } from '../services/pointsService.js';
 import { loadDayContext } from './dayStateController.js';
 import { resolveHomeActiveCard } from '../services/homeActiveCard.js';
 import { entryHasTag } from '../services/piggybankDict.js';
+import { resolveActiveShiftId } from '../services/shiftService.js';
 
 export const getHome = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
@@ -35,8 +41,12 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const [focus] = await db.select().from(dayFocus)
       .where(eq(dayFocus.dayNumber, currentDay)).limit(1);
 
+    const shiftIdForQs = await resolveActiveShiftId();
     const publishedQuestions = await db.select().from(questions)
-      .where(eq(questions.status, 'published'));
+      .where(and(
+        eq(questions.status, 'published'),
+        eq(questions.shiftId, shiftIdForQs),
+      ));
 
     const dayQuestions = publishedQuestions.filter(q =>
       isTouchpointQuestionForForumDay(q, currentDay));
@@ -58,7 +68,8 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const missed = publishedQuestions
       .filter(q => !answeredIds.has(q.id))
       .map(q => {
-        const access = getTouchpointAccess(q.dayNumber, currentDay, q.closeTime, now, q.publishTime);
+        const accessDay = resolveQuestionDayForAccess(q, currentDay);
+        const access = getTouchpointAccess(accessDay, currentDay, q.closeTime, now, q.publishTime);
         return enrichMissed(q, access);
       })
       .filter(q => q.access === 'open' || q.access === 'overdue' || q.access === 'locked');
@@ -89,7 +100,8 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         if (answeredIds.has(q.id) || q.block !== 'Проверка состояния') return false;
         if (!questionMatchesDay(q, currentDay)) return false;
         if ((q.timePoint || '') !== tp) return false;
-        const access = getTouchpointAccess(q.dayNumber, currentDay, q.closeTime, now, q.publishTime);
+        const accessDay = resolveQuestionDayForAccess(q, currentDay);
+        const access = getTouchpointAccess(accessDay, currentDay, q.closeTime, now, q.publishTime);
         return access === 'open' || access === 'overdue';
       });
       if (priorityQuestion) break;
@@ -97,26 +109,48 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const pointB = publishedQuestions.find(q => {
       if (answeredIds.has(q.id)) return false;
       if (!(q.block === 'Точка Б' || q.dayNumber === 8)) return false;
-      const access = getTouchpointAccess(q.dayNumber, currentDay, q.closeTime, now, q.publishTime);
+      const accessDay = resolveQuestionDayForAccess(q, currentDay);
+      const access = getTouchpointAccess(accessDay, currentDay, q.closeTime, now, q.publishTime);
       return access === 'open' || access === 'overdue';
     });
 
-    const dayEvents = await db.select().from(events)
-      .where(and(eq(events.dayNumber, liveScheduleDay), eq(events.isPublished, true)))
-      .orderBy(asc(events.startTime));
+    const [dayMeta] = await db.select().from(scheduleDays).where(and(
+      eq(scheduleDays.dayNumber, liveScheduleDay),
+      eq(scheduleDays.shiftId, shiftIdForQs),
+    )).limit(1);
+    const dayIsLive = dayMeta?.isPublished === true;
+
+    const dayEvents = dayIsLive
+      ? await db.select().from(events)
+        .where(and(
+          eq(events.shiftId, shiftIdForQs),
+          eq(events.dayNumber, liveScheduleDay),
+          eq(events.isPublished, true),
+          eq(events.dayPublished, true),
+          isNull(events.parentEventId),
+        ))
+        .orderBy(asc(events.startTime))
+      : [];
 
     const SOON_MIN_MS = 15 * 60_000;
     const SOON_MAX_MS = 30 * 60_000;
+    const scheduleContext = {
+      startDate: settings.startDate ?? null,
+      dayCalendarDateKey: calendarDateKeyFromTimestamp(dayMeta?.calendarDate ?? null),
+    };
 
     const enrichedEvents = dayEvents.map(e => {
-      const { start, end } = resolveEventInterval(e, settings);
+      const { start, end } = resolveEventInterval(e, scheduleContext);
       const status = getEventLiveStatus(liveScheduleDay, liveScheduleDay, start, end, now);
       return { event: e, start, end, status };
     }).filter(x => x.start);
 
     const schedule: { kind: string; title: string; time: string; place?: string | null }[] = [];
-    const nowEvent = enrichedEvents.find(x => x.status === 'now');
-    if (nowEvent) {
+    // All overlapping «сейчас» blocks — not only the first by startTime
+    const nowEvents = enrichedEvents
+      .filter(x => x.status === 'now')
+      .sort((a, b) => a.start!.getTime() - b.start!.getTime());
+    for (const nowEvent of nowEvents) {
       schedule.push({
         kind: 'now',
         title: nowEvent.event.title,
@@ -131,7 +165,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       const diffMs = e.start!.getTime() - now.getTime();
       return diffMs >= SOON_MIN_MS && diffMs <= SOON_MAX_MS;
     });
-    if (soonEvent) {
+    if (soonEvent && schedule.length < 4) {
       schedule.push({
         kind: 'soon',
         title: soonEvent.event.title,
@@ -144,7 +178,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       if (soonEvent) return e.start!.getTime() > soonEvent.start!.getTime();
       return true;
     });
-    if (nextEvent && schedule.length < 3) {
+    if (nextEvent && schedule.length < 4) {
       schedule.push({
         kind: 'next',
         title: nextEvent.event.title,
@@ -281,7 +315,8 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       counts: {
         availableQuestions: publishedQuestions.filter(q => {
           if (answeredIds.has(q.id)) return false;
-          const access = getTouchpointAccess(q.dayNumber, currentDay, q.closeTime, now, q.publishTime);
+          const accessDay = resolveQuestionDayForAccess(q, currentDay);
+          const access = getTouchpointAccess(accessDay, currentDay, q.closeTime, now, q.publishTime);
           return access === 'open' || access === 'overdue';
         }).length,
         availableTasks: activeTasks.length,
@@ -310,10 +345,14 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         missedTodayCount,
         ctaQuestionId: ctaQuestionId ?? null,
         message: (() => {
+          const openCount = touchpointItems.filter(i => i.state === 'active').length;
+          const pendingCount = touchpointItems.filter(i => i.state === 'pending').length;
+          const doneCount = touchpointItems.filter(i => i.state === 'done').length;
           if (dayMissedCount === 0) {
-            const openCount = touchpointItems.filter(i => i.state === 'active').length;
-            if (openCount > 0) return `${openCount} открыто сегодня`;
-            return 'Все точки дня закрыты';
+            if (openCount > 0) return `${openCount} открыто сейчас`;
+            if (doneCount === dayTouchpointsTotal) return 'Все точки дня пройдены';
+            if (pendingCount > 0) return 'Следующие точки откроются по расписанию';
+            return 'Сейчас нет открытых точек';
           }
           const overdueN = missedToday.filter(m => m.state === 'overdue').length;
           if (overdueN > 0) return `${overdueN} пропущено — ещё можно заполнить`;

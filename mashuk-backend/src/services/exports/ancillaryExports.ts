@@ -15,6 +15,7 @@ import { resolveActiveShiftId } from '../shiftService.js';
 import { addReadmeSheet, fullName } from './exportCommon.js';
 import { loadEnrichedParticipants } from './participantEnrichment.js';
 import { createWorkbook, sendWorkbook, sendCsv, sendSimpleXlsx } from './workbook.js';
+import { sendLeaderboardCsv, sendLeaderboardXlsx } from './leaderboardExportHelpers.js';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 
 export async function writePiggybankFullExport(req: AdminRequest, res: Response): Promise<void> {
@@ -147,17 +148,32 @@ export async function writeRatingDayExport(
   const ranked = allP
     .map(p => ({ p, pts: scores.get(p.id) ?? 0 }))
     .sort((a, b) => b.pts - a.pts);
-  const data = ranked.map((r, i) => [i + 1, r.p.id, fullName(r.p), r.pts]);
+  const data = ranked.map((r, i) => [i + 1, r.p.id, fullName(r.p), r.p.direction ?? '', r.pts]);
+  const meta = {
+    exportType: 'rating_day',
+    participantCount: ranked.length,
+    participantsPool: allP.length,
+    scope: 'day' as const,
+    day,
+    track: 'total',
+  };
   if (format === 'csv') {
-    sendCsv(res, `leaderboard_day${day}.csv`, 'rank,participant_id,name,points', data);
+    sendLeaderboardCsv(
+      res,
+      `leaderboard_day${day}.csv`,
+      'rank,participant_id,name,direction,points',
+      data,
+      meta,
+    );
     return;
   }
-  await sendSimpleXlsx(
+  await sendLeaderboardXlsx(
     res,
     `rating_day_${day}.xlsx`,
     'Рейтинг',
-    ['Место', 'ID участника', 'ФИО', 'Баллы'],
+    ['Место', 'ID участника', 'ФИО', 'Направление', 'Баллы'],
     data,
+    meta,
   );
 }
 
@@ -217,47 +233,156 @@ export async function writeRatingShiftExport(
     (medalsByPid.get(r.p.id) ?? []).join('; '),
     [...(nomsByPid.get(r.p.id) ?? [])].join('; '),
   ]);
+  const meta = {
+    exportType: 'rating_shift',
+    participantCount: ranked.length,
+    participantsPool: allP.length,
+    scope: 'shift' as const,
+    track: 'total',
+  };
   if (format === 'xlsx') {
-    await sendSimpleXlsx(
+    await sendLeaderboardXlsx(
       res,
       'leaderboard_shift.xlsx',
       'Рейтинг',
       ['Место', 'ID участника', 'ФИО', 'Баллы', 'Путь', 'Опыт', 'Бонус', 'Медали', 'Номинации'],
       data,
+      meta,
     );
     return;
   }
-  sendCsv(
+  sendLeaderboardCsv(
     res,
     'leaderboard_shift.csv',
     'rank,participant_id,name,points,path,experience,bonus,medals,nominations',
     data,
+    meta,
   );
 }
 
-export async function writeRatingNominationExport(res: Response, nominationKey: string): Promise<void> {
-  const allTasks = await db.select().from(tasks);
-  const taskIds = new Set(
-    allTasks.filter(t => t.nomination === nominationKey).map(t => t.id),
-  );
-  const subs = await db.select({ s: taskSubmissions, p: participants, t: tasks })
-    .from(taskSubmissions)
-    .leftJoin(participants, eq(taskSubmissions.participantId, participants.id))
-    .leftJoin(tasks, eq(taskSubmissions.taskId, tasks.id));
-  const byParticipant = new Map<number, { p: typeof participants.$inferSelect; pts: number }>();
-  for (const r of subs) {
-    if (!r.p || !r.s.taskId || !taskIds.has(r.s.taskId)) continue;
-    if (r.s.status !== 'approved') continue;
-    const cur = byParticipant.get(r.p.id) ?? { p: r.p, pts: 0 };
-    cur.pts += r.s.pointsAwarded ?? r.t?.points ?? 0;
-    byParticipant.set(r.p.id, cur);
+export async function writeRatingNominationExport(
+  res: Response,
+  nominationKey: string,
+  opts: { scope?: 'day' | 'shift'; day?: number; format?: string; shiftId?: number } = {},
+): Promise<void> {
+  const format = String(opts.format || 'csv').toLowerCase();
+  const scope = opts.scope === 'day' ? 'day' : 'shift';
+  const conditions = [isNull(participants.selfDeletedAt)];
+  if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
+    conditions.push(eq(participants.shiftId, opts.shiftId));
   }
-  const ranked = [...byParticipant.values()].sort((a, b) => b.pts - a.pts);
-  sendCsv(
+  const allP = await db.select().from(participants).where(and(...conditions));
+  const ids = allP.map(p => p.id);
+  const { computeNominationLeaderboard, NOMINATION_LABELS } = await import('../leaderboardService.js');
+  const scores = await computeNominationLeaderboard(nominationKey, ids, {
+    scope,
+    day: scope === 'day' ? opts.day : undefined,
+  });
+  const ranked = allP
+    .map(p => ({ p, pts: scores.get(p.id) ?? 0 }))
+    .filter(r => r.pts > 0)
+    .sort((a, b) => b.pts - a.pts);
+  const data = ranked.map((r, i) => [i + 1, r.p.id, fullName(r.p), r.p.direction ?? '', r.pts]);
+  const meta = {
+    exportType: 'rating_nomination',
+    participantCount: ranked.length,
+    participantsPool: allP.length,
+    scope: scope as 'day' | 'shift',
+    day: scope === 'day' ? opts.day : undefined,
+    nomination: nominationKey,
+  };
+  const suffix = scope === 'day' && opts.day ? `_day${opts.day}` : '_shift';
+  if (format === 'xlsx') {
+    await sendLeaderboardXlsx(
+      res,
+      `nomination_${nominationKey}${suffix}.xlsx`,
+      NOMINATION_LABELS[nominationKey] ?? nominationKey,
+      ['Место', 'ID участника', 'ФИО', 'Направление', 'Баллы'],
+      data,
+      meta,
+    );
+    return;
+  }
+  sendLeaderboardCsv(
     res,
-    `nomination_${nominationKey}.csv`,
-    'rank,participant_id,name,points',
-    ranked.map((r, i) => [i + 1, r.p.id, fullName(r.p), r.pts]),
+    `nomination_${nominationKey}${suffix}.csv`,
+    'rank,participant_id,name,direction,points',
+    data,
+    meta,
+  );
+}
+
+export async function writeMedalLeaderboardExport(
+  res: Response,
+  opts: {
+    format?: string;
+    shiftId?: number;
+    scope?: 'day' | 'shift';
+    day?: number;
+    medalMode?: 'count' | 'holders';
+    medalId?: number;
+  } = {},
+): Promise<void> {
+  const format = String(opts.format || 'csv').toLowerCase();
+  const scope = opts.scope === 'day' ? 'day' : 'shift';
+  const medalMode = opts.medalMode === 'holders' ? 'holders' : 'count';
+  const conditions = [isNull(participants.selfDeletedAt)];
+  if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
+    conditions.push(eq(participants.shiftId, opts.shiftId));
+  }
+  const allP = await db.select().from(participants).where(and(...conditions));
+  const ids = allP.map(p => p.id);
+  const {
+    computeMedalCountLeaderboard,
+    participantIdsWithMedal,
+  } = await import('../leaderboardService.js');
+
+  let ranked: { p: typeof allP[number]; score: number }[];
+  if (medalMode === 'holders' && opts.medalId) {
+    const holders = await participantIdsWithMedal(opts.medalId);
+    ranked = allP
+      .filter(p => holders.has(p.id))
+      .map(p => ({ p, score: 1 }))
+      .sort((a, b) => fullName(a.p).localeCompare(fullName(b.p), 'ru'));
+  } else {
+    const scores = await computeMedalCountLeaderboard(ids, {
+      scope,
+      day: scope === 'day' ? opts.day : undefined,
+    });
+    ranked = allP
+      .map(p => ({ p, score: scores.get(p.id) ?? 0 }))
+      .filter(r => r.score > 0)
+      .sort((a, b) => b.score - a.score || fullName(a.p).localeCompare(fullName(b.p), 'ru'));
+  }
+
+  const data = ranked.map((r, i) => [i + 1, r.p.id, fullName(r.p), r.p.direction ?? '', r.score]);
+  const meta = {
+    exportType: 'medal_leaderboard',
+    participantCount: ranked.length,
+    participantsPool: allP.length,
+    scope: scope as 'day' | 'shift',
+    day: scope === 'day' ? opts.day : undefined,
+    medalMode,
+  };
+  const suffix = scope === 'day' && opts.day ? `_day${opts.day}` : '_shift';
+  const modeSuffix = medalMode === 'holders' && opts.medalId ? `_medal${opts.medalId}` : '_count';
+  if (format === 'xlsx') {
+    await sendLeaderboardXlsx(
+      res,
+      `medal_leaderboard${suffix}${modeSuffix}.xlsx`,
+      'Медали',
+      ['Место', 'ID участника', 'ФИО', 'Направление', medalMode === 'holders' ? 'Медаль' : 'Медалей'],
+      data,
+      meta,
+    );
+    return;
+  }
+  sendLeaderboardCsv(
+    res,
+    `medal_leaderboard${suffix}${modeSuffix}.csv`,
+    'rank,participant_id,name,direction,medal_score',
+    data,
+    meta,
   );
 }
 

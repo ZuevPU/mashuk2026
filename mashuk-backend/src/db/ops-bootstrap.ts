@@ -66,21 +66,14 @@ async function ensureForumSettings() {
 
 async function ensureTouchpoints7x7(startDate: Date, shiftId: number) {
   const existing = await db.select().from(questions).where(eq(questions.shiftId, shiftId));
-  const hasD1Morning = existing.some(
-    q => q.dayNumber === 1 && q.title === 'Утренняя проверка состояния',
-  );
-  if (hasD1Morning) {
-    const count = existing.filter(q =>
-      q.title === 'Утренняя проверка состояния' || q.block === 'Точки осмысления' || q.block === 'Итоги дня' || q.block === 'Проверка состояния',
-    ).length;
-    console.log(`Touchpoints already present (~${count} related rows).`);
-    return;
-  }
-
+  // Fill missing slots even if morning check-in already exists (partial seeds)
   let created = 0;
   for (let day = 1; day <= 7; day++) {
     for (const slot of TOUCHPOINT_SLOTS) {
-      if (existing.some(q => q.dayNumber === day && q.title === slot.title)) continue;
+      const hasSlot = existing.some(q =>
+        q.dayNumber === day && q.title === slot.title,
+      );
+      if (hasSlot) continue;
       const { publishTime, closeTime } = windowsForDay(startDate, day, slot);
       await db.insert(questions).values({
         shiftId,
@@ -98,7 +91,11 @@ async function ensureTouchpoints7x7(startDate: Date, shiftId: number) {
       created++;
     }
   }
-  console.log(`Touchpoint template 7×7 created: ${created} questions.`);
+  if (created > 0) {
+    console.log(`Touchpoint template 7×7: filled ${created} missing questions.`);
+  } else {
+    console.log('Touchpoint template 7×7: all slots present.');
+  }
 }
 
 async function ensurePointB(shiftId: number) {

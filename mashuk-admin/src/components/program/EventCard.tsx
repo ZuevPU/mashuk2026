@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { label } from '../../labels/ru';
-import { confirmDelete, CONFIRM_DELETE_EVENT, CONFIRM_DELETE_SUBTOPIC } from '../../admin/confirmDelete';
+import { confirmDelete, CONFIRM_DELETE_EVENT } from '../../admin/confirmDelete';
 import { ParticipantPreviewHtml, ParticipantPreviewModal } from '../admin/ParticipantPreviewModal';
 import { RichHtmlEditor } from '../admin/RichHtmlEditor';
 import { PlaceSelect } from './ProgramPlacesBlock';
 import { SpeakerMultiPick } from './ProgramCatalogs';
 import { speakerFullLabel } from '../speakers/speakerFormat';
+import { NestedEventNode } from './NestedEventNode';
 import {
   BLOCK_TYPE_OPTIONS,
   buildTimeSlot,
   eventVisibilityLabel,
+  nestLevelLabel,
   parseTimeSlot,
   type ProgramBlockType,
   type ProgramEvent,
@@ -92,6 +94,8 @@ export function EventCard({
   const [expanded, setExpanded] = useState(true);
   const [childTitle, setChildTitle] = useState('');
   const [childPlace, setChildPlace] = useState('');
+  const [childTimeStart, setChildTimeStart] = useState('');
+  const [childTimeEnd, setChildTimeEnd] = useState('');
   const [childSpeakerIds, setChildSpeakerIds] = useState<number[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [dupDay, setDupDay] = useState(String(selectedDay));
@@ -169,7 +173,7 @@ export function EventCard({
 
   const addChild = () => {
     if (!childTitle.trim()) {
-      alert('Название под-темы обязательно.');
+      alert('Название подблока обязательно.');
       return;
     }
     act(async () => {
@@ -179,7 +183,7 @@ export function EventCard({
           title: childTitle.trim(),
           place: childPlace.trim() || null,
           dayNumber: event.dayNumber ?? selectedDay,
-          timeSlot: event.timeSlot,
+          timeSlot: buildTimeSlot(childTimeStart, childTimeEnd) || null,
           parentEventId: event.id,
           isPublished: event.isPublished === true,
           ...(event.isPublished && daySchedulePublished ? { dayPublished: true } : {}),
@@ -190,6 +194,8 @@ export function EventCard({
       });
       setChildTitle('');
       setChildPlace('');
+      setChildTimeStart('');
+      setChildTimeEnd('');
       setChildSpeakerIds([]);
       if (!draft.hasSubSessions) {
         await adminFetch(`/events/${event.id}`, {
@@ -198,7 +204,7 @@ export function EventCard({
         });
       }
       onSaved();
-    }, 'Под-тема добавлена');
+    }, 'Подблок добавлен');
   };
 
   const preview = `${draft.timeStart}${draft.timeEnd ? `–${draft.timeEnd}` : ''} · ${draft.title || '…'}${draft.place ? ` · ${draft.place}` : ''}${speakerLine ? ` · ${speakerLine}` : ''}`;
@@ -298,41 +304,54 @@ export function EventCard({
           </label>
           <label className="adm-forum-check">
             <input type="checkbox" checked={draft.hasSubSessions} onChange={e => setDraft({ ...draft, hasSubSessions: e.target.checked })} />
-            Блок с несколькими под-темами
+            Блок с подблоками (до 2 уровней внутри)
           </label>
           {draft.hasSubSessions && (
-            <div className="adm-program-subsessions" style={{ marginTop: 12, paddingLeft: 12, borderLeft: '3px solid #e2e8f0' }}>
-              <strong>Под-темы</strong>
-              {children.length === 0 && <p className="adm-muted">Пока нет под-тем</p>}
+            <div className="adm-program-subsessions" style={{ marginTop: 12 }}>
+              <strong>Подблоки</strong>
+              <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 8px' }}>
+                Например: «Физическая культура» → пункты с своим временем. Время у подблока необязательно.
+              </p>
+              {children.length === 0 && <p className="adm-muted">Пока нет подблоков</p>}
               {children.map(ch => (
-                <div key={ch.id} className="adm-forum-toolbar" style={{ alignItems: 'center', marginTop: 6 }}>
-                  <span>{ch.title}{ch.place ? ` · ${ch.place}` : ''}</span>
-                  <button
-                    type="button"
-                    className="adm-btn adm-btn-danger adm-btn-sm"
-                    onClick={() => {
-                      if (!confirmDelete(CONFIRM_DELETE_SUBTOPIC)) return;
-                      act(async () => {
-                        await adminFetch(`/events/${ch.id}`, { method: 'DELETE' });
-                        onSaved();
-                      }, 'Удалено');
-                    }}
-                  >
-                    ×
-                  </button>
-                </div>
+                <NestedEventNode
+                  key={ch.id}
+                  node={ch}
+                  depth={2}
+                  allPlaces={allPlaces}
+                  speakers={speakers}
+                  selectedDay={selectedDay}
+                  daySchedulePublished={daySchedulePublished}
+                  parentPublished={event.isPublished === true}
+                  onSaved={onSaved}
+                  adminFetch={adminFetch}
+                  act={act}
+                />
               ))}
-              <div className="adm-forum-grid-2" style={{ marginTop: 8 }}>
-                <input className="adm-input" placeholder="Название под-темы" value={childTitle} onChange={e => setChildTitle(e.target.value)} />
-                <PlaceSelect places={allPlaces} value={childPlace} onChange={setChildPlace} />
+              <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
+                <strong style={{ fontSize: 12 }}>+ {nestLevelLabel(2)}</strong>
+                <div className="adm-forum-grid-2" style={{ marginTop: 6 }}>
+                  <input className="adm-input" placeholder="Название подблока" value={childTitle} onChange={e => setChildTitle(e.target.value)} />
+                  <PlaceSelect places={allPlaces} value={childPlace} onChange={setChildPlace} />
+                </div>
+                <div className="adm-forum-grid-2" style={{ marginTop: 6 }}>
+                  <label className="adm-field">
+                    <span className="adm-label">Начало (необязательно)</span>
+                    <input type="time" className="adm-input" value={childTimeStart} onChange={e => setChildTimeStart(e.target.value)} />
+                  </label>
+                  <label className="adm-field">
+                    <span className="adm-label">Окончание</span>
+                    <input type="time" className="adm-input" value={childTimeEnd} onChange={e => setChildTimeEnd(e.target.value)} />
+                  </label>
+                </div>
+                <div className="adm-field" style={{ marginTop: 8 }}>
+                  <span className="adm-label">Спикеры подблока</span>
+                  <SpeakerMultiPick speakers={speakers} selectedIds={childSpeakerIds} onChange={setChildSpeakerIds} />
+                </div>
+                <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" style={{ marginTop: 8 }} onClick={addChild}>
+                  + Подблок
+                </button>
               </div>
-              <div className="adm-field" style={{ marginTop: 8 }}>
-                <span className="adm-label">Спикеры под-темы</span>
-                <SpeakerMultiPick speakers={speakers} selectedIds={childSpeakerIds} onChange={setChildSpeakerIds} />
-              </div>
-              <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" style={{ marginTop: 8 }} onClick={addChild}>
-                + Под-тема
-              </button>
             </div>
           )}
           <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap' }}>

@@ -8,7 +8,7 @@ import {
   exchangeAnswers, eventAttendance, materials, materialTypes, kbDayUnlocks,
   levelsConfig, piggybank, answers, dailyStats, pushLog, pointsLog,
   participantDayState, pedagogicalRoles, dayExperiments, adminActionsLog,
-  ratingRecalcRuns, ratingBonusRules,
+  ratingRecalcRuns, ratingBonusRules, medals,
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { notifyAllParticipants, sendPushNotification } from '../services/pushService.js';
@@ -48,6 +48,13 @@ import {
 } from '../services/eveningQuestionnaireConfig.js';
 import { TOUCHPOINT_SLOTS, windowsForDay } from '../services/touchpointTemplates.js';
 import { getForumSettings as loadForumSettings } from '../services/helpers.js';
+import {
+  MAX_EVENT_DEPTH,
+  attachEventChildren,
+  childDepthOfParent,
+  collectDescendantIds,
+  wouldCreateCycle,
+} from '../services/eventTree.js';
 import { enrichEventTimestamps } from '../services/eventSchedule.js';
 import { resolveDayPublishedForEvent } from '../services/eventPublishFlags.js';
 import { parseParticipantListQuery, queryParticipants } from '../services/participantsList.js';
@@ -749,22 +756,6 @@ export const crudProgramPlaces = {
   },
 };
 
-function attachEventChildren(all: (typeof events.$inferSelect)[]) {
-  const top = all.filter(e => !e.parentEventId);
-  const byParent = new Map<number, typeof all>();
-  for (const e of all) {
-    if (e.parentEventId) {
-      const list = byParent.get(e.parentEventId) || [];
-      list.push(e);
-      byParent.set(e.parentEventId, list);
-    }
-  }
-  return top.map(e => ({
-    ...e,
-    children: (byParent.get(e.id) || []).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
-  }));
-}
-
 export const crudProgramBlockTypes = {
   list: async (_req: AdminRequest, res: Response) => {
     res.json({ blockTypes: await db.select().from(programBlockTypes).orderBy(asc(programBlockTypes.sortOrder)) });
@@ -979,6 +970,31 @@ export const crudEvents = {
     const parsed = parseBody(eventCreateSchema, req.body);
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
     const shiftId = await resolveAdminShiftId(req);
+    const parentEventId = parsed.data.parentEventId ?? null;
+    if (parentEventId) {
+      const shiftRows = await db.select({
+        id: events.id,
+        parentEventId: events.parentEventId,
+        shiftId: events.shiftId,
+        dayNumber: events.dayNumber,
+      }).from(events).where(eq(events.shiftId, shiftId));
+      const byId = new Map(shiftRows.map(r => [r.id, r]));
+      const parent = byId.get(parentEventId);
+      if (!parent) {
+        res.status(400).json({ error: 'Родительский блок не найден' });
+        return;
+      }
+      const dayNum = parsed.data.dayNumber ?? parent.dayNumber ?? null;
+      if (dayNum != null && parent.dayNumber != null && dayNum !== parent.dayNumber) {
+        res.status(400).json({ error: 'Подблок должен быть в том же дне, что и родитель' });
+        return;
+      }
+      const depth = childDepthOfParent(parentEventId, byId);
+      if (depth > MAX_EVENT_DEPTH) {
+        res.status(400).json({ error: `Максимум ${MAX_EVENT_DEPTH} уровня вложенности` });
+        return;
+      }
+    }
     const settings = await loadForumSettings();
     const values = enrichEventTimestamps(parsed.data, settings);
     const dayNum = parsed.data.dayNumber ?? values.dayNumber ?? null;
@@ -992,12 +1008,15 @@ export const crudEvents = {
       shiftId,
       ...(dayPublished !== undefined ? { dayPublished } : {}),
       speakerIds: parsed.data.speakerIds ?? [],
-      parentEventId: parsed.data.parentEventId ?? null,
+      parentEventId,
       hasSubSessions: parsed.data.hasSubSessions ?? false,
       audienceType: parsed.data.audienceType ?? 'all',
       audienceDirectionId: parsed.data.audienceDirectionId ?? null,
       sortOrder: parsed.data.sortOrder ?? 0,
     }).returning();
+    if (parentEventId) {
+      await db.update(events).set({ hasSubSessions: true }).where(eq(events.id, parentEventId));
+    }
     clearCache('events_day_');
     res.json({ event: e });
   },
@@ -1007,8 +1026,55 @@ export const crudEvents = {
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
     const [existing] = await db.select().from(events).where(eq(events.id, id)).limit(1);
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+    if (parsed.data.parentEventId !== undefined) {
+      const newParentId = parsed.data.parentEventId;
+      const shiftRows = await db.select({
+        id: events.id,
+        parentEventId: events.parentEventId,
+        dayNumber: events.dayNumber,
+      }).from(events).where(eq(events.shiftId, existing.shiftId));
+      const byId = new Map(shiftRows.map(r => [r.id, r]));
+      if (newParentId) {
+        const parent = byId.get(newParentId);
+        if (!parent) {
+          res.status(400).json({ error: 'Родительский блок не найден' });
+          return;
+        }
+        if (wouldCreateCycle(id, newParentId, byId)) {
+          res.status(400).json({ error: 'Нельзя сделать блок потомком самого себя' });
+          return;
+        }
+        const depth = childDepthOfParent(newParentId, byId);
+        if (depth > MAX_EVENT_DEPTH) {
+          res.status(400).json({ error: `Максимум ${MAX_EVENT_DEPTH} уровня вложенности` });
+          return;
+        }
+        const descendants = collectDescendantIds(id, shiftRows);
+        let maxRelative = 0;
+        for (const did of descendants) {
+          let rel = 0;
+          let cur = byId.get(did);
+          const seen = new Set<number>();
+          while (cur && cur.id !== id) {
+            if (seen.has(cur.id)) break;
+            seen.add(cur.id);
+            rel += 1;
+            if (!cur.parentEventId) break;
+            cur = byId.get(cur.parentEventId);
+          }
+          maxRelative = Math.max(maxRelative, rel);
+        }
+        if (depth + maxRelative > MAX_EVENT_DEPTH) {
+          res.status(400).json({ error: `Максимум ${MAX_EVENT_DEPTH} уровня вложенности` });
+          return;
+        }
+      }
+    }
     const settings = await loadForumSettings();
-    const values = enrichEventTimestamps(parsed.data, settings, existing);
+    let values = enrichEventTimestamps(parsed.data, settings, existing);
+    if (parsed.data.timeSlot !== undefined && !String(parsed.data.timeSlot || '').trim()) {
+      values = { ...values, timeSlot: null, startTime: null, endTime: null };
+    }
     const dayNum = parsed.data.dayNumber ?? existing.dayNumber ?? null;
     const dayPublished = await resolveDayPublishedForEvent(
       dayNum,
@@ -1026,6 +1092,9 @@ export const crudEvents = {
       ...(parsed.data.sortOrder !== undefined ? { sortOrder: parsed.data.sortOrder } : {}),
     }).where(eq(events.id, id)).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
+    if (parsed.data.parentEventId) {
+      await db.update(events).set({ hasSubSessions: true }).where(eq(events.id, parsed.data.parentEventId));
+    }
     clearCache('events_day_');
     res.json({ event: updated });
   },
@@ -1035,6 +1104,11 @@ export const crudEvents = {
     if (!targetDay) { res.status(400).json({ error: 'targetDayNumber required' }); return; }
     const [src] = await db.select().from(events).where(eq(events.id, id)).limit(1);
     if (!src) { res.status(404).json({ error: 'Not found' }); return; }
+    const shiftRows = await db.select().from(events).where(eq(events.shiftId, src.shiftId));
+    const descendantIds = collectDescendantIds(id, shiftRows);
+    const subtree = shiftRows.filter(e => e.id === id || descendantIds.includes(e.id));
+    const idMap = new Map<number, number>();
+    // Insert roots of subtree first (the duplicated node as new root on target day), then children by BFS
     const { id: _id, qrToken, ...rest } = src;
     const [copy] = await db.insert(events).values({
       ...rest,
@@ -1042,17 +1116,32 @@ export const crudEvents = {
       isPublished: false,
       dayPublished: false,
       parentEventId: null,
+      qrToken: null,
     }).returning();
-    const children = await db.select().from(events).where(eq(events.parentEventId, id));
-    for (const ch of children) {
-      const { id: cid, qrToken: _q, parentEventId: _p, ...chRest } = ch;
-      await db.insert(events).values({
+    idMap.set(id, copy.id);
+    const queue = descendantIds.slice();
+    // Process in waves so parent is always mapped
+    let guard = 0;
+    while (queue.length && guard < 10000) {
+      guard += 1;
+      const nextId = queue.shift()!;
+      const node = subtree.find(e => e.id === nextId);
+      if (!node?.parentEventId) continue;
+      const mappedParent = idMap.get(node.parentEventId);
+      if (!mappedParent) {
+        queue.push(nextId);
+        continue;
+      }
+      const { id: cid, qrToken: _q, parentEventId: _p, ...chRest } = node;
+      const [created] = await db.insert(events).values({
         ...chRest,
         dayNumber: targetDay,
-        parentEventId: copy.id,
+        parentEventId: mappedParent,
         isPublished: false,
         dayPublished: false,
-      });
+        qrToken: null,
+      }).returning();
+      idMap.set(nextId, created.id);
     }
     clearCache('events_day_');
     res.json({ event: copy });
@@ -1061,15 +1150,23 @@ export const crudEvents = {
     const id = Number(req.params.id);
     const [existing] = await db.select().from(events).where(eq(events.id, id)).limit(1);
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
-    const childIds = await db.select({ id: events.id }).from(events).where(eq(events.parentEventId, id));
-    for (const c of childIds) {
-      await db.delete(eventAttendance).where(eq(eventAttendance.eventId, c.id));
-      await db.update(materials).set({ eventId: null }).where(eq(materials.eventId, c.id));
-      await db.delete(events).where(eq(events.id, c.id));
+    const shiftRows = await db.select({ id: events.id, parentEventId: events.parentEventId })
+      .from(events).where(eq(events.shiftId, existing.shiftId));
+    const descendantIds = collectDescendantIds(id, shiftRows);
+    // Delete deepest first
+    const toDelete = [...descendantIds].reverse().concat(id);
+    for (const eid of toDelete) {
+      await db.delete(eventAttendance).where(eq(eventAttendance.eventId, eid));
+      await db.update(materials).set({ eventId: null }).where(eq(materials.eventId, eid));
+      await db.delete(events).where(eq(events.id, eid));
     }
-    await db.delete(eventAttendance).where(eq(eventAttendance.eventId, id));
-    await db.update(materials).set({ eventId: null }).where(eq(materials.eventId, id));
-    await db.delete(events).where(eq(events.id, id));
+    if (existing.parentEventId) {
+      const remaining = await db.select({ id: events.id }).from(events)
+        .where(eq(events.parentEventId, existing.parentEventId)).limit(1);
+      if (remaining.length === 0) {
+        await db.update(events).set({ hasSubSessions: false }).where(eq(events.id, existing.parentEventId));
+      }
+    }
     clearCache('events_day_');
     const { logAdminAction } = await import('../services/adminActionsLog.js');
     await logAdminAction({
@@ -1108,9 +1205,11 @@ async function buildTaskInsertValues(raw: Record<string, unknown>): Promise<type
   if (enriched.status === 'published' && !enriched.publishTime && !body.publishTime) {
     enriched.publishTime = new Date();
   }
-  const { requiresModeration: _rm, ...rest } = body;
+  const { requiresModeration: _rm, taskKind: _tk, catalogStatus: _cs, ...rest } = body;
   const merged = { ...rest, ...enriched };
   delete (merged as Record<string, unknown>).requiresModeration;
+  delete (merged as Record<string, unknown>).taskKind;
+  delete (merged as Record<string, unknown>).catalogStatus;
   return merged as typeof tasks.$inferInsert;
 }
 
@@ -1118,12 +1217,24 @@ function serializeAdminTaskRow(
   row: typeof tasks.$inferSelect,
   cat: typeof taskCategories.$inferSelect | null,
   stats: { completionCount: number; pendingCount: number },
+  place?: typeof programPlaces.$inferSelect | null,
+  medal?: typeof medals.$inferSelect | null,
 ) {
   const methods = taskMethodsForParticipant(row);
+  const taskKind = row.scopeType === 'team' ? 'team' : (row.executionType || 'once');
+  let catalogStatus: 'active' | 'hidden' | 'completed' | 'draft' = 'active';
+  if (row.status === 'archived') catalogStatus = 'completed';
+  else if (row.isHidden) catalogStatus = 'hidden';
+  else if (row.status === 'draft') catalogStatus = 'draft';
   return {
     ...row,
     categoryName: cat?.name ?? row.category,
     categoryIconKey: cat?.iconKey ?? row.iconKey,
+    programPlaceName: place?.name ?? null,
+    medalName: medal?.name ?? null,
+    medalLevel: medal?.level ?? null,
+    taskKind,
+    catalogStatus,
     confirmationMethods: methods,
     completionCount: stats.completionCount,
     pendingModerationCount: stats.pendingCount,
@@ -1201,6 +1312,7 @@ export const crudTasks = {
         ilike(tasks.title, `%${q}%`),
         ilike(tasks.category, `%${q}%`),
         ilike(tasks.description, `%${q}%`),
+        ilike(tasks.shortDescription, `%${q}%`),
       )!);
     }
 
@@ -1208,8 +1320,12 @@ export const crudTasks = {
     const rows = await db.select({
       task: tasks,
       category: taskCategories,
+      place: programPlaces,
+      medal: medals,
     }).from(tasks)
       .leftJoin(taskCategories, eq(tasks.categoryId, taskCategories.id))
+      .leftJoin(programPlaces, eq(tasks.programPlaceId, programPlaces.id))
+      .leftJoin(medals, eq(tasks.medalId, medals.id))
       .where(where)
       .orderBy(asc(tasks.id));
 
@@ -1245,6 +1361,8 @@ export const crudTasks = {
         r.task,
         r.category,
         statsMap.get(r.task.id) ?? { completionCount: 0, pendingCount: 0 },
+        r.place,
+        r.medal,
       )),
       totalCount: rows.length,
     });
@@ -1269,6 +1387,8 @@ export const crudTasks = {
     const enriched = enrichTaskWritePayload(parsed.data as Record<string, unknown>, before);
     const patch = { ...parsed.data, ...enriched } as Partial<typeof tasks.$inferInsert>;
     delete (patch as Record<string, unknown>).requiresModeration;
+    delete (patch as Record<string, unknown>).taskKind;
+    delete (patch as Record<string, unknown>).catalogStatus;
     if (patch.categoryId != null) {
       patch.category = await resolveTaskCategoryName(patch.categoryId) ?? before.category;
     }

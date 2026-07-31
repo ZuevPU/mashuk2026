@@ -281,6 +281,13 @@
       "when": 1819000000000,
       "tag": "0039_export_history_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1820000000000,
+      "tag": "0040_tasks_catalog_spec",
+      "breakpoints": true
     }
   ]
 }

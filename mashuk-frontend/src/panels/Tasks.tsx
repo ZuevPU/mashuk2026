@@ -25,6 +25,13 @@ const STATUS_LABEL: Record<string, string> = {
   rejected: '🔴 Не принято',
 };
 
+/** Stable 0..7 tone for category chips so many labels stay distinguishable. */
+function categoryTone(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return h % 8;
+}
+
 const CONFIRM_HINT: Record<string, string> = {
   photo: 'Нужно фото',
   post_url: 'Нужна ссылка на пост',
@@ -32,29 +39,47 @@ const CONFIRM_HINT: Record<string, string> = {
   auto: 'Автоподтверждение',
   team: 'Командное задание',
   text_photo: 'Текст и/или фото',
+  text: 'Текстовый ответ',
 };
 
-function taskMethodsFromMeta(meta: { confirmationMethods?: string[]; confirmationType?: string } | null): string[] {
+function taskMethodsFromMeta(meta: {
+  confirmationMethods?: string[];
+  confirmationType?: string;
+  answerType?: string | null;
+  autoConfirm?: boolean | null;
+} | null): string[] {
   if (meta?.confirmationMethods?.length) return meta.confirmationMethods;
+  if (meta?.answerType === 'text') {
+    return meta.autoConfirm === false ? ['text', 'moderator'] : ['text'];
+  }
   const ct = meta?.confirmationType || 'text_photo';
   if (ct === 'qr') return ['qr'];
   if (ct === 'photo') return ['photo'];
   if (ct === 'post_url') return ['link'];
   if (ct === 'team') return ['team'];
   if (ct === 'auto') return [];
-  return ['photo'];
+  if (ct === 'text_photo') {
+    return meta?.autoConfirm === false ? ['text', 'photo', 'moderator'] : ['text', 'photo'];
+  }
+  return ['text'];
 }
 
-function taskConfirmLabel(task: { confirmationMethods?: string[]; confirmationType?: string; answerType?: string | null }): string {
+function taskConfirmLabel(task: {
+  confirmationMethods?: string[];
+  confirmationType?: string;
+  answerType?: string | null;
+  autoConfirm?: boolean | null;
+}): string {
   const methods = taskMethodsFromMeta(task);
   if (methods.length === 0) return CONFIRM_HINT.auto;
   const parts = methods.map(m => {
+    if (m === 'text') return 'Текстовый ответ';
     if (m === 'photo') return 'Фото до 5 МБ';
     if (m === 'link') return 'Ссылка';
     if (m === 'qr') return 'QR';
     if (m === 'volunteer') return 'Волонтёр';
     if (m === 'team') return 'Команда';
-    if (m === 'moderator') return 'Модератор';
+    if (m === 'moderator') return 'на проверке у модератора';
     return m;
   });
   return parts.join(' · ');
@@ -92,7 +117,15 @@ const TaskSubmitModal = ({
   const methods = taskMethodsFromMeta(meta);
   const qrFromHash = getHashSearchParams().get('qr');
 
-  const needsText = methods.includes('photo') && meta?.answerType !== 'photo';
+  const needsText = methods.includes('text')
+    || meta?.answerType === 'text'
+    || (
+      !methods.includes('photo')
+      && !methods.includes('link')
+      && !methods.includes('qr')
+      && !methods.includes('team')
+      && methods.includes('moderator')
+    );
   const needsPhoto = methods.includes('photo');
   const needsPostUrl = methods.includes('link');
   const needsTeam = methods.includes('team');
@@ -184,8 +217,17 @@ const TaskSubmitModal = ({
 
   return (
     <ModalPage id="task-submit" onClose={onClose}>
-      <ModalPageHeader>Отправка задания</ModalPageHeader>
+      <ModalPageHeader>{meta?.title || 'Отправка задания'}</ModalPageHeader>
       <Group>
+        {meta?.shortDescription && (
+          <div style={{ fontSize: 13, color: '#555', marginBottom: 8 }}>{meta.shortDescription}</div>
+        )}
+        {meta?.descriptionHtml && meta.descriptionHtml !== meta?.shortDescription && (
+          <div
+            style={{ fontSize: 13, color: '#444', marginBottom: 8 }}
+            dangerouslySetInnerHTML={{ __html: meta.descriptionHtml }}
+          />
+        )}
         <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
           {taskConfirmLabel(meta || {})}
         </div>
@@ -383,33 +425,55 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
               </div>
             )}
             <div style={{ marginBottom: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#888', marginBottom: 4 }}>
-                <span>Прогресс дня · {progressPercent}%</span>
-                {data?.kbLocked && (
-                  <button type="button" className="time-btn" style={{ padding: '2px 8px', fontSize: 10 }} onClick={() => window.location.hash = '#/program'}>
-                    База знаний
-                  </button>
-                )}
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>
+                Прогресс дня · {progressPercent}%
               </div>
               <div style={{ height: 8, background: '#E8E0D4', borderRadius: 8, overflow: 'hidden' }}>
                 <div style={{ width: `${progressPercent}%`, height: '100%', background: 'var(--m-accent, #B8621A)', borderRadius: 8 }} />
               </div>
             </div>
-            <div className="time-sw" style={{ marginBottom: 8 }}>
-              {(['all', 'active', 'done', 'pending'] as const).map(f => (
-                <button key={f} type="button" className={`time-btn ${filter === f ? 'on' : ''}`} onClick={() => setFilter(f)}>
-                  {{ all: 'Все', active: 'Активные', done: 'Готово', pending: 'На проверке' }[f]}
-                </button>
-              ))}
-            </div>
-            {categories.length > 0 && (
-              <div className="time-sw" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
-                <button type="button" className={`time-btn ${!categoryFilter ? 'on' : ''}`} onClick={() => setCategoryFilter('')}>Все категории</button>
-                {categories.map(c => (
-                  <button key={c} type="button" className={`time-btn ${categoryFilter === c ? 'on' : ''}`} onClick={() => setCategoryFilter(c)}>{c}</button>
-                ))}
+            <div className="task-filters">
+              <div className="task-filters-block">
+                <div className="task-filters-lbl task-filters-lbl--status">По активности</div>
+                <div className="time-sw task-filters-row">
+                  {(['all', 'active', 'done', 'pending'] as const).map(f => (
+                    <button
+                      key={f}
+                      type="button"
+                      className={`task-chip task-chip--status ${filter === f ? 'on' : ''}`}
+                      onClick={() => setFilter(f)}
+                    >
+                      {{ all: 'Все', active: 'Активные', done: 'Готово', pending: 'На проверке' }[f]}
+                    </button>
+                  ))}
+                </div>
               </div>
-            )}
+              {categories.length > 0 && (
+                <div className="task-filters-block">
+                  <div className="task-filters-lbl task-filters-lbl--cat">По содержанию</div>
+                  <div className="time-sw task-filters-row" style={{ flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className={`task-chip task-chip--cat task-chip--cat-all ${!categoryFilter ? 'on' : ''}`}
+                      onClick={() => setCategoryFilter('')}
+                    >
+                      Все категории
+                    </button>
+                    {categories.map(c => (
+                      <button
+                        key={c}
+                        type="button"
+                        data-tone={categoryTone(c)}
+                        className={`task-chip task-chip--cat ${categoryFilter === c ? 'on' : ''}`}
+                        onClick={() => setCategoryFilter(c)}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
             {filteredTasks.length === 0 ? (
               <EmptyState icon="📋" title="Нет заданий" subtitle="Задания появятся по ходу дня" />
             ) : filteredTasks.map((t: any) => (
@@ -426,7 +490,9 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
                   <strong>{t.title}</strong>
                   <span style={{ fontSize: 12 }}>{STATUS_LABEL[t.status] || t.status}</span>
                 </div>
-                {t.description && <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>{t.description}</div>}
+                {(t.shortDescription || t.description) && (
+                  <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>{t.shortDescription || t.description}</div>
+                )}
                 <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
                   +{t.points ?? 0} · {taskConfirmLabel(t)}
                 </div>

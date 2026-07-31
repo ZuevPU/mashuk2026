@@ -87,7 +87,7 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
       {step === 0 && (
         <>
           {goalQuestions.map((q, i) => (
-            <FormItem key={i} top={`${i + 1}. ${q}`}>
+            <FormItem key={i} top={`${i + 1}. ${q}`} topMultiline>
               <Textarea
                 value={answers[i]}
                 onChange={e => {

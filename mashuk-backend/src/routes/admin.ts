@@ -208,6 +208,8 @@ router.get('/exports/participants-archive', requireAdminRole('export'), wrap(exp
 router.get('/exports/rating/day', P('exports', 'export'), wrap(exportsCtrl.exportRatingDayHandler));
 router.get('/exports/rating/shift', P('exports', 'export'), wrap(exportsCtrl.exportRatingShiftHandler));
 router.get('/exports/rating/nominations/:key', P('exports', 'export'), wrap(exportsCtrl.exportRatingNominationHandler));
+router.get('/exports/rating/medals', P('exports', 'export'), wrap(exportsCtrl.exportMedalLeaderboardHandler));
+router.get('/exports/rating/leaderboard', P('exports', 'export'), wrap(exportsCtrl.exportLeaderboardSnapshotHandler));
 router.get('/exports/medals', P('exports', 'export'), wrap(exportsCtrl.exportMedalsHandler));
 router.get('/exports/moderation-log', P('exports', 'export'), wrap(exportsCtrl.exportModerationLogHandler));
 router.get('/exports/points-manual', P('exports', 'export'), wrap(exportsCtrl.exportPointsManualHandler));

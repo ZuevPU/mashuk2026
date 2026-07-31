@@ -20,8 +20,20 @@ export const DaySwitcher: React.FC<DaySwitcherProps> = ({ days, activeDay, onDay
         if (isToday) cls += ' today';
         if (isOn) cls += ' on';
 
+        const locked = day.status === 'locked';
+        if (locked) cls += ' locked';
+
         return (
-          <button key={day.id} className={cls} onClick={() => onDayChange(day.id)}>
+          <button
+            key={day.id}
+            type="button"
+            className={cls}
+            disabled={locked}
+            aria-disabled={locked}
+            onClick={() => {
+              if (!locked) onDayChange(day.id);
+            }}
+          >
             {day.title}
             <span className="dn">{day.subtitle}</span>
           </button>

@@ -56,6 +56,8 @@ export async function tryFinalizeTeamSubmission(submissionId: number): Promise<b
   const payIds = new Set([sub.participantId, ...teamIds]);
   for (const pid of payIds) {
     await awardPoints(pid, 'task_complete', pts, task.dayNumber ?? undefined);
+    const { awardTaskLinkedMedals } = await import('./taskMedalAward.js');
+    await awardTaskLinkedMedals(pid, task);
     await evaluateMedalsForParticipant(pid);
   }
   return true;

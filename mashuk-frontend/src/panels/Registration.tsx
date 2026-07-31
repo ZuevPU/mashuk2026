@@ -304,7 +304,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
               </p>
             </Div>
             {goalQuestions.map((q, i) => (
-              <FormItem key={i} top={`${i + 1}. ${q}`}>
+              <FormItem key={i} top={`${i + 1}. ${q}`} topMultiline>
                 <Textarea
                   value={goalAnswers[i]}
                   onChange={e => {

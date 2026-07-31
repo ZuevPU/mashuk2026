@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Panel, PanelHeader, Group, Spinner, SegmentedControl, Select, Button, Snackbar, Checkbox, Input } from '@vkontakte/vkui';
+import { Panel, PanelHeader, Group, Spinner, Select, Button, Snackbar, Checkbox, Input } from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
 import { apiGet, apiPost, apiPatch, apiDownloadBlob, ApiError } from '../api/client';
 import { useAppModal } from '../App';
@@ -61,15 +61,24 @@ export const ProfilePanel: React.FC<{
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [medalsCatalog, setMedalsCatalog] = useState<any[]>([]);
   const [lbTrack, setLbTrack] = useState<'total' | 'path' | 'experience'>('total');
-  const [lbNomination, setLbNomination] = useState('');
-  const [lbScope, setLbScope] = useState<'total' | 'day' | 'shift'>('total');
+  const [lbMode, setLbMode] = useState<'points' | 'medals' | 'nomination'>('points');
+  const [lbNomination, setLbNomination] = useState('sport');
+  const [lbScope, setLbScope] = useState<'total' | 'day' | 'shift'>('shift');
   const [lbDay, setLbDay] = useState('1');
   const [lbDirection, setLbDirection] = useState('');
+  const [lbMedalMode, setLbMedalMode] = useState<'count' | 'holders'>('count');
+  const [lbMedalId, setLbMedalId] = useState('');
+  const [lbSort, setLbSort] = useState<'score' | 'name'>('score');
+  const [lbExtraOpen, setLbExtraOpen] = useState(false);
   const [lbDirections, setLbDirections] = useState<string[]>([]);
   const [leaders, setLeaders] = useState<any[]>([]);
   const [myRank, setMyRank] = useState<number | null>(null);
   const [lbLoading, setLbLoading] = useState(false);
+  const [shiftResults, setShiftResults] = useState<any>(null);
+  const [shiftResultsLoading, setShiftResultsLoading] = useState(false);
+  const [shiftExportLoading, setShiftExportLoading] = useState(false);
   const [trackerOpen, setTrackerOpen] = useState(false);
+  const [answersOpen, setAnswersOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [finalTagFilter, setFinalTagFilter] = useState('');
   const [finalSourceFilter, setFinalSourceFilter] = useState('');
@@ -129,14 +138,14 @@ export const ProfilePanel: React.FC<{
   useEffect(() => {
     if (section !== 'rating') return;
     setLbLoading(true);
-    const params = new URLSearchParams();
-    if (lbNomination) {
-      params.set('nomination', lbNomination);
-    } else {
-      params.set('track', lbTrack);
-      params.set('scope', lbScope);
-      if (lbDirection) params.set('direction', lbDirection);
-      if (lbScope === 'day') params.set('day', lbDay);
+    const params = new URLSearchParams({ mode: lbMode, scope: lbScope, sort: lbSort });
+    if (lbScope === 'day') params.set('day', lbDay);
+    if (lbDirection) params.set('direction', lbDirection);
+    if (lbMode === 'points') params.set('track', lbTrack);
+    if (lbMode === 'nomination') params.set('nomination', lbNomination);
+    if (lbMode === 'medals') {
+      params.set('medalMode', lbMedalMode);
+      if (lbMedalMode === 'holders' && lbMedalId) params.set('medalId', lbMedalId);
     }
     apiGet<any>(`/leaderboard?${params}`)
       .then((res) => {
@@ -146,13 +155,26 @@ export const ProfilePanel: React.FC<{
       })
       .catch((err) => setSnackbar(err instanceof ApiError ? err.message : 'Не удалось загрузить рейтинг'))
       .finally(() => setLbLoading(false));
-  }, [section, lbTrack, lbDirection, lbScope, lbDay, lbNomination]);
+  }, [section, lbMode, lbTrack, lbDirection, lbScope, lbDay, lbNomination, lbMedalMode, lbMedalId, lbSort]);
 
   useEffect(() => {
-    if (section !== 'medals') return;
+    if (section !== 'rating' && section !== 'medals') return;
     apiGet<any>('/profile/medals/catalog')
       .then(res => setMedalsCatalog(res.medals || []))
-      .catch((err) => setSnackbar(err instanceof ApiError ? err.message : 'Не удалось загрузить медали'));
+      .catch((err) => {
+        if (section === 'medals') {
+          setSnackbar(err instanceof ApiError ? err.message : 'Не удалось загрузить медали');
+        }
+      });
+  }, [section]);
+
+  useEffect(() => {
+    if (section !== 'results') return;
+    setShiftResultsLoading(true);
+    apiGet<any>('/profile/shift-results')
+      .then(setShiftResults)
+      .catch((err) => setSnackbar(err instanceof ApiError ? err.message : 'Не удалось загрузить итог'))
+      .finally(() => setShiftResultsLoading(false));
   }, [section]);
 
   if (loading) {
@@ -222,6 +244,24 @@ export const ProfilePanel: React.FC<{
     }
   };
 
+  const downloadShiftResults = async (format: 'pdf' | 'csv') => {
+    setShiftExportLoading(true);
+    try {
+      const blob = await apiDownloadBlob(`/profile/shift-results?format=${format}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = format === 'pdf' ? 'shift_results.pdf' : 'shift_results.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      setSnackbar(format === 'pdf' ? 'PDF сохранён' : 'CSV сохранён');
+    } catch (err) {
+      setSnackbar(err instanceof ApiError ? err.message : 'Не удалось скачать');
+    } finally {
+      setShiftExportLoading(false);
+    }
+  };
+
   const downloadPdf = async () => {
     setPdfLoading(true);
     try {
@@ -282,23 +322,32 @@ export const ProfilePanel: React.FC<{
 
   const sectionOptions = [
     { label: 'Обзор', value: 'overview' },
-    { label: 'Мои результаты', value: 'results' },
+    { label: 'Результаты', value: 'results' },
     { label: 'Рейтинг', value: 'rating' },
     { label: 'Медали', value: 'medals' },
-    { label: `Копилка (${p.piggybankCount ?? 0})`, value: 'piggybank' },
-    ...(showFinal ? [{ label: 'Итог смены', value: 'final' }] : []),
-    { label: '⚙', value: 'settings' },
+    { label: `Копилка${p.piggybankCount ? ` · ${p.piggybankCount}` : ''}`, value: 'piggybank' },
+    ...(showFinal ? [{ label: 'Итог', value: 'final' }] : []),
+    { label: 'Ещё', value: 'settings' },
   ];
 
   return (
     <Panel id={id}>
       <PanelHeader fixed>Профиль</PanelHeader>
       <Group>
-        <SegmentedControl
-          value={section}
-          onChange={(v) => setSection(v as typeof section)}
-          options={sectionOptions}
-        />
+        <div className="m-seg" role="tablist" aria-label="Разделы профиля">
+          {sectionOptions.map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              role="tab"
+              aria-selected={section === opt.value}
+              className={section === opt.value ? 'on' : undefined}
+              onClick={() => setSection(opt.value as typeof section)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
 
         {section === 'overview' ? (
           <>
@@ -420,7 +469,7 @@ export const ProfilePanel: React.FC<{
                 <div className="abs"><div className="abs-v">{m.piggybankTotal ?? p.piggybankCount ?? 0}</div><div className="abs-l">Идей</div></div>
                 <div className="abs">
                   <div className="abs-v">{m.eveningReflectionsDone ?? 0}/{m.eveningReflectionsTotal ?? 7}</div>
-                  <div className="abs-l">Рефлексий</div>
+                  <div className="abs-l">Точек дня</div>
                 </div>
               </div>
             </div>
@@ -494,14 +543,50 @@ export const ProfilePanel: React.FC<{
 
             {recentReflections.length > 0 && (
               <div className="pb m-card">
-                <div className="pb-lbl">💬 Мои ответы на вопросы</div>
-                {recentReflections.slice(0, 5).map((r, i) => (
-                  <div key={i} style={{ marginTop: 10, paddingTop: i ? 10 : 0, borderTop: i ? '1px solid #eee' : undefined }}>
-                    <div style={{ fontSize: 12, fontWeight: 700 }}>{r.title}</div>
-                    <div style={{ fontSize: 12, color: '#555', marginTop: 4, lineHeight: 1.4 }}>{r.preview}</div>
+                <div
+                  className="pb-lbl"
+                  style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: answersOpen ? 7 : 0 }}
+                  onClick={() => setAnswersOpen(v => !v)}
+                  role="button"
+                  aria-expanded={answersOpen}
+                >
+                  <span>💬 Мои ответы · {recentReflections.length}</span>
+                  <span>{answersOpen ? '▲' : '▼'}</span>
+                </div>
+                {!answersOpen && (
+                  <div style={{ marginTop: 6 }}>
+                    {recentReflections.slice(0, 2).map((r, i) => (
+                      <div key={i} style={{ marginTop: i ? 8 : 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700 }}>{r.title}</div>
+                        <div style={{
+                          fontSize: 12, color: '#555', marginTop: 3, lineHeight: 1.4,
+                          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                        }}
+                        >
+                          {r.preview}
+                        </div>
+                      </div>
+                    ))}
+                    {recentReflections.length > 2 && (
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 8 }}>
+                        Ещё {recentReflections.length - 2} — нажмите, чтобы развернуть
+                      </div>
+                    )}
                   </div>
-                ))}
-                <div className="pb-link" onClick={() => routeNavigator.push('/questions')}>Все ответы в «Вопросы» →</div>
+                )}
+                {answersOpen && (
+                  <div style={{ marginTop: 4 }}>
+                    {recentReflections.map((r, i) => (
+                      <div key={i} style={{ marginTop: 10, paddingTop: i ? 10 : 0, borderTop: i ? '1px solid #eee' : undefined }}>
+                        <div style={{ fontSize: 12, fontWeight: 700 }}>{r.title}</div>
+                        <div style={{ fontSize: 12, color: '#555', marginTop: 4, lineHeight: 1.4 }}>{r.preview}</div>
+                      </div>
+                    ))}
+                    <div className="pb-link" style={{ marginTop: 10 }} onClick={() => routeNavigator.push('/questions')}>
+                      Все ответы в «Вопросы» →
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -686,28 +771,71 @@ export const ProfilePanel: React.FC<{
           <>
             <div className="m-card">
               <div className="pb-lbl">Мои результаты</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+              <div className="m-results-grid">
                 <div className="m-st"><div className="m-sv">{p.points?.path ?? 0}</div><div className="m-sl">Путь</div></div>
                 <div className="m-st"><div className="m-sv">{p.points?.experience ?? 0}</div><div className="m-sl">Опыт</div></div>
                 <div className="m-st"><div className="m-sv">{p.points?.bonus ?? 0}</div><div className="m-sl">Бонус</div></div>
                 <div className="m-st"><div className="m-sv">✦ {p.points?.total ?? 0}</div><div className="m-sl">Общий рейтинг</div></div>
               </div>
               {p.points?.pathLevel && (
-                <div style={{ fontSize: 12, marginTop: 12, color: '#666' }}>
+                <div className="m-results-meta">
                   Уровень Пути: {p.points.pathLevel.level} · Опыт: {p.points.experienceLevel?.level ?? 1}
                 </div>
               )}
-              <div style={{ fontSize: 12, marginTop: 8 }}>
+              <div className="m-results-meta">
                 Заданий выполнено: {p.stats?.tasksDone ?? 0} · Ответов: {p.stats?.answers ?? 0} · Идей в копилке: {p.stats?.ideas ?? 0}
               </div>
             </div>
+
+            <div className="m-card">
+              <div className="pb-lbl">Итог смены по номинациям</div>
+              {shiftResultsLoading ? (
+                <Spinner />
+              ) : shiftResults ? (
+                <>
+                  <div className="shift-results-head">
+                    <div className="shift-results-name">{shiftResults.fullName}</div>
+                    {shiftResults.direction && (
+                      <div className="shift-results-dir">{shiftResults.direction}</div>
+                    )}
+                  </div>
+                  <div className="shift-results-table">
+                    <div className="shift-results-row shift-results-row-head">
+                      <span>Номинация</span>
+                      <span>Баллы</span>
+                    </div>
+                    {(shiftResults.nominations ?? []).map((row: { nomination: string; label: string; points: number }) => (
+                      <div key={row.nomination} className="shift-results-row">
+                        <span>{row.label}</span>
+                        <span className="shift-results-pts">✦ {row.points}</span>
+                      </div>
+                    ))}
+                    <div className="shift-results-row shift-results-total">
+                      <span>Итого за смену</span>
+                      <span className="shift-results-pts">✦ {shiftResults.totalPoints ?? 0}</span>
+                    </div>
+                  </div>
+                  <div className="shift-results-actions">
+                    <Button size="m" stretched mode="secondary" loading={shiftExportLoading} onClick={() => downloadShiftResults('pdf')}>
+                      Скачать PDF
+                    </Button>
+                    <Button size="m" stretched mode="tertiary" loading={shiftExportLoading} onClick={() => downloadShiftResults('csv')}>
+                      Скачать CSV
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="m-results-meta">Нет данных итога смены</div>
+              )}
+            </div>
+
             <div className="m-card">
               <div className="pb-lbl">Медали ({medals.length})</div>
               {medals.length === 0 ? (
-                <div style={{ fontSize: 12, color: '#888' }}>Пока нет медалей — выполняй задания и отвечай на точки.</div>
+                <div className="m-results-meta">Пока нет медалей — выполняй задания и отвечай на точки.</div>
               ) : (
                 medals.slice(0, 12).map((med: any) => (
-                  <div key={med.id ?? med.medalId} style={{ fontSize: 13, padding: '6px 0', borderBottom: '1px solid #f0f0f0' }}>
+                  <div key={med.id ?? med.medalId} className="medals-list-item">
                     🏅 {med.name ?? med.medalName ?? 'Медаль'}
                   </div>
                 ))
@@ -719,7 +847,7 @@ export const ProfilePanel: React.FC<{
             </Button>
             {finalCard?.available && (
               <Button size="l" stretched style={{ marginTop: 8 }} loading={pdfLoading} onClick={downloadPdf}>
-                Скачать итог (PDF)
+                Скачать полный итог (PDF)
               </Button>
             )}
           </>
@@ -728,23 +856,29 @@ export const ProfilePanel: React.FC<{
             <div className="m-card">
               <div className="pb-lbl">Рейтинг участников</div>
               {myRank != null && (
-                <div style={{ fontSize: 13, marginTop: 6, fontWeight: 700, color: '#B8621A' }}>
-                  Ваше место: #{myRank}
-                </div>
+                <div className="lb-my-rank">Ваше место: #{myRank}</div>
               )}
-              <Select
-                style={{ marginTop: 10 }}
-                value={lbNomination}
-                onChange={(e) => setLbNomination(e.target.value)}
-                options={NOMINATION_OPTIONS.map(o => ({ label: o.label, value: o.key }))}
-              />
-              {!lbNomination && (
-              <>
+              <div className="time-sw lb-mode-sw">
+                {([
+                  { key: 'points', label: 'Баллы' },
+                  { key: 'medals', label: 'Медали' },
+                  { key: 'nomination', label: 'Номинации' },
+                ] as const).map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    className={`time-btn ${lbMode === t.key ? 'on' : ''}`}
+                    onClick={() => setLbMode(t.key)}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
               <div className="time-sw" style={{ marginTop: 10 }}>
                 {([
-                  { key: 'total', label: 'Общий' },
+                  { key: 'shift', label: 'Смена' },
                   { key: 'day', label: 'День' },
-                  { key: 'shift', label: 'Смена (лог)' },
+                  { key: 'total', label: 'Общий' },
                 ] as const).map((t) => (
                   <button
                     key={t.key}
@@ -764,32 +898,96 @@ export const ProfilePanel: React.FC<{
                   options={[1, 2, 3, 4, 5, 6, 7].map((d) => ({ label: `День ${d}`, value: String(d) }))}
                 />
               )}
-              <div className="time-sw" style={{ marginTop: 10 }}>
-                {([
-                  { key: 'total', label: 'Общий' },
-                  { key: 'path', label: 'Путь' },
-                  { key: 'experience', label: 'Опыт' },
-                ] as const).map((t) => (
-                  <button
-                    key={t.key}
-                    type="button"
-                    className={`time-btn ${lbTrack === t.key ? 'on' : ''}`}
-                    onClick={() => setLbTrack(t.key)}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              <Select
-                style={{ marginTop: 10 }}
-                value={lbDirection}
-                onChange={(e) => setLbDirection(e.target.value)}
-                options={[
-                  { label: 'Все направления', value: '' },
-                  ...lbDirections.map((d) => ({ label: d, value: d })),
-                ]}
-              />
-              </>
+              {lbMode === 'points' && (
+                <div className="time-sw" style={{ marginTop: 10 }}>
+                  {([
+                    { key: 'total', label: 'Общий' },
+                    { key: 'path', label: 'Путь' },
+                    { key: 'experience', label: 'Опыт' },
+                  ] as const).map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      className={`time-btn ${lbTrack === t.key ? 'on' : ''}`}
+                      onClick={() => setLbTrack(t.key)}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {lbMode === 'nomination' && (
+                <Select
+                  style={{ marginTop: 10 }}
+                  value={lbNomination}
+                  onChange={(e) => setLbNomination(e.target.value)}
+                  options={NOMINATION_OPTIONS.filter(o => o.key).map(o => ({ label: o.label, value: o.key }))}
+                />
+              )}
+              {lbMode === 'medals' && (
+                <>
+                  <div className="time-sw" style={{ marginTop: 10 }}>
+                    {([
+                      { key: 'count', label: 'По количеству' },
+                      { key: 'holders', label: 'По медали' },
+                    ] as const).map((t) => (
+                      <button
+                        key={t.key}
+                        type="button"
+                        className={`time-btn ${lbMedalMode === t.key ? 'on' : ''}`}
+                        onClick={() => setLbMedalMode(t.key)}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  {lbMedalMode === 'holders' && (
+                    <Select
+                      style={{ marginTop: 10 }}
+                      value={lbMedalId}
+                      onChange={(e) => setLbMedalId(e.target.value)}
+                      options={[
+                        { label: 'Выберите медаль', value: '' },
+                        ...medalsCatalog.map((m: any) => ({ label: m.name, value: String(m.id) })),
+                      ]}
+                    />
+                  )}
+                </>
+              )}
+              <button
+                type="button"
+                className="lb-more-toggle"
+                onClick={() => setLbExtraOpen(v => !v)}
+              >
+                {lbExtraOpen ? 'Скрыть фильтры' : 'Ещё фильтры'}
+              </button>
+              {lbExtraOpen && (
+                <>
+                  <Select
+                    style={{ marginTop: 10 }}
+                    value={lbDirection}
+                    onChange={(e) => setLbDirection(e.target.value)}
+                    options={[
+                      { label: 'Все направления', value: '' },
+                      ...lbDirections.map((d) => ({ label: d, value: d })),
+                    ]}
+                  />
+                  <div className="time-sw" style={{ marginTop: 10 }}>
+                    {([
+                      { key: 'score', label: 'По баллам' },
+                      { key: 'name', label: 'По ФИО' },
+                    ] as const).map((t) => (
+                      <button
+                        key={t.key}
+                        type="button"
+                        className={`time-btn ${lbSort === t.key ? 'on' : ''}`}
+                        onClick={() => setLbSort(t.key)}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
             {lbLoading ? (
@@ -800,35 +998,25 @@ export const ProfilePanel: React.FC<{
               leaders.map((row) => (
                 <div
                   key={row.id}
-                  className="m-card"
-                  style={{
-                    display: 'flex',
-                    gap: 12,
-                    alignItems: 'center',
-                    marginBottom: 8,
-                    background: row.isMe ? '#FFF8E7' : undefined,
-                    border: row.isMe ? '1.5px solid #FFE082' : undefined,
-                  }}
+                  className={`lb-row m-card ${row.isMe ? 'lb-row-me' : ''} ${row.rank <= 3 ? `lb-row-top${row.rank}` : ''}`}
                 >
-                  <div style={{ fontWeight: 800, width: 28, color: row.rank <= 3 ? '#B8621A' : '#888' }}>
-                    {row.rank}
-                  </div>
+                  <div className={`lb-rank ${row.rank <= 3 ? 'lb-rank-top' : ''}`}>{row.rank}</div>
                   <ParticipantAvatarCircle
                     firstName={row.name.split(' ')[0]}
                     lastName={row.name.split(' ').slice(1).join(' ')}
                     avatarUrl={row.avatarUrl}
                     size="sm"
                   />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: row.isMe ? 800 : 600 }}>
+                  <div className="lb-name-block">
+                    <div className={`lb-name ${row.isMe ? 'lb-name-me' : ''}`}>
                       {row.name}{row.isMe ? ' · вы' : ''}
                     </div>
-                    {row.direction && (
-                      <div style={{ fontSize: 11, color: '#888' }}>{row.direction}</div>
-                    )}
+                    {row.direction && <div className="lb-direction">{row.direction}</div>}
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>
-                    {lbTrack === 'path' ? '📍' : lbTrack === 'experience' ? '⚡' : '✦'} {row.score}
+                  <div className="lb-score">
+                    {lbMode === 'medals' && lbMedalMode === 'holders'
+                      ? '🏅'
+                      : `${lbMode === 'medals' ? '🏅' : lbTrack === 'path' ? '📍' : lbTrack === 'experience' ? '⚡' : '✦'} ${row.score}`}
                   </div>
                 </div>
               ))
