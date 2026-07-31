@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import type { AdminTabProps } from '../admin/types';
+import { RichFormatToolbar } from '../admin/RichFormatToolbar';
 import type { MedalDraft, RuleMetricOption } from './types';
 
 type Props = {
@@ -81,10 +82,10 @@ export function MedalForm({
 
       <label className="adm-field">
         <span className="adm-label">Описание (rich text)</span>
-        <div className="adm-rich-toolbar">
-          <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => document.execCommand('bold')}>B</button>
-          <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => document.execCommand('insertUnorderedList')}>•</button>
-        </div>
+        <RichFormatToolbar
+          editorRef={editorRef}
+          onAfterCommand={() => onChange({ descriptionHtml: editorRef.current?.innerHTML || '' })}
+        />
         <div
           ref={editorRef}
           className="adm-input adm-rich-editor"

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { RichFormatToolbar } from './RichFormatToolbar';
 
 type Props = {
   value: string;
@@ -8,7 +9,7 @@ type Props = {
   label?: string;
 };
 
-export function RichHtmlEditor({ value, onChange, resetKey, minHeight = 80, label }: Props) {
+export function RichHtmlEditor({ value, onChange, resetKey, minHeight = 100, label }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -17,25 +18,19 @@ export function RichHtmlEditor({ value, onChange, resetKey, minHeight = 80, labe
     }
   }, [resetKey]);
 
-  const exec = (cmd: string) => {
-    document.execCommand(cmd);
-    editorRef.current?.focus();
-  };
+  const persist = () => onChange(editorRef.current?.innerHTML || '');
 
   return (
     <label className="adm-field">
       {label && <span className="adm-label">{label}</span>}
-      <div className="adm-rich-toolbar">
-        <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onMouseDown={e => { e.preventDefault(); exec('bold'); }}>B</button>
-        <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList'); }}>•</button>
-      </div>
+      <RichFormatToolbar editorRef={editorRef} onAfterCommand={persist} />
       <div
         ref={editorRef}
         className="adm-input adm-rich-editor"
         style={{ minHeight }}
         contentEditable
         suppressContentEditableWarning
-        onInput={() => onChange(editorRef.current?.innerHTML || '')}
+        onInput={persist}
       />
     </label>
   );

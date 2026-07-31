@@ -119,8 +119,9 @@ export function SpeakerMultiPick({
       items={items}
       selectedIds={selectedIds}
       onChange={onChange}
-      placeholder="Поиск ФИО спикера…"
-      emptyHint="Введите 2+ символа ФИО"
+      placeholder="Выберите или найдите спикера…"
+      emptyHint="Начните ввод ФИО"
+      minQueryLength={0}
       filterItem={(item, needle) => {
         const sp = speakers.find(s => s.id === item.id);
         return sp ? speakerSearchHaystack(sp).includes(needle) : item.label.toLowerCase().includes(needle);

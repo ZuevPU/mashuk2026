@@ -729,14 +729,14 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   left: 0;
   right: 0;
   top: 100%;
-  z-index: 30;
+  z-index: 40;
   margin-top: 4px;
-  max-height: 220px;
+  max-height: 260px;
   overflow-y: auto;
   background: #fff;
   border: 1px solid var(--m-border, #E8E4DC);
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
 }
 .adm-search-pick-row {
   display: flex;
@@ -836,7 +836,53 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   background: none; border: none; padding: 0; color: var(--m-accent); font-size: inherit;
   font-weight: 600; cursor: pointer; text-decoration: underline;
 }
-.adm-rich-toolbar { display: flex; gap: 6px; margin-bottom: 6px; }
+.adm-rich-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.adm-rich-toolbar-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--m-border, #E8E4DC);
+  margin: 0 2px;
+}
+.adm-rich-btn { min-width: 32px; }
+.adm-rich-btn-b { font-weight: 800; }
+.adm-rich-btn-i { font-style: italic; }
+.adm-rich-btn-u { text-decoration: underline; }
+.adm-rich-editor {
+  min-height: 120px;
+  overflow: auto;
+  line-height: 1.5;
+  padding: 10px 12px;
+}
+.adm-rich-editor:empty:before {
+  content: attr(data-placeholder);
+  color: #a0aec0;
+  pointer-events: none;
+}
+.adm-rich-editor h3 {
+  margin: 0.4em 0 0.35em;
+  font-size: 1.15em;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.adm-rich-editor p { margin: 0.35em 0; }
+.adm-rich-editor ul,
+.adm-rich-editor ol {
+  margin: 0.4em 0 0.4em 1.25em;
+  padding: 0;
+}
+.adm-rich-editor li { margin: 0.15em 0; }
+.adm-rich-editor u { text-decoration: underline; }
+.adm-rich-editor b,
+.adm-rich-editor strong { font-weight: 700; }
+.adm-rich-editor i,
+.adm-rich-editor em { font-style: italic; }
+
 .adm-medal-form-footer {
   margin-top: 16px;
   padding-top: 16px;
@@ -846,7 +892,6 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   background: #fff;
   z-index: 2;
 }
-.adm-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .adm-push-block-grid {
   display: flex;
   flex-wrap: wrap;
@@ -867,9 +912,7 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   background: #f8f8f8;
   padding: 12px;
 }
-.adm-rich-editor {
-  min-height: 120px; overflow: auto; line-height: 1.45;
-}
+
 .adm-task-preview { margin-bottom: 16px; }
 .adm-forum-diag-row {
   display: grid; grid-template-columns: 72px 1fr; gap: 8px; align-items: start; margin-bottom: 10px;

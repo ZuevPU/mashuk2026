@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { RichFormatToolbar, htmlToPlain } from './RichFormatToolbar';
 
 type Props = {
   description: string;
@@ -15,22 +16,34 @@ export function DescriptionEditor({
   onChange,
   editingKey,
   label = 'Описание',
-  minHeight = 100,
+  minHeight = 120,
 }: Props) {
-  const [mode, setMode] = useState<'plain' | 'rich'>(() =>
-    (descriptionHtml && descriptionHtml.replace(/<[^>]+>/g, '').trim()) ? 'rich' : 'plain',
-  );
+  const [mode, setMode] = useState<'plain' | 'rich'>('rich');
   const editorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editorRef.current) {
-      editorRef.current.innerHTML = descriptionHtml || '';
+      editorRef.current.innerHTML = descriptionHtml || description || '';
     }
   }, [editingKey]);
 
-  const exec = (cmd: string) => {
-    document.execCommand(cmd);
-    editorRef.current?.focus();
+  const persistRich = () => {
+    const html = editorRef.current?.innerHTML || '';
+    onChange({ descriptionHtml: html, description: htmlToPlain(html) });
+  };
+
+  const switchToRich = () => {
+    setMode('rich');
+    requestAnimationFrame(() => {
+      if (!editorRef.current) return;
+      if (!editorRef.current.innerHTML.trim() && description.trim()) {
+        editorRef.current.innerHTML = description
+          .split(/\n+/)
+          .map(line => `<p>${line.replace(/</g, '&lt;')}</p>`)
+          .join('');
+        persistRich();
+      }
+    });
   };
 
   return (
@@ -41,7 +54,7 @@ export function DescriptionEditor({
           <button type="button" className={mode === 'plain' ? 'on' : ''} onClick={() => setMode('plain')}>
             Текст
           </button>
-          <button type="button" className={mode === 'rich' ? 'on' : ''} onClick={() => setMode('rich')}>
+          <button type="button" className={mode === 'rich' ? 'on' : ''} onClick={switchToRich}>
             Форматирование
           </button>
         </div>
@@ -49,24 +62,23 @@ export function DescriptionEditor({
       {mode === 'plain' ? (
         <textarea
           className="adm-input"
-          rows={4}
+          rows={5}
           value={description}
           onChange={e => onChange({ description: e.target.value })}
           style={{ minHeight }}
+          placeholder="Описание события…"
         />
       ) : (
         <>
-          <div className="adm-rich-toolbar">
-            <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onMouseDown={e => { e.preventDefault(); exec('bold'); }}>B</button>
-            <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList'); }}>•</button>
-          </div>
+          <RichFormatToolbar editorRef={editorRef} onAfterCommand={persistRich} />
           <div
             ref={editorRef}
             className="adm-input adm-rich-editor"
             style={{ minHeight }}
             contentEditable
             suppressContentEditableWarning
-            onInput={() => onChange({ descriptionHtml: editorRef.current?.innerHTML || '' })}
+            onInput={persistRich}
+            data-placeholder="Описание события…"
           />
         </>
       )}
