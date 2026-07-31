@@ -59,10 +59,19 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   const [speakers, setSpeakers] = useState<ProgramSpeaker[]>([]);
   const [previewMat, setPreviewMat] = useState<MaterialRow | null>(null);
   const [kbForumThreshold, setKbForumThreshold] = useState(4);
+  const [totalDays, setTotalDays] = useState(8);
 
   const refreshUnlocks = async () => {
     setKbUnlocks((await adminFetch('/kb-unlocks')).unlocks || []);
   };
+
+  const dayOptions = useMemo(() => {
+    const fromSettings = Array.from({ length: Math.max(1, totalDays) }, (_, i) => i + 1);
+    const fromMaterials = materials
+      .map(m => m.dayNumber)
+      .filter((d): d is number => typeof d === 'number' && d > 0);
+    return [...new Set([...fromSettings, ...fromMaterials])].sort((a, b) => a - b);
+  }, [totalDays, materials]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,6 +86,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
         adminFetch('/forum-settings').catch(() => ({ settings: {} })),
       ]);
       setKbForumThreshold(fsRes.settings?.kbUnlockThreshold ?? 4);
+      setTotalDays(fsRes.settings?.totalDays ?? 8);
       setMaterials(matRes.materials || []);
       setMaterialTypes((typesRes.types || []).map((t: { key: string; name: string }) => ({ key: t.key, name: t.name })));
       setEvents(evRes.events || []);
@@ -181,14 +191,17 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             onChange={e => setKbUnlockForm({ ...kbUnlockForm, participantId: e.target.value })}
             placeholder="ID участника"
           />
-          <input
-            type="number"
+          <select
             className="adm-input"
             value={kbUnlockForm.dayNumber}
             onChange={e => setKbUnlockForm({ ...kbUnlockForm, dayNumber: Number(e.target.value) })}
-            placeholder="День"
-            style={{ width: 70 }}
-          />
+            style={{ width: 110 }}
+            title="День смены"
+          >
+            {dayOptions.map(d => (
+              <option key={d} value={d}>День {d}</option>
+            ))}
+          </select>
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => {
             const id = Number(kbUnlockForm.participantId);
             if (id) openCard(id);
@@ -235,7 +248,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
           <input className="adm-input" placeholder="Поиск по названию" value={search} onChange={e => setSearch(e.target.value)} />
           <select className="adm-input" value={dayFilter} onChange={e => setDayFilter(e.target.value)}>
             <option value="">Все дни</option>
-            {[...new Set(materials.map(m => m.dayNumber).filter(Boolean))].sort((a, b) => (a as number) - (b as number)).map(d => (
+            {dayOptions.map(d => (
               <option key={d} value={String(d)}>День {d}</option>
             ))}
           </select>
@@ -260,10 +273,43 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
         </div>
 
         <div className="form-row" style={{ marginBottom: 12 }}>
-          <input type="number" className="adm-input" value={newMaterial.dayNumber} onChange={e => setNewMaterial({ ...newMaterial, dayNumber: Number(e.target.value) })} placeholder="День" />
-          <select className="adm-input" value={newMaterial.eventId} onChange={e => setNewMaterial({ ...newMaterial, eventId: e.target.value })}>
+          <select
+            className="adm-input"
+            value={newMaterial.dayNumber}
+            onChange={e => setNewMaterial({
+              ...newMaterial,
+              dayNumber: Number(e.target.value),
+              eventId: '',
+            })}
+            title="День смены"
+          >
+            {dayOptions.map(d => (
+              <option key={d} value={d}>День {d}</option>
+            ))}
+          </select>
+          <select
+            className="adm-input"
+            value={newMaterial.eventId}
+            onChange={e => {
+              const eventId = e.target.value;
+              const ev = events.find(x => String(x.id) === eventId);
+              setNewMaterial({
+                ...newMaterial,
+                eventId,
+                ...(ev ? { dayNumber: ev.dayNumber } : {}),
+              });
+            }}
+          >
             <option value="">— событие —</option>
-            {events.map(ev => <option key={ev.id} value={String(ev.id)}>Д{ev.dayNumber} · {ev.title}</option>)}
+            {events
+              .filter(ev =>
+                !newMaterial.dayNumber
+                || ev.dayNumber === newMaterial.dayNumber
+                || String(ev.id) === newMaterial.eventId,
+              )
+              .map(ev => (
+                <option key={ev.id} value={String(ev.id)}>Д{ev.dayNumber} · {ev.title}</option>
+              ))}
           </select>
           <select className="adm-input" value={newMaterial.direction} onChange={e => setNewMaterial({ ...newMaterial, direction: e.target.value, audienceAll: false })} disabled={newMaterial.audienceAll}>
             <option value="">Направление</option>
@@ -362,6 +408,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
                 speakers={speakers}
                 events={events}
                 directions={directions}
+                dayOptions={dayOptions}
                 onCopyLink={copyLink}
                 onPreview={() => setPreviewMat(m)}
                 onSave={body => act(async () => {

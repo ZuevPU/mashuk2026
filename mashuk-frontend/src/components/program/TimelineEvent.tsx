@@ -8,15 +8,26 @@ interface TimelineEventProps {
   tags?: string[];
   status: 'past' | 'now' | 'future';
   onClick?: () => void;
+  expandState?: 'collapsed' | 'expanded' | null;
 }
 
-export const TimelineEvent: React.FC<TimelineEventProps> = ({ time, title, subtitle, tags, status, onClick }) => {
+export const TimelineEvent: React.FC<TimelineEventProps> = ({
+  time, title, subtitle, tags, status, onClick, expandState = null,
+}) => {
   let rowClass = 'm-tl-row';
   if (status === 'past') rowClass += ' past';
   if (status === 'now') rowClass += ' now-row';
 
+  const trailing = expandState === 'expanded'
+    ? '▼'
+    : expandState === 'collapsed'
+      ? '▶'
+      : status === 'past'
+        ? '✓'
+        : '›';
+
   return (
-    <div className={rowClass} onClick={onClick}>
+    <div className={rowClass} onClick={onClick} role={onClick ? 'button' : undefined}>
       <div className="m-tl-time">{time}</div>
       <div className="m-tl-body">
         <div className="m-tl-title">{title}</div>
@@ -30,9 +41,16 @@ export const TimelineEvent: React.FC<TimelineEventProps> = ({ time, title, subti
         )}
         {status === 'now' && <div className="m-tl-badge" title="По московскому времени">Сейчас</div>}
       </div>
-      {status === 'past' && <div className="m-tl-check">✓</div>}
-      {status === 'now' && <div style={{ fontSize: '16px', color: 'rgba(255,255,255,.6)', marginLeft: '8px' }}>›</div>}
-      {status === 'future' && <div className="m-tl-arr">›</div>}
+      {status === 'past' && !expandState ? (
+        <div className="m-tl-check">✓</div>
+      ) : (
+        <div
+          className="m-tl-arr"
+          style={status === 'now' && !expandState ? { color: 'rgba(255,255,255,.6)' } : undefined}
+        >
+          {trailing}
+        </div>
+      )}
     </div>
   );
 };

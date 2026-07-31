@@ -3,6 +3,8 @@ import { label } from '../../labels/ru';
 import type { AdminTabProps } from '../admin/types';
 import {
   taskSubmissionAnswerCell,
+  submissionLifecycleCell,
+  submissionMetaCell,
   teamBlocked,
   type TaskSubmissionRow,
 } from './taskSubmissionShared';
@@ -162,6 +164,8 @@ export function TaskSubmissionsModeration({ taskId, taskTitle, adminFetch, act, 
                       Статус{sortMark('status')}
                     </button>
                   </th>
+                  <th>Цепочка</th>
+                  <th>Тип</th>
                   <th>Ответ</th>
                   <th>
                     <button type="button" className="adm-link" onClick={() => toggleSort('points')}>
@@ -184,6 +188,8 @@ export function TaskSubmissionsModeration({ taskId, taskTitle, adminFetch, act, 
                     <tr key={s.id}>
                       <td>{s.participantName || `#${s.participantId}`}</td>
                       <td>{label(s.status)}</td>
+                      <td>{submissionLifecycleCell(s)}</td>
+                      <td>{submissionMetaCell(s)}</td>
                       <td style={{ maxWidth: 280 }}>{taskSubmissionAnswerCell(s)}</td>
                       <td>{s.pointsAwarded ?? '—'}</td>
                       <td style={{ fontSize: 11 }}>

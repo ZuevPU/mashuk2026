@@ -214,9 +214,10 @@ async function notifyLevelUpIfNeeded(
   const levelAfter = await getLevel(pointsAfter, track);
   if (levelAfter <= levelBefore) return;
   const label = track === 'path' ? 'Пути' : 'Опыта';
+  const { pushCopy } = await import('./pushCopy.js');
   await sendPushNotification(
     [participantId],
-    `Новый уровень ${label}: ${levelAfter}!`,
+    pushCopy.levelUp(label, levelAfter),
     'transactional_level_up',
   ).catch(() => undefined);
 }

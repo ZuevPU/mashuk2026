@@ -140,7 +140,8 @@ export async function awardPoints(
   actionType: string,
   overridePoints?: number,
   forumDay?: number,
-): Promise<{ awarded: number; track: PointTrack | 'bonus' } | null> {
+  opts?: { submissionId?: number },
+): Promise<{ awarded: number; track: PointTrack | 'bonus'; logId: number } | null> {
   const [config] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, actionType)).limit(1);
   const catalog = ACTION_CATALOG.find(a => a.actionType === actionType);
   // DB row may be missing on fresh/prod shifts — fall back to catalog defaults
@@ -165,12 +166,13 @@ export async function awardPoints(
     experience: beforeRow?.experiencePoints ?? 0,
   };
 
-  await db.insert(pointsLog).values({
+  const [inserted] = await db.insert(pointsLog).values({
     participantId,
     actionType,
     points,
     forumDay: forumDay ?? null,
-  });
+    submissionId: opts?.submissionId ?? null,
+  }).returning({ id: pointsLog.id });
 
   const track = pointsTrackForAction(actionType);
 
@@ -200,7 +202,7 @@ export async function awardPoints(
     console.warn('syncForumPoints failed:', err);
   }
 
-  return { awarded: points, track };
+  return { awarded: points, track, logId: inserted.id };
 }
 
 export function totalRatingScore(path: number, experience: number, bonus: number): number {

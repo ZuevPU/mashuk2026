@@ -1,7 +1,13 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { taskSubmissions, taskTeamConfirmations, tasks } from '../db/schema.js';
+import { pushCopy } from './pushCopy.js';
 import { sendPushNotification } from './pushService.js';
+import {
+  completeSubmissionRewards,
+  markSubmissionRejected,
+  type VerificationType,
+} from './submissionLifecycle.js';
 
 export type TaskModerationResult =
   | { ok: true; submission: typeof taskSubmissions.$inferSelect }
@@ -11,6 +17,7 @@ export async function applyTaskModeration(
   id: number,
   status: 'approved' | 'rejected',
   moderatorComment?: string | null,
+  verifiedByAdminId?: number,
 ): Promise<TaskModerationResult> {
   const [existing] = await db.select().from(taskSubmissions).where(eq(taskSubmissions.id, id)).limit(1);
   if (!existing) {
@@ -27,44 +34,52 @@ export async function applyTaskModeration(
     }
   }
 
-  const [updated] = await db.update(taskSubmissions)
-    .set({ status, moderatorComment: moderatorComment ?? null, checkedAt: new Date() })
-    .where(eq(taskSubmissions.id, id)).returning();
-
-  if (status === 'approved' && updated && !(existing.pointsAwarded ?? 0) && task) {
-    const { awardTeamOnModeratorApprove } = await import('./teamTaskService.js');
-    const { resolveTaskAwardPoints } = await import('./taskPoints.js');
-    const pts = await resolveTaskAwardPoints(task);
-    await awardTeamOnModeratorApprove(updated, task);
-    await db.update(taskSubmissions)
-      .set({ pointsAwarded: pts })
-      .where(eq(taskSubmissions.id, id));
-    updated.pointsAwarded = pts;
-    const { awardTaskLinkedMedals } = await import('./taskMedalAward.js');
-    await awardTaskLinkedMedals(existing.participantId, task);
-    if (task.confirmationType === 'team') {
-      const teamIds = (existing.teamMemberIds as number[]) || [];
-      for (const pid of teamIds) {
-        if (pid !== existing.participantId) await awardTaskLinkedMedals(pid, task);
-      }
+  if (status === 'rejected') {
+    await markSubmissionRejected(id, moderatorComment, verifiedByAdminId);
+    const [updated] = await db.select().from(taskSubmissions).where(eq(taskSubmissions.id, id)).limit(1);
+    try {
+      const title = task?.title || 'Задание';
+      await sendPushNotification(
+        [existing.participantId],
+        pushCopy.taskRejected(title, moderatorComment),
+        'transactional_task_rejected',
+      );
+    } catch {
+      // push optional
     }
+    return { ok: true, submission: updated! };
   }
+
+  if (status === 'approved' && task && !(existing.pointsAwarded ?? 0)) {
+    const teamIds = (existing.teamMemberIds as number[]) || [];
+    const payIds = task.confirmationType === 'team' && teamIds.length
+      ? [...new Set([existing.participantId, ...teamIds])]
+      : [existing.participantId];
+    await completeSubmissionRewards(id, payIds, task, {
+      verificationType: (existing.verificationType as VerificationType) || 'manual_moderator',
+      verifiedByAdminId,
+    });
+  } else if (status === 'approved') {
+    await db.update(taskSubmissions)
+      .set({
+        status: 'approved',
+        verifiedAt: new Date(),
+        checkedAt: new Date(),
+        verifiedByAdminId: verifiedByAdminId ?? null,
+        lifecycleStage: existing.lifecycleStage || 'confirmed',
+      })
+      .where(eq(taskSubmissions.id, id));
+  }
+
+  const [updated] = await db.select().from(taskSubmissions).where(eq(taskSubmissions.id, id)).limit(1);
 
   try {
     const title = task?.title || 'Задание';
-    if (status === 'approved') {
-      await sendPushNotification(
-        [existing.participantId],
-        `Задание «${title}» принято${task?.points ? ` · +${task.points} ⚡` : ''}`,
-        'transactional_task_approved',
-      );
-    } else if (status === 'rejected') {
-      await sendPushNotification(
-        [existing.participantId],
-        `Задание «${title}» не принято${moderatorComment ? `: ${moderatorComment}` : ''}`,
-        'transactional_task_rejected',
-      );
-    }
+    await sendPushNotification(
+      [existing.participantId],
+      pushCopy.taskApproved(title, task?.points),
+      'transactional_task_approved',
+    );
   } catch {
     // push optional
   }

@@ -27,6 +27,38 @@ function startOfTodayUtc(): Date {
   return d;
 }
 
+function escapeIlike(raw: string): string {
+  return raw.replace(/[%_\\]/g, '\\$&');
+}
+
+/** Поиск по ФИО: одно слово, «Имя Фамилия», частичные совпадения. */
+export function buildParticipantNameMatch(
+  q: string,
+  cols: {
+    firstName: typeof participants.firstName;
+    lastName: typeof participants.lastName;
+  } = { firstName: participants.firstName, lastName: participants.lastName },
+): SQL | undefined {
+  const raw = q.trim();
+  if (!raw) return undefined;
+  const tokens = raw.split(/\s+/).filter(Boolean);
+  const fullName = sql`TRIM(CONCAT(COALESCE(${cols.firstName}, ''), ' ', COALESCE(${cols.lastName}, '')))`;
+  const reverseName = sql`TRIM(CONCAT(COALESCE(${cols.lastName}, ''), ' ', COALESCE(${cols.firstName}, '')))`;
+
+  const tokenMatch = (token: string): SQL => {
+    const pattern = `%${escapeIlike(token)}%`;
+    return or(
+      ilike(cols.firstName, pattern),
+      ilike(cols.lastName, pattern),
+      sql`${fullName} ILIKE ${pattern}`,
+      sql`${reverseName} ILIKE ${pattern}`,
+    )!;
+  };
+
+  if (tokens.length === 1) return tokenMatch(tokens[0]!);
+  return and(...tokens.map(tokenMatch))!;
+}
+
 export function buildParticipantWhere(query: ParticipantListQuery): SQL | undefined {
   const conditions: SQL[] = [];
 
@@ -43,20 +75,19 @@ export function buildParticipantWhere(query: ParticipantListQuery): SQL | undefi
   }
   if (query.q?.trim()) {
     const raw = query.q.trim();
-    const pattern = `%${raw.replace(/[%_\\]/g, '\\$&')}%`;
+    const pattern = `%${escapeIlike(raw)}%`;
+    const nameMatch = buildParticipantNameMatch(raw)!;
     const vkNum = Number(raw);
     if (!Number.isNaN(vkNum) && String(vkNum) === raw.replace(/\s/g, '')) {
       conditions.push(or(
-        ilike(participants.firstName, pattern),
-        ilike(participants.lastName, pattern),
+        nameMatch,
         ilike(participants.direction, pattern),
         eq(participants.vkId, vkNum),
         sql`CAST(${participants.id} AS TEXT) = ${raw}`,
       )!);
     } else {
       conditions.push(or(
-        ilike(participants.firstName, pattern),
-        ilike(participants.lastName, pattern),
+        nameMatch,
         ilike(participants.direction, pattern),
       )!);
     }

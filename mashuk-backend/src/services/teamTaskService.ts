@@ -1,10 +1,13 @@
-import { and, eq, inArray, lt } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { taskSubmissions, taskTeamConfirmations, tasks, forumSettings } from '../db/schema.js';
-import { awardPoints } from './pointsService.js';
-import { resolveTaskAwardPoints } from './taskPoints.js';
-import { evaluateMedalsForParticipant } from './medalEvaluator.js';
+import { pushCopy } from './pushCopy.js';
 import { sendPushNotification } from './pushService.js';
+import {
+  completeSubmissionRewards,
+  markSubmissionExpired,
+  markSubmissionRejected,
+} from './submissionLifecycle.js';
 
 export async function createTeamConfirmations(
   submissionId: number,
@@ -36,30 +39,19 @@ export async function tryFinalizeTeamSubmission(submissionId: number): Promise<b
     .where(eq(taskTeamConfirmations.submissionId, submissionId));
   if (rows.length === 0) return false;
   if (rows.some(r => r.status === 'declined')) {
-    await db.update(taskSubmissions)
-      .set({ status: 'rejected', checkedAt: new Date(), moderatorComment: 'Отклонено участником команды' })
-      .where(eq(taskSubmissions.id, submissionId));
+    await markSubmissionRejected(submissionId, 'Отклонено участником команды');
     return false;
   }
   if (!rows.every(r => r.status === 'confirmed')) return false;
 
   const [task] = await db.select().from(tasks).where(eq(tasks.id, sub.taskId)).limit(1);
   if (!task) return false;
-  const pts = await resolveTaskAwardPoints(task);
-  if (!pts) return false;
-
-  await db.update(taskSubmissions)
-    .set({ status: 'approved', checkedAt: new Date(), pointsAwarded: pts })
-    .where(eq(taskSubmissions.id, submissionId));
 
   const teamIds = (sub.teamMemberIds as number[]) || [];
-  const payIds = new Set([sub.participantId, ...teamIds]);
-  for (const pid of payIds) {
-    await awardPoints(pid, 'task_complete', pts, task.dayNumber ?? undefined);
-    const { awardTaskLinkedMedals } = await import('./taskMedalAward.js');
-    await awardTaskLinkedMedals(pid, task);
-    await evaluateMedalsForParticipant(pid);
-  }
+  const payIds = [...new Set([sub.participantId, ...teamIds])];
+  await completeSubmissionRewards(submissionId, payIds, task, {
+    verificationType: 'team_confirm',
+  });
   return true;
 }
 
@@ -77,12 +69,10 @@ export async function expireStaleTeamSubmissions(now = new Date()): Promise<numb
     const hours = t.teamConfirmHours ?? defaultHours;
     const deadline = new Date(s.submittedAt!.getTime() + hours * 3600_000);
     if (now <= deadline) continue;
-    await db.update(taskSubmissions)
-      .set({ status: 'expired', checkedAt: now, moderatorComment: 'Истекло время подтверждения команды' })
-      .where(eq(taskSubmissions.id, s.id));
+    await markSubmissionExpired(s.id, 'Истекло время подтверждения команды');
     await sendPushNotification(
       [s.participantId],
-      `Командная заявка «${t.title}» закрыта — не все подтвердили участие в срок`,
+      pushCopy.teamExpired(t.title),
       `team_expired_${s.id}`,
     );
     n += 1;
@@ -98,7 +88,7 @@ export async function notifyTeamConfirmRequest(
   if (memberIds.length === 0) return;
   await sendPushNotification(
     memberIds,
-    `Подтвердите участие в командном задании «${taskTitle}»`,
+    pushCopy.teamConfirmRequest(taskTitle),
     `team_confirm_${submissionId}`,
   );
 }
@@ -106,20 +96,14 @@ export async function notifyTeamConfirmRequest(
 export async function awardTeamOnModeratorApprove(
   submission: typeof taskSubmissions.$inferSelect,
   task: typeof tasks.$inferSelect,
+  verifiedByAdminId?: number,
 ): Promise<void> {
-  const pts = await resolveTaskAwardPoints(task);
-  if (task.confirmationType !== 'team') {
-    await awardPoints(submission.participantId, 'task_complete', pts, task.dayNumber ?? undefined);
-    return;
-  }
-  const rows = await db.select().from(taskTeamConfirmations)
-    .where(eq(taskTeamConfirmations.submissionId, submission.id));
-  if (rows.length > 0 && !rows.every(r => r.status === 'confirmed')) {
-    return;
-  }
   const teamIds = (submission.teamMemberIds as number[]) || [];
-  const payIds = new Set([submission.participantId, ...teamIds]);
-  for (const pid of payIds) {
-    await awardPoints(pid, 'task_complete', pts, task.dayNumber ?? undefined);
-  }
+  const payIds = task.confirmationType === 'team' && teamIds.length
+    ? [...new Set([submission.participantId, ...teamIds])]
+    : [submission.participantId];
+  await completeSubmissionRewards(submission.id, payIds, task, {
+    verificationType: 'manual_moderator',
+    verifiedByAdminId,
+  });
 }

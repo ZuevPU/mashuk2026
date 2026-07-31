@@ -202,7 +202,7 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
     <div className="adm-forum">
       <AdminPageHero
         title={`Пуши · ${summary.total} всего · ${summary.queued} в очереди`}
-        hint="Ручные и запланированные уведомления, баннер в мини-приложении до времени окончания."
+        hint="Ручные и авто-уведомления. В ЛС сообщества в конце всегда ссылка на мини-приложение (vk.ru/app…), не на backend. Баннер в приложении — до времени окончания."
       >
         <div className="adm-seg" style={{ marginBottom: 12 }}>
           {tabs.map(t => (

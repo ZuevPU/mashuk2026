@@ -1,11 +1,14 @@
 import { and, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { participants, pointsLog, taskSubmissions, tasks } from '../db/schema.js';
-import { awardPoints, revokePointsLogEntry } from './pointsService.js';
+import { revokePointsLogEntry } from './pointsService.js';
 import { assertTaskSubmissionAllowed } from './taskEligibility.js';
 import { applyTaskModeration } from './taskModerationService.js';
-import { resolveTaskAwardPoints } from './taskPoints.js';
 import { evaluateMedalsForParticipant } from './medalEvaluator.js';
+import {
+  completeSubmissionRewards,
+  submissionCreatePatch,
+} from './submissionLifecycle.js';
 
 export type ManualTaskResult =
   | { ok: true; submission: typeof taskSubmissions.$inferSelect }
@@ -45,7 +48,13 @@ export async function adminCompleteParticipantTask(
     return { ok: false, error: elig.error, status: 400 };
   }
 
-  const pts = await resolveTaskAwardPoints(task);
+  const lifecyclePatch = submissionCreatePatch({
+    task,
+    payload: { volunteer: false },
+    status: 'approved',
+    isTeam: false,
+    forceAuto: true,
+  });
   let submissionId: number;
 
   if (existing) {
@@ -53,9 +62,15 @@ export async function adminCompleteParticipantTask(
       .set({
         status: 'approved',
         checkedAt: new Date(),
+        verifiedAt: new Date(),
         moderatorComment: moderatorComment ?? 'Отмечено администратором',
-        pointsAwarded: pts,
+        pointsAwarded: 0,
+        pointsLogId: null,
+        userMedalId: null,
         submittedAt: existing.submittedAt ?? new Date(),
+        proofType: 'moderator',
+        verificationType: 'manual_moderator',
+        lifecycleStage: 'confirmed',
       })
       .where(eq(taskSubmissions.id, existing.id))
       .returning();
@@ -66,17 +81,20 @@ export async function adminCompleteParticipantTask(
       taskId,
       status: 'approved',
       checkedAt: new Date(),
+      verifiedAt: new Date(),
       moderatorComment: moderatorComment ?? 'Отмечено администратором',
-      pointsAwarded: pts,
+      pointsAwarded: 0,
       submittedAt: new Date(),
+      ...lifecyclePatch,
+      proofType: 'moderator',
+      verificationType: 'manual_moderator',
     }).returning();
     submissionId = created!.id;
   }
 
-  if (pts > 0) {
-    await awardPoints(participantId, 'admin_manual_task', pts, task.dayNumber ?? undefined);
-  }
-  await evaluateMedalsForParticipant(participantId);
+  await completeSubmissionRewards(submissionId, [participantId], task, {
+    verificationType: 'manual_moderator',
+  });
 
   const [submission] = await db.select().from(taskSubmissions).where(eq(taskSubmissions.id, submissionId)).limit(1);
   return { ok: true, submission: submission! };
@@ -95,6 +113,11 @@ async function revokePointsForSubmission(
 ): Promise<number[]> {
   const pts = submission.pointsAwarded ?? 0;
   if (pts <= 0 || submission.status !== 'approved') return [];
+
+  if (submission.pointsLogId) {
+    const r = await revokePointsLogEntry(submission.pointsLogId, submission.participantId, reason);
+    if (r.ok) return [submission.pointsLogId];
+  }
 
   const since = submission.checkedAt ?? submission.submittedAt ?? new Date(0);
   const participantIds = new Set<number>([submission.participantId]);

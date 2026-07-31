@@ -44,9 +44,10 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   const { setModal } = useAppModal();
   const { panel: activePanel } = useActiveVkuiLocation();
   const [activeTab, setActiveTab] = useState<'sched' | 'kb'>('sched');
-  const [activeDay, setActiveDay] = useState(1);
+  const [activeDay, setActiveDay] = useState<number | null>(null);
   const [totalDays, setTotalDays] = useState(8);
   const [currentDay, setCurrentDay] = useState(1);
+  const [liveDay, setLiveDay] = useState(1);
   const [slots, setSlots] = useState<ProgramSlot[]>([]);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [recMeta, setRecMeta] = useState<{ interests: string[]; publishedEventsCount: number } | null>(null);
@@ -58,12 +59,39 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   const [publishedDays, setPublishedDays] = useState<number[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<ProgramEvent | null>(null);
   const [expandedParents, setExpandedParents] = useState<Record<number, boolean>>({});
+  const [settingsReady, setSettingsReady] = useState(false);
 
   const toggleParent = (id: number) => {
     setExpandedParents(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const loadSettings = useCallback((jumpToToday = true) => {
+    return apiGet<{
+      currentDay: number;
+      liveScheduleDay?: number;
+      totalDays: number;
+      publishedDays?: number[];
+    }>('/program/settings')
+      .then(s => {
+        const today = s.liveScheduleDay ?? s.currentDay ?? 1;
+        setCurrentDay(s.currentDay ?? today);
+        setLiveDay(today);
+        setTotalDays(s.totalDays);
+        setPublishedDays(s.publishedDays || []);
+        if (jumpToToday) setActiveDay(today);
+        setSettingsReady(true);
+        return today;
+      })
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.message : 'Не удалось загрузить настройки программы');
+        setActiveDay(prev => prev ?? 1);
+        setSettingsReady(true);
+        return 1;
+      });
+  }, []);
+
   const loadProgram = useCallback(() => {
+    if (activeDay == null) return;
     setLoading(true);
     setError(null);
     Promise.all([
@@ -84,32 +112,26 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
     }).finally(() => setLoading(false));
   }, [activeDay]);
 
+  // On each open of Program tab — jump to today's forum day
   useEffect(() => {
-    apiGet<{ currentDay: number; totalDays: number; publishedDays?: number[] }>('/program/settings')
-      .then(s => {
-        setCurrentDay(s.currentDay);
-        setTotalDays(s.totalDays);
-        setActiveDay(s.currentDay);
-        setPublishedDays(s.publishedDays || []);
-      })
-      .catch((err) => {
-        setError(err instanceof ApiError ? err.message : 'Не удалось загрузить настройки программы');
-      });
+    if (activePanel !== id) return;
+    loadSettings(true);
     apiGet<{ days: any[] }>('/program/knowledge-base/days')
       .then(r => setKbDays(r.days || []))
       .catch(() => setKbDays([]));
-  }, []);
+  }, [activePanel, id, loadSettings]);
 
   useEffect(() => {
+    if (!settingsReady || activeDay == null) return;
     loadProgram();
-  }, [loadProgram]);
+  }, [loadProgram, settingsReady, activeDay]);
   const publishedSet = new Set(publishedDays);
   const days = Array.from({ length: totalDays }, (_, i) => {
     const dayNum = i + 1;
     let status: DayStatus = 'future';
-    if (dayNum < currentDay) status = 'done';
-    else if (dayNum === currentDay) status = 'today';
-    const scheduleLocked = activeTab === 'sched' && dayNum > currentDay && !publishedSet.has(dayNum);
+    if (dayNum < liveDay) status = 'done';
+    else if (dayNum === liveDay) status = 'today';
+    const scheduleLocked = activeTab === 'sched' && dayNum > liveDay && !publishedSet.has(dayNum);
     if (scheduleLocked) status = 'locked';
     const kbMeta = kbDays.find(d => d.day === dayNum);
     const kbSub = activeTab === 'kb' && kbMeta?.switcherLabel
@@ -118,7 +140,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
     const weekday = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс', 'пн · отъезд'][i] || '';
     const schedSub = scheduleLocked
       ? 'скоро'
-      : (dayNum < currentDay ? `✓ ${weekday}` : weekday);
+      : (dayNum < liveDay ? `✓ ${weekday}` : weekday);
     return {
       id: dayNum,
       title: `День ${dayNum}`,
@@ -192,6 +214,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
           subtitle={hasChildren && !expanded ? `${e.subtitle} · ${nestedCount} тем` : e.subtitle}
           tags={e.tags}
           status={e.status}
+          expandState={hasChildren ? (expanded ? 'expanded' : 'collapsed') : null}
           onClick={() => {
             if (hasChildren) {
               toggleParent(e.id);
@@ -266,9 +289,13 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
       <Group>
         <Div>
           <ProgramTabs activeTab={activeTab} onTabChange={setActiveTab} />
-          <DaySwitcher days={days} activeDay={activeDay} onDayChange={setActiveDay} />
+          <DaySwitcher
+            days={days}
+            activeDay={activeDay ?? liveDay}
+            onDayChange={setActiveDay}
+          />
 
-          {loading ? <Spinner size="l" /> : error ? (
+          {!settingsReady || activeDay == null || loading ? <Spinner size="l" /> : error ? (
             <>
               <div className="m-card" style={{ color: '#C53030', marginTop: 12 }}>{error}</div>
               <Button style={{ marginTop: 8 }} onClick={loadProgram}>Повторить</Button>
@@ -320,7 +347,11 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
                     )}
                     {slot.parallel ? (
                       <div className="m-parallel-scroll">
-                        {slot.events.map(e => renderEvent(e))}
+                        {slot.events.map(e => (
+                          <div key={e.id} className="m-parallel-item">
+                            {renderEvent(e)}
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       slot.events.map(e => renderEvent(e))

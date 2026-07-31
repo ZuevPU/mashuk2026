@@ -54,13 +54,19 @@ export async function sendMiniAppNotification(vkId: number, text: string): Promi
   }
 }
 
+/** Ссылка на мини-приложение в конце ЛС (не PUBLIC_URL / backend). */
+export function pushAppLinkSuffix(): string {
+  const url = (env.VK_MINI_APP_URL || 'https://vk.ru/app54662212').trim().replace(/\/+$/, '');
+  if (!url) return '';
+  return `\n\nОткрыть приложение:\n${url}`;
+}
+
 export async function sendCommunityMessage(vkId: number, text: string): Promise<VkApiResult> {
   if (!env.VK_COMMUNITY_TOKEN) {
     return { ok: false, status: 'skipped_no_community_token' };
   }
-  const body = text.slice(0, 4090);
-  const linkSuffix = env.PUBLIC_URL ? `\n${env.PUBLIC_URL}` : '';
-  const message = (body + linkSuffix).slice(0, 4090);
+  const body = text.slice(0, 3900);
+  const message = (body + pushAppLinkSuffix()).slice(0, 4090);
   try {
     const r = await vkGet('messages.send', {
       user_id: String(vkId),

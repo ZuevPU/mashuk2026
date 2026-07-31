@@ -154,18 +154,34 @@ async function ensureContent(shiftId: number) {
     console.log('Groups ok.');
   }
 
-  if ((await db.select().from(pushTemplates).limit(1)).length === 0) {
-    await db.insert(pushTemplates).values([
-      { key: 'slot_0800', slotKey: 'slot_0800', title: 'Утро', body: 'Доброе утро! 1 минута на проверку состояния', isActive: true },
-      { key: 'slot_1300', slotKey: 'slot_1300', title: 'День', body: 'Две задачи дня: осмысление направления и проверка состояния', isActive: true },
-      { key: 'slot_1600', slotKey: 'slot_1600', title: 'После урока', body: 'На каком уроке был? Коротко зафиксируй', isActive: true },
-      { key: 'slot_1830', slotKey: 'slot_1830', title: 'Вечер', body: 'Вечерняя проверка состояния и осмысление', isActive: true },
-      { key: 'slot_2200', slotKey: 'slot_2200', title: 'Итог', body: 'Финал дня — оцени и поделись', isActive: true },
-      { key: 'slot_2300', slotKey: 'slot_2300', title: 'Ночь', body: 'Спокойной ночи! Если остались мысли — запиши в копилку', isActive: true },
-    ]);
-    console.log('Push templates seeded.');
-  } else {
-    console.log('Push templates ok.');
+  {
+    const { pushCopy, LEGACY_SLOT_BODIES } = await import('../services/pushCopy.js');
+    const slotDefs = [
+      { key: 'slot_0800', slotKey: 'slot_0800', title: 'Утро', body: pushCopy.slots.slot_0800.text },
+      { key: 'slot_1300', slotKey: 'slot_1300', title: 'День', body: pushCopy.slots.slot_1300.text },
+      { key: 'slot_1600', slotKey: 'slot_1600', title: 'После урока', body: pushCopy.slots.slot_1600.text },
+      { key: 'slot_1830', slotKey: 'slot_1830', title: 'Вечер', body: pushCopy.slots.slot_1830.text },
+      { key: 'slot_2200', slotKey: 'slot_2200', title: 'Итог', body: pushCopy.slots.slot_2200.text },
+      { key: 'slot_2300', slotKey: 'slot_2300', title: 'Ночь', body: pushCopy.slots.slot_2300.text },
+    ];
+    if ((await db.select().from(pushTemplates).limit(1)).length === 0) {
+      await db.insert(pushTemplates).values(slotDefs.map(t => ({ ...t, isActive: true })));
+      console.log('Push templates seeded.');
+    } else {
+      // Мягко обновить устаревшие дефолтные тексты слотов
+      for (const def of slotDefs) {
+        const [row] = await db.select().from(pushTemplates).where(eq(pushTemplates.key, def.key)).limit(1);
+        if (!row) {
+          await db.insert(pushTemplates).values({ ...def, isActive: true });
+          continue;
+        }
+        const legacy = LEGACY_SLOT_BODIES[def.key] || [];
+        if (legacy.includes(row.body || '')) {
+          await db.update(pushTemplates).set({ body: def.body }).where(eq(pushTemplates.id, row.id));
+        }
+      }
+      console.log('Push templates ok.');
+    }
   }
 
   if ((await db.select().from(medals).limit(1)).length === 0) {

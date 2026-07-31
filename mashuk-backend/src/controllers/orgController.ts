@@ -174,9 +174,10 @@ export const adminReplyOrgThread = async (req: AdminRequest, res: Response): Pro
       .where(eq(orgThreads.id, threadId));
 
     if (sendPush !== false) {
+      const { pushCopy } = await import('../services/pushCopy.js');
       await sendPushNotification(
         [thread.participantId],
-        `Организаторы ответили: ${text.trim().slice(0, 120)}`,
+        pushCopy.orgReply(text),
         'org_reply',
       );
     }

@@ -8,13 +8,14 @@ import {
   exchangeAnswers, eventAttendance, materials, materialTypes, kbDayUnlocks,
   levelsConfig, piggybank, answers, dailyStats, pushLog, pointsLog,
   participantDayState, pedagogicalRoles, dayExperiments, adminActionsLog,
-  ratingRecalcRuns, ratingBonusRules, medals,
+  ratingRecalcRuns, ratingBonusRules,
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { notifyAllParticipants, sendPushNotification } from '../services/pushService.js';
 import { recalculateDailyStats } from '../services/analyticsService.js';
 import { clearCache } from '../services/cache.js';
 import { normalizeOnboardingConfig } from '../services/roleService.js';
+import { enrichSubmissionRow } from '../services/submissionLifecycle.js';
 import { entryTags, formatTagsForExport } from '../services/piggybankDict.js';
 import {
   eventCreateSchema, eventUpdateSchema,
@@ -573,7 +574,7 @@ async function rebindTagName(fromName: string, toName: string) {
   for (const ev of allEvents) {
     const tags = Array.isArray(ev.tags) ? (ev.tags as string[]) : [];
     if (!tags.includes(fromName)) continue;
-    const next = [...new Set(tags.map(t => (t === fromName ? toName : t)))];
+    const next = [...new Set(tags.map(t => (t === fromName ? toName : t)).filter(Boolean))];
     await db.update(events).set({ tags: next }).where(eq(events.id, ev.id));
     eventsUpdated++;
   }
@@ -582,7 +583,7 @@ async function rebindTagName(fromName: string, toName: string) {
   for (const m of allMats) {
     const tags = Array.isArray(m.tags) ? (m.tags as string[]) : [];
     if (!tags.includes(fromName)) continue;
-    const next = [...new Set(tags.map(t => (t === fromName ? toName : t)))];
+    const next = [...new Set(tags.map(t => (t === fromName ? toName : t)).filter(Boolean))];
     await db.update(materials).set({ tags: next }).where(eq(materials.id, m.id));
     matsUpdated++;
   }
@@ -591,11 +592,16 @@ async function rebindTagName(fromName: string, toName: string) {
   for (const p of allP) {
     const ints = Array.isArray(p.interests) ? (p.interests as string[]) : [];
     if (!ints.includes(fromName)) continue;
-    const next = [...new Set(ints.map(t => (t === fromName ? toName : t)))];
+    const next = [...new Set(ints.map(t => (t === fromName ? toName : t)).filter(Boolean))];
     await db.update(participants).set({ interests: next }).where(eq(participants.id, p.id));
     participantsUpdated++;
   }
   return { eventsUpdated, materialsUpdated: matsUpdated, participantsUpdated };
+}
+
+/** Убрать тег из событий / материалов / интересов участников. */
+async function unlinkTagName(tagName: string) {
+  return rebindTagName(tagName, '');
 }
 
 export const crudThematicTags = {
@@ -638,20 +644,44 @@ export const crudThematicTags = {
     const [before] = await db.select().from(thematicTags).where(eq(thematicTags.id, id)).limit(1);
     if (!before) { res.status(404).json({ error: 'Not found' }); return; }
     const patch: Partial<typeof thematicTags.$inferInsert> = {};
-    if (req.body.name != null) patch.name = String(req.body.name).trim();
+    const newName = req.body.name != null ? String(req.body.name).trim() : null;
+    if (newName != null) {
+      if (!newName) { res.status(400).json({ error: 'name required' }); return; }
+      const dup = await db.select({ id: thematicTags.id }).from(thematicTags)
+        .where(and(eq(thematicTags.name, newName), sql`${thematicTags.id} <> ${id}`)).limit(1);
+      if (dup.length) {
+        res.status(400).json({ error: 'Тег с таким названием уже есть' });
+        return;
+      }
+      patch.name = newName;
+      if (req.body.slug == null && newName !== before.name) {
+        const nextSlug = slugifyTagName(newName);
+        const slugTaken = await db.select({ id: thematicTags.id }).from(thematicTags)
+          .where(and(eq(thematicTags.slug, nextSlug), sql`${thematicTags.id} <> ${id}`)).limit(1);
+        if (!slugTaken.length) patch.slug = nextSlug;
+      }
+    }
     if (req.body.slug != null) patch.slug = String(req.body.slug).trim();
     if (req.body.description !== undefined) patch.description = req.body.description;
     if (req.body.color !== undefined) patch.color = req.body.color;
     if (req.body.isActive !== undefined) patch.isActive = !!req.body.isActive;
     if (req.body.sortOrder != null) patch.sortOrder = Number(req.body.sortOrder);
     if (Array.isArray(req.body.applicationTypes)) patch.applicationTypes = req.body.applicationTypes;
+    if (Object.keys(patch).length === 0) {
+      res.status(400).json({ error: 'No fields to update' });
+      return;
+    }
     const [updated] = await db.update(thematicTags).set(patch).where(eq(thematicTags.id, id)).returning();
+    let rebind: Awaited<ReturnType<typeof rebindTagName>> | undefined;
+    if (newName && newName !== before.name) {
+      rebind = await rebindTagName(before.name, newName);
+    }
     const { logAdminAction } = await import('../services/adminActionsLog.js');
     await logAdminAction({
       req, actionType: 'tag_update', section: 'recommendation-tags', objectId: id,
-      oldValue: before, newValue: updated,
+      oldValue: before, newValue: { ...updated, rebind },
     });
-    res.json({ tag: updated });
+    res.json({ tag: updated, rebind });
   },
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
@@ -659,17 +689,26 @@ export const crudThematicTags = {
     if (!tag) { res.status(404).json({ error: 'Not found' }); return; }
     const usage = await tagUsageCounts(tag);
     const totalLinks = usage.events + usage.materials + usage.participants + Number(usage.questions);
-    if (totalLinks > 0 && req.query.force !== '1') {
-      res.status(409).json({ error: 'Tag has links', usage });
+    const force = req.query.force === '1' || req.query.force === 'true'
+      || req.body?.force === true || req.body?.force === 1 || req.body?.force === '1';
+    if (totalLinks > 0 && !force) {
+      res.status(409).json({
+        error: 'Tag has links',
+        message: 'Тег используется. Удалите с force=1, чтобы снять его со всех связей.',
+        usage,
+      });
       return;
+    }
+    if (totalLinks > 0) {
+      await unlinkTagName(tag.name);
     }
     const [deleted] = await db.delete(thematicTags).where(eq(thematicTags.id, id)).returning();
     const { logAdminAction } = await import('../services/adminActionsLog.js');
     await logAdminAction({
       req, actionType: 'tag_delete', section: 'recommendation-tags', objectId: id,
-      oldValue: deleted, isCritical: true,
+      oldValue: { ...deleted, usage }, isCritical: true,
     });
-    res.json({ ok: true });
+    res.json({ ok: true, unlinked: totalLinks > 0, usage });
   },
   reorder: async (req: AdminRequest, res: Response) => {
     const order = Array.isArray(req.body.order) ? req.body.order as Array<{ id: number; sortOrder: number }> : [];
@@ -1002,6 +1041,7 @@ export const crudEvents = {
       dayNum,
       parsed.data.isPublished,
       parsed.data.dayPublished,
+      shiftId,
     );
     const [e] = await db.insert(events).values({
       ...values,
@@ -1080,9 +1120,12 @@ export const crudEvents = {
       dayNum,
       parsed.data.isPublished,
       parsed.data.dayPublished,
+      existing.shiftId,
     );
     const [updated] = await db.update(events).set({
       ...values,
+      ...(parsed.data.place !== undefined ? { place: parsed.data.place } : {}),
+      ...(parsed.data.descriptionHtml !== undefined ? { descriptionHtml: parsed.data.descriptionHtml } : {}),
       ...(dayPublished !== undefined ? { dayPublished } : {}),
       ...(parsed.data.speakerIds !== undefined ? { speakerIds: parsed.data.speakerIds } : {}),
       ...(parsed.data.parentEventId !== undefined ? { parentEventId: parsed.data.parentEventId } : {}),
@@ -1101,47 +1144,72 @@ export const crudEvents = {
   duplicate: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
     const targetDay = Number(req.body.targetDayNumber ?? req.body.dayNumber);
-    if (!targetDay) { res.status(400).json({ error: 'targetDayNumber required' }); return; }
+    if (!targetDay || Number.isNaN(targetDay)) {
+      res.status(400).json({ error: 'targetDayNumber required' });
+      return;
+    }
     const [src] = await db.select().from(events).where(eq(events.id, id)).limit(1);
     if (!src) { res.status(404).json({ error: 'Not found' }); return; }
     const shiftRows = await db.select().from(events).where(eq(events.shiftId, src.shiftId));
     const descendantIds = collectDescendantIds(id, shiftRows);
     const subtree = shiftRows.filter(e => e.id === id || descendantIds.includes(e.id));
     const idMap = new Map<number, number>();
+
+    const publishFlagsFor = async (isPublished: boolean | null | undefined) => {
+      const published = isPublished === true;
+      const dayPublished = await resolveDayPublishedForEvent(
+        targetDay,
+        published,
+        undefined,
+        src.shiftId,
+      );
+      return {
+        isPublished: published,
+        dayPublished: published ? (dayPublished === true) : false,
+      };
+    };
+
     // Insert roots of subtree first (the duplicated node as new root on target day), then children by BFS
     const { id: _id, qrToken, ...rest } = src;
+    const rootFlags = await publishFlagsFor(src.isPublished);
     const [copy] = await db.insert(events).values({
       ...rest,
       dayNumber: targetDay,
-      isPublished: false,
-      dayPublished: false,
+      ...rootFlags,
       parentEventId: null,
       qrToken: null,
     }).returning();
     idMap.set(id, copy.id);
-    const queue = descendantIds.slice();
-    // Process in waves so parent is always mapped
-    let guard = 0;
-    while (queue.length && guard < 10000) {
-      guard += 1;
-      const nextId = queue.shift()!;
-      const node = subtree.find(e => e.id === nextId);
-      if (!node?.parentEventId) continue;
-      const mappedParent = idMap.get(node.parentEventId);
-      if (!mappedParent) {
-        queue.push(nextId);
-        continue;
+
+    let queue = descendantIds.slice();
+    while (queue.length) {
+      const still: number[] = [];
+      let progress = false;
+      for (const nextId of queue) {
+        const node = subtree.find(e => e.id === nextId);
+        if (!node?.parentEventId) continue;
+        const mappedParent = idMap.get(node.parentEventId);
+        if (!mappedParent) {
+          still.push(nextId);
+          continue;
+        }
+        const { id: cid, qrToken: _q, parentEventId: _p, ...chRest } = node;
+        const childFlags = await publishFlagsFor(node.isPublished);
+        const [created] = await db.insert(events).values({
+          ...chRest,
+          dayNumber: targetDay,
+          parentEventId: mappedParent,
+          ...childFlags,
+          qrToken: null,
+        }).returning();
+        idMap.set(nextId, created.id);
+        progress = true;
       }
-      const { id: cid, qrToken: _q, parentEventId: _p, ...chRest } = node;
-      const [created] = await db.insert(events).values({
-        ...chRest,
-        dayNumber: targetDay,
-        parentEventId: mappedParent,
-        isPublished: false,
-        dayPublished: false,
-        qrToken: null,
-      }).returning();
-      idMap.set(nextId, created.id);
+      if (!progress && still.length) {
+        res.status(500).json({ error: 'Не удалось скопировать вложенные блоки (битая иерархия)' });
+        return;
+      }
+      queue = still;
     }
     clearCache('events_day_');
     res.json({ event: copy });
@@ -1205,11 +1273,9 @@ async function buildTaskInsertValues(raw: Record<string, unknown>): Promise<type
   if (enriched.status === 'published' && !enriched.publishTime && !body.publishTime) {
     enriched.publishTime = new Date();
   }
-  const { requiresModeration: _rm, taskKind: _tk, catalogStatus: _cs, ...rest } = body;
+  const { requiresModeration: _rm, ...rest } = body;
   const merged = { ...rest, ...enriched };
   delete (merged as Record<string, unknown>).requiresModeration;
-  delete (merged as Record<string, unknown>).taskKind;
-  delete (merged as Record<string, unknown>).catalogStatus;
   return merged as typeof tasks.$inferInsert;
 }
 
@@ -1217,24 +1283,12 @@ function serializeAdminTaskRow(
   row: typeof tasks.$inferSelect,
   cat: typeof taskCategories.$inferSelect | null,
   stats: { completionCount: number; pendingCount: number },
-  place?: typeof programPlaces.$inferSelect | null,
-  medal?: typeof medals.$inferSelect | null,
 ) {
   const methods = taskMethodsForParticipant(row);
-  const taskKind = row.scopeType === 'team' ? 'team' : (row.executionType || 'once');
-  let catalogStatus: 'active' | 'hidden' | 'completed' | 'draft' = 'active';
-  if (row.status === 'archived') catalogStatus = 'completed';
-  else if (row.isHidden) catalogStatus = 'hidden';
-  else if (row.status === 'draft') catalogStatus = 'draft';
   return {
     ...row,
     categoryName: cat?.name ?? row.category,
     categoryIconKey: cat?.iconKey ?? row.iconKey,
-    programPlaceName: place?.name ?? null,
-    medalName: medal?.name ?? null,
-    medalLevel: medal?.level ?? null,
-    taskKind,
-    catalogStatus,
     confirmationMethods: methods,
     completionCount: stats.completionCount,
     pendingModerationCount: stats.pendingCount,
@@ -1312,7 +1366,6 @@ export const crudTasks = {
         ilike(tasks.title, `%${q}%`),
         ilike(tasks.category, `%${q}%`),
         ilike(tasks.description, `%${q}%`),
-        ilike(tasks.shortDescription, `%${q}%`),
       )!);
     }
 
@@ -1320,12 +1373,8 @@ export const crudTasks = {
     const rows = await db.select({
       task: tasks,
       category: taskCategories,
-      place: programPlaces,
-      medal: medals,
     }).from(tasks)
       .leftJoin(taskCategories, eq(tasks.categoryId, taskCategories.id))
-      .leftJoin(programPlaces, eq(tasks.programPlaceId, programPlaces.id))
-      .leftJoin(medals, eq(tasks.medalId, medals.id))
       .where(where)
       .orderBy(asc(tasks.id));
 
@@ -1361,8 +1410,6 @@ export const crudTasks = {
         r.task,
         r.category,
         statsMap.get(r.task.id) ?? { completionCount: 0, pendingCount: 0 },
-        r.place,
-        r.medal,
       )),
       totalCount: rows.length,
     });
@@ -1387,8 +1434,6 @@ export const crudTasks = {
     const enriched = enrichTaskWritePayload(parsed.data as Record<string, unknown>, before);
     const patch = { ...parsed.data, ...enriched } as Partial<typeof tasks.$inferInsert>;
     delete (patch as Record<string, unknown>).requiresModeration;
-    delete (patch as Record<string, unknown>).taskKind;
-    delete (patch as Record<string, unknown>).catalogStatus;
     if (patch.categoryId != null) {
       patch.category = await resolveTaskCategoryName(patch.categoryId) ?? before.category;
     }
@@ -1407,7 +1452,8 @@ export const crudTasks = {
     const isPublished = updated?.status === 'published';
     const publishJustHappened = isPublished && (!wasPublished || (updated.publishTime && before.publishTime && updated.publishTime > before.publishTime));
     if (updated?.pushOnPublish && isPublished && publishJustHappened) {
-      await notifyAllParticipants(`Новое задание: ${updated.title}`, 'task_publish');
+      const { pushCopy } = await import('../services/pushCopy.js');
+      await notifyAllParticipants(pushCopy.taskPublished(updated.title), 'task_publish');
     }
     if (isPublished && publishJustHappened) {
       try {
@@ -1590,7 +1636,7 @@ export const moderateTask = async (req: AdminRequest, res: Response): Promise<vo
   const id = Number(req.params.id);
   const { status, moderatorComment } = req.body;
   const { applyTaskModeration } = await import('../services/taskModerationService.js');
-  const result = await applyTaskModeration(id, status, moderatorComment);
+  const result = await applyTaskModeration(id, status, moderatorComment, req.adminId);
   if (!result.ok) {
     res.status(result.status).json({ error: result.error });
     return;
@@ -1600,7 +1646,7 @@ export const moderateTask = async (req: AdminRequest, res: Response): Promise<vo
     req, actionType: 'task_moderate', section: 'moderation', objectId: id,
     newValue: { status, moderatorComment }, isCritical: true,
   });
-  res.json({ submission: result.submission });
+  res.json({ submission: enrichSubmissionRow(result.submission) });
 };
 
 export const bulkModerateTasks = async (req: AdminRequest, res: Response): Promise<void> => {
@@ -1624,6 +1670,7 @@ export const bulkModerateTasks = async (req: AdminRequest, res: Response): Promi
       id,
       status,
       status === 'rejected' ? (moderatorComment || 'Не принято') : undefined,
+      req.adminId,
     );
     results.push({ id, ok: result.ok, error: result.ok ? undefined : result.error });
   }
@@ -2403,9 +2450,9 @@ export const listPendingSubmissions = async (_req: AdminRequest, res: Response):
   }
 
   res.json({
-    submissions: rows.map(r => ({
+    submissions: rows.map(r => enrichSubmissionRow({
       ...r.s,
-      participantName: `${r.p?.firstName} ${r.p?.lastName}`,
+      participantName: `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
       taskTitle: r.t?.title,
       confirmationType: r.t?.confirmationType,
       teamConfirmations: confBySub.get(r.s.id) || [],
@@ -2498,7 +2545,7 @@ export const listAllSubmissions = async (req: AdminRequest, res: Response): Prom
   }
 
   res.json({
-    submissions: rows.map(r => ({
+    submissions: rows.map(r => enrichSubmissionRow({
       ...r.s,
       participantName: `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
       participantId: r.p?.id ?? r.s.participantId,

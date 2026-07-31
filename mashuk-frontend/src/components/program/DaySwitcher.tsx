@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import '../../style.css';
 
 interface DaySwitcherProps {
@@ -8,13 +8,19 @@ interface DaySwitcherProps {
 }
 
 export const DaySwitcher: React.FC<DaySwitcherProps> = ({ days, activeDay, onDayChange }) => {
+  const activeRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }, [activeDay]);
+
   return (
     <div className="m-day-sw">
       {days.map(day => {
         const isDone = day.status === 'done';
         const isToday = day.status === 'today';
         const isOn = day.id === activeDay;
-        
+
         let cls = 'm-dsb';
         if (isDone) cls += ' done';
         if (isToday) cls += ' today';
@@ -26,6 +32,7 @@ export const DaySwitcher: React.FC<DaySwitcherProps> = ({ days, activeDay, onDay
         return (
           <button
             key={day.id}
+            ref={isOn ? activeRef : undefined}
             type="button"
             className={cls}
             disabled={locked}

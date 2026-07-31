@@ -296,9 +296,9 @@ router.post('/medals/evaluate', P('medals', 'update'), wrap(p0.runMedalEvaluatio
 router.post('/qr/generate', P('tasks', 'update'), wrap(ops.generateEntityQr));
 router.post('/qr/download', P('tasks', 'update'), wrap(p0.generateAndDownloadQr));
 router.get('/qr/pack', P('tasks', 'read'), wrap(p0.getQrPack));
-router.post('/participants/:id/points/:logId/revoke', requireAdminRole('settings'), wrap(p0.revokeParticipantPoints));
-router.post('/participants/:id/points/revoke-bulk', requireAdminRole('settings'), wrap(p0.revokeSuspiciousParticipantPoints));
-router.get('/leaderboard', P('levels', 'read'), wrap(ops.getLeaderboard));
+router.post('/participants/:id/points/:logId/revoke', P('levels', 'update'), wrap(p0.revokeParticipantPoints));
+router.post('/participants/:id/points/revoke-bulk', P('levels', 'update'), wrap(p0.revokeSuspiciousParticipantPoints));
+router.get('/leaderboard', wrap(ops.getLeaderboard));
 router.get('/pdf-whitelist', wrap(ops.listPdfWhitelist));
 router.post('/pdf-whitelist', requireAdminRole('settings'), wrap(ops.setPdfWhitelist));
 router.get('/participants/:id/pdf-text', requireAdminRole('export'), wrap(ops.buildParticipantPdfText));

@@ -5,19 +5,9 @@ export type TaskCategory = {
   sortOrder?: number;
 };
 
-export type MedalOption = {
-  id: number;
-  name: string;
-  level?: string | null;
-};
-
-export type TaskKind = 'once' | 'daily' | 'repeatable' | 'team';
-export type CatalogStatus = 'active' | 'hidden' | 'completed' | 'draft';
-
 export type AdminTask = {
   id: number;
   title: string;
-  shortDescription?: string | null;
   description?: string | null;
   descriptionHtml?: string | null;
   category?: string | null;
@@ -29,8 +19,6 @@ export type AdminTask = {
   dayNumbers?: number[];
   status?: string;
   isHidden?: boolean;
-  catalogStatus?: CatalogStatus;
-  taskKind?: TaskKind;
   scopeType?: string;
   answerType?: string;
   confirmationType?: string;
@@ -43,68 +31,61 @@ export type AdminTask = {
   dailyRepeatLimit?: number;
   teamConfirmHours?: number;
   medalTask?: boolean;
-  medalId?: number | null;
-  medalCount?: number | null;
-  medalName?: string | null;
-  medalLevel?: string | null;
   nomination?: string | null;
   programPlaceId?: number | null;
-  programPlaceName?: string | null;
   iconKey?: string | null;
   publishTime?: string | null;
-  eventTime?: string | null;
   deadline?: string | null;
   availableFrom?: string | null;
   availableTo?: string | null;
   applicationDeadline?: string | null;
+  qrValidFrom?: string | null;
+  qrValidTo?: string | null;
   completionCount?: number;
   pendingModerationCount?: number;
+  shortDescription?: string | null;
+  medalId?: number | null;
+  medalCount?: number | null;
+  medalName?: string | null;
+  eventTime?: string | null;
+  programPlaceName?: string | null;
+  catalogStatus?: string | null;
+  taskKind?: string | null;
 };
+
+export type MedalOption = { id: number; name: string };
 
 export type TaskDraft = {
   title: string;
   shortDescription: string;
+  description: string;
   descriptionHtml: string;
   categoryId: number | '';
   points: number;
   dayNumbers: number[];
-  catalogStatus: CatalogStatus;
   status: string;
-  taskKind: TaskKind;
   scopeType: string;
   confirmationMethods: string[];
   requiresModeration: boolean;
   executionType: string;
   dailyRepeatLimit: number;
   teamConfirmHours: number;
+  medalTask: boolean;
   medalId: number | '';
   medalCount: number;
-  medalTask: boolean;
+  eventTimeLocal: string;
   nomination: string;
   programPlaceId: number | '';
   iconKey: string;
   pushOnPublish: boolean;
   allowRetry: boolean;
   publishTimeLocal: string;
-  eventTimeLocal: string;
   availableFromLocal: string;
   availableToLocal: string;
   applicationDeadlineLocal: string;
+  qrValidFromLocal: string;
+  qrValidToLocal: string;
 };
-
-export const TASK_KIND_OPTIONS: { key: TaskKind; label: string }[] = [
-  { key: 'once', label: 'Одноразовое' },
-  { key: 'daily', label: 'Ежедневное' },
-  { key: 'repeatable', label: 'Многоразовое' },
-  { key: 'team', label: 'Командное' },
-];
-
-export const CATALOG_STATUS_OPTIONS: { key: CatalogStatus; label: string }[] = [
-  { key: 'active', label: 'Активно' },
-  { key: 'hidden', label: 'Скрыто' },
-  { key: 'completed', label: 'Завершено' },
-  { key: 'draft', label: 'Черновик' },
-];
 
 export const CONFIRMATION_METHOD_OPTIONS = [
   { key: 'qr', label: 'QR' },
@@ -124,6 +105,8 @@ export const NOMINATION_OPTIONS = [
   { key: 'culture', label: 'Культура' },
   { key: 'volunteer', label: 'Волонтёрство' },
   { key: 'team', label: 'Команда' },
+  { key: 'networking', label: 'Нетворкинг' },
+  { key: 'leadership', label: 'Лидерство' },
   { key: 'general', label: 'Общее' },
 ];
 
@@ -141,52 +124,37 @@ function fromLocalInput(v: string): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-export function taskKindFromTask(t: AdminTask): TaskKind {
-  if (t.taskKind) return t.taskKind;
-  if (t.scopeType === 'team') return 'team';
-  const et = t.executionType || 'once';
-  if (et === 'daily' || et === 'repeatable') return et;
-  return 'once';
-}
-
-export function catalogStatusFromTask(t: AdminTask): CatalogStatus {
-  if (t.catalogStatus) return t.catalogStatus;
-  if (t.status === 'archived') return 'completed';
-  if (t.isHidden) return 'hidden';
-  if (t.status === 'draft') return 'draft';
-  return 'active';
-}
-
 export function emptyDraft(day = 1): TaskDraft {
   return {
     title: '',
     shortDescription: '',
+    description: '',
     descriptionHtml: '',
     categoryId: '',
     points: 20,
     dayNumbers: [day],
-    catalogStatus: 'draft',
     status: 'draft',
-    taskKind: 'once',
     scopeType: 'individual',
     confirmationMethods: ['photo'],
     requiresModeration: true,
     executionType: 'once',
     dailyRepeatLimit: 1,
     teamConfirmHours: 24,
+    medalTask: false,
     medalId: '',
     medalCount: 1,
-    medalTask: false,
+    eventTimeLocal: '',
     nomination: '',
     programPlaceId: '',
     iconKey: '',
     pushOnPublish: false,
     allowRetry: true,
     publishTimeLocal: '',
-    eventTimeLocal: '',
     availableFromLocal: '',
     availableToLocal: '',
     applicationDeadlineLocal: '',
+    qrValidFromLocal: '',
+    qrValidToLocal: '',
   };
 }
 
@@ -202,92 +170,80 @@ export function draftFromTask(t: AdminTask): TaskDraft {
           : t.autoConfirm === false
             ? ['photo', 'moderator']
             : ['photo'];
-  const kind = taskKindFromTask(t);
   return {
     title: t.title || '',
-    shortDescription: t.shortDescription || '',
+    shortDescription: t.shortDescription || t.description || '',
+    description: t.description || '',
     descriptionHtml: t.descriptionHtml || t.description || '',
     categoryId: t.categoryId ?? '',
     points: t.points ?? 0,
     dayNumbers: t.dayNumbers?.length ? [...t.dayNumbers] : [t.dayNumber ?? 1],
-    catalogStatus: catalogStatusFromTask(t),
     status: t.status || 'draft',
-    taskKind: kind,
-    scopeType: kind === 'team' ? 'team' : 'individual',
+    scopeType: t.scopeType || 'individual',
     confirmationMethods: methods,
     requiresModeration: methods.includes('moderator') || t.autoConfirm === false,
-    executionType: kind === 'team' ? 'once' : (t.executionType || 'once'),
+    executionType: t.executionType || 'once',
     dailyRepeatLimit: t.dailyRepeatLimit ?? 1,
     teamConfirmHours: t.teamConfirmHours ?? 24,
+    medalTask: !!t.medalTask,
     medalId: t.medalId ?? '',
     medalCount: t.medalCount ?? 1,
-    medalTask: !!(t.medalTask || t.medalId),
+    eventTimeLocal: toLocalInput(t.eventTime),
     nomination: t.nomination || '',
     programPlaceId: t.programPlaceId ?? '',
     iconKey: t.iconKey || '',
     pushOnPublish: !!t.pushOnPublish,
     allowRetry: t.allowRetry !== false,
     publishTimeLocal: toLocalInput(t.publishTime),
-    eventTimeLocal: toLocalInput(t.eventTime ?? t.availableFrom),
-    availableFromLocal: toLocalInput(t.availableFrom ?? t.eventTime),
+    availableFromLocal: toLocalInput(t.availableFrom),
     availableToLocal: toLocalInput(t.availableTo ?? t.deadline),
     applicationDeadlineLocal: toLocalInput(t.applicationDeadline),
+    qrValidFromLocal: toLocalInput(t.qrValidFrom),
+    qrValidToLocal: toLocalInput(t.qrValidTo),
   };
 }
 
 export function patchBodyFromDraft(draft: TaskDraft, publish = false): Record<string, unknown> {
-  const catalogStatus = publish ? 'active' : draft.catalogStatus;
-  const status = publish ? 'published' : (catalogStatus === 'completed' ? 'archived' : catalogStatus === 'draft' ? 'draft' : 'published');
-  const isHidden = catalogStatus === 'hidden';
+  const status = publish ? 'published' : draft.status;
   return {
     title: draft.title.trim(),
-    shortDescription: draft.shortDescription.trim() || null,
+    shortDescription: draft.shortDescription.trim() || draft.description.trim() || draft.descriptionHtml.replace(/<[^>]+>/g, ' ').trim(),
+    description: draft.description.trim() || draft.descriptionHtml.replace(/<[^>]+>/g, ' ').trim(),
     descriptionHtml: draft.descriptionHtml,
-    description: draft.shortDescription.trim() || draft.descriptionHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || null,
     categoryId: draft.categoryId === '' ? null : Number(draft.categoryId),
     points: Number(draft.points),
     dayNumbers: draft.dayNumbers.length ? draft.dayNumbers : [1],
     dayNumber: draft.dayNumbers[0] ?? 1,
-    catalogStatus,
     status,
-    isHidden,
-    taskKind: draft.taskKind,
-    scopeType: draft.taskKind === 'team' ? 'team' : 'individual',
+    scopeType: draft.scopeType,
     confirmationMethods: draft.confirmationMethods,
     requiresModeration: draft.requiresModeration,
-    executionType: draft.taskKind === 'team' ? 'once' : draft.taskKind,
+    executionType: draft.executionType,
     dailyRepeatLimit: Number(draft.dailyRepeatLimit),
     teamConfirmHours: Number(draft.teamConfirmHours),
+    medalTask: draft.medalTask,
     medalId: draft.medalId === '' ? null : Number(draft.medalId),
     medalCount: Number(draft.medalCount) || 1,
-    medalTask: draft.medalId !== '' || draft.medalTask,
+    eventTime: fromLocalInput(draft.eventTimeLocal),
     nomination: draft.nomination || null,
     programPlaceId: draft.programPlaceId === '' ? null : Number(draft.programPlaceId),
     iconKey: draft.iconKey.trim() || null,
     pushOnPublish: draft.pushOnPublish,
     allowRetry: draft.allowRetry,
     publishTime: fromLocalInput(draft.publishTimeLocal),
-    eventTime: fromLocalInput(draft.eventTimeLocal),
-    availableFrom: fromLocalInput(draft.availableFromLocal || draft.eventTimeLocal),
+    availableFrom: fromLocalInput(draft.availableFromLocal),
     availableTo: fromLocalInput(draft.availableToLocal),
     applicationDeadline: fromLocalInput(draft.applicationDeadlineLocal),
+    qrValidFrom: fromLocalInput(draft.qrValidFromLocal),
+    qrValidTo: fromLocalInput(draft.qrValidToLocal),
   };
 }
 
 export function statusLabel(t: AdminTask): string {
-  const cs = catalogStatusFromTask(t);
-  const found = CATALOG_STATUS_OPTIONS.find(o => o.key === cs);
-  return found?.label ?? cs;
-}
-
-export function taskKindLabel(t: AdminTask): string {
-  const kind = taskKindFromTask(t);
-  return TASK_KIND_OPTIONS.find(o => o.key === kind)?.label ?? kind;
-}
-
-export function nominationLabel(key?: string | null): string {
-  if (!key) return '—';
-  return NOMINATION_OPTIONS.find(o => o.key === key)?.label ?? key;
+  if (t.isHidden) return 'Скрыто';
+  if (t.status === 'archived') return 'Архив';
+  if (t.status === 'draft') return 'Черновик';
+  return 'Опубликовано';
 }
 
 export function methodsLabel(methods?: string[]): string {
@@ -310,8 +266,25 @@ export function formatTaskDateTime(iso?: string | null): string {
   return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+export function nominationLabel(key?: string | null): string {
+  if (!key) return '—';
+  return NOMINATION_OPTIONS.find(o => o.key === key)?.label ?? key;
+}
+
+export function taskKindLabel(t: AdminTask): string {
+  const kind = t.taskKind || t.executionType || 'once';
+  const map: Record<string, string> = {
+    once: 'Разовое',
+    daily: 'Ежедневное',
+    repeatable: 'Повторяемое',
+    team: 'Командное',
+  };
+  return map[kind] ?? kind;
+}
+
 export function medalLabel(t: AdminTask): string {
-  if (t.medalName) return t.medalLevel ? `${t.medalName} (${t.medalLevel})` : t.medalName;
-  if (t.medalTask) return 'Особое';
+  if (t.medalName) return t.medalName;
+  if (t.medalId) return `#${t.medalId}${t.medalCount && t.medalCount > 1 ? ` ×${t.medalCount}` : ''}`;
+  if (t.medalTask) return 'Авто';
   return '—';
 }

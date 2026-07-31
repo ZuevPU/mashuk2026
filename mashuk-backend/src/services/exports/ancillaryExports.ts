@@ -134,21 +134,63 @@ export async function writeTaskSubmissionsFullExport(
 export async function writeRatingDayExport(
   res: Response,
   day: number,
-  opts: { format?: string; shiftId?: number } = {},
+  opts: { format?: string; shiftId?: number; direction?: string; groupId?: number } = {},
 ): Promise<void> {
   const format = String(opts.format || 'xlsx').toLowerCase();
   const conditions = [isNull(participants.selfDeletedAt)];
   if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
     conditions.push(eq(participants.shiftId, opts.shiftId));
   }
+  if (opts.direction) conditions.push(eq(participants.direction, opts.direction));
+  if (opts.groupId != null && !Number.isNaN(opts.groupId)) {
+    conditions.push(eq(participants.groupId, opts.groupId));
+  }
   const allP = await db.select().from(participants).where(and(...conditions));
   const ids = allP.map(p => p.id);
-  const { computeLeaderboardScores } = await import('../leaderboardService.js');
+  const { computeLeaderboardScores, computeMedalCountLeaderboard } = await import('../leaderboardService.js');
   const scores = await computeLeaderboardScores(ids, { scope: 'day', day, track: 'total' });
+  const medalCounts = await computeMedalCountLeaderboard(ids, { scope: 'day', day });
+
+  const medalNamesByPid = new Map<number, string[]>();
+  if (ids.length) {
+    const { clampForumDay } = await import('../leaderboardQuery.js');
+    const safeDay = clampForumDay(day);
+    const shift = await (await import('../shiftService.js')).resolveActiveShift();
+    let dayStart: Date | null = null;
+    let dayEnd: Date | null = null;
+    if (shift?.startDate) {
+      dayStart = new Date(shift.startDate);
+      dayStart.setUTCDate(dayStart.getUTCDate() + (safeDay - 1));
+      dayStart.setUTCHours(0, 0, 0, 0);
+      dayEnd = new Date(dayStart);
+      dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+    }
+    const medalRows = await db.select({
+      participantId: userMedals.participantId,
+      name: medals.name,
+      awardedAt: userMedals.awardedAt,
+    }).from(userMedals)
+      .leftJoin(medals, eq(userMedals.medalId, medals.id))
+      .where(inArray(userMedals.participantId, ids));
+    for (const r of medalRows) {
+      if (!r.participantId || !r.name) continue;
+      if (dayStart && dayEnd && r.awardedAt) {
+        const t = new Date(r.awardedAt);
+        if (t < dayStart || t >= dayEnd) continue;
+      }
+      const list = medalNamesByPid.get(r.participantId) ?? [];
+      list.push(r.name);
+      medalNamesByPid.set(r.participantId, list);
+    }
+  }
+
   const ranked = allP
-    .map(p => ({ p, pts: scores.get(p.id) ?? 0 }))
-    .sort((a, b) => b.pts - a.pts);
-  const data = ranked.map((r, i) => [i + 1, r.p.id, fullName(r.p), r.p.direction ?? '', r.pts]);
+    .map(p => ({ p, pts: scores.get(p.id) ?? 0, mc: medalCounts.get(p.id) ?? 0 }))
+    .sort((a, b) => b.pts - a.pts || b.mc - a.mc);
+  const data = ranked.map((r, i) => [
+    i + 1, r.p.id, fullName(r.p), r.p.direction ?? '', r.p.groupName ?? '', r.pts,
+    r.mc, (medalNamesByPid.get(r.p.id) ?? []).join('; '),
+  ]);
   const meta = {
     exportType: 'rating_day',
     participantCount: ranked.length,
@@ -161,7 +203,7 @@ export async function writeRatingDayExport(
     sendLeaderboardCsv(
       res,
       `leaderboard_day${day}.csv`,
-      'rank,participant_id,name,direction,points',
+      'rank,participant_id,name,direction,group,points,medal_count,medals',
       data,
       meta,
     );
@@ -171,7 +213,77 @@ export async function writeRatingDayExport(
     res,
     `rating_day_${day}.xlsx`,
     'Рейтинг',
-    ['Место', 'ID участника', 'ФИО', 'Направление', 'Баллы'],
+    ['Место', 'ID участника', 'ФИО', 'Направление', 'Группа', 'Баллы', 'Медалей', 'Медали'],
+    data,
+    meta,
+  );
+}
+
+export async function writeRatingTotalExport(
+  res: Response,
+  opts: { format?: string; shiftId?: number; direction?: string; groupId?: number; track?: string } = {},
+): Promise<void> {
+  const format = String(opts.format || 'csv').toLowerCase();
+  const track = opts.track || 'total';
+  const conditions = [isNull(participants.selfDeletedAt)];
+  if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
+    conditions.push(eq(participants.shiftId, opts.shiftId));
+  }
+  if (opts.direction) conditions.push(eq(participants.direction, opts.direction));
+  if (opts.groupId != null && !Number.isNaN(opts.groupId)) {
+    conditions.push(eq(participants.groupId, opts.groupId));
+  }
+  const allP = await db.select().from(participants).where(and(...conditions));
+  const ids = allP.map(p => p.id);
+  const { computeLeaderboardScores } = await import('../leaderboardService.js');
+  const scores = await computeLeaderboardScores(ids, { scope: 'total', track });
+
+  const medalNamesByPid = new Map<number, string[]>();
+  if (ids.length) {
+    const medalRows = await db.select({
+      participantId: userMedals.participantId,
+      name: medals.name,
+    }).from(userMedals)
+      .leftJoin(medals, eq(userMedals.medalId, medals.id))
+      .where(inArray(userMedals.participantId, ids));
+    for (const r of medalRows) {
+      if (!r.participantId || !r.name) continue;
+      const list = medalNamesByPid.get(r.participantId) ?? [];
+      list.push(r.name);
+      medalNamesByPid.set(r.participantId, list);
+    }
+  }
+
+  const ranked = allP
+    .map(p => ({ p, pts: scores.get(p.id) ?? 0 }))
+    .sort((a, b) => b.pts - a.pts);
+  const data = ranked.map((r, i) => [
+    i + 1, r.p.id, fullName(r.p), r.p.direction ?? '', r.p.groupName ?? '',
+    r.pts, r.p.pathPoints ?? 0, r.p.experiencePoints ?? 0, r.p.bonusPoints ?? 0,
+    (medalNamesByPid.get(r.p.id) ?? []).join('; '),
+  ]);
+  const meta = {
+    exportType: 'rating_total',
+    participantCount: ranked.length,
+    participantsPool: allP.length,
+    scope: 'total' as const,
+    track,
+  };
+  if (format === 'xlsx') {
+    await sendLeaderboardXlsx(
+      res,
+      'leaderboard_total.xlsx',
+      'Итоговый рейтинг',
+      ['Место', 'ID', 'ФИО', 'Направление', 'Группа', 'Баллы', 'Путь', 'Опыт', 'Бонус', 'Медали'],
+      data,
+      meta,
+    );
+    return;
+  }
+  sendLeaderboardCsv(
+    res,
+    'leaderboard_total.csv',
+    'rank,participant_id,name,direction,group,points,path,experience,bonus,medals',
     data,
     meta,
   );

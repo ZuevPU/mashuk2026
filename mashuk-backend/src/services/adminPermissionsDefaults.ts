@@ -101,6 +101,8 @@ export function buildDefaultPermissionRows(): RoleSectionRow[] {
         canUpdate: section === 'tasks' || section === 'piggybank',
         canExport: section === 'piggybank',
       }));
+    } else if (section === 'levels') {
+      rows.push(row('moderator', section, { ...base, canUpdate: true }));
     } else {
       rows.push(row('moderator', section, base));
     }
@@ -130,6 +132,14 @@ export function buildDefaultPermissionRows(): RoleSectionRow[] {
     const base = readOnly();
     if (['events', 'forum', 'knowledge'].includes(section)) {
       rows.push(row('organizer', section, { ...base, canCreate: true, canUpdate: true }));
+    } else if (section === 'recommendation-tags') {
+      // Теги правятся из «Программы» — без update/delete организатор может только создавать
+      rows.push(row('organizer', section, {
+        ...base,
+        canCreate: true,
+        canUpdate: true,
+        canDelete: true,
+      }));
     } else {
       rows.push(row('organizer', section, base));
     }

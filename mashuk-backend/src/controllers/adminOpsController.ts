@@ -462,7 +462,12 @@ export const awardMedal = async (req: AdminRequest, res: Response): Promise<void
     way: 'manual',
   }).returning();
   const [medal] = await db.select().from(medals).where(eq(medals.id, Number(medalId))).limit(1);
-  await sendPushNotification([Number(participantId)], `🏅 Ты получил медаль: ${medal?.name || 'награда'}`, 'medal_award');
+  const { pushCopy } = await import('../services/pushCopy.js');
+  await sendPushNotification(
+    [Number(participantId)],
+    pushCopy.medalAwarded(medal?.name || 'награда'),
+    'medal_award',
+  );
   await logAdminAction({
     req, actionType: 'medal_award', section: 'medals', objectId: um.id,
     newValue: { participantId, medalId }, isCritical: true,
@@ -493,31 +498,14 @@ export const generateEntityQr = async (req: AdminRequest, res: Response): Promis
 };
 
 export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<void> => {
-  const track = (req.query.track as string) || 'total';
-  const scopeRaw = (req.query.scope as string) || 'shift';
-  const scope = (scopeRaw === 'day' || scopeRaw === 'shift' || scopeRaw === 'total')
-    ? scopeRaw
-    : 'shift';
-  const day = req.query.day != null ? Number(req.query.day) : undefined;
-  const modeRaw = (req.query.mode as string) || 'points';
-  const mode = (modeRaw === 'medals' || modeRaw === 'nomination') ? modeRaw : 'points';
-  const nomination = (req.query.nomination as string) || '';
-  const medalModeRaw = (req.query.medalMode as string) || 'count';
-  const medalMode = medalModeRaw === 'holders' ? 'holders' : 'count';
-  const medalId = req.query.medalId != null ? Number(req.query.medalId) : undefined;
-  const directionFilter = (req.query.direction as string) || '';
-  const sortRaw = (req.query.sort as string) || 'score';
-  const sort = sortRaw === 'name' ? 'name' : 'score';
+  const { parseLeaderboardQuery } = await import('../services/leaderboardQuery.js');
+  const { buildLeaderboardResult } = await import('../services/leaderboardBuild.js');
+  const { NOMINATION_LEADERBOARD_KEYS } = await import('../services/leaderboardService.js');
 
-  const {
-    NOMINATION_LEADERBOARD_KEYS,
-    resolveLeaderboardScoreMap,
-    sortLeaderboardByScore,
-    participantIdsWithMedal,
-  } = await import('../services/leaderboardService.js');
+  const query = parseLeaderboardQuery(req.query as Record<string, unknown>);
 
-  if (mode === 'nomination' && nomination
-    && !NOMINATION_LEADERBOARD_KEYS.includes(nomination as typeof NOMINATION_LEADERBOARD_KEYS[number])) {
+  if (query.mode === 'nomination' && query.nomination
+    && !NOMINATION_LEADERBOARD_KEYS.includes(query.nomination as typeof NOMINATION_LEADERBOARD_KEYS[number])) {
     res.status(400).json({ error: 'Invalid nomination' });
     return;
   }
@@ -527,6 +515,8 @@ export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<
     firstName: participants.firstName,
     lastName: participants.lastName,
     direction: participants.direction,
+    groupId: participants.groupId,
+    groupName: participants.groupName,
     pathPoints: participants.pathPoints,
     experiencePoints: participants.experiencePoints,
     bonusPoints: participants.bonusPoints,
@@ -536,73 +526,8 @@ export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<
     avatarUrl: participants.avatarUrl,
   }).from(participants);
 
-  const directions = [...new Set(list.map(p => p.direction).filter(Boolean))] as string[];
-
-  let medalSet: Set<number> | null = null;
-  if (mode === 'medals' && medalMode === 'holders' && medalId && !Number.isNaN(medalId)) {
-    medalSet = await participantIdsWithMedal(medalId);
-  }
-
-  const visible = list
-    .filter(p => !p.selfDeletedAt)
-    .filter(p => !p.hideFromLeaderboard)
-    .filter(p => !directionFilter || p.direction === directionFilter)
-    .filter(p => !medalSet || medalSet.has(p.id));
-
-  const ids = visible.map(p => p.id);
-  const effectiveScope = mode === 'nomination' ? scope : scope;
-  const scoreMap = await resolveLeaderboardScoreMap(
-    ids,
-    {
-      mode,
-      track: mode === 'nomination' ? 'total' : track,
-      scope: effectiveScope as 'total' | 'day' | 'shift',
-      day: Number.isFinite(day) ? day : undefined,
-      nomination: mode === 'nomination' ? nomination : undefined,
-      medalMode,
-      medalId: medalId && !Number.isNaN(medalId) ? medalId : undefined,
-    },
-    visible,
-  );
-
-  const ranked = sortLeaderboardByScore(
-    visible.map(p => ({
-      id: p.id,
-      firstName: p.firstName,
-      lastName: p.lastName,
-      direction: p.direction,
-      avatarUrl: p.avatarUrl,
-      score: scoreMap.get(p.id) ?? 0,
-    })),
-    sort,
-  ).map((p, i) => ({
-    rank: i + 1,
-    id: p.id,
-    firstName: p.firstName,
-    lastName: p.lastName,
-    direction: p.direction,
-    avatarUrl: p.avatarUrl,
-    score: p.score,
-  }));
-
-  const leaders = mode === 'medals' && medalMode === 'holders' && medalId
-    ? ranked.filter(r => r.score > 0).slice(0, 50)
-    : ranked.slice(0, 50);
-
-  res.json({
-    mode,
-    track: mode === 'nomination' ? 'nomination' : track,
-    scope,
-    day: scope === 'day' ? (day ?? null) : null,
-    nomination: mode === 'nomination' ? (nomination || null) : null,
-    medalMode: mode === 'medals' ? medalMode : null,
-    medalId: mode === 'medals' && medalId && !Number.isNaN(medalId) ? medalId : null,
-    direction: directionFilter || null,
-    sort,
-    directions,
-    participantCount: ranked.length,
-    leaders,
-  });
+  const result = await buildLeaderboardResult(list, query, { hideFromLeaderboard: true });
+  res.json(result);
 };
 
 export const setPdfWhitelist = async (req: AdminRequest, res: Response): Promise<void> => {

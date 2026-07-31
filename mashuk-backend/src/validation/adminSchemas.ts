@@ -6,6 +6,7 @@ const optionalBool = z.boolean().optional();
 export const eventCreateSchema = z.object({
   title: z.string().min(1, 'title required'),
   description: optionalString,
+  descriptionHtml: optionalString,
   place: optionalString,
   dayNumber: z.coerce.number().int().positive().optional(),
   timeSlot: optionalString,

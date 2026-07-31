@@ -288,6 +288,13 @@
       "when": 1820000000000,
       "tag": "0040_tasks_catalog_spec",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1821000000000,
+      "tag": "0041_submission_lifecycle",
+      "breakpoints": true
     }
   ]
 }

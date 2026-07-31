@@ -23,6 +23,7 @@ import { clusterOverlappingTimedItems, formatSlotLabel } from '../services/progr
 
 export const getProgramSettings = async (req: ParticipantRequest, res: Response): Promise<void> => {
   const settings = await getForumSettings();
+  const now = new Date();
   const shiftId = await resolveActiveShiftId();
   const publishedRows = await db.select({
     dayNumber: scheduleDays.dayNumber,
@@ -30,8 +31,12 @@ export const getProgramSettings = async (req: ParticipantRequest, res: Response)
     eq(scheduleDays.shiftId, shiftId),
     eq(scheduleDays.isPublished, true),
   ));
+  const currentDay = resolveEffectiveCurrentDay(settings, now);
+  const liveScheduleDay = resolveLiveScheduleDay(settings, now);
   res.json({
-    currentDay: settings.currentDay ?? 1,
+    // Same “today” as home — not raw admin currentDay (often stuck at 1)
+    currentDay,
+    liveScheduleDay,
     totalDays: settings.totalDays ?? 8,
     recommendationThreshold: settings.recommendationThreshold ?? 1,
     sectionsVisibility: settings.sectionsVisibility ?? {},

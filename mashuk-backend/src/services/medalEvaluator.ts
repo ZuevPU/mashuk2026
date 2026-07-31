@@ -4,6 +4,7 @@ import {
   medals, userMedals, taskSubmissions, piggybank, answers, participants,
   eventAttendance, exchangeAnswers,
 } from '../db/schema.js';
+import { pushCopy } from './pushCopy.js';
 import { sendPushNotification } from './pushService.js';
 import { isNotNull } from 'drizzle-orm';
 import { medalRuleLabel } from './medalRuleMetrics.js';
@@ -99,7 +100,7 @@ export async function evaluateMedalsForParticipantDetailed(
       newlyAwarded.push({ id: medal.id, name: medal.name });
       await sendPushNotification(
         [participantId],
-        `Новая медаль: «${medal.name}»`,
+        pushCopy.medalAwarded(medal.name),
         'transactional_medal',
       ).catch(() => undefined);
     }

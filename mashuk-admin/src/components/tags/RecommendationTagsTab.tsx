@@ -276,8 +276,20 @@ export function RecommendationTagsTab({ adminFetch, act, reloadKey }: AdminTabPr
                         label: 'Удалить',
                         danger: true,
                         onClick: () => {
-                          if (!confirmDelete()) return;
-                          act(() => adminFetch(`/thematic-tags/${t.id}`, { method: 'DELETE' }).then(load), 'Удалено');
+                          if (!confirmDelete(`Удалить тег «${t.name}»?`)) return;
+                          act(async () => {
+                            try {
+                              await adminFetch(`/thematic-tags/${t.id}`, { method: 'DELETE' });
+                            } catch (err) {
+                              const msg = String(err);
+                              if (!msg.includes('Tag has links')) throw err;
+                              if (!window.confirm(
+                                `Тег «${t.name}» используется (события ${t.usage?.events ?? 0}, материалы ${t.usage?.materials ?? 0}, участники ${t.usage?.participants ?? 0}).\n\nУдалить и снять со всех связей?`,
+                              )) return;
+                              await adminFetch(`/thematic-tags/${t.id}?force=1`, { method: 'DELETE' });
+                            }
+                            await load();
+                          }, 'Удалено');
                         },
                       },
                     ]} />

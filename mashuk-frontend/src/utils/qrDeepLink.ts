@@ -47,6 +47,20 @@ export function extractParticipantQrToken(input: string): string {
   return trimmed;
 }
 
+/** Токен QR из ссылки задания (#/tasks?task=ID&qr=TOKEN) или сырой код */
+export function extractTaskQrToken(input: string): string {
+  return extractParticipantQrToken(input);
+}
+
+export function parseTaskQrScan(raw: string): { taskId: number; qrToken: string } | null {
+  const qrToken = extractTaskQrToken(raw);
+  const taskIdStr = extractTaskIdFromInput(raw);
+  if (!qrToken || !taskIdStr) return null;
+  const taskId = Number(taskIdStr);
+  if (!Number.isFinite(taskId) || taskId <= 0) return null;
+  return { taskId, qrToken };
+}
+
 export function extractTaskIdFromInput(input: string): string | null {
   const trimmed = input.trim();
   const hashIdx = trimmed.indexOf('#');

@@ -103,25 +103,25 @@ export async function runSeed() {
     ]);
 
     await db.insert(taskCategories).values([
-      { name: 'Образовательная программа', iconKey: 'education', sortOrder: 1 },
-      { name: 'Культурная программа', iconKey: 'culture', sortOrder: 2 },
-      { name: 'Спорт', iconKey: 'sport', sortOrder: 3 },
-      { name: 'Полезные знакомства/общение', iconKey: 'network', sortOrder: 4 },
-      { name: 'Групповые активности', iconKey: 'team', sortOrder: 5 },
-      { name: 'Креатив', iconKey: 'creative', sortOrder: 6 },
-      { name: 'Медиа/соцсети', iconKey: 'media', sortOrder: 7 },
+      { name: 'Образование', iconKey: 'education', sortOrder: 1 },
+      { name: 'Полезные знакомства/общение', iconKey: 'network', sortOrder: 2 },
+      { name: 'Медиа', iconKey: 'media', sortOrder: 3 },
+      { name: 'Рефлексия', iconKey: 'reflection', sortOrder: 4 },
+      { name: 'Командная работа', iconKey: 'team', sortOrder: 5 },
+      { name: 'Организация', iconKey: 'org', sortOrder: 6 },
+      { name: 'Направление', iconKey: 'direction', sortOrder: 7 },
       { name: 'Волонтёрство', iconKey: 'volunteer', sortOrder: 8 },
-      { name: 'Организация активности', iconKey: 'org', sortOrder: 9 },
-      { name: 'Полезные выезды', iconKey: 'trip', sortOrder: 10 },
-      { name: 'Инсайты и рефлексия', iconKey: 'insight', sortOrder: 11 },
+      { name: 'Творчество', iconKey: 'creative', sortOrder: 9 },
+      { name: 'Активность', iconKey: 'activity', sortOrder: 10 },
+      { name: 'Прочее', iconKey: 'other', sortOrder: 11 },
     ]).onConflictDoNothing({ target: taskCategories.name });
 
     const cats = await db.select().from(taskCategories);
     const catByName = (n: string) => cats.find(c => c.name === n)?.id;
     const networkingCat = catByName('Полезные знакомства/общение');
-    const mediaCat = catByName('Медиа/соцсети') ?? catByName('Медиа');
-    const eduCat = catByName('Образовательная программа') ?? catByName('Образование');
-    const orgCat = catByName('Организация активности') ?? catByName('Организация');
+    const mediaCat = catByName('Медиа');
+    const eduCat = catByName('Образование');
+    const orgCat = catByName('Организация');
 
     await db.insert(tasks).values([
       {
@@ -141,7 +141,7 @@ export async function runSeed() {
       {
         shiftId,
         title: 'Напиши пост о форуме',
-        category: 'Медиа/соцсети',
+        category: 'Медиа',
         categoryId: mediaCat,
         points: 30,
         dayNumber: 1,
@@ -156,7 +156,7 @@ export async function runSeed() {
       {
         shiftId,
         title: 'Зафиксируй идею эксперимента',
-        category: 'Образовательная программа',
+        category: 'Образование',
         categoryId: eduCat,
         points: 25,
         dayNumber: 3,
@@ -170,7 +170,7 @@ export async function runSeed() {
       {
         shiftId,
         title: 'Скан QR на площадке',
-        category: 'Организация активности',
+        category: 'Организация',
         categoryId: orgCat,
         points: 15,
         dayNumber: 2,
@@ -487,12 +487,12 @@ export async function runSeed() {
   if (existingTpl.length === 0) {
     await db.insert(pushTemplates).values(
       [
-        { key: 'slot_0800', slotKey: 'slot_0800', title: 'Утро', body: 'Доброе утро! 1 минута на проверку состояния' },
-        { key: 'slot_1300', slotKey: 'slot_1300', title: 'День', body: 'Две задачи дня: осмысление направления и проверка состояния' },
-        { key: 'slot_1600', slotKey: 'slot_1600', title: 'После урока', body: 'На каком уроке был? Коротко зафиксируй' },
-        { key: 'slot_1830', slotKey: 'slot_1830', title: 'Вечер', body: 'Вечерняя проверка состояния и осмысление' },
-        { key: 'slot_2200', slotKey: 'slot_2200', title: 'Итог', body: 'Финал дня — оцени и поделись' },
-        { key: 'slot_2300', slotKey: 'slot_2300', title: 'Ночь', body: 'Спокойной ночи! Если остались мысли — запиши в копилку' },
+        { key: 'slot_0800', slotKey: 'slot_0800', title: 'Утро', body: 'Доброе утро! Утренняя проверка состояния открыта — займёт около минуты.' },
+        { key: 'slot_1300', slotKey: 'slot_1300', title: 'День', body: 'Дневные точки: осмысление направления и проверка состояния. Загляните в приложение.' },
+        { key: 'slot_1600', slotKey: 'slot_1600', title: 'После урока', body: 'После урока: коротко зафиксируйте впечатления в приложении.' },
+        { key: 'slot_1830', slotKey: 'slot_1830', title: 'Вечер', body: 'Вечерняя проверка состояния и осмысление дня открыты.' },
+        { key: 'slot_2200', slotKey: 'slot_2200', title: 'Итог', body: 'Финал дня: оцените день и поделитесь итогами в приложении.' },
+        { key: 'slot_2300', slotKey: 'slot_2300', title: 'Ночь', body: 'Спокойной ночи! Если остались мысли — запишите их в копилку.' },
       ].map(t => ({ ...t, isActive: true, kind: 'auto_slot' as const })),
     );
     console.log('Push templates seeded.');
@@ -505,27 +505,27 @@ export async function runSeed() {
       {
         key: 'preset_morning', kind: 'preset', presetCategory: 'morning', title: 'Утро',
         pushTitle: 'Доброе утро', icon: '🌅', notificationType: 'reminder',
-        body: '{ФИО}, доброе утро! {День} смены — проверка состояния открыта.',
+        body: '{ФИО}, доброе утро! {День} смены: утренняя проверка состояния открыта.',
       },
       {
         key: 'preset_state', kind: 'preset', presetCategory: 'state_check', title: 'Проверка состояния',
         pushTitle: 'Проверка состояния', icon: '💚', notificationType: 'state_check',
-        body: '{ФИО}, как ты сейчас? Открой проверку состояния.',
+        body: '{ФИО}, как вы сейчас? Откройте проверку состояния в приложении.',
       },
       {
         key: 'preset_question', kind: 'preset', presetCategory: 'question_of_day', title: 'Вопрос дня',
         pushTitle: 'Вопрос дня', icon: '❓', notificationType: 'day_summary',
-        body: '{ФИО}, {День}: новый вопрос для размышления.',
+        body: '{ФИО}, {День}: новая точка для размышления — откройте в приложении.',
       },
       {
         key: 'preset_reminder', kind: 'preset', presetCategory: 'reminder', title: 'Напоминание',
         pushTitle: 'Напоминание', icon: '🔔', notificationType: 'reminder',
-        body: '{ФИО}, напоминание: {Событие} скоро начнётся.',
+        body: '{ФИО}, напоминание: «{Событие}» скоро начнётся.',
       },
       {
         key: 'preset_urgent', kind: 'preset', presetCategory: 'urgent', title: 'Срочное',
         pushTitle: 'Важно', icon: '⚡', notificationType: 'org',
-        body: '{ФИО}, срочное сообщение от организаторов.',
+        body: '{ФИО}, важное сообщение от организаторов. Откройте приложение.',
       },
     ].map(t => ({ ...t, isActive: true })));
     console.log('Push preset templates seeded.');

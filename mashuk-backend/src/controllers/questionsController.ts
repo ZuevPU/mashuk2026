@@ -500,9 +500,10 @@ export const answerExchange = async (req: ParticipantRequest, res: Response): Pr
       confirm = extras.confirm;
 
       if (question.participantId !== req.participant!.id) {
+        const { pushCopy } = await import('../services/pushCopy.js');
         await sendPushNotification(
           [question.participantId],
-          'На ваш вопрос в «Обмене опытом» ответили участники',
+          pushCopy.exchangeAnswerReceived(),
           'transactional_exchange_answer_received',
         ).catch(err => console.warn('answerExchange push:', err));
       }

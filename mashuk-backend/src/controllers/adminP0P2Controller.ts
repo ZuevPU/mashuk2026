@@ -633,9 +633,10 @@ export const revokeParticipantPoints = async (req: AdminRequest, res: Response):
     res.status(400).json({ error: result.error });
     return;
   }
+  const { pushCopy } = await import('../services/pushCopy.js');
   await sendPushNotification(
     [participantId],
-    `Баллы пересмотрены: ${reason}`,
+    pushCopy.pointsRevoked(reason),
     `points_revoke_${logId}`,
   );
   await logAdminAction({
@@ -687,9 +688,10 @@ export const revokeSuspiciousParticipantPoints = async (req: AdminRequest, res: 
   }
 
   if (notify && revoked > 0) {
+    const { pushCopy } = await import('../services/pushCopy.js');
     await sendPushNotification(
       [participantId],
-      `Организаторы пересмотрели начисления (${revoked}): ${reason}`,
+      pushCopy.pointsBulkRevoked(revoked, reason),
       `points_bulk_revoke_${participantId}_${Date.now()}`,
     );
   }

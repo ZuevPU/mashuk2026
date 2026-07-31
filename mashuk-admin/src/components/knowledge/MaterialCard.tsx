@@ -47,6 +47,8 @@ type Props = {
   speakers: ProgramSpeaker[];
   events: { id: number; dayNumber: number; title: string }[];
   directions: { id: number; name: string }[];
+  /** Дни смены для выбора (1…totalDays) */
+  dayOptions: number[];
   onSave: (body: Record<string, unknown>) => void;
   onDelete: () => void;
   onCopyLink?: (url: string) => void;
@@ -94,6 +96,7 @@ export function MaterialCard({
   speakers,
   events,
   directions,
+  dayOptions,
   onSave,
   onDelete,
   onCopyLink,
@@ -102,6 +105,10 @@ export function MaterialCard({
   const rowRef = useRef<HTMLTableRowElement>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => mkDraft(material));
+  const materialDay = material.dayNumber ?? 1;
+  const days = dayOptions.includes(materialDay)
+    ? dayOptions
+    : [...dayOptions, materialDay].sort((a, b) => a - b);
 
   useEffect(() => {
     setDraft(mkDraft(material));
@@ -177,13 +184,20 @@ export function MaterialCard({
   return (
     <tr ref={rowRef} className="adm-material-edit-row">
       <td>
-        <input
-          type="number"
+        <select
           className="adm-input adm-input-narrow"
           value={draft.dayNumber}
-          onChange={e => setDraft(d => ({ ...d, dayNumber: Number(e.target.value) }))}
+          onChange={e => setDraft(d => ({
+            ...d,
+            dayNumber: Number(e.target.value),
+            eventId: '',
+          }))}
           title="День смены"
-        />
+        >
+          {days.map(d => (
+            <option key={d} value={d}>День {d}</option>
+          ))}
+        </select>
         <div className="adm-muted" style={{ fontSize: 10 }}>{dateStr}</div>
       </td>
       <td style={{ minWidth: 160 }}>
@@ -225,9 +239,29 @@ export function MaterialCard({
           Общий
         </label>
         {!draft.isGeneral && (
-          <select className="adm-input adm-input-narrow" value={draft.eventId} onChange={e => setDraft(d => ({ ...d, eventId: e.target.value }))}>
+          <select
+            className="adm-input adm-input-narrow"
+            value={draft.eventId}
+            onChange={e => {
+              const eventId = e.target.value;
+              const ev = events.find(x => String(x.id) === eventId);
+              setDraft(d => ({
+                ...d,
+                eventId,
+                ...(ev ? { dayNumber: ev.dayNumber } : {}),
+              }));
+            }}
+          >
             <option value="">— блок —</option>
-            {events.map(ev => <option key={ev.id} value={String(ev.id)}>Д{ev.dayNumber} · {ev.title}</option>)}
+            {events
+              .filter(ev =>
+                !draft.dayNumber
+                || ev.dayNumber === draft.dayNumber
+                || String(ev.id) === draft.eventId,
+              )
+              .map(ev => (
+                <option key={ev.id} value={String(ev.id)}>Д{ev.dayNumber} · {ev.title}</option>
+              ))}
           </select>
         )}
         <div style={{ marginTop: 8, fontSize: 11 }}>

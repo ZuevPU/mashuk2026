@@ -1,7 +1,8 @@
-import type { LeaderboardFiltersState, LeaderboardMode, LeaderboardScope, LeaderboardSort, LeaderboardTrack, MedalMode } from './leaderboardTypes';
-import { NOMINATION_OPTIONS } from './leaderboardTypes';
+import type { LeaderboardMode, LeaderboardFiltersState, LeaderboardScope, LeaderboardSort, LeaderboardTrack, MedalFilter } from './leaderboardTypes';
+import { FORUM_RATING_DAYS, NOMINATION_OPTIONS, scopeLabel, trackLabel } from './leaderboardTypes';
 
 type MedalOption = { id: number; name: string };
+type GroupOption = { id: number; name: string };
 
 function Segment<T extends string>({
   options,
@@ -32,6 +33,7 @@ export function LeaderboardFilters({
   filters,
   onChange,
   directions,
+  groups,
   medals,
   forumDay,
   compact,
@@ -39,11 +41,13 @@ export function LeaderboardFilters({
   filters: LeaderboardFiltersState;
   onChange: (patch: Partial<LeaderboardFiltersState>) => void;
   directions: string[];
+  groups: GroupOption[];
   medals: MedalOption[];
   forumDay?: string;
   compact?: boolean;
 }) {
   const set = (patch: Partial<LeaderboardFiltersState>) => onChange(patch);
+  const clampedForumDay = forumDay && Number(forumDay) <= 6 ? forumDay : undefined;
 
   return (
     <div className={`lb-filters ${compact ? 'lb-filters-compact' : ''}`}>
@@ -53,7 +57,6 @@ export function LeaderboardFilters({
           onChange={mode => set({ mode })}
           options={[
             { key: 'points', label: 'Баллы' },
-            { key: 'medals', label: 'Медали' },
             { key: 'nomination', label: 'Номинации' },
           ]}
         />
@@ -63,9 +66,9 @@ export function LeaderboardFilters({
         value={filters.scope}
         onChange={scope => set({ scope })}
         options={[
-          { key: 'shift', label: 'Смена' },
-          { key: 'day', label: 'День' },
-          { key: 'total', label: 'Общий' },
+          { key: 'shift', label: scopeLabel('shift') },
+          { key: 'day', label: scopeLabel('day') },
+          { key: 'total', label: scopeLabel('total') },
         ]}
       />
 
@@ -75,8 +78,10 @@ export function LeaderboardFilters({
           value={filters.day}
           onChange={e => set({ day: e.target.value })}
         >
-          {[1, 2, 3, 4, 5, 6, 7].map(d => (
-            <option key={d} value={String(d)}>День {d}{forumDay === String(d) ? ' (сегодня)' : ''}</option>
+          {FORUM_RATING_DAYS.map(d => (
+            <option key={d} value={String(d)}>
+              День {d}{clampedForumDay === String(d) ? ' (сегодня)' : ''}
+            </option>
           ))}
         </select>
       )}
@@ -86,9 +91,9 @@ export function LeaderboardFilters({
           value={filters.track}
           onChange={track => set({ track })}
           options={[
-            { key: 'total', label: 'Общий' },
-            { key: 'path', label: 'Путь' },
-            { key: 'experience', label: 'Опыт' },
+            { key: 'total', label: trackLabel('total') },
+            { key: 'path', label: trackLabel('path') },
+            { key: 'experience', label: trackLabel('experience') },
           ]}
         />
       )}
@@ -105,17 +110,19 @@ export function LeaderboardFilters({
         </select>
       )}
 
-      {filters.mode === 'medals' && (
+      {filters.mode === 'points' && (
         <>
-          <Segment<MedalMode>
-            value={filters.medalMode}
-            onChange={medalMode => set({ medalMode })}
-            options={[
-              { key: 'count', label: 'По количеству' },
-              { key: 'holders', label: 'По медали' },
-            ]}
-          />
-          {filters.medalMode === 'holders' && (
+          <select
+            className="adm-input lb-select"
+            value={filters.medalFilter}
+            onChange={e => set({ medalFilter: e.target.value as MedalFilter, medalId: '' })}
+            aria-label="Фильтр по медалям"
+          >
+            <option value="">Все участники</option>
+            <option value="count">Сортировка по медалям</option>
+            <option value="holders">Только с медалью</option>
+          </select>
+          {filters.medalFilter === 'holders' && (
             <select
               className="adm-input lb-select"
               value={filters.medalId}
@@ -141,6 +148,26 @@ export function LeaderboardFilters({
         ))}
       </select>
 
+      <select
+        className="adm-input lb-select"
+        value={filters.groupId}
+        onChange={e => set({ groupId: e.target.value })}
+      >
+        <option value="">Все группы / потоки</option>
+        {groups.map(g => (
+          <option key={g.id} value={String(g.id)}>{g.name}</option>
+        ))}
+      </select>
+
+      <input
+        className="adm-input lb-select"
+        type="search"
+        placeholder="Поиск по ФИО или ID"
+        value={filters.search}
+        onChange={e => set({ search: e.target.value })}
+        aria-label="Поиск участника"
+      />
+
       <Segment<LeaderboardSort>
         value={filters.sort}
         onChange={sort => set({ sort })}
@@ -149,6 +176,15 @@ export function LeaderboardFilters({
           { key: 'name', label: 'По ФИО' },
         ]}
       />
+
+      <label className="lb-show-all" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+        <input
+          type="checkbox"
+          checked={filters.showAll}
+          onChange={e => set({ showAll: e.target.checked })}
+        />
+        Показать всех
+      </label>
     </div>
   );
 }

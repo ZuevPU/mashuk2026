@@ -12,7 +12,13 @@ export const env = {
   VK_SERVICE_TOKEN: process.env.VK_SERVICE_TOKEN || '',
   VK_GROUP_ID: process.env.VK_GROUP_ID || '',
   VK_COMMUNITY_TOKEN: process.env.VK_COMMUNITY_TOKEN || '',
+  /** Публичный URL API/загрузок (фото, QR) — не путать со ссылкой в push */
   PUBLIC_URL: process.env.PUBLIC_URL || '',
+  /**
+   * Ссылка в ЛС сообщества (fallback push).
+   * Мини-приложение VK, не backend-хост.
+   */
+  VK_MINI_APP_URL: process.env.VK_MINI_APP_URL || 'https://vk.ru/app54662212',
   EXPORT_STORAGE_DIR: process.env.EXPORT_STORAGE_DIR || 'data/admin-exports',
   UNIFIED_RATING: process.env.UNIFIED_RATING !== 'false',
 };

@@ -273,37 +273,26 @@ export const updateProfileSettings = async (req: ParticipantRequest, res: Respon
 
 export const getPublicLeaderboard = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
-    const track = (req.query.track as string) || 'total';
-    const nomination = (req.query.nomination as string) || '';
-    const directionFilter = (req.query.direction as string) || '';
-    const scopeRaw = (req.query.scope as string) || 'total';
-    const scope = (scopeRaw === 'day' || scopeRaw === 'shift') ? scopeRaw : 'total';
-    const dayNum = req.query.day != null ? Number(req.query.day) : undefined;
-    const medalId = req.query.medalId != null ? Number(req.query.medalId) : undefined;
-    const modeRaw = (req.query.mode as string) || (nomination ? 'nomination' : medalId ? 'medals' : 'points');
-    const mode = (modeRaw === 'medals' || modeRaw === 'nomination') ? modeRaw : 'points';
-    const medalModeRaw = (req.query.medalMode as string) || 'count';
-    const medalMode = medalModeRaw === 'holders' ? 'holders' : 'count';
-    const sortRaw = (req.query.sort as string) || 'score';
-    const sort = sortRaw === 'name' ? 'name' : 'score';
-
+    const { parseLeaderboardQuery } = await import('../services/leaderboardQuery.js');
+    const { buildLeaderboardResult } = await import('../services/leaderboardBuild.js');
     const { getForumSettings } = await import('../services/helpers.js');
     const {
       normalizeLeaderboardScopes,
       isLeaderboardScopeEnabled,
       NOMINATION_LEADERBOARD_KEYS,
-      resolveLeaderboardScoreMap,
-      sortLeaderboardByScore,
     } = await import('../services/leaderboardService.js');
+
+    const query = parseLeaderboardQuery(req.query as Record<string, unknown>);
     const settings = await getForumSettings();
     const scopes = normalizeLeaderboardScopes(settings?.leaderboardScopes);
-    const effectiveNomination = mode === 'nomination' ? nomination : '';
-    if (effectiveNomination) {
-      if (!NOMINATION_LEADERBOARD_KEYS.includes(effectiveNomination as typeof NOMINATION_LEADERBOARD_KEYS[number])) {
+    const me = req.participant!.id;
+
+    if (query.mode === 'nomination' && query.nomination) {
+      if (!NOMINATION_LEADERBOARD_KEYS.includes(query.nomination as typeof NOMINATION_LEADERBOARD_KEYS[number])) {
         res.status(400).json({ error: 'Invalid nomination' });
         return;
       }
-    } else if (mode === 'points' && !isLeaderboardScopeEnabled(scopes, scope, track)) {
+    } else if (query.mode === 'points' && query.medalMode !== 'count' && !isLeaderboardScopeEnabled(scopes, query.scope, query.track)) {
       res.status(400).json({ error: 'Leaderboard scope disabled' });
       return;
     }
@@ -313,6 +302,8 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       firstName: participants.firstName,
       lastName: participants.lastName,
       direction: participants.direction,
+      groupId: participants.groupId,
+      groupName: participants.groupName,
       pathPoints: participants.pathPoints,
       experiencePoints: participants.experiencePoints,
       bonusPoints: participants.bonusPoints,
@@ -322,59 +313,34 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       avatarUrl: participants.avatarUrl,
     }).from(participants);
 
-    const me = req.participant!.id;
-    const directions = [...new Set(list.map(p => p.direction).filter(Boolean))] as string[];
+    const full = await buildLeaderboardResult(list, { ...query, limit: 0 }, {
+      keepParticipantId: me,
+      hideFromLeaderboard: true,
+    });
+    const myRank = full.leaders.find(r => r.id === me)?.rank ?? null;
+    const leaders = query.limit > 0 ? full.leaders.slice(0, query.limit) : full.leaders;
 
-    const eligible = list
-      .filter(p => !p.selfDeletedAt)
-      .filter(p => !p.hideFromLeaderboard || p.id === me)
-      .filter(p => !directionFilter || p.direction === directionFilter);
-
-    const scoreMap = await resolveLeaderboardScoreMap(
-      eligible.map(p => p.id),
-      {
-        mode,
-        track: mode === 'nomination' ? 'total' : track,
-        scope,
-        day: scope === 'day' ? dayNum : undefined,
-        nomination: effectiveNomination || undefined,
-        medalMode,
-        medalId: medalId && !Number.isNaN(medalId) ? medalId : undefined,
-      },
-      eligible,
-    );
-
-    let rows = eligible
-      .map(p => ({
-        id: p.id,
-        name: `${p.firstName} ${p.lastName}`.trim(),
-        direction: p.direction,
-        score: scoreMap.get(p.id) ?? 0,
-        isMe: p.id === me,
-        avatarUrl: p.avatarUrl || null,
-      }));
-
-    if (mode === 'medals' && medalMode === 'holders' && medalId) {
-      rows = rows.filter(r => r.score > 0);
-    }
-
-    const sorted = sortLeaderboardByScore(rows, sort)
-      .map((p, i) => ({ rank: i + 1, ...p }));
-
-    const myRank = sorted.find(r => r.isMe)?.rank ?? null;
     res.json({
-      mode,
-      track: mode === 'nomination' ? 'nomination' : track,
-      scope: mode === 'nomination' ? scope : scope,
-      nomination: effectiveNomination || null,
-      day: scope === 'day' ? (dayNum ?? null) : null,
-      direction: directionFilter || null,
-      medalId: medalId && !Number.isNaN(medalId) ? medalId : null,
-      medalMode: mode === 'medals' ? medalMode : null,
-      sort,
-      directions,
+      mode: full.mode,
+      track: full.track,
+      scope: full.scope,
+      nomination: full.nomination,
+      day: full.day,
+      direction: full.direction,
+      groupId: full.groupId,
+      medalId: full.medalId,
+      medalMode: full.medalMode,
+      medalFilter: full.medalFilter,
+      sort: full.sort,
+      directions: full.directions,
+      groups: full.groups,
       myRank,
-      leaders: sorted.slice(0, 50),
+      participantCount: full.participantCount,
+      leaders: leaders.map(r => ({
+        ...r,
+        name: `${r.firstName ?? ''} ${r.lastName ?? ''}`.trim(),
+        isMe: r.id === me,
+      })),
     });
   } catch (error) {
     console.error('getPublicLeaderboard:', error);

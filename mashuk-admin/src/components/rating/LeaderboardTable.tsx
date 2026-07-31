@@ -10,6 +10,7 @@ export function LeaderboardTable({
   participantCount,
   maxRows,
   emptyHint,
+  searchHighlight,
 }: {
   rows: LeaderboardRow[];
   filters: LeaderboardFiltersState;
@@ -18,9 +19,16 @@ export function LeaderboardTable({
   participantCount?: number;
   maxRows?: number;
   emptyHint?: string;
+  searchHighlight?: string;
 }) {
   const shown = maxRows != null ? rows.slice(0, maxRows) : rows;
   const prefix = scorePrefix(filters);
+  const highlight = searchHighlight?.trim().toLowerCase() ?? '';
+
+  const nameMatches = (row: LeaderboardRow) => {
+    if (!highlight) return false;
+    return leaderboardRowName(row).toLowerCase().includes(highlight) || String(row.id).includes(highlight);
+  };
 
   if (loading) {
     return <p className="adm-muted lb-status">Загрузка рейтинга…</p>;
@@ -43,7 +51,9 @@ export function LeaderboardTable({
       {participantCount != null && (
         <p className="adm-muted lb-meta">
           Участников: <strong>{participantCount}</strong>
-          {shown.length < rows.length ? ` · показано ${shown.length}` : ''}
+          {maxRows != null && shown.length < participantCount
+            ? ` · топ-${shown.length} (включите «Показать всех» или скачайте CSV)`
+            : ''}
         </p>
       )}
       <div className="lb-table">
@@ -52,7 +62,7 @@ export function LeaderboardTable({
           return (
             <div
               key={row.id}
-              className={`lb-row ${top3 ? `lb-row-top${row.rank}` : ''}`}
+              className={`lb-row ${top3 ? `lb-row-top${row.rank}` : ''} ${nameMatches(row) ? 'lb-row-highlight' : ''}`}
             >
               <div className={`lb-rank ${top3 ? 'lb-rank-top' : ''}`}>{row.rank}</div>
               <ParticipantAvatar
@@ -63,13 +73,11 @@ export function LeaderboardTable({
               />
               <div className="lb-name-block">
                 <div className="lb-name">{leaderboardRowName(row)}</div>
-                {row.direction && <div className="lb-direction">{row.direction}</div>}
+                <div className="lb-direction">
+                  {[row.direction, row.groupName].filter(Boolean).join(' · ') || null}
+                </div>
               </div>
-              <div className="lb-score">
-                {filters.mode === 'medals' && filters.medalMode === 'holders'
-                  ? '🏅'
-                  : `${prefix} ${row.score}`}
-              </div>
+              <div className="lb-score">{`${prefix} ${row.score}`}</div>
             </div>
           );
         })}

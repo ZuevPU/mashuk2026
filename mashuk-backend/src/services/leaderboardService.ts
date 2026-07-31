@@ -3,6 +3,7 @@ import { db } from '../db/index.js';
 import { participants, pointsLog, userMedals, tasks, taskSubmissions } from '../db/schema.js';
 import { pointsTrackForAction, totalRatingScore, isUnifiedRatingEnabled, participantRatingScore } from './pointsService.js';
 import { resolveActiveShift } from './shiftService.js';
+import { FORUM_RATING_MAX_DAY } from './leaderboardQuery.js';
 
 export type LeaderboardScope = 'total' | 'day' | 'shift';
 export type LeaderboardMode = 'points' | 'medals' | 'nomination';
@@ -110,7 +111,7 @@ export async function computeLeaderboardScores(
   if (opts.scope === 'day' && opts.day) {
     conditions.push(eq(pointsLog.forumDay, opts.day));
   } else if (opts.scope === 'shift') {
-    conditions.push(sql`${pointsLog.forumDay} IS NOT NULL AND ${pointsLog.forumDay} BETWEEN 1 AND 7`);
+    conditions.push(sql`${pointsLog.forumDay} IS NOT NULL AND ${pointsLog.forumDay} BETWEEN 1 AND ${FORUM_RATING_MAX_DAY}`);
   }
 
   const rows = await db.select({
@@ -213,6 +214,16 @@ export async function computeMedalCountLeaderboard(
       conditions.push(gte(userMedals.awardedAt, bounds.start));
       conditions.push(lt(userMedals.awardedAt, bounds.end));
     }
+  } else if (scope === 'shift') {
+    const shift = await resolveActiveShift();
+    if (shift?.startDate) {
+      const start = new Date(shift.startDate);
+      start.setUTCHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setUTCDate(end.getUTCDate() + FORUM_RATING_MAX_DAY);
+      conditions.push(gte(userMedals.awardedAt, start));
+      conditions.push(lt(userMedals.awardedAt, end));
+    }
   }
 
   const rows = await db.select({
@@ -256,6 +267,8 @@ export async function resolveLeaderboardScoreMap(
     nomination?: string;
     medalMode?: MedalMode;
     medalId?: number;
+    /** When true on points mode, score = medal count for period instead of points. */
+    medalAsScore?: boolean;
   },
   participantsForTotal?: Array<{
     id: number;
@@ -272,7 +285,8 @@ export async function resolveLeaderboardScoreMap(
     });
   }
 
-  if (opts.mode === 'medals') {
+  const useMedalScore = opts.mode === 'medals' || (opts.mode === 'points' && opts.medalAsScore);
+  if (useMedalScore) {
     if (opts.medalMode === 'holders' && opts.medalId) {
       const holders = await participantIdsWithMedal(opts.medalId);
       const map = new Map<number, number>();
@@ -308,7 +322,8 @@ export async function resolveLeaderboardScoreMap(
 }
 
 export const NOMINATION_LEADERBOARD_KEYS = [
-  'sport', 'creative', 'media', 'education', 'culture', 'volunteer', 'team', 'general',
+  'sport', 'creative', 'media', 'education', 'culture', 'volunteer', 'team',
+  'networking', 'leadership', 'general',
 ] as const;
 
 export const NOMINATION_LABELS: Record<string, string> = {
@@ -319,6 +334,8 @@ export const NOMINATION_LABELS: Record<string, string> = {
   culture: 'Культура',
   volunteer: 'Волонтёрство',
   team: 'Командность',
+  networking: 'Нетворкинг',
+  leadership: 'Лидерство',
   general: 'Общий зачёт',
 };
 

@@ -5,6 +5,7 @@ import { directions, participantGroups, participants, piggybank } from '../db/sc
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { logAdminAction } from '../services/adminActionsLog.js';
 import { entryTags, formatTagsForExport } from '../services/piggybankDict.js';
+import { buildParticipantNameMatch } from '../services/participantsList.js';
 
 function parseListQuery(req: AdminRequest) {
   const page = Math.max(1, Number(req.query.page) || 1);
@@ -15,6 +16,7 @@ function parseListQuery(req: AdminRequest) {
     offset: (page - 1) * limit,
     q: String(req.query.q || '').trim(),
     participantId: req.query.participantId ? Number(req.query.participantId) : undefined,
+    participantQ: String(req.query.participantQ || '').trim(),
     directionId: req.query.directionId ? Number(req.query.directionId) : undefined,
     groupId: req.query.groupId ? Number(req.query.groupId) : undefined,
     directionName: String(req.query.direction || '').trim(),
@@ -31,7 +33,12 @@ function parseListQuery(req: AdminRequest) {
 function buildWhere(params: ReturnType<typeof parseListQuery>) {
   const conditions = [isNull(piggybank.deletedAt)];
   if (params.q) conditions.push(ilike(piggybank.text, `%${params.q}%`));
-  if (params.participantId) conditions.push(eq(piggybank.participantId, params.participantId));
+  if (params.participantId && !Number.isNaN(params.participantId)) {
+    conditions.push(eq(piggybank.participantId, params.participantId));
+  } else if (params.participantQ) {
+    const nameMatch = buildParticipantNameMatch(params.participantQ);
+    if (nameMatch) conditions.push(nameMatch);
+  }
   if (params.forumDay) conditions.push(eq(piggybank.forumDay, params.forumDay));
   if (params.source) conditions.push(eq(piggybank.source, params.source));
   if (params.tag) {

@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
 
+export type LifecycleChainStep = {
+  key: string;
+  label: string;
+  done: boolean;
+  current: boolean;
+};
+
 export type TaskSubmissionRow = {
   id: number;
   participantId: number;
@@ -17,6 +24,17 @@ export type TaskSubmissionRow = {
   participantDirection?: string | null;
   participantGroupName?: string | null;
   teamConfirmations?: { participantId: number; name: string; status: string }[];
+  proofType?: string | null;
+  proofTypeLabel?: string | null;
+  verificationType?: string | null;
+  verificationTypeLabel?: string | null;
+  lifecycleStage?: string | null;
+  lifecycleLabel?: string | null;
+  lifecycleChain?: LifecycleChainStep[];
+  pointsLogId?: number | null;
+  userMedalId?: number | null;
+  verifiedAt?: string | null;
+  verifiedByAdminId?: number | null;
 };
 
 export function taskSubmissionAnswerCell(row: TaskSubmissionRow): ReactNode {
@@ -42,6 +60,49 @@ export function taskSubmissionAnswerCell(row: TaskSubmissionRow): ReactNode {
   }
   if (parts.length === 0) return <span className="adm-muted">—</span>;
   return <>{parts}</>;
+}
+
+export function submissionLifecycleCell(row: TaskSubmissionRow): ReactNode {
+  if (row.lifecycleStage === 'rejected' || row.lifecycleStage === 'expired') {
+    return (
+      <span style={{ color: '#C53030', fontSize: 11 }}>
+        {row.lifecycleLabel || row.lifecycleStage}
+      </span>
+    );
+  }
+  const chain = row.lifecycleChain;
+  if (!chain?.length) {
+    return <span className="adm-muted">{row.lifecycleLabel || '—'}</span>;
+  }
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 10, maxWidth: 260 }}>
+      {chain.map(step => (
+        <span
+          key={step.key}
+          title={step.label}
+          style={{
+            padding: '2px 6px',
+            borderRadius: 4,
+            background: step.current ? '#EBF8FF' : step.done ? '#F0FFF4' : '#F7FAFC',
+            color: step.current ? '#2B6CB0' : step.done ? '#276749' : '#A0AEC0',
+            border: step.current ? '1px solid #90CDF4' : '1px solid transparent',
+          }}
+        >
+          {step.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export function submissionMetaCell(row: TaskSubmissionRow): ReactNode {
+  const parts: string[] = [];
+  if (row.proofTypeLabel) parts.push(`Доказательство: ${row.proofTypeLabel}`);
+  if (row.verificationTypeLabel) parts.push(`Проверка: ${row.verificationTypeLabel}`);
+  if (row.pointsLogId) parts.push(`points_log #${row.pointsLogId}`);
+  if (row.userMedalId) parts.push(`медаль #${row.userMedalId}`);
+  if (parts.length === 0) return <span className="adm-muted">—</span>;
+  return <div style={{ fontSize: 10, lineHeight: 1.4 }}>{parts.map(p => <div key={p}>{p}</div>)}</div>;
 }
 
 export function teamBlocked(row: TaskSubmissionRow): boolean {

@@ -48,6 +48,7 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
   const [search, setSearch] = useState('');
   const [participantId, setParticipantId] = useState('');
   const [participantSearch, setParticipantSearch] = useState('');
+  const [debouncedParticipantQ, setDebouncedParticipantQ] = useState('');
   const [directionId, setDirectionId] = useState('');
   const [groupId, setGroupId] = useState('');
   const [forumDay, setForumDay] = useState('');
@@ -58,14 +59,24 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
   const [totalDays, setTotalDays] = useState(8);
   const [openEntry, setOpenEntry] = useState<Entry | null>(null);
   const [participantOptions, setParticipantOptions] = useState<{ id: number; label: string }[]>([]);
+  const [selectedParticipantLabel, setSelectedParticipantLabel] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedParticipantQ(participantSearch.trim()), 300);
+    return () => clearTimeout(t);
+  }, [participantSearch]);
 
   const hasFilters = Boolean(
-    search.trim() || participantId || directionId || groupId || forumDay || tag || source,
+    search.trim() || participantId || debouncedParticipantQ || directionId || groupId || forumDay || tag || source,
   );
 
   const filters = useMemo(() => ({
     q: search.trim(),
     participantId: participantId ? Number(participantId) : undefined,
+    // Пока не выбран конкретный id — фильтруем записи по ФИО напрямую
+    participantQ: !participantId && debouncedParticipantQ.length >= 2
+      ? debouncedParticipantQ
+      : undefined,
     directionId: directionId ? Number(directionId) : undefined,
     groupId: groupId ? Number(groupId) : undefined,
     forumDay: forumDay ? Number(forumDay) : undefined,
@@ -73,7 +84,7 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
     source,
     page,
     limit: PAGE_SIZE,
-  }), [search, participantId, directionId, groupId, forumDay, tag, source, page]);
+  }), [search, participantId, debouncedParticipantQ, directionId, groupId, forumDay, tag, source, page]);
 
   const loadMeta = useCallback(async () => {
     const [dirs, gr, fs] = await Promise.all([
@@ -107,26 +118,36 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
 
   useEffect(() => {
     setPage(1);
-  }, [search, participantId, directionId, groupId, forumDay, tag, source]);
+  }, [search, participantId, debouncedParticipantQ, directionId, groupId, forumDay, tag, source]);
 
   useEffect(() => {
     if (participantSearch.trim().length < 2) {
-      setParticipantOptions([]);
+      setParticipantOptions(prev => {
+        if (participantId && selectedParticipantLabel) {
+          const keep = prev.find(p => String(p.id) === participantId);
+          return keep ? [keep] : [{ id: Number(participantId), label: selectedParticipantLabel }];
+        }
+        return [];
+      });
       return;
     }
     const t = setTimeout(() => {
       adminFetch(`/participants?q=${encodeURIComponent(participantSearch.trim())}&limit=15`)
         .then(res => {
           const list = res.participants || [];
-          setParticipantOptions(list.map((p: { id: number; firstName?: string; lastName?: string; vkId?: string }) => ({
+          const mapped = list.map((p: { id: number; firstName?: string; lastName?: string; vkId?: string }) => ({
             id: p.id,
             label: [p.firstName, p.lastName].filter(Boolean).join(' ') || String(p.vkId),
-          })));
+          }));
+          if (participantId && selectedParticipantLabel && !mapped.some((p: { id: number }) => String(p.id) === participantId)) {
+            mapped.unshift({ id: Number(participantId), label: selectedParticipantLabel });
+          }
+          setParticipantOptions(mapped);
         })
         .catch(() => setParticipantOptions([]));
     }, 300);
     return () => clearTimeout(t);
-  }, [participantSearch, adminFetch]);
+  }, [participantSearch, adminFetch, participantId, selectedParticipantLabel]);
 
   const patchEntry = (id: number, body: Record<string, boolean>) =>
     act(async () => {
@@ -170,22 +191,48 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
           />
           <input
             className="adm-input"
-            placeholder="Участник (поиск ФИО)"
+            placeholder="Участник (ФИО)"
             value={participantSearch}
-            onChange={e => setParticipantSearch(e.target.value)}
-            style={{ minWidth: 140 }}
+            onChange={e => {
+              const next = e.target.value;
+              setParticipantSearch(next);
+              // Сброс точного выбора при правке текста — дальше фильтр по ФИО
+              if (participantId && next.trim() !== selectedParticipantLabel.trim()) {
+                setParticipantId('');
+                setSelectedParticipantLabel('');
+              }
+              if (!next.trim()) {
+                setParticipantId('');
+                setSelectedParticipantLabel('');
+              }
+            }}
+            style={{ minWidth: 160 }}
+            title="Введите ФИО — список отфильтруется. Можно уточнить выбор в списке справа."
           />
           <select
             className="adm-input"
             value={participantId}
             onChange={e => {
-              setParticipantId(e.target.value);
-              const hit = participantOptions.find(p => String(p.id) === e.target.value);
-              if (hit) setParticipantSearch(hit.label);
+              const id = e.target.value;
+              setParticipantId(id);
+              if (!id) {
+                setSelectedParticipantLabel('');
+                return;
+              }
+              const hit = participantOptions.find(p => String(p.id) === id);
+              if (hit) {
+                setSelectedParticipantLabel(hit.label);
+                setParticipantSearch(hit.label);
+              }
             }}
             style={{ minWidth: 160 }}
+            title="Уточнить участника из найденных"
           >
-            <option value="">Все участники</option>
+            <option value="">
+              {debouncedParticipantQ.length >= 2 && !participantId
+                ? 'Уточнить участника…'
+                : 'Все участники'}
+            </option>
             {participantOptions.map(p => (
               <option key={p.id} value={p.id}>{p.label}</option>
             ))}

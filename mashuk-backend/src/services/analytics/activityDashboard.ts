@@ -5,9 +5,11 @@ import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import {
   computeLeaderboardScores,
   computeNominationLeaderboard,
+  computeMedalCountLeaderboard,
   NOMINATION_LABELS,
   NOMINATION_LEADERBOARD_KEYS,
 } from '../leaderboardService.js';
+import { FORUM_RATING_MAX_DAY } from '../leaderboardQuery.js';
 import { getForumSettings } from '../helpers.js';
 import { loadCohortParticipants } from './cohort.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
@@ -181,7 +183,7 @@ export async function buildActivityDashboard(filters: AnalyticsFilters, req?: Ad
     .sort((a, b) => a.approved - b.approved || (a.approvalRate ?? 100) - (b.approvalRate ?? 100))
     .slice(0, 15);
 
-  const activitySeries = await activityByDaySeries(cohortIds, days.length > 1 ? days : [1, 2, 3, 4, 5, 6, 7]);
+  const activitySeries = await activityByDaySeries(cohortIds, days.length > 1 ? days : [1, 2, 3, 4, 5, 6]);
   const engagementSeries = days.map(d => {
     const pts = pointsByDay.find(p => p.day === d);
     const act = activitySeries.find(a => a.day === d);
@@ -195,6 +197,33 @@ export async function buildActivityDashboard(filters: AnalyticsFilters, req?: Ad
       taskCompletions: taskDone?.approved ?? 0,
     };
   });
+
+  const nominationRatings = await Promise.all(
+    NOMINATION_LEADERBOARD_KEYS.map(async key => {
+      const scores = await computeNominationLeaderboard(key, cohortIds, {
+        scope: filters.day ? 'day' : 'shift',
+        day: filters.day ?? day,
+      });
+      const top = allP
+        .map(p => ({ id: p.id, name: `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim(), direction: p.direction, points: scores.get(p.id) ?? 0 }))
+        .filter(r => r.points > 0)
+        .sort((a, b) => b.points - a.points)
+        .slice(0, 10)
+        .map((r, i) => ({ rank: i + 1, ...r }));
+      return { key, label: NOMINATION_LABELS[key] ?? key, top };
+    }),
+  );
+
+  const medalDayScores = await computeMedalCountLeaderboard(cohortIds, {
+    scope: 'day',
+    day: filters.day ?? day,
+  });
+  const medalsDayTop = allP
+    .map(p => ({ id: p.id, name: `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim(), direction: p.direction, points: medalDayScores.get(p.id) ?? 0 }))
+    .filter(r => r.points > 0)
+    .sort((a, b) => b.points - a.points)
+    .slice(0, 10)
+    .map((r, i) => ({ rank: i + 1, ...r }));
 
   return {
     filters,
@@ -220,6 +249,9 @@ export async function buildActivityDashboard(filters: AnalyticsFilters, req?: Ad
       total: rankList(totalScores),
       day: rankList(dayTotal),
       byDirection: ratingsByDirection,
+      nominations: nominationRatings.filter(n => n.top.length > 0),
+      medalsDay: medalsDayTop,
+      forumDays: FORUM_RATING_MAX_DAY,
     },
     tasks: {
       popular: popularTasks,

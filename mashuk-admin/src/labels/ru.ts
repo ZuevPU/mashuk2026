@@ -41,6 +41,25 @@ const LABELS: Record<string, string> = {
   confirmed: 'Подтверждено',
   declined: 'Отказ',
 
+  // Жизненный цикл заявки
+  created: 'Создана',
+  awaiting_confirm: 'Ожидает подтверждения',
+  points_awarded: 'Баллы начислены',
+  medal_awarded: 'Медаль получена',
+
+  // Тип доказательства
+  proof_qr: 'QR',
+  proof_photo: 'Фото',
+  proof_post: 'Пост VK',
+  proof_volunteer: 'Волонтёр',
+  proof_moderator: 'Модератор',
+  proof_team: 'Команда',
+
+  // Тип проверки
+  manual_moderator: 'Модератор',
+  manual_volunteer: 'Волонтёр',
+  team_confirm: 'Команда',
+
   // Типы действий (баллы)
   question_answer: 'Ответ на вопрос',
   task_complete: 'Выполнение задания',

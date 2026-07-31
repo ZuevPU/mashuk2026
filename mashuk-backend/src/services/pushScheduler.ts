@@ -4,17 +4,18 @@ import {
   answers, events, forumSettings, participants, pushLog, pushQueue, pushTemplates, questions,
 } from '../db/schema.js';
 import { getMoscowParts } from './timePhase.js';
+import { pushCopy } from './pushCopy.js';
 import { notifyAllParticipants, sendPushNotification } from './pushService.js';
 import { runTouchpointPushPlanner } from './touchpointPushPlanner.js';
 
 /** Слоты авто-push по ТЗ (минуты от полуночи МСК) */
 export const PUSH_SLOTS: { minutes: number; key: string; text: string; retryText: string }[] = [
-  { minutes: 8 * 60, key: 'slot_0800', text: 'Доброе утро! 1 минута на проверку состояния', retryText: 'Напоминание: утренняя проверка состояния ещё открыта' },
-  { minutes: 13 * 60, key: 'slot_1300', text: 'Две задачи дня: осмысление направления и проверка состояния', retryText: 'Напоминание: дневные точки осмысления ещё можно заполнить' },
-  { minutes: 16 * 60, key: 'slot_1600', text: 'На каком уроке был? Коротко зафиксируй', retryText: 'Напоминание: рефлексия после урока ещё открыта' },
-  { minutes: 18 * 60 + 30, key: 'slot_1830', text: 'Вечерняя проверка состояния и осмысление', retryText: 'Напоминание: вечерние точки ещё можно заполнить' },
-  { minutes: 22 * 60, key: 'slot_2200', text: 'Финал дня — оцени и поделись. Откройте главную: #?evening=1', retryText: 'Напоминание: итоговая анкета дня ещё открыта до 01:00 · #?evening=1' },
-  { minutes: 23 * 60, key: 'slot_2300', text: 'Спокойной ночи! Если остались мысли — запиши в копилку', retryText: '' },
+  { minutes: 8 * 60, key: 'slot_0800', ...pushCopy.slots.slot_0800 },
+  { minutes: 13 * 60, key: 'slot_1300', ...pushCopy.slots.slot_1300 },
+  { minutes: 16 * 60, key: 'slot_1600', ...pushCopy.slots.slot_1600 },
+  { minutes: 18 * 60 + 30, key: 'slot_1830', ...pushCopy.slots.slot_1830 },
+  { minutes: 22 * 60, key: 'slot_2200', ...pushCopy.slots.slot_2200 },
+  { minutes: 23 * 60, key: 'slot_2300', ...pushCopy.slots.slot_2300 },
 ];
 
 export function matchPushSlot(totalMinutes: number): typeof PUSH_SLOTS[0] | null {
@@ -184,7 +185,7 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
     const trigger = `event_reminder_${ev.id}_${getMoscowParts(now).dateKey}`;
     if (await alreadySentToday(trigger, dayStart)) continue;
     await notifyAllParticipants(
-      `Скоро: «${ev.title}»${ev.place ? ` · ${ev.place}` : ''} · через ~15 мин`,
+      pushCopy.eventSoon(ev.title, ev.place),
       trigger,
     );
     eventCount += 1;

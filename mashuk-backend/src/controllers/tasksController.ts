@@ -1,10 +1,9 @@
 import { Response } from 'express';
-import { eq, and, or, isNull, ilike, ne, isNotNull } from 'drizzle-orm';
+import { eq, and, lte, or, isNull, ilike, ne, isNotNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { tasks, taskSubmissions, participants, taskTeamConfirmations } from '../db/schema.js';
+import { tasks, taskSubmissions, questions, answers, participants, taskTeamConfirmations } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { getForumSettings } from '../services/helpers.js';
-import { awardPoints } from '../services/pointsService.js';
 import { resolveTaskAwardPoints } from '../services/taskPoints.js';
 import { sendPushNotification } from '../services/pushService.js';
 import { evaluateMedalsForParticipant } from '../services/medalEvaluator.js';
@@ -12,7 +11,10 @@ import {
   assertPostUrlUnique,
   assertTaskSubmissionAllowed,
   isQrInValidWindow,
-  normalizePostUrl,
+  isRepeatableExecution,
+  loadParticipantTaskSubmissions,
+  pickDisplaySubmission,
+  resolveSubmissionWriteAction,
 } from '../services/taskEligibility.js';
 import {
   isTaskOnForumDay,
@@ -28,18 +30,45 @@ import {
   tryFinalizeTeamSubmission,
 } from '../services/teamTaskService.js';
 import { getMoscowParts } from '../services/timePhase.js';
+import {
+  completeSubmissionRewards,
+  enrichSubmissionRow,
+  submissionCreatePatch,
+  type EnrichedSubmission,
+} from '../services/submissionLifecycle.js';
 
-function getTaskStatus(
+async function resolveTaskListState(
   task: typeof tasks.$inferSelect,
-  submission: typeof taskSubmissions.$inferSelect | undefined,
+  taskSubs: typeof taskSubmissions.$inferSelect[],
+  participantId: number,
   now: Date,
-): string {
-  if (task.publishTime && task.publishTime > now) return 'soon';
-  if (!submission) return 'available';
-  if (submission.status === 'approved') return 'done';
-  if (submission.status === 'rejected' || submission.status === 'expired') return 'rejected';
-  if (submission.status === 'pending_team') return 'pending';
-  return 'pending';
+): Promise<{ status: string; canResubmit: boolean; displaySub: typeof taskSubmissions.$inferSelect | undefined }> {
+  if (task.publishTime && task.publishTime > now) {
+    return { status: 'soon', canResubmit: false, displaySub: pickDisplaySubmission(taskSubs) };
+  }
+
+  const displaySub = pickDisplaySubmission(taskSubs);
+  const open = isTaskSubmissionOpen(task, now);
+
+  if (displaySub && (displaySub.status === 'pending' || displaySub.status === 'pending_team')) {
+    return { status: 'pending', canResubmit: false, displaySub };
+  }
+
+  if (displaySub && (displaySub.status === 'rejected' || displaySub.status === 'expired')) {
+    const canResubmit = !!task.allowRetry && open;
+    return { status: 'rejected', canResubmit, displaySub };
+  }
+
+  const elig = await assertTaskSubmissionAllowed(participantId, task);
+  if (elig.ok && open) {
+    return { status: 'available', canResubmit: false, displaySub: displaySub?.status === 'approved' ? displaySub : undefined };
+  }
+
+  if (displaySub?.status === 'approved') {
+    return { status: 'done', canResubmit: false, displaySub };
+  }
+
+  return { status: displaySub ? 'pending' : 'available', canResubmit: false, displaySub };
 }
 
 const TASK_STATUS_SORT: Record<string, number> = {
@@ -76,7 +105,12 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
     const submissions = await db.select().from(taskSubmissions)
       .where(eq(taskSubmissions.participantId, req.participant!.id));
 
-    const subMap = new Map(submissions.map(s => [s.taskId, s]));
+    const subsByTask = new Map<number, typeof taskSubmissions.$inferSelect[]>();
+    for (const s of submissions) {
+      const list = subsByTask.get(s.taskId) ?? [];
+      list.push(s);
+      subsByTask.set(s.taskId, list);
+    }
 
     type TaskListItem = {
       id: number;
@@ -94,18 +128,31 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
       autoConfirm: boolean | null;
       allowRetry: boolean | null;
       hasQr: boolean;
+      executionType: string;
+      dailyRepeatLimit: number;
+      canSubmitAgain: boolean;
+      todayCompletedCount: number;
       status: string;
       canResubmit: boolean;
-      submission: typeof taskSubmissions.$inferSelect | null;
+      submission: EnrichedSubmission | null;
     };
 
-    let result = allTasks.map(t => {
-      const sub = subMap.get(t.id);
-      const status = getTaskStatus(t, sub, now);
+    const dayStart = mskTodayStart(now);
+
+    const mapped = await Promise.all(allTasks.map(async t => {
+      const taskSubs = subsByTask.get(t.id) ?? [];
+      const { status, canResubmit, displaySub } = await resolveTaskListState(
+        t,
+        taskSubs,
+        req.participant!.id,
+        now,
+      );
       if (t.hideUntilPublish && t.publishTime && t.publishTime > now) return null;
-      if (!isTaskSubmissionOpen(t, now) && !sub) return null;
+      if (!isTaskSubmissionOpen(t, now) && !displaySub) return null;
       const methods = taskMethodsForParticipant(t);
-      const canResubmit = (status === 'rejected') && t.allowRetry && isTaskSubmissionOpen(t, now);
+      const todayCompletedCount = taskSubs.filter(s =>
+        s.status === 'approved' && s.checkedAt && s.checkedAt >= dayStart,
+      ).length;
       return {
         id: t.id,
         title: t.title,
@@ -122,11 +169,16 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
         autoConfirm: t.autoConfirm,
         allowRetry: t.allowRetry,
         hasQr: Boolean(t.qrToken),
+        executionType: t.executionType || 'once',
+        dailyRepeatLimit: t.dailyRepeatLimit ?? 1,
+        canSubmitAgain: status === 'available' && isRepeatableExecution(t.executionType),
+        todayCompletedCount,
         status,
         canResubmit,
-        submission: sub ?? null,
+        submission: displaySub ? enrichSubmissionRow(displaySub) as EnrichedSubmission : null,
       };
-    }).filter((t): t is TaskListItem => t !== null);
+    }));
+    let result: TaskListItem[] = mapped.filter((t): t is TaskListItem => t !== null);
 
     result.sort((a, b) => taskSortRank(a) - taskSortRank(b) || a.id - b.id);
 
@@ -137,7 +189,6 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
     if (filter === 'done') result = result.filter(t => t.status === 'done');
     if (filter === 'pending') result = result.filter(t => t.status === 'pending');
 
-    const dayStart = mskTodayStart(now);
     const pointsToday = submissions
       .filter(s => s.status === 'approved' && s.checkedAt && s.checkedAt >= dayStart)
       .reduce((sum, s) => sum + (s.pointsAwarded ?? 0), 0);
@@ -145,6 +196,19 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
     const experienceTotal = req.participant!.experiencePoints ?? 0;
 
     const currentDay = settings.currentDay ?? 1;
+    const dayQuestions = await db.select().from(questions)
+      .where(and(
+        eq(questions.status, 'published'),
+        eq(questions.dayNumber, currentDay),
+        or(isNull(questions.publishTime), lte(questions.publishTime, now)),
+      ));
+    const participantAnswers = await db.select().from(answers)
+      .where(eq(answers.participantId, req.participant!.id));
+    const answeredIds = new Set(participantAnswers.map(a => a.questionId));
+    const touchpoints = dayQuestions.filter(q => answeredIds.has(q.id)).length;
+    const touchpointsTotal = dayQuestions.length || 7;
+    const requiredTouchpoints = settings.kbUnlockThreshold ?? 4;
+    const unlockDisabled = settings.kbUnlockDisabled === true;
 
     const pendingTeamInvites = await db.select({
       c: taskTeamConfirmations,
@@ -169,6 +233,10 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
         return { ...t, availableFrom };
       }),
       dayNumber: currentDay,
+      kbLocked: !unlockDisabled && touchpoints < requiredTouchpoints,
+      touchpointsCompleted: touchpoints,
+      touchpointsTotal,
+      requiredTouchpoints,
       pendingTeamInvites: pendingTeamInvites.map(r => ({
         submissionId: r.s.id,
         taskId: r.t.id,
@@ -237,23 +305,21 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
       postUrlNormalized = dupCheck.normalized;
     }
 
-    const [existing] = await db.select().from(taskSubmissions)
-      .where(and(
-        eq(taskSubmissions.participantId, req.participant!.id),
-        eq(taskSubmissions.taskId, taskId),
-      )).limit(1);
-
-    const allowResubmit = existing?.status === 'rejected' && task.allowRetry;
+    const taskSubs = await loadParticipantTaskSubmissions(req.participant!.id, taskId);
+    const rejectedSub = taskSubs.find(s => s.status === 'rejected' || s.status === 'expired');
+    const allowResubmit = !!rejectedSub && task.allowRetry !== false;
     const elig = await assertTaskSubmissionAllowed(req.participant!.id, task, {
-      allowResubmitRejected: !!allowResubmit,
-      existingStatus: existing?.status ?? null,
+      allowResubmitRejected: allowResubmit,
+      existingStatus: rejectedSub?.status ?? null,
     });
     if (!elig.ok && !allowResubmit) {
       res.status(400).json({ error: elig.error });
       return;
     }
-    if (!allowResubmit && existing && existing.status !== 'rejected') {
-      res.status(400).json({ error: 'Already submitted' });
+
+    const writeAction = resolveSubmissionWriteAction(task, taskSubs, elig.ok, allowResubmit);
+    if (writeAction.action === 'block') {
+      res.status(400).json({ error: writeAction.error });
       return;
     }
 
@@ -261,10 +327,17 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
     const isTeam = outcome.isTeam;
     const forceAuto = outcome.forceAuto;
     const status = outcome.status;
-    const pointsAwarded = forceAuto ? await resolveTaskAwardPoints(task) : 0;
+
+    const lifecyclePatch = submissionCreatePatch({
+      task,
+      payload: { answerText, photoUrl, postUrl, teamMemberIds: teamIds, qrToken },
+      status,
+      isTeam,
+      forceAuto,
+    });
 
     let submission;
-    if (existing && allowResubmit) {
+    if (writeAction.action === 'update') {
       [submission] = await db.update(taskSubmissions)
         .set({
           answerText,
@@ -273,12 +346,18 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
           postUrlNormalized,
           teamMemberIds: teamIds,
           status,
-          pointsAwarded,
+          pointsAwarded: 0,
+          pointsLogId: null,
+          userMedalId: null,
           checkedAt: forceAuto ? new Date() : null,
+          verifiedAt: null,
+          verifiedByAdminId: null,
+          verifiedByVolunteerVkId: null,
           moderatorComment: null,
           submittedAt: new Date(),
+          ...lifecyclePatch,
         })
-        .where(eq(taskSubmissions.id, existing.id))
+        .where(eq(taskSubmissions.id, writeAction.submissionId))
         .returning();
     } else {
       [submission] = await db.insert(taskSubmissions).values({
@@ -290,8 +369,9 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
         postUrlNormalized,
         teamMemberIds: teamIds,
         status,
-        pointsAwarded,
+        pointsAwarded: 0,
         checkedAt: forceAuto ? new Date() : null,
+        ...lifecyclePatch,
       }).returning();
     }
 
@@ -301,23 +381,30 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
       await createTeamConfirmations(submission.id, req.participant!.id, teamIds!);
       const notifyIds = teamIds!.filter(id => id !== req.participant!.id);
       await notifyTeamConfirmRequest(submission.id, task.title, notifyIds);
-    } else if (forceAuto && pointsAwarded > 0) {
-      const awarded = await awardPoints(req.participant!.id, 'task_complete', pointsAwarded, task.dayNumber ?? undefined);
-      xpAwarded = awarded?.awarded ?? pointsAwarded;
-      const { awardTaskLinkedMedals } = await import('../services/taskMedalAward.js');
-      await awardTaskLinkedMedals(req.participant!.id, task);
+    } else if (forceAuto && submission) {
+      const rewards = await completeSubmissionRewards(submission.id, [req.participant!.id], task, {
+        verificationType: 'auto',
+      });
+      xpAwarded = (await resolveTaskAwardPoints(task)) || 0;
+      [submission] = await db.select().from(taskSubmissions).where(eq(taskSubmissions.id, submission.id)).limit(1);
+      void rewards;
     } else if (submission && (status === 'pending' || status === 'pending_team')) {
+      const { pushCopy } = await import('../services/pushCopy.js');
       await sendPushNotification(
         [req.participant!.id],
         isTeam
-          ? `Командное задание «${task.title}» отправлено на подтверждение`
-          : `Задание «${task.title}» на проверке у модератора`,
+          ? pushCopy.taskPendingTeam(task.title)
+          : pushCopy.taskPendingModerator(task.title),
         `transactional_task_pending_${submission.id}`,
       );
     }
     await evaluateMedalsForParticipant(req.participant!.id);
 
-    res.json({ submission, xpAwarded, track: 'experience' });
+    res.json({
+      submission: submission ? enrichSubmissionRow(submission) : null,
+      xpAwarded,
+      track: 'experience',
+    });
   } catch (error) {
     console.error('submitTask:', error);
     res.status(500).json({ error: 'Internal server error' });

@@ -1,7 +1,85 @@
-import { and, eq, gte, lte, ne, or } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, ne, or } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { taskSubmissions, tasks } from '../db/schema.js';
 import { getMoscowParts } from './timePhase.js';
+
+export type TaskSubmissionRow = typeof taskSubmissions.$inferSelect;
+
+export function isRepeatableExecution(executionType: string | null | undefined): boolean {
+  return executionType === 'daily' || executionType === 'repeatable' || executionType === 'multiple';
+}
+
+function bySubmittedAtDesc(a: TaskSubmissionRow, b: TaskSubmissionRow): number {
+  return (b.submittedAt?.getTime() ?? 0) - (a.submittedAt?.getTime() ?? 0);
+}
+
+export function pickDisplaySubmission(submissions: TaskSubmissionRow[]): TaskSubmissionRow | undefined {
+  if (!submissions.length) return undefined;
+  const pending = submissions
+    .filter(s => s.status === 'pending' || s.status === 'pending_team')
+    .sort(bySubmittedAtDesc);
+  if (pending.length) return pending[0];
+  return [...submissions].sort(bySubmittedAtDesc)[0];
+}
+
+export function findPendingSubmission(submissions: TaskSubmissionRow[]): TaskSubmissionRow | undefined {
+  return submissions.find(s => s.status === 'pending' || s.status === 'pending_team');
+}
+
+export function findRejectedSubmission(submissions: TaskSubmissionRow[]): TaskSubmissionRow | undefined {
+  return submissions
+    .filter(s => s.status === 'rejected' || s.status === 'expired')
+    .sort(bySubmittedAtDesc)[0];
+}
+
+export type SubmissionWriteAction =
+  | { action: 'insert' }
+  | { action: 'update'; submissionId: number }
+  | { action: 'block'; error: string };
+
+export function resolveSubmissionWriteAction(
+  task: typeof tasks.$inferSelect,
+  submissions: TaskSubmissionRow[],
+  eligOk: boolean,
+  allowResubmitRejected: boolean,
+): SubmissionWriteAction {
+  const pending = findPendingSubmission(submissions);
+  if (pending) {
+    return { action: 'block', error: 'Заявка уже на проверке' };
+  }
+
+  const rejected = findRejectedSubmission(submissions);
+  if (rejected && !allowResubmitRejected) {
+    return { action: 'block', error: 'Заявка отклонена, повторная отправка недоступна' };
+  }
+  if (allowResubmitRejected && rejected) {
+    return { action: 'update', submissionId: rejected.id };
+  }
+
+  if (!eligOk) {
+    return { action: 'block', error: 'Already submitted' };
+  }
+
+  const executionType = task.executionType || 'once';
+  const hasApproved = submissions.some(s => s.status === 'approved');
+  if (!submissions.length || (isRepeatableExecution(executionType) && hasApproved)) {
+    return { action: 'insert' };
+  }
+
+  return { action: 'insert' };
+}
+
+export async function loadParticipantTaskSubmissions(
+  participantId: number,
+  taskId: number,
+): Promise<TaskSubmissionRow[]> {
+  return db.select().from(taskSubmissions)
+    .where(and(
+      eq(taskSubmissions.participantId, participantId),
+      eq(taskSubmissions.taskId, taskId),
+    ))
+    .orderBy(desc(taskSubmissions.submittedAt));
+}
 
 export function normalizePostUrl(raw: string): string {
   let s = raw.trim();

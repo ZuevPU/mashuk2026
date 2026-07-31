@@ -24,8 +24,8 @@ export function ProgramPlacesBlock({
   return (
     <div className="card adm-forum-block">
       <h3>Места проведения</h3>
-      <p className="adm-forum-hint">Справочник площадок. При создании события выбирайте место из списка.</p>
-      {places.length === 0 && <p className="adm-muted">Добавьте хотя бы одно место — иначе в событии поле «Место» будет пустым.</p>}
+      <p className="adm-forum-hint">Справочник площадок. В событии можно выбрать из списка или ввести место вручную.</p>
+      {places.length === 0 && <p className="adm-muted">Справочник пуст — в карточке события всё равно можно вписать место вручную.</p>}
       <div className="adm-forum-toolbar">
         <input
           className="adm-input"
@@ -92,15 +92,30 @@ export function PlaceSelect({
   onChange: (name: string) => void;
   legacyPlace?: string | null;
 }) {
-  const legacy = legacyPlace?.trim();
-  const legacyOrphan = legacy && !places.some(p => p.name === legacy);
+  const legacy = legacyPlace?.trim() || '';
+  const legacyOrphan = !!legacy && !places.some(p => p.name === legacy);
+  const valueInCatalog = places.some(p => p.name === value) || (legacyOrphan && value === legacy);
+
   return (
-    <select className="adm-input" value={value} onChange={e => onChange(e.target.value)}>
-      <option value="">— не выбрано —</option>
-      {legacyOrphan && <option value={legacy}>{legacy} (не в справочнике)</option>}
-      {places.map(p => (
-        <option key={p.id} value={p.name}>{p.name}</option>
-      ))}
-    </select>
+    <div className="adm-place-select" onClick={e => e.stopPropagation()}>
+      <select
+        className="adm-input"
+        value={valueInCatalog ? value : ''}
+        onChange={e => onChange(e.target.value)}
+      >
+        <option value="">{value.trim() && !valueInCatalog ? `— вручную: ${value} —` : '— из справочника —'}</option>
+        {legacyOrphan && <option value={legacy}>{legacy} (не в справочнике)</option>}
+        {places.map(p => (
+          <option key={p.id} value={p.name}>{p.name}</option>
+        ))}
+      </select>
+      <input
+        className="adm-input"
+        style={{ marginTop: 6 }}
+        value={value}
+        placeholder="Место: выберите выше или введите вручную"
+        onChange={e => onChange(e.target.value)}
+      />
+    </div>
   );
 }

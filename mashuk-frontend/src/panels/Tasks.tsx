@@ -3,6 +3,8 @@ import { Panel, PanelHeader, Group, Spinner, Button, Textarea, ModalRoot, ModalP
 import { useActiveVkuiLocation } from '@vkontakte/vk-mini-apps-router';
 import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { uploadTaskPhoto } from '../utils/uploadPhoto';
+import { openCodeReader } from '../utils/vkBridgeClient';
+import { extractTaskQrToken, parseTaskQrScan } from '../utils/qrDeepLink';
 import { useAppModal } from '../App';
 import { EmptyState } from '../components/EmptyState';
 import {
@@ -17,6 +19,16 @@ const TASK_SUBMIT_CONFIRM: AnswerConfirmationConfig = {
   titleTemplate: 'Задание отправлено',
 };
 
+const LIFECYCLE_LABEL: Record<string, string> = {
+  created: 'Создана',
+  awaiting_confirm: 'Ожидает подтверждения',
+  confirmed: 'Подтверждена',
+  points_awarded: 'Баллы начислены',
+  medal_awarded: 'Медаль получена',
+  rejected: 'Отклонена',
+  expired: 'Истекла',
+};
+
 const STATUS_LABEL: Record<string, string> = {
   soon: '⚪ Скоро откроется',
   available: '🔵 Доступно',
@@ -25,13 +37,6 @@ const STATUS_LABEL: Record<string, string> = {
   rejected: '🔴 Не принято',
 };
 
-/** Stable 0..7 tone for category chips so many labels stay distinguishable. */
-function categoryTone(name: string): number {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return h % 8;
-}
-
 const CONFIRM_HINT: Record<string, string> = {
   photo: 'Нужно фото',
   post_url: 'Нужна ссылка на пост',
@@ -39,41 +44,23 @@ const CONFIRM_HINT: Record<string, string> = {
   auto: 'Автоподтверждение',
   team: 'Командное задание',
   text_photo: 'Текст и/или фото',
-  text: 'Текстовый ответ',
 };
 
-function taskMethodsFromMeta(meta: {
-  confirmationMethods?: string[];
-  confirmationType?: string;
-  answerType?: string | null;
-  autoConfirm?: boolean | null;
-} | null): string[] {
+function taskMethodsFromMeta(meta: { confirmationMethods?: string[]; confirmationType?: string } | null): string[] {
   if (meta?.confirmationMethods?.length) return meta.confirmationMethods;
-  if (meta?.answerType === 'text') {
-    return meta.autoConfirm === false ? ['text', 'moderator'] : ['text'];
-  }
   const ct = meta?.confirmationType || 'text_photo';
   if (ct === 'qr') return ['qr'];
   if (ct === 'photo') return ['photo'];
   if (ct === 'post_url') return ['link'];
   if (ct === 'team') return ['team'];
   if (ct === 'auto') return [];
-  if (ct === 'text_photo') {
-    return meta?.autoConfirm === false ? ['text', 'photo', 'moderator'] : ['text', 'photo'];
-  }
-  return ['text'];
+  return ['photo'];
 }
 
-function taskConfirmLabel(task: {
-  confirmationMethods?: string[];
-  confirmationType?: string;
-  answerType?: string | null;
-  autoConfirm?: boolean | null;
-}): string {
+function taskConfirmLabel(task: { confirmationMethods?: string[]; confirmationType?: string; answerType?: string | null }): string {
   const methods = taskMethodsFromMeta(task);
   if (methods.length === 0) return CONFIRM_HINT.auto;
   const parts = methods.map(m => {
-    if (m === 'text') return 'Текстовый ответ';
     if (m === 'photo') return 'Фото до 5 МБ';
     if (m === 'link') return 'Ссылка';
     if (m === 'qr') return 'QR';
@@ -91,6 +78,28 @@ function isTaskAlreadySubmittedError(message: string): boolean {
     || m.includes('уже выполн')
     || m.includes('одноразовое')
     || m.includes('лимит выполнений');
+}
+
+function repeatableProgressLabel(task: {
+  executionType?: string;
+  dailyRepeatLimit?: number;
+  todayCompletedCount?: number;
+  canSubmitAgain?: boolean;
+  status?: string;
+}): string | null {
+  const exec = task.executionType || 'once';
+  if (exec !== 'daily' && exec !== 'repeatable' && exec !== 'multiple') return null;
+  const limit = task.dailyRepeatLimit ?? 1;
+  const done = task.todayCompletedCount ?? 0;
+  if (exec === 'daily') {
+    if (task.status === 'done') return 'Выполнено сегодня';
+    if (task.status === 'available' && done === 0) return 'Можно выполнить сегодня';
+    return null;
+  }
+  if (done >= limit && task.status === 'done') return `Лимит ${limit}/день исчерпан`;
+  if (done > 0) return `${done}/${limit} сегодня${task.canSubmitAgain ? ' · можно ещё' : ''}`;
+  if (task.status === 'available') return `До ${limit} раз сегодня`;
+  return null;
 }
 
 const TaskSubmitModal = ({
@@ -114,18 +123,16 @@ const TaskSubmitModal = ({
   const [teamSearch, setTeamSearch] = useState('');
   const [teamResults, setTeamResults] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
+  const [scannedQr, setScannedQr] = useState('');
   const methods = taskMethodsFromMeta(meta);
   const qrFromHash = getHashSearchParams().get('qr');
+  const effectiveQr = scannedQr || qrFromHash || meta?._scannedQr || '';
 
-  const needsText = methods.includes('text')
-    || meta?.answerType === 'text'
-    || (
-      !methods.includes('photo')
-      && !methods.includes('link')
-      && !methods.includes('qr')
-      && !methods.includes('team')
-      && methods.includes('moderator')
-    );
+  useEffect(() => {
+    setScannedQr(meta?._scannedQr || '');
+  }, [taskId, meta?._scannedQr]);
+
+  const needsText = methods.includes('photo') && meta?.answerType !== 'photo';
   const needsPhoto = methods.includes('photo');
   const needsPostUrl = methods.includes('link');
   const needsTeam = methods.includes('team');
@@ -179,7 +186,7 @@ const TaskSubmitModal = ({
       setSnackbar('Добавьте участников команды');
       return;
     }
-    if (isQr && !qrFromHash) {
+    if (isQr && !effectiveQr) {
       setSnackbar('Отсканируйте QR задания');
       return;
     }
@@ -190,7 +197,7 @@ const TaskSubmitModal = ({
         photoUrl,
         postUrl: postUrl || undefined,
         teamMemberIds: teamIds.length ? teamIds : undefined,
-        qrToken: qrFromHash || undefined,
+        qrToken: effectiveQr || undefined,
       });
       const xp = res.xpAwarded ?? 0;
       const teamPending = methods.includes('team');
@@ -217,17 +224,8 @@ const TaskSubmitModal = ({
 
   return (
     <ModalPage id="task-submit" onClose={onClose}>
-      <ModalPageHeader>{meta?.title || 'Отправка задания'}</ModalPageHeader>
+      <ModalPageHeader>Отправка задания</ModalPageHeader>
       <Group>
-        {meta?.shortDescription && (
-          <div style={{ fontSize: 13, color: '#555', marginBottom: 8 }}>{meta.shortDescription}</div>
-        )}
-        {meta?.descriptionHtml && meta.descriptionHtml !== meta?.shortDescription && (
-          <div
-            style={{ fontSize: 13, color: '#444', marginBottom: 8 }}
-            dangerouslySetInnerHTML={{ __html: meta.descriptionHtml }}
-          />
-        )}
         <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
           {taskConfirmLabel(meta || {})}
         </div>
@@ -236,9 +234,31 @@ const TaskSubmitModal = ({
         )}
         {isQr && (
           <div style={{ fontSize: 13, marginBottom: 8 }}>
-            {qrFromHash
+            {effectiveQr
               ? 'QR распознан — можно подтвердить выполнение.'
-              : 'Отсканируйте QR задания или попросите волонтёра подтвердить ваш участнический QR.'}
+              : 'Отсканируйте QR задания камерой VK или откройте ссылку с площадки.'}
+            <Button
+              size="m"
+              mode="secondary"
+              stretched
+              style={{ marginTop: 8 }}
+              onClick={async () => {
+                const raw = await openCodeReader();
+                if (!raw) {
+                  setSnackbar('Сканирование отменено');
+                  return;
+                }
+                const token = extractTaskQrToken(raw);
+                if (!token) {
+                  setSnackbar('Не удалось прочитать QR');
+                  return;
+                }
+                setScannedQr(token);
+                setSnackbar('QR задания распознан');
+              }}
+            >
+              Сканировать QR (VK)
+            </Button>
           </div>
         )}
         {needsText && (
@@ -294,9 +314,9 @@ const TaskSubmitModal = ({
           stretched
           onClick={handleSubmit}
           style={{ marginTop: 12 }}
-          disabled={isQr && !qrFromHash}
+          disabled={isQr && !effectiveQr}
         >
-          {isAuto || (isQr && qrFromHash) ? 'Подтвердить' : 'Отправить на проверку'}
+          {isAuto || (isQr && effectiveQr) ? 'Подтвердить' : 'Отправить на проверку'}
         </Button>
       </Group>
     </ModalPage>
@@ -320,6 +340,30 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
     setSubmitTaskId(task.id);
     setSubmitTaskMeta(task);
   }, []);
+
+  const scanTaskQr = useCallback(async () => {
+    const raw = await openCodeReader();
+    if (!raw) {
+      setSnackbar('Сканирование отменено');
+      return;
+    }
+    const parsed = parseTaskQrScan(raw);
+    if (!parsed) {
+      setSnackbar('QR не содержит задание — нужна ссылка #/tasks?task=…&qr=…');
+      return;
+    }
+    const task = data?.tasks?.find((t: { id: number }) => t.id === parsed.taskId);
+    if (task) {
+      if (window.location.hash.split('?')[0] !== '#/tasks') {
+        window.location.hash = `#/tasks?task=${parsed.taskId}&qr=${encodeURIComponent(parsed.qrToken)}`;
+      }
+      openSubmit({ ...task, _scannedQr: parsed.qrToken });
+      setSnackbar('QR задания распознан');
+      return;
+    }
+    window.location.hash = `#/tasks?task=${parsed.taskId}&qr=${encodeURIComponent(parsed.qrToken)}`;
+    setSnackbar('Открываем задание…');
+  }, [data?.tasks, openSubmit]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -425,55 +469,36 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
               </div>
             )}
             <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>
-                Прогресс дня · {progressPercent}%
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#888', marginBottom: 4 }}>
+                <span>Прогресс дня · {progressPercent}%</span>
+                {data?.kbLocked && (
+                  <button type="button" className="time-btn" style={{ padding: '2px 8px', fontSize: 10 }} onClick={() => window.location.hash = '#/program'}>
+                    База знаний
+                  </button>
+                )}
               </div>
               <div style={{ height: 8, background: '#E8E0D4', borderRadius: 8, overflow: 'hidden' }}>
                 <div style={{ width: `${progressPercent}%`, height: '100%', background: 'var(--m-accent, #B8621A)', borderRadius: 8 }} />
               </div>
             </div>
-            <div className="task-filters">
-              <div className="task-filters-block">
-                <div className="task-filters-lbl task-filters-lbl--status">По активности</div>
-                <div className="time-sw task-filters-row">
-                  {(['all', 'active', 'done', 'pending'] as const).map(f => (
-                    <button
-                      key={f}
-                      type="button"
-                      className={`task-chip task-chip--status ${filter === f ? 'on' : ''}`}
-                      onClick={() => setFilter(f)}
-                    >
-                      {{ all: 'Все', active: 'Активные', done: 'Готово', pending: 'На проверке' }[f]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {categories.length > 0 && (
-                <div className="task-filters-block">
-                  <div className="task-filters-lbl task-filters-lbl--cat">По содержанию</div>
-                  <div className="time-sw task-filters-row" style={{ flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className={`task-chip task-chip--cat task-chip--cat-all ${!categoryFilter ? 'on' : ''}`}
-                      onClick={() => setCategoryFilter('')}
-                    >
-                      Все категории
-                    </button>
-                    {categories.map(c => (
-                      <button
-                        key={c}
-                        type="button"
-                        data-tone={categoryTone(c)}
-                        className={`task-chip task-chip--cat ${categoryFilter === c ? 'on' : ''}`}
-                        onClick={() => setCategoryFilter(c)}
-                      >
-                        {c}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+            <div className="time-sw" style={{ marginBottom: 8 }}>
+              {(['all', 'active', 'done', 'pending'] as const).map(f => (
+                <button key={f} type="button" className={`time-btn ${filter === f ? 'on' : ''}`} onClick={() => setFilter(f)}>
+                  {{ all: 'Все', active: 'Активные', done: 'Готово', pending: 'На проверке' }[f]}
+                </button>
+              ))}
+              <button type="button" className="time-btn" onClick={() => void scanTaskQr()}>
+                Скан QR
+              </button>
             </div>
+            {categories.length > 0 && (
+              <div className="time-sw" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
+                <button type="button" className={`time-btn ${!categoryFilter ? 'on' : ''}`} onClick={() => setCategoryFilter('')}>Все категории</button>
+                {categories.map(c => (
+                  <button key={c} type="button" className={`time-btn ${categoryFilter === c ? 'on' : ''}`} onClick={() => setCategoryFilter(c)}>{c}</button>
+                ))}
+              </div>
+            )}
             {filteredTasks.length === 0 ? (
               <EmptyState icon="📋" title="Нет заданий" subtitle="Задания появятся по ходу дня" />
             ) : filteredTasks.map((t: any) => (
@@ -490,16 +515,20 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
                   <strong>{t.title}</strong>
                   <span style={{ fontSize: 12 }}>{STATUS_LABEL[t.status] || t.status}</span>
                 </div>
-                {(t.shortDescription || t.description) && (
-                  <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>{t.shortDescription || t.description}</div>
-                )}
+                {t.description && <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>{t.description}</div>}
                 <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
                   +{t.points ?? 0} · {taskConfirmLabel(t)}
+                  {repeatableProgressLabel(t) ? ` · ${repeatableProgressLabel(t)}` : ''}
                 </div>
                 {(t.status === 'available' || t.canResubmit) && (
                   <Button size="m" style={{ marginTop: 8 }} onClick={() => openSubmit(t)}>
-                    {t.canResubmit ? 'Отправить снова' : 'Выполнить'}
+                    {t.canResubmit ? 'Отправить снова' : t.canSubmitAgain && (t.todayCompletedCount ?? 0) > 0 ? 'Выполнить снова' : 'Выполнить'}
                   </Button>
+                )}
+                {(t.status === 'pending' || t.status === 'done') && t.submission?.lifecycleLabel && (
+                  <div style={{ fontSize: 11, color: '#666', marginTop: 6 }}>
+                    {LIFECYCLE_LABEL[t.submission.lifecycleStage as string] || t.submission.lifecycleLabel}
+                  </div>
                 )}
                 {t.submission?.moderatorComment && (
                   <div style={{ fontSize: 12, color: '#C53030', marginTop: 6 }}>{t.submission.moderatorComment}</div>

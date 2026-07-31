@@ -200,41 +200,53 @@ export const exportMedalLeaderboardHandler = async (req: AdminRequest, res: Resp
 };
 
 export const exportLeaderboardSnapshotHandler = async (req: AdminRequest, res: Response) => {
-  const mode = String(req.query.mode || 'points');
-  const scopeRaw = String(req.query.scope || 'shift');
-  const scope = (scopeRaw === 'day' || scopeRaw === 'shift' || scopeRaw === 'total') ? scopeRaw : 'shift';
-  const day = req.query.day != null ? Number(req.query.day) : undefined;
-  const format = String(req.query.format || 'csv');
+  const { parseLeaderboardQuery } = await import('../services/leaderboardQuery.js');
   const { resolveAdminShiftId } = await import('../services/shiftService.js');
-  const shiftId = await resolveAdminShiftId(req);
+  const {
+    writeRatingDayExport,
+    writeRatingShiftExport,
+    writeRatingTotalExport,
+    writeRatingNominationExport,
+    writeMedalLeaderboardExport,
+  } = await import('../services/exports/ancillaryExports.js');
 
-  if (mode === 'medals') {
-    const medalModeRaw = String(req.query.medalMode || 'count');
-    const medalId = req.query.medalId != null ? Number(req.query.medalId) : undefined;
+  const query = parseLeaderboardQuery({ ...req.query, limit: 0, showAll: 'true' } as Record<string, unknown>);
+  const format = String(req.query.format || 'csv');
+  const shiftId = await resolveAdminShiftId(req);
+  const exportFilters = {
+    format,
+    shiftId,
+    direction: query.direction || undefined,
+    groupId: query.groupId,
+  };
+
+  if (query.mode === 'medals' || (query.mode === 'points' && query.medalMode === 'count')) {
     await writeMedalLeaderboardExport(res, {
-      format,
-      shiftId,
-      scope: scope === 'day' ? 'day' : 'shift',
-      day: scope === 'day' && Number.isFinite(day) ? day : undefined,
-      medalMode: medalModeRaw === 'holders' ? 'holders' : 'count',
-      medalId: medalId && !Number.isNaN(medalId) ? medalId : undefined,
+      ...exportFilters,
+      scope: query.scope === 'day' ? 'day' : query.scope === 'total' ? 'shift' : 'shift',
+      day: query.scope === 'day' ? query.day : undefined,
+      medalMode: query.medalMode,
+      medalId: query.medalId,
     });
     return;
   }
-  if (mode === 'nomination') {
-    await writeRatingNominationExport(res, String(req.query.nomination || 'general'), {
-      scope: scope === 'day' ? 'day' : 'shift',
-      day: scope === 'day' && Number.isFinite(day) ? day : undefined,
-      format,
-      shiftId,
+  if (query.mode === 'nomination') {
+    await writeRatingNominationExport(res, query.nomination || 'general', {
+      scope: query.scope === 'day' ? 'day' : 'shift',
+      day: query.scope === 'day' ? query.day : undefined,
+      ...exportFilters,
     });
     return;
   }
-  if (scope === 'day') {
-    await writeRatingDayExport(res, Number.isFinite(day) ? Number(day) : 1, { format, shiftId });
+  if (query.scope === 'total') {
+    await writeRatingTotalExport(res, { ...exportFilters, track: query.track });
     return;
   }
-  await writeRatingShiftExport(res, { format, shiftId });
+  if (query.scope === 'day') {
+    await writeRatingDayExport(res, query.day ?? 1, exportFilters);
+    return;
+  }
+  await writeRatingShiftExport(res, exportFilters);
 };
 export const exportMedalsHandler = async (req: AdminRequest, res: Response) => {
   const { resolveAdminShiftId } = await import('../services/shiftService.js');

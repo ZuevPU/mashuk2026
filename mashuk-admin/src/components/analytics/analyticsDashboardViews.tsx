@@ -407,7 +407,7 @@ export function ActivityView({
           )}
         </div>
         <p className="adm-muted" style={{ fontSize: 12, marginTop: 6 }}>
-          Топ-10 по смене. Фильтры и медали — во вкладке «Рейтинг».
+          Топ-10 с учётом фильтров аналитики (направление, группа, день). Полная таблица — во вкладке «Рейтинг».
         </p>
         <div className="lb-activity-grid">
           {(['total', 'day'] as const).map(track => (
@@ -425,7 +425,34 @@ export function ActivityView({
               />
             </div>
           ))}
+          {(data.ratings?.medalsDay ?? []).length > 0 && (
+            <div className="lb-activity-block">
+              <h4>Медали за день</h4>
+              <LeaderboardTable
+                rows={toRows(data.ratings.medalsDay)}
+                filters={{ ...DEFAULT_LEADERBOARD_FILTERS, mode: 'points', medalFilter: 'count', scope: 'day' }}
+                maxRows={10}
+              />
+            </div>
+          )}
         </div>
+        {(data.ratings?.nominations ?? []).length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <h4 style={{ margin: '0 0 8px' }}>Номинации (топ-10)</h4>
+            <div className="lb-activity-grid">
+              {(data.ratings.nominations as { key: string; label: string; top: { id: number; rank: number; name: string; points: number; direction?: string }[] }[]).map(nom => (
+                <div key={nom.key} className="lb-activity-block">
+                  <strong>{nom.label}</strong>
+                  <LeaderboardTable
+                    rows={toRows(nom.top)}
+                    filters={{ ...DEFAULT_LEADERBOARD_FILTERS, mode: 'nomination', nomination: nom.key }}
+                    maxRows={10}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {(data.ratings?.byDirection ?? []).length > 0 && (
           <div style={{ marginTop: 16 }}>
             <h4 style={{ margin: '0 0 8px' }}>По направлениям</h4>

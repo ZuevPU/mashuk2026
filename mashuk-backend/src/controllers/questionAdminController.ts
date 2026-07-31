@@ -228,7 +228,7 @@ export const crudQuestions = {
     if (!values.status) values.status = 'draft';
     const [q] = await db.insert(questions).values({ ...values, shiftId }).returning();
     if (q.pushOnPublish && q.status === 'published') {
-      const msg = q.pushTemplate?.trim() || `Новый вопрос: ${q.title}`;
+      const msg = q.pushTemplate?.trim() || `Новая точка: «${q.title}». Откройте в приложении.`;
       await notifyAllParticipants(msg, 'question_publish');
     }
     res.json({ question: serializeAdminQuestion(q, 0) });
@@ -305,7 +305,7 @@ export const crudQuestions = {
     const wasPublished = before.status === 'published';
     const isPublished = updated?.status === 'published';
     if (updated?.pushOnPublish && isPublished && !wasPublished) {
-      const msg = updated.pushTemplate?.trim() || `Новый вопрос: ${updated.title}`;
+      const msg = updated.pushTemplate?.trim() || `Новая точка: «${updated.title}». Откройте в приложении.`;
       await notifyAllParticipants(msg, 'question_publish');
     }
     res.json({ question: serializeAdminQuestion(updated!, Number(answerCount)), versioned: false });

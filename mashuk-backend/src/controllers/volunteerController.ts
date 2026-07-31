@@ -4,11 +4,19 @@ import { db } from '../db/index.js';
 import { participants, taskSubmissions, tasks } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { VkAuthRequest } from '../middlewares/vkAuth.js';
-import { awardPoints } from '../services/pointsService.js';
-import { resolveTaskAwardPoints } from '../services/taskPoints.js';
-import { evaluateMedalsForParticipant } from '../services/medalEvaluator.js';
 import { logAdminAction } from '../services/adminActionsLog.js';
 import { taskMethodsForParticipant } from '../services/taskAdminHelpers.js';
+import {
+  assertTaskSubmissionAllowed,
+  isQrInValidWindow,
+  loadParticipantTaskSubmissions,
+  resolveSubmissionWriteAction,
+} from '../services/taskEligibility.js';
+import {
+  completeSubmissionRewards,
+  enrichSubmissionRow,
+  submissionCreatePatch,
+} from '../services/submissionLifecycle.js';
 
 /**
  * POST /volunteer/confirm
@@ -35,7 +43,6 @@ export const volunteerConfirm = async (req: AdminRequest & VkAuthRequest, res: R
       return;
     }
 
-    // Non-admin VK path: must be linked as admin user with vkId
     if (!isAdmin) {
       const { adminUsers } = await import('../db/schema.js');
       const [staff] = await db.select().from(adminUsers)
@@ -67,78 +74,110 @@ export const volunteerConfirm = async (req: AdminRequest & VkAuthRequest, res: R
       return;
     }
     const now = new Date();
-    const { isQrInValidWindow, assertTaskSubmissionAllowed } = await import('../services/taskEligibility.js');
     if (!isQrInValidWindow(task, now)) {
       res.status(400).json({ error: 'QR-код задания сейчас не активен' });
       return;
     }
 
-    const [existing] = await db.select().from(taskSubmissions)
-      .where(and(
-        eq(taskSubmissions.participantId, participant.id),
-        eq(taskSubmissions.taskId, task.id),
-      )).limit(1);
-
-    if (existing?.status === 'approved') {
-      res.json({ ok: true, alreadyConfirmed: true, submission: existing });
-      return;
-    }
+    const taskSubs = await loadParticipantTaskSubmissions(participant.id, task.id);
+    const rejectedSub = taskSubs.find(s => s.status === 'rejected' || s.status === 'expired');
+    const allowResubmit = !!rejectedSub && task.allowRetry !== false;
 
     const elig = await assertTaskSubmissionAllowed(participant.id, task, {
-      allowResubmitRejected: existing?.status === 'rejected',
-      existingStatus: existing?.status ?? null,
+      allowResubmitRejected: allowResubmit,
+      existingStatus: rejectedSub?.status ?? null,
     });
-    if (!elig.ok && existing?.status !== 'rejected') {
+    if (!elig.ok && !allowResubmit) {
+      const lastApproved = taskSubs.find(s => s.status === 'approved');
+      if (lastApproved && (lastApproved.lifecycleStage === 'points_awarded' || lastApproved.lifecycleStage === 'medal_awarded' || (lastApproved.pointsAwarded ?? 0) > 0)) {
+        res.json({ ok: true, alreadyConfirmed: true, submission: enrichSubmissionRow(lastApproved) });
+        return;
+      }
       res.status(400).json({ error: elig.error });
       return;
     }
 
-    const pointsAwarded = await resolveTaskAwardPoints(task);
-    let submission;
-    if (existing) {
-      [submission] = await db.update(taskSubmissions).set({
+    const writeAction = resolveSubmissionWriteAction(task, taskSubs, elig.ok, allowResubmit);
+    if (writeAction.action === 'block') {
+      res.status(400).json({ error: writeAction.error });
+      return;
+    }
+
+    const lifecyclePatch = submissionCreatePatch({
+      task,
+      payload: { volunteer: true, qrToken: participantQrToken },
+      status: 'approved',
+      isTeam: false,
+      forceAuto: true,
+    });
+
+    let submissionId: number;
+    if (writeAction.action === 'update') {
+      const [updated] = await db.update(taskSubmissions).set({
         status: 'approved',
-        pointsAwarded,
+        pointsAwarded: 0,
+        pointsLogId: null,
+        userMedalId: null,
         checkedAt: new Date(),
+        verifiedAt: new Date(),
+        verifiedByVolunteerVkId: volunteerVkId ?? null,
+        verifiedByAdminId: isAdmin ? req.adminId ?? null : null,
         moderatorComment: 'Подтверждено волонтёром по QR',
-        answerText: existing.answerText || 'QR-подтверждение',
-      }).where(eq(taskSubmissions.id, existing.id)).returning();
+        answerText: 'QR-подтверждение',
+        submittedAt: new Date(),
+        ...lifecyclePatch,
+        proofType: 'volunteer',
+        verificationType: 'manual_volunteer',
+      }).where(eq(taskSubmissions.id, writeAction.submissionId)).returning();
+      submissionId = updated!.id;
     } else {
-      [submission] = await db.insert(taskSubmissions).values({
+      const [created] = await db.insert(taskSubmissions).values({
         participantId: participant.id,
         taskId: task.id,
         answerText: 'QR-подтверждение',
         status: 'approved',
-        pointsAwarded,
+        pointsAwarded: 0,
         checkedAt: new Date(),
+        verifiedAt: new Date(),
+        verifiedByVolunteerVkId: volunteerVkId ?? null,
+        verifiedByAdminId: isAdmin ? req.adminId ?? null : null,
         moderatorComment: 'Подтверждено волонтёром по QR',
+        ...lifecyclePatch,
+        proofType: 'volunteer',
+        verificationType: 'manual_volunteer',
       }).returning();
+      submissionId = created!.id;
     }
 
-    if (pointsAwarded > 0) {
-      await awardPoints(participant.id, 'task_complete', pointsAwarded, task.dayNumber ?? undefined);
-    }
-    await evaluateMedalsForParticipant(participant.id);
+    const rewards = await completeSubmissionRewards(submissionId, [participant.id], task, {
+      verificationType: 'manual_volunteer',
+      verifiedByVolunteerVkId: volunteerVkId ?? undefined,
+      verifiedByAdminId: isAdmin ? req.adminId : undefined,
+    });
+
+    const [submission] = await db.select().from(taskSubmissions).where(eq(taskSubmissions.id, submissionId)).limit(1);
 
     if (isAdmin) {
       await logAdminAction({
         req,
         actionType: 'volunteer_confirm',
         section: 'tasks',
-        objectId: submission.id,
+        objectId: submissionId,
         newValue: { participantId: participant.id, taskId: task.id },
       });
     }
 
     res.json({
       ok: true,
-      submission,
+      submission: submission ? enrichSubmissionRow(submission) : null,
       participant: {
         id: participant.id,
         firstName: participant.firstName,
         lastName: participant.lastName,
       },
-      pointsAwarded,
+      pointsAwarded: submission?.pointsAwarded ?? 0,
+      pointsLogId: rewards.pointsLogId,
+      userMedalId: rewards.userMedalId,
     });
   } catch (error) {
     console.error('volunteerConfirm:', error);

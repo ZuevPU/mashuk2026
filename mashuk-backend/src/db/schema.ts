@@ -562,8 +562,8 @@ export const tasks = pgTable('tasks', {
   id: serial('id').primaryKey(),
   shiftId: integer('shift_id').notNull(),
   title: varchar('title', { length: 255 }).notNull(),
-  description: text('description'),
   shortDescription: text('short_description'),
+  description: text('description'),
   descriptionHtml: text('description_html'),
   points: integer('points').default(0),
   medalTask: boolean('medal_task').default(false),
@@ -617,14 +617,23 @@ export const taskSubmissions = pgTable('task_submissions', {
   postUrlNormalized: varchar('post_url_normalized', { length: 500 }),
   teamMemberIds: jsonb('team_member_ids'),
   status: varchar('status', { length: 50 }).default('pending'),
+  proofType: varchar('proof_type', { length: 32 }),
+  verificationType: varchar('verification_type', { length: 32 }),
+  lifecycleStage: varchar('lifecycle_stage', { length: 32 }),
   submittedAt: timestamp('submitted_at').defaultNow(),
   checkedAt: timestamp('checked_at'),
+  verifiedAt: timestamp('verified_at'),
+  verifiedByAdminId: integer('verified_by_admin_id'),
+  verifiedByVolunteerVkId: integer('verified_by_volunteer_vk_id'),
   pointsAwarded: integer('points_awarded').default(0),
+  pointsLogId: integer('points_log_id'),
+  userMedalId: integer('user_medal_id'),
   moderatorComment: text('moderator_comment'),
 }, (table) => [
   index('task_submissions_participant_id_idx').on(table.participantId),
   index('task_submissions_task_id_idx').on(table.taskId),
   index('task_submissions_status_idx').on(table.status),
+  index('task_submissions_lifecycle_stage_idx').on(table.lifecycleStage),
 ]);
 
 export const taskTeamConfirmations = pgTable('task_team_confirmations', {
@@ -689,9 +698,11 @@ export const pointsLog = pgTable('points_log', {
   revokedAt: timestamp('revoked_at'),
   revokeReason: text('revoke_reason'),
   relatedLogId: integer('related_log_id'),
+  submissionId: integer('submission_id'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('points_log_participant_id_idx').on(table.participantId),
+  index('points_log_submission_id_idx').on(table.submissionId),
 ]);
 
 export const levelsConfig = pgTable('levels_config', {
@@ -813,9 +824,11 @@ export const userMedals = pgTable('user_medals', {
   medalId: integer('medal_id').notNull(),
   awardedAt: timestamp('awarded_at').defaultNow(),
   awardedByAdminId: integer('awarded_by_admin_id'),
+  submissionId: integer('submission_id'),
   way: varchar('way', { length: 50 }).default('auto'),
 }, (table) => [
   index('user_medals_participant_idx').on(table.participantId),
+  index('user_medals_submission_id_idx').on(table.submissionId),
 ]);
 
 export const pdfWhitelist = pgTable('pdf_whitelist', {

@@ -78,17 +78,20 @@ export function NestedEventNode({
       alert(`Укажите название (${levelLabel.toLowerCase()}).`);
       return;
     }
+    const place = draft.place.trim() || null;
     act(async () => {
       await adminFetch(`/events/${node.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           title: draft.title.trim(),
-          place: draft.place.trim() || null,
+          place,
           timeSlot: buildTimeSlot(draft.timeStart, draft.timeEnd) || null,
           speakerIds: draft.speakerIds,
           dayNumber: node.dayNumber ?? selectedDay,
         }),
       });
+      // Keep local place immediately — full tab reload may jump day
+      setDraft(d => ({ ...d, place: place || '' }));
       onSaved();
     }, 'Сохранено');
   };
@@ -142,7 +145,7 @@ export function NestedEventNode({
         <span className="adm-muted" style={{ marginLeft: 'auto' }}>{open ? '▼' : '▶'}</span>
       </div>
       {open && (
-        <>
+        <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
           <div className="adm-forum-grid-2" style={{ marginTop: 8 }}>
             <label className="adm-field">
               <span className="adm-label">Название</span>
@@ -236,7 +239,7 @@ export function NestedEventNode({
               </button>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

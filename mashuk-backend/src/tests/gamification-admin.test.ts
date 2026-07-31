@@ -37,4 +37,26 @@ describe('gamification admin access', () => {
     assert.ok(!tabs.includes('forum'));
     assert.equal(defaultTabForRole('gamification', tabs), 'rating');
   });
+
+  it('admin role includes rating tab first', () => {
+    const perms = permissionsFromDefaults('admin');
+    const tabs = computeAllowedTabs('admin', perms);
+    assert.equal(tabs[0], 'rating');
+    assert.ok(tabs.includes('forum'));
+    assert.ok(tabs.includes('admins'));
+  });
+
+  it('director and moderator roles include rating tab', () => {
+    for (const role of ['director', 'moderator'] as const) {
+      const tabs = computeAllowedTabs(role, permissionsFromDefaults(role));
+      assert.ok(tabs.includes('rating'), `${role} should see rating`);
+    }
+  });
+
+  it('moderator and gamification can update levels for revoke', () => {
+    const mod = permissionsFromDefaults('moderator');
+    const gam = permissionsFromDefaults('gamification');
+    assert.equal(mod.levels.canUpdate, true);
+    assert.equal(gam.levels.canUpdate, true);
+  });
 });

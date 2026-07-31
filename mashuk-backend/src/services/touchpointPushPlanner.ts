@@ -2,6 +2,7 @@ import { and, eq, gte, isNotNull, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { answers, participants, pushLog, questions } from '../db/schema.js';
 import { getForumSettings, getTouchpointAccess, resolveEffectiveCurrentDay } from './helpers.js';
+import { pushCopy } from './pushCopy.js';
 import { sendPushNotification } from './pushService.js';
 import { getMoscowParts } from './timePhase.js';
 import { loadPublishedTouchpointQuestions } from './touchpointProgress.js';
@@ -105,7 +106,7 @@ export async function runTouchpointPushPlanner(now = new Date()): Promise<string
         if (await sentTriggerSince(openTrigger, p.id, dayStart)) continue;
         await sendPushNotification(
           [p.id],
-          `Открыта точка: «${label}». Зайдите в приложение.`,
+          pushCopy.touchpointOpen(label),
           openTrigger,
         );
         fired.push(`${openTrigger}:${p.id}`);
@@ -116,7 +117,7 @@ export async function runTouchpointPushPlanner(now = new Date()): Promise<string
         if (await sentTriggerSince(retryTrigger, p.id, dayStart)) continue;
         await sendPushNotification(
           [p.id],
-          `Напоминание: «${label}» ещё можно заполнить.`,
+          pushCopy.touchpointReminder(label),
           retryTrigger,
         );
         fired.push(`${retryTrigger}:${p.id}`);

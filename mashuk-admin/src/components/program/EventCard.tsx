@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { label } from '../../labels/ru';
 import { confirmDelete, CONFIRM_DELETE_EVENT } from '../../admin/confirmDelete';
-import { ParticipantPreviewHtml, ParticipantPreviewModal } from '../admin/ParticipantPreviewModal';
+import { ParticipantPreviewModal } from '../admin/ParticipantPreviewModal';
 import { RichHtmlEditor } from '../admin/RichHtmlEditor';
 import { PlaceSelect } from './ProgramPlacesBlock';
 import { SpeakerMultiPick } from './ProgramCatalogs';
 import { speakerFullLabel } from '../speakers/speakerFormat';
 import { NestedEventNode } from './NestedEventNode';
+import { EventParticipantPreview } from './EventParticipantPreview';
 import {
   BLOCK_TYPE_OPTIONS,
   buildTimeSlot,
@@ -75,6 +76,7 @@ export function EventCard({
   selectedDay,
   daySchedulePublished,
   onSaved,
+  onGoToDay,
   adminFetch,
   act,
 }: {
@@ -87,6 +89,8 @@ export function EventCard({
   selectedDay: number;
   daySchedulePublished: boolean;
   onSaved: () => void;
+  /** После дублирования на другой день — перейти к нему */
+  onGoToDay?: (day: number) => void;
   adminFetch: (path: string, opts?: RequestInit) => Promise<any>;
   act: (fn: () => Promise<void>, msg?: string) => void;
 }) {
@@ -387,11 +391,21 @@ export function EventCard({
               className="adm-btn adm-btn-secondary adm-btn-sm"
               onClick={() => {
                 const td = Number(dupDay);
-                if (!td) return;
+                if (!td || Number.isNaN(td)) {
+                  alert('Укажите номер дня для дублирования');
+                  return;
+                }
                 act(async () => {
-                  await adminFetch(`/events/${event.id}/duplicate`, { method: 'POST', body: JSON.stringify({ targetDayNumber: td }) });
-                  onSaved();
-                }, 'Дубликат создан');
+                  await adminFetch(`/events/${event.id}/duplicate`, {
+                    method: 'POST',
+                    body: JSON.stringify({ targetDayNumber: td }),
+                  });
+                  if (td !== selectedDay && onGoToDay) {
+                    onGoToDay(td);
+                  } else {
+                    onSaved();
+                  }
+                }, `Дубликат создан на день ${td}`);
               }}
             >
               Дублировать
@@ -425,10 +439,15 @@ export function EventCard({
           </div>
           {previewOpen && (
             <ParticipantPreviewModal open={previewOpen} onClose={() => setPreviewOpen(false)} title="Событие — превью">
-              <p className="adm-muted">{preview}</p>
-              <ParticipantPreviewHtml
+              <EventParticipantPreview
                 title={draft.title || 'Событие'}
-                html={draft.descriptionHtml || draft.description.replace(/\n/g, '<br/>')}
+                place={draft.place}
+                timeStart={draft.timeStart}
+                timeEnd={draft.timeEnd}
+                speakerLine={speakerLine || undefined}
+                descriptionHtml={draft.descriptionHtml}
+                description={draft.description}
+                children={children}
               />
             </ParticipantPreviewModal>
           )}

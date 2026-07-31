@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
+import { ADMIN_SHIFT_CHANGED_EVENT, getAdminEditingShiftId } from '../../admin/client';
 import { label } from '../../labels/ru';
 import { EventCard } from './EventCard';
 import { PlaceSelect, ProgramPlacesBlock } from './ProgramPlacesBlock';
@@ -35,9 +36,30 @@ const emptyForm = (day: number) => ({
   hasSubSessions: false,
 });
 
+function programDayStorageKey(shiftId: number | null): string {
+  return `mashuk_admin_program_day_${shiftId ?? 'default'}`;
+}
+
+function readStoredProgramDay(shiftId: number | null): number | null {
+  try {
+    const n = Number(sessionStorage.getItem(programDayStorageKey(shiftId)));
+    return Number.isFinite(n) && n >= 1 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredProgramDay(shiftId: number | null, day: number) {
+  try {
+    sessionStorage.setItem(programDayStorageKey(shiftId), String(day));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps) {
   const [loading, setLoading] = useState(true);
-  const [selectedDay, setSelectedDay] = useState(1);
+  const [selectedDay, setSelectedDay] = useState(() => readStoredProgramDay(getAdminEditingShiftId()) ?? 1);
   const [totalDays, setTotalDays] = useState(8);
   const [forumCurrentDay, setForumCurrentDay] = useState(1);
   const [events, setEvents] = useState<ProgramEvent[]>([]);
@@ -92,6 +114,14 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
     setPlaces(res.places || []);
   }, [adminFetch]);
 
+  const selectedDayRef = useRef(selectedDay);
+  selectedDayRef.current = selectedDay;
+
+  // Запоминаем день редактирования — после save/reloadKey не прыгаем на день 1
+  useEffect(() => {
+    writeStoredProgramDay(getAdminEditingShiftId(), selectedDay);
+  }, [selectedDay]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -100,10 +130,9 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
       const cd = fs?.currentDay ?? 1;
       setTotalDays(td);
       setForumCurrentDay(cd);
-      setSelectedDay(cd);
-      setForm(emptyForm(cd));
+      const day = selectedDayRef.current;
       await Promise.all([
-        reloadEvents(cd),
+        reloadEvents(day),
         reloadTags(),
         reloadPlaces(),
         reloadBlockTypes(),
@@ -111,9 +140,14 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
         reloadScheduleDays(),
       ]);
       setDirections((await adminFetch('/directions')).directions || []);
-      const sched = await adminFetch(`/schedule/versions?day=${cd}`);
+      // Если за время загрузки админ переключил день — не затираем его список
+      const dayNow = selectedDayRef.current;
+      const sched = await adminFetch(`/schedule/versions?day=${dayNow}`);
       setScheduleDays(sched.days || []);
       setVersions(sched.versions || []);
+      if (dayNow !== day) {
+        await reloadEvents(dayNow);
+      }
     } finally {
       setLoading(false);
     }
@@ -122,6 +156,17 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
   useEffect(() => {
     load().catch(() => setLoading(false));
   }, [load, reloadKey]);
+
+  // Смена в шапке — восстановить день этой смены (или 1)
+  useEffect(() => {
+    const onShiftChanged = () => {
+      const day = readStoredProgramDay(getAdminEditingShiftId()) ?? 1;
+      setSelectedDay(day);
+      setForm(emptyForm(day));
+    };
+    window.addEventListener(ADMIN_SHIFT_CHANGED_EVENT, onShiftChanged);
+    return () => window.removeEventListener(ADMIN_SHIFT_CHANGED_EVENT, onShiftChanged);
+  }, []);
 
   useEffect(() => {
     setForm(f => ({ ...f, dayNumber: selectedDay }));
@@ -238,8 +283,8 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
             blockType: isKeyBlock ? 'key_block' : (e.blockType || 'session'),
             isKeyBlock: !!isKeyBlock,
             pushReminder: e.pushReminder !== false,
-            isPublished: false,
-            dayPublished: false,
+            isPublished: e.isPublished === true,
+            // dayPublished выставит бэкенд по статусу целевого дня
             audienceType: e.audienceType || 'all',
             audienceDirectionId: e.audienceDirectionId ?? null,
             speakerIds: e.speakerIds || [],
@@ -344,40 +389,71 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
                     className="adm-input adm-input-narrow"
                     value={editingTag.name}
                     onChange={e => setEditingTag({ id: t.id, name: e.target.value })}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const name = editingTag.name.trim();
+                        if (!name) return;
+                        act(async () => {
+                          await adminFetch(`/thematic-tags/${t.id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+                          setEditingTag(null);
+                          await reloadTags();
+                          await reloadEvents(selectedDay);
+                        }, 'Тег переименован');
+                      }
+                    }}
                   />
-                  <button type="button" className="adm-btn adm-btn-sm adm-btn-primary" onClick={() => act(async () => {
-                    await adminFetch(`/thematic-tags/${t.id}`, { method: 'PATCH', body: JSON.stringify({ name: editingTag.name.trim() }) });
-                    setEditingTag(null);
-                    await reloadTags();
-                  }, 'Сохранено')}>OK</button>
-                  <button type="button" className="adm-btn adm-btn-sm adm-btn-ghost" onClick={() => setEditingTag(null)}>×</button>
+                  <button
+                    type="button"
+                    className="adm-btn adm-btn-sm adm-btn-primary"
+                    onClick={() => {
+                      const name = editingTag.name.trim();
+                      if (!name) return;
+                      act(async () => {
+                        await adminFetch(`/thematic-tags/${t.id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+                        setEditingTag(null);
+                        await reloadTags();
+                        await reloadEvents(selectedDay);
+                      }, 'Тег переименован');
+                    }}
+                  >
+                    Сохранить
+                  </button>
+                  <button type="button" className="adm-btn adm-btn-sm adm-btn-ghost" onClick={() => setEditingTag(null)}>Отмена</button>
                 </>
               ) : (
                 <>
                   <span className="adm-program-tag-name">{t.name}</span>
                   <button
                     type="button"
-                    className="adm-tag-icon-btn"
-                    title="Изменить"
-                    aria-label="Изменить"
+                    className="adm-btn adm-btn-ghost adm-btn-sm"
                     onClick={() => setEditingTag({ id: t.id, name: t.name })}
                   >
-                    ✎
+                    Изменить
                   </button>
                   <button
                     type="button"
-                    className="adm-tag-icon-btn adm-tag-icon-btn-delete"
-                    title="Удалить"
-                    aria-label="Удалить"
+                    className="adm-btn adm-btn-ghost adm-btn-sm"
+                    style={{ color: '#9B2C2C' }}
                     onClick={() => {
-                      if (!confirmDelete('Удалить тег?')) return;
+                      if (!confirmDelete(`Удалить тег «${t.name}»?`)) return;
                       act(async () => {
-                        await adminFetch(`/thematic-tags/${t.id}`, { method: 'DELETE' });
+                        try {
+                          await adminFetch(`/thematic-tags/${t.id}`, { method: 'DELETE' });
+                        } catch (err) {
+                          const msg = String(err);
+                          if (!msg.includes('Tag has links')) throw err;
+                          if (!window.confirm(
+                            `Тег «${t.name}» уже используется в событиях, материалах или интересах.\n\nУдалить и снять его со всех связей?`,
+                          )) return;
+                          await adminFetch(`/thematic-tags/${t.id}?force=1`, { method: 'DELETE' });
+                        }
                         await reloadTags();
-                      });
+                        await reloadEvents(selectedDay);
+                      }, 'Тег удалён');
                     }}
                   >
-                    ×
+                    Удалить
                   </button>
                 </>
               )}
@@ -670,6 +746,7 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
                   adminFetch={adminFetch}
                   act={act}
                   onSaved={() => reloadEvents(selectedDay)}
+                  onGoToDay={day => setSelectedDay(day)}
                 />
               ))}
             </div>

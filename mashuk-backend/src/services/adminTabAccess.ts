@@ -53,17 +53,6 @@ const TAB_PRIMARY_SECTION: Partial<Record<AdminUiTab, AdminSection>> = {
   medals: 'medals',
 };
 
-const GAMIFICATION_RATING_SECTIONS: AdminSection[] = [
-  'tasks',
-  'moderation',
-  'medals',
-  'levels',
-  'participants',
-  'exports',
-  'analytics',
-  'data',
-];
-
 function sectionReadable(permissions: Record<AdminSection, SectionPermissions>, section: AdminSection): boolean {
   return !!permissions[section]?.canRead;
 }
@@ -72,15 +61,10 @@ export function computeAllowedTabs(
   role: string,
   permissions: Record<AdminSection, SectionPermissions>,
 ): AdminUiTab[] {
+  const tabs: AdminUiTab[] = ['rating'];
+
   if (role === 'admin' || role === 'superadmin') {
-    return ADMIN_UI_TABS.filter(t => t !== 'rating');
-  }
-
-  const tabs: AdminUiTab[] = [];
-
-  if (role === 'gamification') {
-    const anyRating = GAMIFICATION_RATING_SECTIONS.some(s => sectionReadable(permissions, s));
-    if (anyRating) tabs.push('rating');
+    return [...tabs, ...ADMIN_UI_TABS.filter(t => t !== 'rating')];
   }
 
   for (const tab of ADMIN_UI_TABS) {

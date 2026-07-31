@@ -11,6 +11,7 @@ import {
 } from './leaderboardTypes';
 
 type MedalOption = { id: number; name: string };
+type GroupOption = { id: number; name: string };
 
 export function LeaderboardDashboard({
   adminFetch,
@@ -31,22 +32,28 @@ export function LeaderboardDashboard({
   showModeTabs?: boolean;
   onExport?: (q: URLSearchParams) => void | Promise<void>;
 }) {
+  const defaultDay = forumDay && Number(forumDay) <= 6 ? forumDay : '1';
   const [filters, setFilters] = useState<LeaderboardFiltersState>({
     ...DEFAULT_LEADERBOARD_FILTERS,
-    day: forumDay || '1',
+    day: defaultDay,
     ...initialFilters,
   });
   const [rows, setRows] = useState<LeaderboardRow[]>([]);
   const [directions, setDirections] = useState<string[]>([]);
+  const [groups, setGroups] = useState<GroupOption[]>([]);
   const [medals, setMedals] = useState<MedalOption[]>([]);
   const [participantCount, setParticipantCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    adminFetch('/medals?tab=active')
-      .then((r: { medals?: MedalOption[] }) => setMedals(r.medals ?? []))
-      .catch(() => undefined);
+    Promise.all([
+      adminFetch('/medals?tab=active').then((r: { medals?: MedalOption[] }) => r.medals ?? []).catch(() => []),
+      adminFetch('/participants/groups').then((r: { groups?: GroupOption[] }) => r.groups ?? []).catch(() => []),
+    ]).then(([medalList, groupList]) => {
+      setMedals(medalList);
+      setGroups(groupList);
+    });
   }, [adminFetch]);
 
   const load = useCallback(() => {
@@ -57,10 +64,12 @@ export function LeaderboardDashboard({
       .then((r: {
         leaders?: LeaderboardRow[];
         directions?: string[];
+        groups?: GroupOption[];
         participantCount?: number;
       }) => {
         setRows(r.leaders ?? []);
         if (r.directions?.length) setDirections(r.directions);
+        if (r.groups?.length) setGroups(r.groups);
         setParticipantCount(r.participantCount ?? (r.leaders?.length ?? null));
       })
       .catch(e => setError(String(e)))
@@ -82,10 +91,9 @@ export function LeaderboardDashboard({
   };
 
   const downloadExport = async () => {
-    const q = buildLeaderboardQuery(filters);
+    const q = buildLeaderboardQuery({ ...filters, showAll: true });
     q.set('format', 'csv');
-    const ext = 'csv';
-    const filename = `leaderboard_${filters.mode}_${filters.scope}.${ext}`;
+    const filename = `leaderboard_${filters.mode}_${filters.scope}.csv`;
     if (onExport) {
       await onExport(q);
       return;
@@ -93,13 +101,14 @@ export function LeaderboardDashboard({
     await adminDownloadBinary(`/exports/rating/leaderboard?${q}`, filename);
   };
 
+  const uiMaxRows = filters.showAll ? undefined : (maxRows ?? 50);
+
   return (
     <div className="lb-dashboard card">
       {showModeTabs !== false && (
         <div className="lb-mode-tabs">
           {([
             { key: 'points' as const, label: 'Баллы' },
-            { key: 'medals' as const, label: 'Медали' },
             { key: 'nomination' as const, label: 'Номинации' },
           ]).map(tab => (
             <button
@@ -118,6 +127,7 @@ export function LeaderboardDashboard({
         filters={filters}
         onChange={patchFilters}
         directions={directions}
+        groups={groups}
         medals={medals}
         forumDay={forumDay}
         compact={showModeTabs === false}
@@ -134,7 +144,7 @@ export function LeaderboardDashboard({
           </button>
         )}
         <button type="button" className="adm-btn adm-btn-secondary" onClick={() => void downloadExport()}>
-          Скачать CSV
+          Скачать CSV (полная таблица)
         </button>
         <button type="button" className="adm-btn adm-btn-secondary" onClick={load}>
           Обновить
@@ -147,7 +157,8 @@ export function LeaderboardDashboard({
         loading={loading}
         error={error}
         participantCount={participantCount ?? undefined}
-        maxRows={maxRows}
+        maxRows={uiMaxRows}
+        searchHighlight={filters.search.trim()}
       />
     </div>
   );

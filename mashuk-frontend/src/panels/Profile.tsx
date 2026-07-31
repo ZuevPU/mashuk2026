@@ -31,6 +31,8 @@ const NOMINATION_OPTIONS: { key: string; label: string }[] = [
   { key: 'culture', label: 'Культура' },
   { key: 'volunteer', label: 'Волонтёрство' },
   { key: 'team', label: 'Командность' },
+  { key: 'networking', label: 'Нетворкинг' },
+  { key: 'leadership', label: 'Лидерство' },
   { key: 'general', label: 'Общий зачёт' },
 ];
 
@@ -61,16 +63,19 @@ export const ProfilePanel: React.FC<{
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [medalsCatalog, setMedalsCatalog] = useState<any[]>([]);
   const [lbTrack, setLbTrack] = useState<'total' | 'path' | 'experience'>('total');
-  const [lbMode, setLbMode] = useState<'points' | 'medals' | 'nomination'>('points');
+  const [lbMode, setLbMode] = useState<'points' | 'nomination'>('points');
   const [lbNomination, setLbNomination] = useState('sport');
   const [lbScope, setLbScope] = useState<'total' | 'day' | 'shift'>('shift');
   const [lbDay, setLbDay] = useState('1');
   const [lbDirection, setLbDirection] = useState('');
-  const [lbMedalMode, setLbMedalMode] = useState<'count' | 'holders'>('count');
+  const [lbGroupId, setLbGroupId] = useState('');
+  const [lbSearch, setLbSearch] = useState('');
+  const [lbMedalFilter, setLbMedalFilter] = useState<'count' | 'holders' | ''>('');
   const [lbMedalId, setLbMedalId] = useState('');
   const [lbSort, setLbSort] = useState<'score' | 'name'>('score');
   const [lbExtraOpen, setLbExtraOpen] = useState(false);
   const [lbDirections, setLbDirections] = useState<string[]>([]);
+  const [lbGroups, setLbGroups] = useState<{ id: number; name: string }[]>([]);
   const [leaders, setLeaders] = useState<any[]>([]);
   const [myRank, setMyRank] = useState<number | null>(null);
   const [lbLoading, setLbLoading] = useState(false);
@@ -141,21 +146,25 @@ export const ProfilePanel: React.FC<{
     const params = new URLSearchParams({ mode: lbMode, scope: lbScope, sort: lbSort });
     if (lbScope === 'day') params.set('day', lbDay);
     if (lbDirection) params.set('direction', lbDirection);
+    if (lbGroupId) params.set('groupId', lbGroupId);
+    if (lbSearch.trim()) params.set('search', lbSearch.trim());
     if (lbMode === 'points') params.set('track', lbTrack);
     if (lbMode === 'nomination') params.set('nomination', lbNomination);
-    if (lbMode === 'medals') {
-      params.set('medalMode', lbMedalMode);
-      if (lbMedalMode === 'holders' && lbMedalId) params.set('medalId', lbMedalId);
+    if (lbMode === 'points' && lbMedalFilter === 'count') params.set('medalMode', 'count');
+    if (lbMode === 'points' && lbMedalFilter === 'holders') {
+      params.set('medalMode', 'holders');
+      if (lbMedalId) params.set('medalId', lbMedalId);
     }
     apiGet<any>(`/leaderboard?${params}`)
       .then((res) => {
         setLeaders(res.leaders || []);
         setMyRank(res.myRank ?? null);
         setLbDirections(res.directions || []);
+        setLbGroups(res.groups || []);
       })
       .catch((err) => setSnackbar(err instanceof ApiError ? err.message : 'Не удалось загрузить рейтинг'))
       .finally(() => setLbLoading(false));
-  }, [section, lbMode, lbTrack, lbDirection, lbScope, lbDay, lbNomination, lbMedalMode, lbMedalId, lbSort]);
+  }, [section, lbMode, lbTrack, lbDirection, lbGroupId, lbSearch, lbScope, lbDay, lbNomination, lbMedalFilter, lbMedalId, lbSort]);
 
   useEffect(() => {
     if (section !== 'rating' && section !== 'medals') return;
@@ -861,7 +870,6 @@ export const ProfilePanel: React.FC<{
               <div className="time-sw lb-mode-sw">
                 {([
                   { key: 'points', label: 'Баллы' },
-                  { key: 'medals', label: 'Медали' },
                   { key: 'nomination', label: 'Номинации' },
                 ] as const).map((t) => (
                   <button
@@ -876,9 +884,9 @@ export const ProfilePanel: React.FC<{
               </div>
               <div className="time-sw" style={{ marginTop: 10 }}>
                 {([
-                  { key: 'shift', label: 'Смена' },
-                  { key: 'day', label: 'День' },
-                  { key: 'total', label: 'Общий' },
+                  { key: 'shift', label: 'За смену' },
+                  { key: 'day', label: 'За день' },
+                  { key: 'total', label: 'Итоговый' },
                 ] as const).map((t) => (
                   <button
                     key={t.key}
@@ -895,13 +903,13 @@ export const ProfilePanel: React.FC<{
                   style={{ marginTop: 10 }}
                   value={lbDay}
                   onChange={(e) => setLbDay(e.target.value)}
-                  options={[1, 2, 3, 4, 5, 6, 7].map((d) => ({ label: `День ${d}`, value: String(d) }))}
+                  options={[1, 2, 3, 4, 5, 6].map((d) => ({ label: `День ${d}`, value: String(d) }))}
                 />
               )}
               {lbMode === 'points' && (
                 <div className="time-sw" style={{ marginTop: 10 }}>
                   {([
-                    { key: 'total', label: 'Общий' },
+                    { key: 'total', label: 'Сумма' },
                     { key: 'path', label: 'Путь' },
                     { key: 'experience', label: 'Опыт' },
                   ] as const).map((t) => (
@@ -924,24 +932,19 @@ export const ProfilePanel: React.FC<{
                   options={NOMINATION_OPTIONS.filter(o => o.key).map(o => ({ label: o.label, value: o.key }))}
                 />
               )}
-              {lbMode === 'medals' && (
+              {lbMode === 'points' && (
                 <>
-                  <div className="time-sw" style={{ marginTop: 10 }}>
-                    {([
-                      { key: 'count', label: 'По количеству' },
-                      { key: 'holders', label: 'По медали' },
-                    ] as const).map((t) => (
-                      <button
-                        key={t.key}
-                        type="button"
-                        className={`time-btn ${lbMedalMode === t.key ? 'on' : ''}`}
-                        onClick={() => setLbMedalMode(t.key)}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-                  {lbMedalMode === 'holders' && (
+                  <Select
+                    style={{ marginTop: 10 }}
+                    value={lbMedalFilter}
+                    onChange={(e) => { setLbMedalFilter(e.target.value as '' | 'count' | 'holders'); setLbMedalId(''); }}
+                    options={[
+                      { label: 'Все участники', value: '' },
+                      { label: 'Сортировка по медалям', value: 'count' },
+                      { label: 'Только с медалью', value: 'holders' },
+                    ]}
+                  />
+                  {lbMedalFilter === 'holders' && (
                     <Select
                       style={{ marginTop: 10 }}
                       value={lbMedalId}
@@ -954,6 +957,13 @@ export const ProfilePanel: React.FC<{
                   )}
                 </>
               )}
+              <Input
+                style={{ marginTop: 10 }}
+                type="search"
+                placeholder="Поиск по ФИО или ID"
+                value={lbSearch}
+                onChange={(e) => setLbSearch(e.target.value)}
+              />
               <button
                 type="button"
                 className="lb-more-toggle"
@@ -970,6 +980,15 @@ export const ProfilePanel: React.FC<{
                     options={[
                       { label: 'Все направления', value: '' },
                       ...lbDirections.map((d) => ({ label: d, value: d })),
+                    ]}
+                  />
+                  <Select
+                    style={{ marginTop: 10 }}
+                    value={lbGroupId}
+                    onChange={(e) => setLbGroupId(e.target.value)}
+                    options={[
+                      { label: 'Все группы / потоки', value: '' },
+                      ...lbGroups.map((g) => ({ label: g.name, value: String(g.id) })),
                     ]}
                   />
                   <div className="time-sw" style={{ marginTop: 10 }}>
@@ -1014,9 +1033,7 @@ export const ProfilePanel: React.FC<{
                     {row.direction && <div className="lb-direction">{row.direction}</div>}
                   </div>
                   <div className="lb-score">
-                    {lbMode === 'medals' && lbMedalMode === 'holders'
-                      ? '🏅'
-                      : `${lbMode === 'medals' ? '🏅' : lbTrack === 'path' ? '📍' : lbTrack === 'experience' ? '⚡' : '✦'} ${row.score}`}
+                    {`${lbMedalFilter === 'count' ? '🏅' : lbTrack === 'path' ? '📍' : lbTrack === 'experience' ? '⚡' : '✦'} ${row.score}`}
                   </div>
                 </div>
               ))
