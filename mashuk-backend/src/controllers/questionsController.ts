@@ -370,7 +370,8 @@ export const listExchange = async (req: ParticipantRequest, res: Response): Prom
       a: exchangeAnswers,
       author: participants,
     }).from(exchangeAnswers)
-      .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id));
+      .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
+      .orderBy(asc(exchangeAnswers.createdAt), asc(exchangeAnswers.id));
 
     const answersByQuestion = new Map<number, typeof allAnswers>();
     for (const row of allAnswers) {

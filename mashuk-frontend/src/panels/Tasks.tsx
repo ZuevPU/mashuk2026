@@ -38,6 +38,15 @@ const STATUS_LABEL: Record<string, string> = {
   rejected: '🔴 Не принято',
 };
 
+const CATEGORY_TONES = ['terracotta', 'olive', 'teal', 'sand', 'slate', 'rose'] as const;
+type CategoryTone = (typeof CATEGORY_TONES)[number];
+
+function categoryTone(name: string): CategoryTone {
+  let h = 0;
+  for (let i = 0; i < name.length; i += 1) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return CATEGORY_TONES[h % CATEGORY_TONES.length];
+}
+
 function taskMethodsFromMeta(meta: { confirmationMethods?: string[]; confirmationType?: string } | null): string[] {
   if (meta?.confirmationMethods?.length) return meta.confirmationMethods;
   const ct = meta?.confirmationType || 'text_photo';
@@ -563,50 +572,79 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
             <div style={{ marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#888', marginBottom: 4 }}>
                 <span>Прогресс дня · {progressPercent}%</span>
-                {data?.kbLocked && (
-                  <button type="button" className="time-btn" style={{ padding: '2px 8px', fontSize: 10 }} onClick={() => window.location.hash = '#/program'}>
-                    База знаний
-                  </button>
-                )}
               </div>
               <div style={{ height: 8, background: '#E8E0D4', borderRadius: 8, overflow: 'hidden' }}>
                 <div style={{ width: `${progressPercent}%`, height: '100%', background: 'var(--m-accent, #B8621A)', borderRadius: 8 }} />
               </div>
             </div>
-            <div className="time-sw" style={{ marginBottom: 8 }}>
-              {(['all', 'active', 'done', 'pending'] as const).map(f => (
-                <button key={f} type="button" className={`time-btn ${filter === f ? 'on' : ''}`} onClick={() => setFilter(f)}>
-                  {{ all: 'Все', active: 'Активные', done: 'Готово', pending: 'На проверке' }[f]}
+            <div className="tasks-filter-row">
+              {([
+                { id: 'all', label: 'Все' },
+                { id: 'active', label: 'Активные' },
+                { id: 'done', label: 'Готово' },
+                { id: 'pending', label: 'На проверке' },
+              ] as const).map(f => (
+                <button
+                  key={f.id}
+                  type="button"
+                  className={`tasks-filter-chip tasks-filter-chip--${f.id}${filter === f.id ? ' on' : ''}`}
+                  onClick={() => setFilter(f.id)}
+                >
+                  {f.label}
                 </button>
               ))}
-              <button type="button" className="time-btn" onClick={() => void scanTaskQr()}>
+              <button type="button" className="tasks-filter-chip tasks-filter-chip--scan" onClick={() => void scanTaskQr()}>
                 Скан QR
               </button>
             </div>
             {categories.length > 0 && (
-              <div className="time-sw" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
-                <button type="button" className={`time-btn ${!categoryFilter ? 'on' : ''}`} onClick={() => setCategoryFilter('')}>Все категории</button>
-                {categories.map(c => (
-                  <button key={c} type="button" className={`time-btn ${categoryFilter === c ? 'on' : ''}`} onClick={() => setCategoryFilter(c)}>{c}</button>
-                ))}
+              <div className="tasks-filter-row tasks-filter-row--cats">
+                <button
+                  type="button"
+                  className={`tasks-cat-chip${!categoryFilter ? ' on' : ''}`}
+                  onClick={() => setCategoryFilter('')}
+                >
+                  Все категории
+                </button>
+                {categories.map(c => {
+                  const tone = categoryTone(c);
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      className={`tasks-cat-chip${categoryFilter === c ? ' on' : ''}`}
+                      data-tone={tone}
+                      onClick={() => setCategoryFilter(c)}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
               </div>
             )}
             {filteredTasks.length === 0 ? (
               <EmptyState icon="📋" title="Нет заданий" subtitle="Задания появятся по ходу дня" />
-            ) : filteredTasks.map((t: any) => (
+            ) : filteredTasks.map((t: any) => {
+              const tone = t.category ? categoryTone(t.category) : null;
+              return (
               <div
                 key={t.id}
-                className="m-card"
+                className={`m-card tasks-card${tone ? ` tasks-card--${tone}` : ''}`}
                 style={{
                   marginBottom: 10,
                   border: (t.status === 'available' || t.canResubmit) ? '2px solid var(--m-accent, #B8621A)' : undefined,
                   opacity: t.status === 'soon' ? 0.65 : 1,
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
                   <strong>{t.title}</strong>
-                  <span style={{ fontSize: 12 }}>{STATUS_LABEL[t.status] || t.status}</span>
+                  <span className={`tasks-status-pill tasks-status-pill--${t.status === 'unknown'}`}>
+                    {STATUS_LABEL[t.status] || t.status}
+                  </span>
                 </div>
+                {t.category && (
+                  <span className="tasks-cat-badge" data-tone={tone || 'sand'}>{t.category}</span>
+                )}
                 {t.description && <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>{t.description}</div>}
                 <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
                   +{t.points ?? 0} · {taskConfirmLabel(t)}
@@ -626,7 +664,8 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
                   <div style={{ fontSize: 12, color: '#C53030', marginTop: 6 }}>{t.submission.moderatorComment}</div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </>
         )}
       </Group>

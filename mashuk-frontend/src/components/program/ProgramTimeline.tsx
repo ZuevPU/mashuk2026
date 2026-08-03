@@ -1,5 +1,5 @@
 import React from 'react';
-import { TimelineEvent } from './TimelineEvent';
+import { TimelineEvent, speakersLine, type ProgramSpeakerInfo } from './TimelineEvent';
 import '../../style.css';
 
 export interface ProgramChildEvent {
@@ -8,6 +8,8 @@ export interface ProgramChildEvent {
   place?: string | null;
   time: string;
   endTime?: string;
+  tags?: string[];
+  speakers?: ProgramSpeakerInfo[];
   hasSubSessions?: boolean;
   children?: ProgramChildEvent[];
 }
@@ -19,8 +21,10 @@ export interface ProgramEvent {
   title: string;
   subtitle: string;
   description?: string;
+  descriptionHtml?: string | null;
   place?: string;
   tags?: string[];
+  speakers?: ProgramSpeakerInfo[];
   status: 'past' | 'now' | 'future';
   hasSubSessions?: boolean;
   children?: ProgramChildEvent[];
@@ -44,6 +48,15 @@ function countNested(nodes: ProgramChildEvent[] | undefined): number {
   return nodes.reduce((n, ch) => n + 1 + countNested(ch.children), 0);
 }
 
+function placeOnlySubtitle(subtitle: string, speakers?: ProgramSpeakerInfo[]): string {
+  const line = speakersLine(speakers);
+  if (!line || !subtitle) return subtitle;
+  if (subtitle === line) return '';
+  if (subtitle.endsWith(` · ${line}`)) return subtitle.slice(0, -(line.length + 3));
+  if (subtitle.startsWith(`${line} · `)) return subtitle.slice(line.length + 3);
+  return subtitle;
+}
+
 export function ProgramTimeline({
   slots,
   expandedParents,
@@ -54,6 +67,8 @@ export function ProgramTimeline({
     const hasKids = (ch.children?.length ?? 0) > 0;
     const expanded = expandedParents[ch.id];
     const timeLabel = ch.time || (ch.endTime ? `–${ch.endTime}` : '·');
+    const nestedSpeakers = speakersLine(ch.speakers);
+    const nestedSub = [ch.place, nestedSpeakers].filter(Boolean).join(' · ');
     return (
       <React.Fragment key={ch.id}>
         <button
@@ -70,7 +85,11 @@ export function ProgramTimeline({
                 place: ch.place || undefined,
                 time: ch.time,
                 endTime: ch.endTime,
-                subtitle: [ch.place, ch.title].filter(Boolean).join(' · '),
+                tags: ch.tags,
+                speakers: ch.speakers,
+                description: undefined,
+                descriptionHtml: undefined,
+                subtitle: nestedSub,
                 hasSubSessions: false,
                 children: [],
               });
@@ -83,7 +102,7 @@ export function ProgramTimeline({
               {ch.title}
               {hasKids && !expanded ? ` · ${ch.children!.length}` : ''}
             </span>
-            {ch.place && <span className="m-prog-nested-sub">{ch.place}</span>}
+            {nestedSub && <span className="m-prog-nested-sub">{nestedSub}</span>}
           </span>
           <span className="m-prog-nested-arr">{hasKids ? (expanded ? '▼' : '▶') : '›'}</span>
         </button>
@@ -96,6 +115,10 @@ export function ProgramTimeline({
     const hasChildren = (event.children?.length ?? 0) > 0;
     const expanded = expandedParents[event.id];
     const nestedCount = countNested(event.children);
+    const baseSub = placeOnlySubtitle(event.subtitle, event.speakers);
+    const subtitle = hasChildren && !expanded
+      ? [baseSub, `${nestedCount} тем`].filter(Boolean).join(' · ')
+      : baseSub;
 
     return (
       <div key={event.id} className="m-prog-event-wrap">
@@ -103,8 +126,8 @@ export function ProgramTimeline({
           time={event.time}
           endTime={event.endTime}
           title={event.title}
-          subtitle={hasChildren && !expanded ? `${event.subtitle} · ${nestedCount} тем` : event.subtitle}
-          tags={event.tags}
+          subtitle={subtitle}
+          speakers={event.speakers}
           status={event.status}
           showTime={grouped}
           expandState={hasChildren ? (expanded ? 'expanded' : 'collapsed') : null}
@@ -137,11 +160,6 @@ export function ProgramTimeline({
             </div>
 
             <div className="m-prog-stack">
-              {slot.parallel && slot.events.length > 1 && (
-                <div className="m-prog-parallel-note">
-                  {slot.events.length} события · можно выбрать любое
-                </div>
-              )}
               {slot.events.map(event => renderEvent(event, slot.parallel && slot.events.length > 1))}
             </div>
           </section>

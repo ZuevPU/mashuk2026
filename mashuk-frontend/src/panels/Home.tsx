@@ -13,6 +13,7 @@ import {
 import { PushBanner, type PushBannerItem } from '../components/home/PushBanner';
 import { EveningQuestionnaire, type EveningQuestionnaireProps } from '../components/home/EveningQuestionnaire';
 import { apiGet, ApiError } from '../api/client';
+import { isEveningDaySummaryQuestion } from '../utils/eveningSummaryQuestion';
 
 interface ScheduleItem {
   kind: string;
@@ -355,6 +356,10 @@ export const HomePanel: React.FC<{
           items={d.touchpoints.items}
           onItemClick={(item) => {
             if (item.state === 'locked') return;
+            if (isEveningDaySummaryQuestion({ title: item.title, block: item.block })) {
+              setShowEvening(true);
+              return;
+            }
             routeNavigator.push(`/questions?q=${item.id}`);
           }}
         />

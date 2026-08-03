@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Textarea, Button, Checkbox, Radio, Slider, Div, FormItem } from '@vkontakte/vkui';
 import { GOAL_QUESTIONS, ROLE_CATALOG } from '../../data/onboarding';
 import { apiGet } from '../../api/client';
+import { isPointBQuestion } from '../../utils/eveningSummaryQuestion';
 
 const CHECKIN_EMOTIONS = [
   { id: 'joy', label: 'Радость', icon: '😊' },
@@ -272,7 +273,7 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
   const [dependentText, setDependentText] = useState('');
   const [saving, setSaving] = useState(false);
 
-  if (question.block === 'Точка Б') {
+  if (isPointBQuestion(question)) {
     return <PointBForm onSubmit={onSubmit} />;
   }
 

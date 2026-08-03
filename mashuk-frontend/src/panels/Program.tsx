@@ -189,31 +189,49 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   useEffect(() => {
     if (activePanel !== id) return;
     if (selectedEvent) {
+      const html = selectedEvent.descriptionHtml?.trim()
+        || (selectedEvent.description ? selectedEvent.description.replace(/\n/g, '<br/>') : '');
+      const speakerText = (selectedEvent.speakers || [])
+        .map(s => (s.credentials?.trim() ? `${s.name} — ${s.credentials.trim()}` : s.name))
+        .filter(Boolean)
+        .join(', ');
       setModal(
         <ModalRoot activeModal="event-detail" onClose={() => setSelectedEvent(null)}>
-          <ModalPage id="event-detail" onClose={() => setSelectedEvent(null)}>
+          <ModalPage id="event-detail" settlingHeight={100} onClose={() => setSelectedEvent(null)}>
             <ModalPageHeader>{selectedEvent.title}</ModalPageHeader>
             <Group>
-              <div style={{ fontSize: 12, fontWeight: 600 }}>
-                Время: {selectedEvent.time}{selectedEvent.endTime ? ` — ${selectedEvent.endTime}` : ''}
-              </div>
-              {(selectedEvent.place || selectedEvent.subtitle) && (
-                <div style={{ fontSize: 12, marginTop: 8 }}>
-                  <span style={{ color: '#888' }}>Место: </span>
-                  {selectedEvent.place || selectedEvent.subtitle}
+              <Div className="m-prog-detail">
+                <div className="m-prog-detail-meta">
+                  <div className="m-prog-detail-row">
+                    <span className="m-prog-detail-label">Время</span>
+                    <span>
+                      {selectedEvent.time}
+                      {selectedEvent.endTime ? ` — ${selectedEvent.endTime}` : ''}
+                    </span>
+                  </div>
+                  {selectedEvent.place && (
+                    <div className="m-prog-detail-row">
+                      <span className="m-prog-detail-label">Место</span>
+                      <span>{selectedEvent.place}</span>
+                    </div>
+                  )}
+                  {speakerText && (
+                    <div className="m-prog-detail-row">
+                      <span className="m-prog-detail-label">Спикеры</span>
+                      <span>{speakerText}</span>
+                    </div>
+                  )}
                 </div>
-              )}
-              {selectedEvent.description && (
-                <div style={{ fontSize: 12, marginTop: 10, lineHeight: 1.45 }}>
-                  <div style={{ color: '#888', marginBottom: 4 }}>Описание</div>
-                  {selectedEvent.description}
-                </div>
-              )}
-              {selectedEvent.tags && selectedEvent.tags.length > 0 && (
-                <div style={{ fontSize: 11, color: '#666', marginTop: 10 }}>
-                  {selectedEvent.tags.join(' · ')}
-                </div>
-              )}
+                {html && (
+                  <div className="m-prog-detail-desc">
+                    <div className="m-prog-detail-label">Описание</div>
+                    <div
+                      className="m-prog-detail-html"
+                      dangerouslySetInnerHTML={{ __html: html }}
+                    />
+                  </div>
+                )}
+              </Div>
             </Group>
           </ModalPage>
         </ModalRoot>
@@ -263,7 +281,13 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
                       <div className="m-rec-cb">✓</div>
                       <div style={{ flex: 1 }}>
                         <div className="m-rec-item-t">{r.title}</div>
-                        <div className="m-rec-item-s">{r.subtitle}</div>
+                        {(r.matchedThemes?.length > 0 || r.subtitle) && (
+                          <div className="m-rec-item-s">
+                            {r.matchedThemes?.length
+                              ? `Тема: ${r.matchedThemes.join(' · ')}`
+                              : r.subtitle}
+                          </div>
+                        )}
                       </div>
                       <div className="m-rec-arr">›</div>
                     </div>

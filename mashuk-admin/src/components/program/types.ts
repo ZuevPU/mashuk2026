@@ -62,13 +62,12 @@ export function parseOptionalTimeSlot(slot: string | null | undefined): { start:
   return parseTimeSlot(slot);
 }
 
-/** Max nesting: root → section → item */
-export const MAX_PROGRAM_NEST_DEPTH = 3;
+/** Max nesting: root block → nested subblocks (must match backend MAX_EVENT_DEPTH). */
+export const MAX_PROGRAM_NEST_DEPTH = 4;
 
 export function nestLevelLabel(depth: number): string {
   if (depth <= 1) return 'Блок';
-  if (depth === 2) return 'Подблок';
-  return 'Пункт';
+  return 'Подблок';
 }
 
 function addMinutes(hhmm: string, mins: number): string {

@@ -1,12 +1,29 @@
 import React from 'react';
 import '../../style.css';
 
+export type ProgramSpeakerInfo = {
+  id: number;
+  name: string;
+  credentials?: string | null;
+  initials?: string | null;
+};
+
+export function formatSpeakerLabel(s: ProgramSpeakerInfo): string {
+  const cred = s.credentials?.trim();
+  return cred ? `${s.name} — ${cred}` : s.name;
+}
+
+export function speakersLine(speakers?: ProgramSpeakerInfo[] | null): string {
+  if (!speakers?.length) return '';
+  return speakers.map(formatSpeakerLabel).filter(Boolean).join(', ');
+}
+
 interface TimelineEventProps {
   time: string;
   endTime?: string;
   title: string;
   subtitle: string;
-  tags?: string[];
+  speakers?: ProgramSpeakerInfo[];
   status: 'past' | 'now' | 'future';
   onClick?: () => void;
   expandState?: 'collapsed' | 'expanded' | null;
@@ -19,7 +36,7 @@ export const TimelineEvent: React.FC<TimelineEventProps> = ({
   endTime,
   title,
   subtitle,
-  tags,
+  speakers,
   status,
   onClick,
   expandState = null,
@@ -38,6 +55,7 @@ export const TimelineEvent: React.FC<TimelineEventProps> = ({
         : '›';
 
   const timeRange = endTime && endTime !== time ? `${time}–${endTime}` : time;
+  const speakerText = speakersLine(speakers);
 
   return (
     <button type="button" className={rowClass} onClick={onClick}>
@@ -47,13 +65,7 @@ export const TimelineEvent: React.FC<TimelineEventProps> = ({
         )}
         <div className="m-prog-card-title">{title}</div>
         {subtitle && <div className="m-prog-card-sub">{subtitle}</div>}
-        {tags && tags.length > 0 && (
-          <div className="m-prog-card-tags">
-            {tags.map(tag => (
-              <span key={tag} className="m-prog-card-tag">{tag}</span>
-            ))}
-          </div>
-        )}
+        {speakerText && <div className="m-prog-card-speakers">{speakerText}</div>}
         {status === 'now' && (
           <div className="m-prog-card-live" title="По московскому времени">Сейчас</div>
         )}

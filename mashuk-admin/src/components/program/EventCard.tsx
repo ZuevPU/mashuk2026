@@ -102,6 +102,9 @@ export function EventCard({
   const [childTimeStart, setChildTimeStart] = useState('');
   const [childTimeEnd, setChildTimeEnd] = useState('');
   const [childSpeakerIds, setChildSpeakerIds] = useState<number[]>([]);
+  const [childTagNames, setChildTagNames] = useState<string[]>([]);
+  const [childAudienceType, setChildAudienceType] = useState<'all' | 'direction'>('all');
+  const [childAudienceDirectionId, setChildAudienceDirectionId] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [dupDay, setDupDay] = useState(String(selectedDay));
 
@@ -174,6 +177,10 @@ export function EventCard({
       alert('Название подблока обязательно.');
       return;
     }
+    if (childAudienceType === 'direction' && !childAudienceDirectionId) {
+      alert('Выберите направление для аудитории.');
+      return;
+    }
     act(async () => {
       await adminFetch('/events', {
         method: 'POST',
@@ -186,8 +193,12 @@ export function EventCard({
           isPublished: event.isPublished === true,
           ...(event.isPublished && daySchedulePublished ? { dayPublished: true } : {}),
           blockType: 'session',
-          tags: [],
+          tags: childTagNames,
           speakerIds: childSpeakerIds,
+          audienceType: childAudienceType,
+          audienceDirectionId: childAudienceType === 'direction' && childAudienceDirectionId
+            ? Number(childAudienceDirectionId)
+            : null,
         }),
       });
       setChildTitle('');
@@ -195,6 +206,9 @@ export function EventCard({
       setChildTimeStart('');
       setChildTimeEnd('');
       setChildSpeakerIds([]);
+      setChildTagNames([]);
+      setChildAudienceType('all');
+      setChildAudienceDirectionId('');
       if (!draft.hasSubSessions) {
         await adminFetch(`/events/${event.id}`, {
           method: 'PATCH',
@@ -290,13 +304,13 @@ export function EventCard({
           </label>
           <label className="adm-forum-check">
             <input type="checkbox" checked={draft.hasSubSessions} onChange={e => setDraft({ ...draft, hasSubSessions: e.target.checked })} />
-            Блок с подблоками (до 2 уровней внутри)
+            Блок с подблоками (можно вкладывать подблоки в подблоки)
           </label>
           {draft.hasSubSessions && (
             <div className="adm-program-subsessions" style={{ marginTop: 12 }}>
               <strong>Подблоки</strong>
               <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 8px' }}>
-                Например: «Физическая культура» → пункты с своим временем. Время у подблока необязательно.
+                Можно задать аудиторию отдельно: участник увидит только подблоки своего направления.
               </p>
               {children.length === 0 && <p className="adm-muted">Пока нет подблоков</p>}
               {children.map(ch => (
@@ -305,6 +319,8 @@ export function EventCard({
                   node={ch}
                   depth={2}
                   allPlaces={allPlaces}
+                  allTags={allTags}
+                  directions={directions}
                   speakers={speakers}
                   selectedDay={selectedDay}
                   daySchedulePublished={daySchedulePublished}
@@ -330,9 +346,31 @@ export function EventCard({
                     <input type="time" className="adm-input" value={childTimeEnd} onChange={e => setChildTimeEnd(e.target.value)} />
                   </label>
                 </div>
+                <div className="adm-forum-grid-2" style={{ marginTop: 6 }}>
+                  <label className="adm-field">
+                    <span className="adm-label">Аудитория</span>
+                    <select className="adm-input" value={childAudienceType} onChange={e => setChildAudienceType(e.target.value as 'all' | 'direction')}>
+                      <option value="all">Все участники</option>
+                      <option value="direction">Направление</option>
+                    </select>
+                  </label>
+                  {childAudienceType === 'direction' && (
+                    <label className="adm-field">
+                      <span className="adm-label">Направление</span>
+                      <select className="adm-input" value={childAudienceDirectionId} onChange={e => setChildAudienceDirectionId(e.target.value)}>
+                        <option value="">—</option>
+                        {directions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      </select>
+                    </label>
+                  )}
+                </div>
                 <div className="adm-field" style={{ marginTop: 8 }}>
                   <span className="adm-label">Спикеры подблока</span>
                   <SpeakerMultiPick speakers={speakers} selectedIds={childSpeakerIds} onChange={setChildSpeakerIds} />
+                </div>
+                <div className="adm-field" style={{ marginTop: 8 }}>
+                  <span className="adm-label">Тематические теги</span>
+                  <ThematicTagPick tags={allTags} selectedNames={childTagNames} onChange={setChildTagNames} />
                 </div>
                 <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" style={{ marginTop: 8 }} onClick={addChild}>
                   + Подблок

@@ -38,8 +38,14 @@ function NestedPreview({
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: depth >= 2 ? 12 : 13, fontWeight: 700 }}>{n.title}</div>
+                {n.audienceType === 'direction' && (
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>Только для направления</div>
+                )}
                 {n.place && <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{n.place}</div>}
                 {speakers && <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>{speakers}</div>}
+                {Array.isArray(n.tags) && n.tags.length > 0 && (
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{n.tags.join(' · ')}</div>
+                )}
               </div>
               {kids.length > 0 && (
                 <div style={{ fontSize: 11, color: '#888' }}>{kids.length}</div>

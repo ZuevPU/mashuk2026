@@ -4,9 +4,11 @@ import { useActiveVkuiLocation } from '@vkontakte/vk-mini-apps-router';
 import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { useAppModal } from '../App';
 import { QuestionAnswerForm } from '../components/questions/QuestionAnswerForm';
+import { EveningDaySummaryFlow } from '../components/questions/EveningDaySummaryFlow';
 import { EmptyState } from '../components/EmptyState';
 import { AnswerSuccessOverlay, type SubmitSuccessPayload, type AnswerConfirmationConfig } from '../components/questions/AnswerSuccessOverlay';
 import { RosmolCareServiceCard } from '../components/org/RosmolCareServiceCard';
+import { isEveningDaySummaryQuestion } from '../utils/eveningSummaryQuestion';
 
 type ChatTab = 'reflect' | 'peer' | 'org';
 
@@ -22,15 +24,23 @@ type ExchangeAnswerRow = {
   text: string;
   parentAnswerId?: number | null;
   authorName?: string;
+  createdAt?: string | null;
   reactions?: { likes?: number; discuss?: number; likedBy?: number[]; discussBy?: number[] };
 };
 
+function byCreatedAtAsc(a: ExchangeAnswerRow, b: ExchangeAnswerRow): number {
+  const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+  const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+  if (ta !== tb) return ta - tb;
+  return a.id - b.id;
+}
+
 function exchangeTopLevelAnswers(answers: ExchangeAnswerRow[] | undefined): ExchangeAnswerRow[] {
-  return (answers || []).filter(a => !a.parentAnswerId);
+  return (answers || []).filter(a => !a.parentAnswerId).sort(byCreatedAtAsc);
 }
 
 function exchangeRepliesTo(parentId: number, answers: ExchangeAnswerRow[] | undefined): ExchangeAnswerRow[] {
-  return (answers || []).filter(a => a.parentAnswerId === parentId);
+  return (answers || []).filter(a => a.parentAnswerId === parentId).sort(byCreatedAtAsc);
 }
 
 function exchangeAnswerCountLabel(q: { answerCount?: number; answers?: ExchangeAnswerRow[] }): string {
@@ -333,17 +343,38 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
       return;
     }
     if (activeQuestion) {
+      const isEveningSummary = isEveningDaySummaryQuestion(activeQuestion);
       setModal(
         <ModalRoot activeModal="answer" onClose={() => setActiveQuestion(null)}>
-          <ModalPage id="answer" onClose={() => setActiveQuestion(null)}>
-            <ModalPageHeader>{activeQuestion.title}</ModalPageHeader>
-            <QuestionAnswerForm
-              question={activeQuestion}
-              options={questionOptions}
-              dayEvents={dayEvents}
-              myAnswer={myAnswer}
-              onSubmit={submitAnswer}
-            />
+          <ModalPage id="answer" settlingHeight={100} onClose={() => setActiveQuestion(null)}>
+            <ModalPageHeader>
+              {isEveningSummary ? 'Итоговая анкета' : activeQuestion.title}
+            </ModalPageHeader>
+            {isEveningSummary ? (
+              <EveningDaySummaryFlow
+                onClose={() => setActiveQuestion(null)}
+                onSubmitted={() => {
+                  setActiveQuestion(null);
+                  showSubmitSuccess({
+                    confirm: {
+                      ...DEFAULT_CONFIRM,
+                      titleTemplate: 'Итоговая анкета сохранена',
+                    },
+                    xpAwarded: 15,
+                    track: 'path',
+                  });
+                  loadAll();
+                }}
+              />
+            ) : (
+              <QuestionAnswerForm
+                question={activeQuestion}
+                options={questionOptions}
+                dayEvents={dayEvents}
+                myAnswer={myAnswer}
+                onSubmit={submitAnswer}
+              />
+            )}
           </ModalPage>
         </ModalRoot>,
       );
@@ -406,7 +437,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
         ) : tab === 'reflect' ? (
           <>
             <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-              Вопросы от бота — для тебя. Отвечай в своё время, копи Путь
+              Вопросы для размышления и фиксации своих находок. Каждый ответ — ещё один шаг в вашем Пути
             </div>
             {unanswered.length > 0 && (
               <>
@@ -488,8 +519,10 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
           </>
         ) : tab === 'peer' ? (
           <>
-            <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-              Обмен опытом между участниками. 👍 и «Интересно обсудить» — это реакции, не новые ответы. Текстовый ответ — кнопка «Ответить».
+            <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8, lineHeight: 1.45 }}>
+              Делитесь своим опытом, читайте ответы других участников и продолжайте обсуждение.
+              <br />
+              👍 и «Интересно обсудить» — это реакции, а для комментария используйте кнопку «Ответить».
             </div>
             {myQuestions.length > 0 && (
               <>
@@ -608,10 +641,9 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
           </>
         ) : (
           <>
-            <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-              Прямая линия к дирекции. Вопрос по программе, предложение, обратная связь — дирекция отвечает лично
+            <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8, lineHeight: 1.45 }}>
+              Напишите нашим организаторам: вопрос по программе, предложение или обратная связь — дирекция ответит лично.
             </div>
-            <RosmolCareServiceCard />
             {orgThreads.length > 0 ? (
               <>
                 <div className="rq-hdr"><span className="rq-hdr-t">Твои переписки · {orgThreads.length}</span></div>
@@ -633,9 +665,10 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
             ) : (
               <EmptyState icon="✉️" title="Пока нет обращений" subtitle="Напишите, если нужна помощь организаторов" />
             )}
-            <div style={{ position: 'sticky', bottom: 8, marginTop: 16, paddingTop: 8 }}>
-              <Button size="l" stretched onClick={() => setOrgComposeOpen(true)}>+ Написать в дирекцию</Button>
+            <div style={{ marginTop: 12, marginBottom: 16 }}>
+              <Button size="l" stretched onClick={() => setOrgComposeOpen(true)}>+ Написать организаторам</Button>
             </div>
+            <RosmolCareServiceCard />
           </>
         )}
       </Group>

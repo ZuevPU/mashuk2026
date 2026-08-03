@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { eq, and, asc, lte, or, isNull, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { events, eventAttendance, materials, questions, answers, scheduleDays, dayFocus, kbDayUnlocks } from '../db/schema.js';
+import { events, eventAttendance, materials, questions, answers, scheduleDays, dayFocus, kbDayUnlocks, programSpeakers } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { getForumSettings, formatTime, resolveEffectiveCurrentDay, resolveLiveScheduleDay } from '../services/helpers.js';
 import { isPublishedStatus } from '../services/publishStatus.js';
@@ -245,6 +245,21 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
       .where(eq(eventAttendance.participantId, req.participant!.id));
     const attendedIds = new Set(attendance.map(a => a.eventId));
 
+    const speakerRows = await db.select().from(programSpeakers);
+    const speakerMap = new Map(speakerRows.map(s => [s.id, s]));
+    const mapSpeakers = (rawIds: unknown) => {
+      const ids = Array.isArray(rawIds) ? (rawIds as number[]) : [];
+      return ids
+        .map(id => speakerMap.get(id))
+        .filter((s): s is NonNullable<typeof s> => !!s)
+        .map(s => ({
+          id: s.id,
+          name: s.name,
+          credentials: s.credentials,
+          initials: s.initials,
+        }));
+    };
+
     const settings = await getForumSettings();
     const now = new Date();
     const liveScheduleDay = resolveLiveScheduleDay(settings, now);
@@ -258,6 +273,8 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
       place: string | null;
       time: string;
       endTime: string;
+      tags: string[];
+      speakers: ReturnType<typeof mapSpeakers>;
       hasSubSessions: boolean;
       children: NestedProgramChild[];
     };
@@ -284,12 +301,15 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
     const mapNestedChild = (c: typeof eventsList[0]): NestedProgramChild => {
       const iv = resolveEventInterval(c, scheduleContext);
       const nested = sortEvents(childByParent.get(c.id) || []).map(mapNestedChild);
+      const speakers = mapSpeakers(c.speakerIds);
       return {
         id: c.id,
         title: c.title,
         place: c.place,
         time: c.timeSlot ? formatTime(iv.start) : '',
         endTime: c.timeSlot ? formatTime(iv.end) : '',
+        tags: (c.tags as string[]) || [],
+        speakers,
         hasSubSessions: nested.length > 0 || c.hasSubSessions === true,
         children: nested,
       };
@@ -299,6 +319,10 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
       const { start, end } = resolveEventInterval(e, scheduleContext);
       const status = getEventLiveStatus(day, liveScheduleDay, start, end, now);
       const childMapped = sortEvents(childByParent.get(e.id) || []).map(mapNestedChild);
+      const speakers = mapSpeakers(e.speakerIds);
+      const speakerLine = speakers
+        .map(s => (s.credentials?.trim() ? `${s.name} — ${s.credentials.trim()}` : s.name))
+        .join(', ');
 
       return {
         id: e.id,
@@ -306,9 +330,11 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
         endTime: formatTime(end),
         title: e.title,
         description: e.description,
-        subtitle: [e.place, e.description?.slice(0, 120)].filter(Boolean).join(' · ') || '',
+        descriptionHtml: e.descriptionHtml,
+        subtitle: [e.place, speakerLine].filter(Boolean).join(' · ') || '',
         place: e.place,
         tags: (e.tags as string[]) || [],
+        speakers,
         timeSlot: e.timeSlot ?? formatTime(start),
         status,
         attended: attendedIds.has(e.id),
@@ -366,7 +392,7 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
       eq(scheduleDays.shiftId, shiftId),
     )).limit(1);
     const dayIsLive = dayMeta?.isPublished === true;
-    const eventList = dayIsLive
+    const eventListRaw = dayIsLive
       ? await db.select().from(events)
         .where(and(
           eq(events.shiftId, shiftId),
@@ -375,11 +401,52 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
           eq(events.dayPublished, true),
         ))
       : [];
+    const pid = req.participant!.directionId;
+    const eventList = eventListRaw.filter(e => {
+      if (e.audienceType === 'direction' && e.audienceDirectionId && pid && e.audienceDirectionId !== pid) {
+        return false;
+      }
+      return true;
+    });
 
-    const scored = eventList.map(e => {
-      const tags = (e.tags as string[]) || [];
-      const overlap = tags.filter(t => interestSet.has(norm(t))).length;
-      return { event: e, score: overlap };
+    const childByParent = new Map<number, typeof eventList>();
+    for (const e of eventList) {
+      if (e.parentEventId) {
+        const arr = childByParent.get(e.parentEventId) || [];
+        arr.push(e);
+        childByParent.set(e.parentEventId, arr);
+      }
+    }
+
+    /** Tags on the block itself + all nested subblocks (for ranking parents). */
+    const subtreeTags = (rootId: number): string[] => {
+      const out: string[] = [];
+      const walk = (id: number) => {
+        const node = eventList.find(e => e.id === id);
+        if (!node) return;
+        const tags = Array.isArray(node.tags) ? (node.tags as string[]) : [];
+        out.push(...tags);
+        for (const ch of childByParent.get(id) || []) walk(ch.id);
+      };
+      walk(rootId);
+      return out;
+    };
+
+    // Top-level blocks that match participant interests (via own or nested tags)
+    const topLevel = eventList.filter(e => !e.parentEventId);
+    const scored = topLevel.map(e => {
+      const tags = subtreeTags(e.id);
+      const matchedByNorm = new Map<string, string>();
+      for (const raw of tags) {
+        const key = norm(raw);
+        if (!key || !interestSet.has(key)) continue;
+        if (!matchedByNorm.has(key)) matchedByNorm.set(key, raw.trim());
+      }
+      return {
+        event: e,
+        score: matchedByNorm.size,
+        matchedThemes: [...matchedByNorm.values()],
+      };
     }).filter(x => x.score >= threshold)
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;
@@ -393,9 +460,12 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
         id: s.event.id,
         eventId: s.event.id,
         title: s.event.title,
-        subtitle: recommendationSubtitle(s.score, threshold),
+        subtitle: s.matchedThemes.length
+          ? `Тема: ${s.matchedThemes.join(' · ')}`
+          : recommendationSubtitle(s.score, threshold),
         score: s.score,
-        tags: s.event.tags,
+        matchedThemes: s.matchedThemes,
+        tags: s.matchedThemes,
       })),
       interests,
       publishedEventsCount: eventList.length,

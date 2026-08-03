@@ -1030,7 +1030,7 @@ export const crudEvents = {
       }
       const depth = childDepthOfParent(parentEventId, byId);
       if (depth > MAX_EVENT_DEPTH) {
-        res.status(400).json({ error: `Максимум ${MAX_EVENT_DEPTH} уровня вложенности` });
+        res.status(400).json({ error: `Максимум ${MAX_EVENT_DEPTH} уровней вложенности` });
         return;
       }
     }
@@ -1086,7 +1086,7 @@ export const crudEvents = {
         }
         const depth = childDepthOfParent(newParentId, byId);
         if (depth > MAX_EVENT_DEPTH) {
-          res.status(400).json({ error: `Максимум ${MAX_EVENT_DEPTH} уровня вложенности` });
+          res.status(400).json({ error: `Максимум ${MAX_EVENT_DEPTH} уровней вложенности` });
           return;
         }
         const descendants = collectDescendantIds(id, shiftRows);
@@ -1105,7 +1105,7 @@ export const crudEvents = {
           maxRelative = Math.max(maxRelative, rel);
         }
         if (depth + maxRelative > MAX_EVENT_DEPTH) {
-          res.status(400).json({ error: `Максимум ${MAX_EVENT_DEPTH} уровня вложенности` });
+          res.status(400).json({ error: `Максимум ${MAX_EVENT_DEPTH} уровней вложенности` });
           return;
         }
       }

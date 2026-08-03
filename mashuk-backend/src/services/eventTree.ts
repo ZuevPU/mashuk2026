@@ -1,5 +1,5 @@
-/** Max nesting: root (1) → section (2) → item (3). */
-export const MAX_EVENT_DEPTH = 3;
+/** Max nesting: root block (1) → nested subblocks (2…MAX). */
+export const MAX_EVENT_DEPTH = 4;
 
 export type EventTreeNode<T extends { id: number; parentEventId?: number | null; sortOrder?: number | null }> =
   T & { children: EventTreeNode<T>[] };

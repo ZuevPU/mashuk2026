@@ -10,24 +10,31 @@ function endMs(r: TimedItem<unknown>): number {
   return (r.end ?? new Date(r.start.getTime() + DEFAULT_EVENT_DURATION_MS)).getTime();
 }
 
-/** Cluster events whose time ranges overlap (parallel blocks with different timeSlot strings). */
+/** Floor start to the minute (MSK instants are absolute Date values). */
+function startMinuteKey(d: Date): number {
+  return Math.floor(d.getTime() / 60_000) * 60_000;
+}
+
+/**
+ * Group program blocks into timeline cells by start time.
+ * Same start minute → one cell (parallel tracks). Different starts → separate cells,
+ * even if intervals overlap (avoids one long block swallowing the whole day).
+ */
 export function clusterOverlappingTimedItems<T>(rows: TimedItem<T>[]): TimedItem<T>[][] {
   const sorted = [...rows].sort(
     (a, b) => a.start.getTime() - b.start.getTime() || endMs(a) - endMs(b),
   );
 
   const clusters: TimedItem<T>[][] = [];
+  let currentKey: number | null = null;
+
   for (const row of sorted) {
-    const last = clusters[clusters.length - 1];
-    if (!last) {
+    const key = startMinuteKey(row.start);
+    if (currentKey === null || key !== currentKey) {
       clusters.push([row]);
-      continue;
-    }
-    const clusterEnd = Math.max(...last.map(endMs));
-    if (row.start.getTime() < clusterEnd) {
-      last.push(row);
+      currentKey = key;
     } else {
-      clusters.push([row]);
+      clusters[clusters.length - 1].push(row);
     }
   }
   return clusters;
