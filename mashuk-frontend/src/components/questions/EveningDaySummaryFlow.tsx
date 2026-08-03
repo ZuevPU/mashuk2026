@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Spinner, Button, Div } from '@vkontakte/vkui';
 import { apiGet, ApiError } from '../../api/client';
 import {
