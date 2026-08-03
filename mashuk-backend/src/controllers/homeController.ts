@@ -35,7 +35,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const liveScheduleDay = resolveLiveScheduleDay(settings, now);
     const totalDays = settings.totalDays ?? 8;
     const timeSlot = getMoscowPhase(now);
-    const eveningWrap = isEveningWrapWindow(now);
+    let eveningWrap = isEveningWrapWindow(now);
 
     const [focus] = await db.select().from(dayFocus)
       .where(eq(dayFocus.dayNumber, currentDay)).limit(1);
@@ -199,6 +199,9 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       hasPointB,
       pointBQuestionId: pointB?.id ?? pointBQuestion?.id ?? null,
     });
+    if (currentDay >= 1 && currentDay <= 7) {
+      eveningWrap = !!dayContext.eveningQuestionnaire.open;
+    }
 
     let priorityAction: { type: string; title: string; subtitle: string; route: string; id?: number } | null = null;
     if (currentDay === 8 && pointB) {
@@ -221,9 +224,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       };
     }
 
-    const eveningCard = eveningWrap
-      && dayContext.eveningQuestionnaire.available
-      && !dayContext.eveningQuestionnaire.completed
+    const eveningCard = dayContext.eveningQuestionnaire.available
       ? {
         title: '✦ Завершение дня',
         subtitle: currentDay === 7

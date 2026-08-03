@@ -1,4 +1,5 @@
 import type { forumSettings } from '../db/schema.js';
+import { getMoscowParts } from './timePhase.js';
 import { EVENING_SCALE_KEYS } from './touchpointTemplates.js';
 
 export type EveningFieldType =
@@ -26,7 +27,56 @@ export type EveningStep = {
 
 export type EveningQuestionnaireConfig = {
   steps: EveningStep[];
+  /** HH:MM Europe/Moscow — auto-open after this time (default 22:00). */
+  opensAtMsk?: string;
+  /** Admin forced the questionnaire open for this day (before opensAtMsk). */
+  forcePublished?: boolean;
 };
+
+export const DEFAULT_EVENING_OPENS_AT_MSK = '22:00';
+
+function eveningPublishMeta(
+  config: EveningQuestionnaireConfig,
+): Pick<EveningQuestionnaireConfig, 'opensAtMsk' | 'forcePublished'> {
+  const meta: Pick<EveningQuestionnaireConfig, 'opensAtMsk' | 'forcePublished'> = {};
+  if (config.opensAtMsk?.trim()) meta.opensAtMsk = config.opensAtMsk.trim();
+  if (config.forcePublished) meta.forcePublished = true;
+  return meta;
+}
+
+/** Normalize "21:00" / "9:30" → "HH:MM", or null if invalid. */
+export function normalizeOpensAtMsk(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
+  const m = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+export function getEveningOpensAtMsk(config: EveningQuestionnaireConfig | null | undefined): string {
+  return normalizeOpensAtMsk(config?.opensAtMsk) || DEFAULT_EVENING_OPENS_AT_MSK;
+}
+
+function opensAtToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/**
+ * Evening questionnaire window: from opensAtMsk (or forcePublished) until 01:00 MSK.
+ * Matches previous hardcoded 22:00–01:00 behaviour, with configurable start.
+ */
+export function isEveningOpenForConfig(
+  config: EveningQuestionnaireConfig | null | undefined,
+  now = new Date(),
+): boolean {
+  if (config?.forcePublished) return true;
+  const { totalMinutes } = getMoscowParts(now);
+  const openMinutes = opensAtToMinutes(getEveningOpensAtMsk(config));
+  return totalMinutes >= openMinutes || totalMinutes < 60;
+}
 
 const SCALE_LABELS: Record<string, string> = {
   direction: 'Работа в рамках тематического направления',
@@ -100,6 +150,7 @@ export const DEFAULT_EVENING_QUESTIONNAIRE_CONFIG: EveningQuestionnaireConfig = 
 /** Точка Б — отдельный вопрос в день 8, не часть вечерней анкеты дней 1–7. */
 export function stripPointBFromEveningConfig(config: EveningQuestionnaireConfig): EveningQuestionnaireConfig {
   return {
+    ...eveningPublishMeta(config),
     steps: config.steps
       .map(step => ({
         ...step,
@@ -124,7 +175,7 @@ export function normalizeExperimentStep(config: EveningQuestionnaireConfig): Eve
   }).filter(s => s.fields.length > 0);
 
   if (experimentFields.length === 0) {
-    return { steps };
+    return { ...eveningPublishMeta(config), steps };
   }
 
   const roleIdx = steps.findIndex(s => s.id === 'role' || s.fields.some(f => f.type === 'role_select'));
@@ -138,7 +189,7 @@ export function normalizeExperimentStep(config: EveningQuestionnaireConfig): Eve
   } else {
     steps.push(experimentStep);
   }
-  return { steps };
+  return { ...eveningPublishMeta(config), steps };
 }
 
 export function resolveEveningConfigForDay(

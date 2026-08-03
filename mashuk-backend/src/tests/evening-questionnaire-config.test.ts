@@ -2,6 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
+  getEveningOpensAtMsk,
+  isEveningOpenForConfig,
   resolveEveningConfigForDay,
   stripPointBFromEveningConfig,
   normalizeExperimentStep,
@@ -38,8 +40,51 @@ describe('eveningQuestionnaireConfig', () => {
     assert.equal(types.includes('point_b_cta'), false);
   });
 
+  it('isEveningOpenForConfig respects opensAtMsk and forcePublished', () => {
+    const at2130 = new Date('2026-07-01T18:30:00.000Z'); // 21:30 MSK
+    const at2045 = new Date('2026-07-01T17:45:00.000Z'); // 20:45 MSK
+    assert.equal(
+      isEveningOpenForConfig({ steps: [], opensAtMsk: '21:00' }, at2130),
+      true,
+    );
+    assert.equal(
+      isEveningOpenForConfig({ steps: [], opensAtMsk: '21:00' }, at2045),
+      false,
+    );
+    assert.equal(
+      isEveningOpenForConfig({ steps: [], opensAtMsk: '22:00', forcePublished: true }, at2045),
+      true,
+    );
+    assert.equal(getEveningOpensAtMsk({ steps: [] }), '22:00');
+    assert.equal(getEveningOpensAtMsk({ steps: [], opensAtMsk: '9:05' }), '09:05');
+  });
+
+  it('preserves publish meta when stripping Point B / normalizing experiment', () => {
+    const cfg = {
+      opensAtMsk: '21:00',
+      forcePublished: true,
+      steps: [{
+        id: 'open',
+        title: 'Выводы',
+        fields: [
+          { key: 'likedMost', type: 'text' as const, label: 'Liked' },
+          { key: 'experimentResult', type: 'experiment_text' as const, label: 'Exp' },
+          { key: 'pointB_cta', type: 'point_b_cta' as const, label: 'Точка Б' },
+        ],
+      }],
+    };
+    const stripped = stripPointBFromEveningConfig(cfg);
+    assert.equal(stripped.opensAtMsk, '21:00');
+    assert.equal(stripped.forcePublished, true);
+    assert.equal(stripped.steps[0].fields.some(f => f.type === 'point_b_cta'), false);
+    const norm = normalizeExperimentStep(stripped);
+    assert.equal(norm.opensAtMsk, '21:00');
+    assert.equal(norm.forcePublished, true);
+  });
+
   it('strips point_b_cta from saved configs for days 1–7', () => {
     const withPointB = {
+      opensAtMsk: '21:30',
       steps: [{
         id: 'role',
         title: 'Роль',
@@ -54,6 +99,7 @@ describe('eveningQuestionnaireConfig', () => {
       3,
     );
     assert.equal(resolved.steps[0].fields.some(f => f.type === 'point_b_cta'), false);
+    assert.equal(resolved.opensAtMsk, '21:30');
     assert.equal(stripPointBFromEveningConfig(withPointB).steps[0].fields.length, 1);
   });
 });

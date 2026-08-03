@@ -23,6 +23,10 @@ export type EveningStep = {
 
 export type EveningQuestionnaireConfig = {
   steps: EveningStep[];
+  /** HH:MM МСК — автооткрытие после этого времени */
+  opensAtMsk?: string;
+  /** Организатор открыл анкету вручную раньше времени */
+  forcePublished?: boolean;
 };
 
 export type ProfileProgressWeights = {

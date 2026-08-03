@@ -41,7 +41,7 @@ export function getMoscowPhase(now = new Date()): 'morning' | 'day' | 'evening' 
   return 'evening';
 }
 
-/** Окно итоговой анкеты / завершения дня: 22:00–00:00 МСК */
+/** Окно итоговой анкеты по умолчанию: с 22:00 МСК (см. opensAtMsk в конфиге смены). */
 export function isEveningWrapWindow(now = new Date()): boolean {
   const { totalMinutes } = getMoscowParts(now);
   return totalMinutes >= 22 * 60;

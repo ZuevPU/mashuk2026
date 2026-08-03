@@ -43,6 +43,9 @@ import {
 import { generateQrToken } from '../services/qrService.js';
 import {
   DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
+  getEveningOpensAtMsk,
+  isEveningOpenForConfig,
+  normalizeOpensAtMsk,
   resolveEveningConfigForDay,
   stripPointBFromEveningConfig,
   type EveningQuestionnaireConfig,
@@ -889,76 +892,137 @@ export const updateForumSettings = async (req: AdminRequest, res: Response): Pro
 
 export const getAdminEveningQuestionnaire = async (req: AdminRequest, res: Response): Promise<void> => {
   const day = Math.max(1, Math.min(7, Number(req.query.day) || 1));
-  const [settings] = await db.select().from(forumSettings).limit(1);
+  const shiftId = await resolveAdminShiftId(req);
+  const shift = await getShiftById(shiftId);
+  const settings = shift ? shiftOpsToForumShape(shift) : null;
+  const config = resolveEveningConfigForDay(settings as never, day);
+  const opensAtMsk = getEveningOpensAtMsk(config);
   res.json({
     day,
-    config: resolveEveningConfigForDay(settings ?? null, day),
+    shiftId,
+    config,
     defaultConfig: DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
+    opensAtMsk,
+    forcePublished: !!config.forcePublished,
+    isOpenNow: isEveningOpenForConfig(config),
   });
 };
 
 export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Response): Promise<void> => {
   const day = Math.max(1, Math.min(7, Number(req.query.day) || 1));
-  const config = req.body.config as EveningQuestionnaireConfig;
-  if (!config?.steps?.length) {
+  const shiftId = await resolveAdminShiftId(req);
+  const current = await getShiftById(shiftId);
+  if (!current) {
+    res.status(404).json({ error: 'Shift not found' });
+    return;
+  }
+
+  const bodyConfig = req.body.config as EveningQuestionnaireConfig | undefined;
+  const forcePublishedRaw = req.body.forcePublished;
+  const opensAtRaw = req.body.opensAtMsk;
+
+  const byDay = {
+    ...((current.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {}),
+  };
+  const existing = resolveEveningConfigForDay(shiftOpsToForumShape(current) as never, day);
+
+  let next: EveningQuestionnaireConfig = bodyConfig?.steps?.length
+    ? (day >= 1 && day <= 7 ? stripPointBFromEveningConfig(bodyConfig) : bodyConfig)
+    : { ...existing };
+
+  if (opensAtRaw !== undefined) {
+    const normalized = normalizeOpensAtMsk(opensAtRaw === null || opensAtRaw === '' ? null : String(opensAtRaw));
+    if (opensAtRaw && !normalized) {
+      res.status(400).json({ error: 'opensAtMsk must be HH:MM' });
+      return;
+    }
+    if (normalized) next = { ...next, opensAtMsk: normalized };
+    else {
+      const { opensAtMsk: _drop, ...rest } = next;
+      next = rest;
+    }
+  } else if (bodyConfig && 'opensAtMsk' in bodyConfig) {
+    const normalized = normalizeOpensAtMsk(bodyConfig.opensAtMsk);
+    if (normalized) next = { ...next, opensAtMsk: normalized };
+  } else if (existing.opensAtMsk) {
+    next = { ...next, opensAtMsk: existing.opensAtMsk };
+  }
+
+  if (forcePublishedRaw === true || forcePublishedRaw === false) {
+    if (forcePublishedRaw) next = { ...next, forcePublished: true };
+    else {
+      const { forcePublished: _f, ...rest } = next;
+      next = rest;
+    }
+  } else if (bodyConfig?.forcePublished) {
+    next = { ...next, forcePublished: true };
+  } else if (existing.forcePublished) {
+    next = { ...next, forcePublished: true };
+  }
+
+  if (!next.steps?.length) {
     res.status(400).json({ error: 'config.steps required' });
     return;
   }
-  const toSave = day >= 1 && day <= 7
-    ? stripPointBFromEveningConfig(config)
-    : config;
-  const [settings] = await db.select().from(forumSettings).limit(1);
-  if (!settings) {
-    res.status(404).json({ error: 'forum_settings missing' });
-    return;
-  }
-  const byDay = (settings.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {};
-  byDay[String(day)] = toSave;
-  const [updated] = await db.update(forumSettings)
-    .set({ eveningQuestionnaireByDay: byDay, updatedAt: new Date() })
-    .where(eq(forumSettings.id, settings.id))
-    .returning();
-  clearCache('forumSettings');
-  res.json({ settings: updated, config: resolveEveningConfigForDay(updated, day) });
+
+  byDay[String(day)] = next;
+  const updated = await updateShift(shiftId, { eveningQuestionnaireByDay: byDay });
+  clearShiftCaches();
+  const shape = updated ? shiftOpsToForumShape(updated) : shiftOpsToForumShape(current);
+  const resolved = resolveEveningConfigForDay(shape as never, day);
+  res.json({
+    ok: true,
+    shiftId,
+    config: resolved,
+    opensAtMsk: getEveningOpensAtMsk(resolved),
+    forcePublished: !!resolved.forcePublished,
+    isOpenNow: isEveningOpenForConfig(resolved),
+  });
 };
 
 export const copyAdminEveningQuestionnaire = async (req: AdminRequest, res: Response): Promise<void> => {
   const fromDay = Math.max(1, Math.min(7, Number(req.body.fromDay) || 1));
   const toDay = Math.max(1, Math.min(7, Number(req.body.toDay) || 1));
-  const [settings] = await db.select().from(forumSettings).limit(1);
-  if (!settings) {
-    res.status(404).json({ error: 'forum_settings missing' });
+  const shiftId = await resolveAdminShiftId(req);
+  const current = await getShiftById(shiftId);
+  if (!current) {
+    res.status(404).json({ error: 'Shift not found' });
     return;
   }
-  const src = resolveEveningConfigForDay(settings, fromDay);
-  const byDay = (settings.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {};
+  const shape = shiftOpsToForumShape(current);
+  const src = resolveEveningConfigForDay(shape as never, fromDay);
+  const byDay = {
+    ...((current.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {}),
+  };
   byDay[String(toDay)] = src;
-  const [updated] = await db.update(forumSettings)
-    .set({ eveningQuestionnaireByDay: byDay, updatedAt: new Date() })
-    .where(eq(forumSettings.id, settings.id))
-    .returning();
-  clearCache('forumSettings');
-  res.json({ ok: true, toDay, config: resolveEveningConfigForDay(updated, toDay) });
+  const updated = await updateShift(shiftId, { eveningQuestionnaireByDay: byDay });
+  clearShiftCaches();
+  const nextShape = updated ? shiftOpsToForumShape(updated) : shape;
+  res.json({
+    ok: true,
+    toDay,
+    config: resolveEveningConfigForDay(nextShape as never, toDay),
+  });
 };
 
 export const resetAdminEveningQuestionnaire = async (req: AdminRequest, res: Response): Promise<void> => {
   const day = Math.max(1, Math.min(7, Number(req.query.day) || 1));
-  const [settings] = await db.select().from(forumSettings).limit(1);
-  if (!settings) {
-    res.status(404).json({ error: 'forum_settings missing' });
+  const shiftId = await resolveAdminShiftId(req);
+  const current = await getShiftById(shiftId);
+  if (!current) {
+    res.status(404).json({ error: 'Shift not found' });
     return;
   }
-  const byDay = { ...(settings.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) };
+  const byDay = {
+    ...((current.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {}),
+  };
   delete byDay[String(day)];
-  const [updated] = await db.update(forumSettings)
-    .set({
-      eveningQuestionnaireByDay: Object.keys(byDay).length ? byDay : null,
-      updatedAt: new Date(),
-    })
-    .where(eq(forumSettings.id, settings.id))
-    .returning();
-  clearCache('forumSettings');
-  res.json({ config: resolveEveningConfigForDay(updated, day) });
+  const updated = await updateShift(shiftId, {
+    eveningQuestionnaireByDay: Object.keys(byDay).length ? byDay : null,
+  });
+  clearShiftCaches();
+  const shape = updated ? shiftOpsToForumShape(updated) : shiftOpsToForumShape(current);
+  res.json({ config: resolveEveningConfigForDay(shape as never, day) });
 };
 
 export const upsertDayFocus = async (req: AdminRequest, res: Response): Promise<void> => {

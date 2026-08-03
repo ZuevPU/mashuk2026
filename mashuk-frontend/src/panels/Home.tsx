@@ -51,7 +51,9 @@ interface HomeData {
   } | null;
   eveningQuestionnaire: {
     available: boolean;
+    open?: boolean;
     opensAt?: string | null;
+    forcePublished?: boolean;
     completed: boolean;
   } & EveningQuestionnaireProps['questionnaire'];
   missedQuestions: { id: number; title: string; closeTime: string; expired?: boolean; overdue?: boolean }[];

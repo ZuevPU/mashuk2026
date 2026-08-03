@@ -4,11 +4,16 @@ import { z } from 'zod';
 import { db } from '../db/index.js';
 import { participantDayState, dayExperiments, pedagogicalRoles, questions, answers } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
-import { getForumSettings, resolveEffectiveCurrentDay, getMoscowParts } from '../services/helpers.js';
+import {
+  getEveningOpensAtMsk,
+  isEveningOpenForConfig,
+  resolveEveningConfigForDay,
+  type EveningQuestionnaireConfig,
+} from '../services/eveningQuestionnaireConfig.js';
+import { getForumSettings, resolveEffectiveCurrentDay } from '../services/helpers.js';
 import { ROLE_KEYS, getRoleMeta } from '../services/roleService.js';
 import { EVENING_SCALE_KEYS } from '../services/touchpointTemplates.js';
 import { awardPoints } from '../services/pointsService.js';
-import { resolveEveningConfigForDay, type EveningQuestionnaireConfig } from '../services/eveningQuestionnaireConfig.js';
 
 const scaleField = z.coerce.number().int().min(1).max(5).optional();
 
@@ -54,11 +59,6 @@ const eveningDraftSchema = z.object({
   form: z.record(z.unknown()).default({}),
   tomorrowRoleKey: z.string().optional(),
 });
-
-function isEveningQuestionnaireOpen(now = new Date()): boolean {
-  const { totalMinutes } = getMoscowParts(now);
-  return totalMinutes >= 22 * 60 || totalMinutes < 60;
-}
 
 export const patchEveningDraft = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
@@ -156,8 +156,14 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
       return;
     }
 
-    if (!isEveningQuestionnaireOpen() && process.env.NODE_ENV !== 'test') {
-      res.status(400).json({ error: 'Итоговая анкета доступна с 22:00 до 01:00 МСК' });
+    const eveningConfig = resolveEveningConfigForDay(settings, dayNumber);
+    const opensAt = getEveningOpensAtMsk(eveningConfig);
+    if (!isEveningOpenForConfig(eveningConfig) && process.env.NODE_ENV !== 'test') {
+      res.status(400).json({
+        error: eveningConfig.forcePublished
+          ? 'Итоговая анкета сейчас недоступна'
+          : `Итоговая анкета доступна с ${opensAt} МСК (или после публикации организатором)`,
+      });
       return;
     }
 
@@ -282,8 +288,9 @@ export async function loadDayContext(
   const showRoleOfDay = dayNumber >= 1 && dayNumber <= 7 && !!roleMeta;
   const eveningDone = !!state?.eveningRatings;
   const askTomorrowRole = dayNumber >= 1 && dayNumber <= 6;
-  const eveningOpen = isEveningQuestionnaireOpen(now);
   const config: EveningQuestionnaireConfig = resolveEveningConfigForDay(settings, dayNumber);
+  const opensAt = getEveningOpensAtMsk(config);
+  const eveningOpen = dayNumber >= 1 && dayNumber <= 7 && isEveningOpenForConfig(config, now);
   const draft = state?.eveningDraft as {
     step?: number;
     form?: Record<string, unknown>;
@@ -299,8 +306,10 @@ export async function loadDayContext(
     } : null,
     experiment,
     eveningQuestionnaire: {
-      available: dayNumber >= 1 && dayNumber <= 7 && eveningOpen && !eveningDone,
-      opensAt: eveningOpen ? null : '22:00',
+      available: eveningOpen && !eveningDone,
+      open: eveningOpen,
+      opensAt,
+      forcePublished: !!config.forcePublished,
       completed: eveningDone,
       askTomorrowRole,
       config,

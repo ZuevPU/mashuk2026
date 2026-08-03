@@ -21,6 +21,9 @@ const EMPTY_CONFIG: EveningQuestionnaireConfig = {
 export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
   const [day, setDay] = useState(1);
   const [config, setConfig] = useState<EveningQuestionnaireConfig>(EMPTY_CONFIG);
+  const [opensAtMsk, setOpensAtMsk] = useState('22:00');
+  const [forcePublished, setForcePublished] = useState(false);
+  const [isOpenNow, setIsOpenNow] = useState(false);
   const [copyFromDay, setCopyFromDay] = useState(1);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -34,6 +37,9 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
       if (c?.steps?.length) setConfig(JSON.parse(JSON.stringify(c)));
       else if (fallback?.steps?.length) setConfig(JSON.parse(JSON.stringify(fallback)));
       else setConfig(JSON.parse(JSON.stringify(EMPTY_CONFIG)));
+      setOpensAtMsk(ev.opensAtMsk || c?.opensAtMsk || '22:00');
+      setForcePublished(!!ev.forcePublished || !!c?.forcePublished);
+      setIsOpenNow(!!ev.isOpenNow);
     } finally {
       setLoading(false);
     }
@@ -140,11 +146,36 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
       }
     }
     act(async () => {
-      await adminFetch(`/evening-questionnaire?day=${day}`, {
+      const res = await adminFetch(`/evening-questionnaire?day=${day}`, {
         method: 'PATCH',
-        body: JSON.stringify({ config }),
+        body: JSON.stringify({
+          config: { ...config, opensAtMsk, forcePublished: forcePublished || undefined },
+          opensAtMsk,
+          forcePublished,
+        }),
       });
+      setOpensAtMsk(res.opensAtMsk || opensAtMsk);
+      setForcePublished(!!res.forcePublished);
+      setIsOpenNow(!!res.isOpenNow);
+      if (res.config?.steps) setConfig(JSON.parse(JSON.stringify(res.config)));
     }, `Анкета дня ${day} сохранена`);
+  };
+
+  const setPublished = (published: boolean) => {
+    act(async () => {
+      const res = await adminFetch(`/evening-questionnaire?day=${day}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          config: { ...config, opensAtMsk, forcePublished: published || undefined },
+          opensAtMsk,
+          forcePublished: published,
+        }),
+      });
+      setOpensAtMsk(res.opensAtMsk || opensAtMsk);
+      setForcePublished(!!res.forcePublished);
+      setIsOpenNow(!!res.isOpenNow);
+      if (res.config?.steps) setConfig(JSON.parse(JSON.stringify(res.config)));
+    }, published ? `Анкета дня ${day} опубликована` : `Ручная публикация дня ${day} снята`);
   };
 
   const yesNoFieldsInStep = (step: EveningStep) =>
@@ -167,6 +198,36 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
         ))}
       </div>
       {loading && <p className="adm-muted">Загрузка…</p>}
+
+      <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+        <label className="adm-forum-inline">
+          Открыть с (МСК)
+          <input
+            type="time"
+            className="adm-input"
+            style={{ width: 120 }}
+            value={opensAtMsk}
+            onChange={e => setOpensAtMsk(e.target.value)}
+          />
+        </label>
+        <span className="adm-muted" style={{ fontSize: 12 }}>
+          {forcePublished
+            ? 'Сейчас открыта вручную (можно заполнять до авто-времени и после).'
+            : isOpenNow
+              ? `Сейчас открыта по расписанию (≥ ${opensAtMsk} МСК).`
+              : `На главной появится автоматически в ${opensAtMsk} МСК.`}
+        </span>
+        {forcePublished ? (
+          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setPublished(false)}>
+            Снять ручную публикацию
+          </button>
+        ) : (
+          <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={() => setPublished(true)}>
+            Опубликовать сейчас
+          </button>
+        )}
+      </div>
+
       <div className="adm-forum-toolbar">
         <label className="adm-forum-inline">
           Скопировать настройки с дня
