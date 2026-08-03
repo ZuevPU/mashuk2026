@@ -1,6 +1,6 @@
 import { Fragment, useMemo } from 'react';
 import { label } from '../../labels/ru';
-import { eventVisibilityLabel, type ProgramEvent, type ScheduleDayRow } from './types';
+import { eventVisibilityLabel, parseTimeSlot, type ProgramEvent, type ScheduleDayRow } from './types';
 import {
   buildTimeSlots,
   minutesToTime,
@@ -8,6 +8,11 @@ import {
   CAL_SLOT_MINUTES,
   parallelEventsForCell,
 } from './programCalendar';
+
+function eventTimeLabel(timeSlot: string | null | undefined): string {
+  const { start, end } = parseTimeSlot(timeSlot);
+  return end && end !== start ? `${start}–${end}` : start;
+}
 
 type Props = {
   events: ProgramEvent[];
@@ -85,15 +90,17 @@ export function ProgramCalendarGrid({
                   <div className={list.length > 1 ? 'adm-program-cal-parallel' : ''}>
                     {list.map(ev => {
                       const vis = eventVisibilityLabel(ev);
+                      const timeLabel = eventTimeLabel(ev.timeSlot);
                       return (
                         <button
                           key={ev.id}
                           type="button"
                           className={`adm-program-cal-event adm-program-badge-${vis}`}
                           onClick={() => onEditEvent(ev)}
-                          title={ev.title}
+                          title={`${ev.title || 'Без названия'} · ${timeLabel}`}
                         >
-                          {ev.title || 'Без названия'}
+                          <span className="adm-program-cal-event-time">{timeLabel}</span>
+                          <span className="adm-program-cal-event-title">{ev.title || 'Без названия'}</span>
                         </button>
                       );
                     })}
@@ -113,6 +120,7 @@ export function ProgramCalendarGrid({
         ))}
       </div>
       <p className="adm-muted adm-forum-hint" style={{ marginTop: 8 }}>
+        Блоки стоят в строке по времени начала (шаг 30 мин). Несколько блоков с одним стартом — в одной ячейке.
         Клик по заголовку дня — выбор для публикации. {label('schedule_visible')} / {label('schedule_waiting_day')} / {label('draft')} — цвет полоски у события.
       </p>
     </div>

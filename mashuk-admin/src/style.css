@@ -598,12 +598,16 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   display: flex;
   flex-direction: column;
   gap: 4px;
+  align-self: start;
 }
 .adm-program-cal-cell-parallel { min-height: 72px; }
 .adm-program-cal-cell:hover .adm-program-cal-add { opacity: 1; }
-.adm-program-cal-parallel { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.adm-program-cal-parallel { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
 .adm-program-cal-event {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
   width: 100%;
   text-align: left;
   border: none;
@@ -617,6 +621,16 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   line-height: 1.3;
   white-space: normal;
   word-break: break-word;
+}
+.adm-program-cal-event-time {
+  font-size: 10px;
+  font-weight: 700;
+  color: #4A5568;
+  letter-spacing: 0.02em;
+}
+.adm-program-cal-event-title {
+  display: block;
+  width: 100%;
 }
 .adm-program-cal-event.adm-program-badge-visible { border-left-color: #276749; background: #F0FFF4; }
 .adm-program-cal-event.adm-program-badge-waiting_day { border-left-color: #9C4221; background: #FFFAF0; }

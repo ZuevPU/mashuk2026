@@ -38,35 +38,23 @@ function eventIntervalMinutes(e: ProgramEvent): { start: number; end: number } {
   return { start: s, end: Math.max(en, s + CAL_SLOT_MINUTES) };
 }
 
-/** Parallel blocks: overlapping intervals → one cluster, shown in row of earliest start. */
+function compareEventsByStart(a: ProgramEvent, b: ProgramEvent): number {
+  const ia = eventIntervalMinutes(a);
+  const ib = eventIntervalMinutes(b);
+  return ia.start - ib.start || ia.end - ib.end || a.title.localeCompare(b.title, 'ru');
+}
+
+/**
+ * Group day events into calendar rows by snapped start time.
+ * Same 30-min row → parallel tracks in one cell. Different starts → separate rows,
+ * even if intervals overlap (avoids a morning block swallowing the whole day).
+ */
 export function clusterParallelEvents(dayEvents: ProgramEvent[]): Map<string, ProgramEvent[]> {
-  const sorted = [...dayEvents].sort((a, b) => {
-    const ia = eventIntervalMinutes(a);
-    const ib = eventIntervalMinutes(b);
-    return ia.start - ib.start || ia.end - ib.end;
-  });
-
-  const clusters: ProgramEvent[][] = [];
-  for (const ev of sorted) {
-    const iv = eventIntervalMinutes(ev);
-    const last = clusters[clusters.length - 1];
-    if (!last) {
-      clusters.push([ev]);
-      continue;
-    }
-    const lastEnd = Math.max(...last.map(e => eventIntervalMinutes(e).end));
-    if (iv.start < lastEnd) {
-      last.push(ev);
-    } else {
-      clusters.push([ev]);
-    }
-  }
-
   const map = new Map<string, ProgramEvent[]>();
-  for (const cluster of clusters) {
-    const slot = slotKeyForEvent(cluster[0]);
+  for (const ev of [...dayEvents].sort(compareEventsByStart)) {
+    const slot = slotKeyForEvent(ev);
     const prev = map.get(slot);
-    map.set(slot, prev ? [...prev, ...cluster] : cluster);
+    map.set(slot, prev ? [...prev, ev] : [ev]);
   }
   return map;
 }
@@ -76,9 +64,9 @@ export function parallelEventsForCell(
   day: number,
   time: string,
 ): ProgramEvent[] {
-  const byDay = dayEvents.filter(e => e.dayNumber === day);
-  const clusters = clusterParallelEvents(byDay);
-  return clusters.get(time) ?? [];
+  return dayEvents
+    .filter(e => e.dayNumber === day && slotKeyForEvent(e) === time)
+    .sort(compareEventsByStart);
 }
 
 export type CalendarCell = {
@@ -97,7 +85,9 @@ export function buildCalendarMatrix(
 
   for (let day = 1; day <= totalDays; day += 1) {
     for (const time of timeSlots) {
-      const dayEvents = rootEvents.filter(e => e.dayNumber === day && slotKeyForEvent(e) === time);
+      const dayEvents = rootEvents
+        .filter(e => e.dayNumber === day && slotKeyForEvent(e) === time)
+        .sort(compareEventsByStart);
       cells.push({ day, time, events: dayEvents });
     }
   }
