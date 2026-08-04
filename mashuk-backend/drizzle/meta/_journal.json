@@ -316,6 +316,13 @@
       "when": 1824000000000,
       "tag": "0045_task_answer_options",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1825000000000,
+      "tag": "0046_event_audience_direction_ids",
+      "breakpoints": true
     }
   ]
 }

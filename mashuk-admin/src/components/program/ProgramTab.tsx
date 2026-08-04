@@ -243,6 +243,7 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
             isPublished: e.isPublished === true,
             audienceType: e.audienceType || 'all',
             audienceDirectionId: e.audienceDirectionId ?? null,
+            audienceDirectionIds: Array.isArray(e.audienceDirectionIds) ? e.audienceDirectionIds : [],
             speakerIds: e.speakerIds || [],
             hasSubSessions: (e.children?.length ?? 0) > 0 || e.hasSubSessions === true,
             ...(parentEventId ? { parentEventId } : {}),

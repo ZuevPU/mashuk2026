@@ -20,6 +20,7 @@ export const eventCreateSchema = z.object({
   hasSubSessions: optionalBool,
   audienceType: z.enum(['all', 'direction']).optional(),
   audienceDirectionId: z.coerce.number().int().positive().optional().nullable(),
+  audienceDirectionIds: z.array(z.coerce.number().int().positive()).optional(),
   speakerIds: z.array(z.coerce.number().int()).optional(),
   sortOrder: z.coerce.number().int().optional(),
 }).strict();

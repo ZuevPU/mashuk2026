@@ -21,6 +21,7 @@ import {
 import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
 import { resolveActiveShiftId } from '../services/shiftService.js';
 import { clusterOverlappingTimedItems, formatSlotLabel } from '../services/programSlots.js';
+import { eventVisibleForParticipantDirection } from '../services/eventAudience.js';
 
 export const getProgramSettings = async (req: ParticipantRequest, res: Response): Promise<void> => {
   const settings = await getForumSettings();
@@ -280,12 +281,7 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
     };
 
     const pid = req.participant!.directionId;
-    const visible = eventsList.filter(e => {
-      if (e.audienceType === 'direction' && e.audienceDirectionId && pid && e.audienceDirectionId !== pid) {
-        return false;
-      }
-      return true;
-    });
+    const visible = eventsList.filter(e => eventVisibleForParticipantDirection(e, pid));
     const childByParent = new Map<number, typeof eventsList>();
     for (const e of visible) {
       if (e.parentEventId) {
@@ -402,12 +398,7 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
         ))
       : [];
     const pid = req.participant!.directionId;
-    const eventList = eventListRaw.filter(e => {
-      if (e.audienceType === 'direction' && e.audienceDirectionId && pid && e.audienceDirectionId !== pid) {
-        return false;
-      }
-      return true;
-    });
+    const eventList = eventListRaw.filter(e => eventVisibleForParticipantDirection(e, pid));
 
     const childByParent = new Map<number, typeof eventList>();
     for (const e of eventList) {

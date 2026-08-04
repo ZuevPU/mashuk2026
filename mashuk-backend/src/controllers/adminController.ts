@@ -41,6 +41,7 @@ import {
   taskMethodsForParticipant,
 } from '../services/taskAdminHelpers.js';
 import { generateQrToken } from '../services/qrService.js';
+import { audienceWriteFields } from '../services/eventAudience.js';
 import {
   DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
   getEveningOpensAtMsk,
@@ -1107,6 +1108,11 @@ export const crudEvents = {
       parsed.data.dayPublished,
       shiftId,
     );
+    const audience = audienceWriteFields({
+      audienceDirectionIds: parsed.data.audienceDirectionIds,
+      audienceType: parsed.data.audienceType,
+      audienceDirectionId: parsed.data.audienceDirectionId ?? null,
+    });
     const [e] = await db.insert(events).values({
       ...values,
       shiftId,
@@ -1114,8 +1120,9 @@ export const crudEvents = {
       speakerIds: parsed.data.speakerIds ?? [],
       parentEventId,
       hasSubSessions: parsed.data.hasSubSessions ?? false,
-      audienceType: parsed.data.audienceType ?? 'all',
-      audienceDirectionId: parsed.data.audienceDirectionId ?? null,
+      audienceType: audience.audienceType,
+      audienceDirectionId: audience.audienceDirectionId,
+      audienceDirectionIds: audience.audienceDirectionIds,
       sortOrder: parsed.data.sortOrder ?? 0,
     }).returning();
     if (parentEventId) {
@@ -1199,8 +1206,15 @@ export const crudEvents = {
       ...(parsed.data.speakerIds !== undefined ? { speakerIds: parsed.data.speakerIds } : {}),
       ...(parsed.data.parentEventId !== undefined ? { parentEventId: parsed.data.parentEventId } : {}),
       ...(parsed.data.hasSubSessions !== undefined ? { hasSubSessions: parsed.data.hasSubSessions } : {}),
-      ...(parsed.data.audienceType !== undefined ? { audienceType: parsed.data.audienceType } : {}),
-      ...(parsed.data.audienceDirectionId !== undefined ? { audienceDirectionId: parsed.data.audienceDirectionId } : {}),
+      ...((
+        parsed.data.audienceDirectionIds !== undefined
+        || parsed.data.audienceType !== undefined
+        || parsed.data.audienceDirectionId !== undefined
+      ) ? audienceWriteFields({
+        audienceDirectionIds: parsed.data.audienceDirectionIds,
+        audienceType: parsed.data.audienceType,
+        audienceDirectionId: parsed.data.audienceDirectionId ?? null,
+      }) : {}),
       ...(parsed.data.sortOrder !== undefined ? { sortOrder: parsed.data.sortOrder } : {}),
     }).where(eq(events.id, id)).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }

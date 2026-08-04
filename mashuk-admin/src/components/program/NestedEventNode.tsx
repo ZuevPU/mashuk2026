@@ -3,6 +3,7 @@ import { confirmDelete, CONFIRM_DELETE_SUBTOPIC } from '../../admin/confirmDelet
 import { PlaceSelect } from './ProgramPlacesBlock';
 import { SpeakerMultiPick } from './ProgramCatalogs';
 import { ThematicTagPick } from './ThematicTagPick';
+import { DirectionAudiencePick } from './DirectionAudiencePick';
 import {
   MAX_PROGRAM_NEST_DEPTH,
   buildTimeSlot,
@@ -13,6 +14,7 @@ import {
   type ProgramSpeaker,
   type ThematicTag,
 } from './types';
+import { resolveDraftAudienceIds } from './eventEditorShared';
 
 type DirectionOpt = { id: number; name: string };
 
@@ -23,8 +25,7 @@ type NestedDraft = {
   timeEnd: string;
   speakerIds: number[];
   tagNames: string[];
-  audienceType: 'all' | 'direction';
-  audienceDirectionId: string;
+  audienceDirectionIds: number[];
 };
 
 function draftFrom(e: ProgramEvent): NestedDraft {
@@ -38,63 +39,17 @@ function draftFrom(e: ProgramEvent): NestedDraft {
     timeEnd: end,
     speakerIds: [...speakerIds],
     tagNames: [...tags],
-    audienceType: e.audienceType === 'direction' ? 'direction' : 'all',
-    audienceDirectionId: e.audienceDirectionId ? String(e.audienceDirectionId) : '',
+    audienceDirectionIds: resolveDraftAudienceIds(e),
   };
 }
 
-function audiencePayload(audienceType: 'all' | 'direction', audienceDirectionId: string) {
+function audiencePayload(ids: number[]) {
+  const clean = ids.filter(n => Number.isInteger(n) && n > 0);
   return {
-    audienceType,
-    audienceDirectionId: audienceType === 'direction' && audienceDirectionId
-      ? Number(audienceDirectionId)
-      : null,
+    audienceType: clean.length ? 'direction' : 'all',
+    audienceDirectionId: clean[0] ?? null,
+    audienceDirectionIds: clean,
   };
-}
-
-function AudienceFields({
-  audienceType,
-  audienceDirectionId,
-  directions,
-  onTypeChange,
-  onDirectionChange,
-}: {
-  audienceType: 'all' | 'direction';
-  audienceDirectionId: string;
-  directions: DirectionOpt[];
-  onTypeChange: (v: 'all' | 'direction') => void;
-  onDirectionChange: (v: string) => void;
-}) {
-  return (
-    <div className="adm-forum-grid-2" style={{ marginTop: 6 }}>
-      <label className="adm-field">
-        <span className="adm-label">Аудитория</span>
-        <select
-          className="adm-input"
-          value={audienceType}
-          onChange={e => onTypeChange(e.target.value as 'all' | 'direction')}
-        >
-          <option value="all">Все участники</option>
-          <option value="direction">Направление</option>
-        </select>
-      </label>
-      {audienceType === 'direction' && (
-        <label className="adm-field">
-          <span className="adm-label">Направление</span>
-          <select
-            className="adm-input"
-            value={audienceDirectionId}
-            onChange={e => onDirectionChange(e.target.value)}
-          >
-            <option value="">—</option>
-            {directions.map(d => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
-        </label>
-      )}
-    </div>
-  );
 }
 
 export function NestedEventNode({
@@ -133,28 +88,26 @@ export function NestedEventNode({
   const [childTimeEnd, setChildTimeEnd] = useState('');
   const [childSpeakerIds, setChildSpeakerIds] = useState<number[]>([]);
   const [childTagNames, setChildTagNames] = useState<string[]>([]);
-  const [childAudienceType, setChildAudienceType] = useState<'all' | 'direction'>('all');
-  const [childAudienceDirectionId, setChildAudienceDirectionId] = useState('');
+  const [childAudienceDirectionIds, setChildAudienceDirectionIds] = useState<number[]>([]);
 
   useEffect(() => {
     setDraft(draftFrom(node));
-  }, [node.id, node.title, node.timeSlot, node.place, node.tags, node.audienceType, node.audienceDirectionId, node.children?.length]);
+  }, [node.id, node.title, node.timeSlot, node.place, node.tags, node.audienceType, node.audienceDirectionId, node.audienceDirectionIds, node.children?.length]);
 
   const levelLabel = nestLevelLabel(depth);
   const canAddInside = depth < MAX_PROGRAM_NEST_DEPTH;
   const children = node.children || [];
   const childLabel = nestLevelLabel(depth + 1);
-  const directionName = draft.audienceType === 'direction' && draft.audienceDirectionId
-    ? directions.find(d => String(d.id) === draft.audienceDirectionId)?.name
+  const directionNames = draft.audienceDirectionIds.length
+    ? draft.audienceDirectionIds
+      .map(id => directions.find(d => d.id === id)?.name)
+      .filter(Boolean)
+      .join(', ')
     : null;
 
   const save = () => {
     if (!draft.title.trim()) {
       alert(`Укажите название (${levelLabel.toLowerCase()}).`);
-      return;
-    }
-    if (draft.audienceType === 'direction' && !draft.audienceDirectionId) {
-      alert('Выберите направление для аудитории.');
       return;
     }
     const place = draft.place.trim() || null;
@@ -168,7 +121,7 @@ export function NestedEventNode({
           speakerIds: draft.speakerIds,
           tags: draft.tagNames,
           dayNumber: node.dayNumber ?? selectedDay,
-          ...audiencePayload(draft.audienceType, draft.audienceDirectionId),
+          ...audiencePayload(draft.audienceDirectionIds),
         }),
       });
       setDraft(d => ({ ...d, place: place || '' }));
@@ -179,10 +132,6 @@ export function NestedEventNode({
   const addChild = () => {
     if (!childTitle.trim()) {
       alert(`Название (${childLabel.toLowerCase()}) обязательно.`);
-      return;
-    }
-    if (childAudienceType === 'direction' && !childAudienceDirectionId) {
-      alert('Выберите направление для аудитории.');
       return;
     }
     act(async () => {
@@ -199,7 +148,7 @@ export function NestedEventNode({
           blockType: 'session',
           tags: childTagNames,
           speakerIds: childSpeakerIds,
-          ...audiencePayload(childAudienceType, childAudienceDirectionId),
+          ...audiencePayload(childAudienceDirectionIds),
         }),
       });
       setChildTitle('');
@@ -208,8 +157,7 @@ export function NestedEventNode({
       setChildTimeEnd('');
       setChildSpeakerIds([]);
       setChildTagNames([]);
-      setChildAudienceType('all');
-      setChildAudienceDirectionId('');
+      setChildAudienceDirectionIds([]);
       onSaved();
     }, `${childLabel} добавлен`);
   };
@@ -229,7 +177,7 @@ export function NestedEventNode({
         <span style={{ fontSize: 13 }}>
           {timePreview} · {draft.title || '…'}
           {draft.place ? ` · ${draft.place}` : ''}
-          {directionName ? ` · ${directionName}` : ''}
+          {directionNames ? ` · ${directionNames}` : ''}
         </span>
         <span className="adm-muted" style={{ marginLeft: 'auto' }}>{open ? '▼' : '▶'}</span>
       </div>
@@ -260,12 +208,10 @@ export function NestedEventNode({
               <input type="time" className="adm-input" value={draft.timeEnd} onChange={e => setDraft({ ...draft, timeEnd: e.target.value })} />
             </label>
           </div>
-          <AudienceFields
-            audienceType={draft.audienceType}
-            audienceDirectionId={draft.audienceDirectionId}
+          <DirectionAudiencePick
             directions={directions}
-            onTypeChange={v => setDraft({ ...draft, audienceType: v })}
-            onDirectionChange={v => setDraft({ ...draft, audienceDirectionId: v })}
+            selectedIds={draft.audienceDirectionIds}
+            onChange={ids => setDraft({ ...draft, audienceDirectionIds: ids })}
           />
           <div className="adm-field">
             <span className="adm-label">Спикеры</span>
@@ -332,12 +278,10 @@ export function NestedEventNode({
                   <input type="time" className="adm-input" value={childTimeEnd} onChange={e => setChildTimeEnd(e.target.value)} />
                 </label>
               </div>
-              <AudienceFields
-                audienceType={childAudienceType}
-                audienceDirectionId={childAudienceDirectionId}
+              <DirectionAudiencePick
                 directions={directions}
-                onTypeChange={setChildAudienceType}
-                onDirectionChange={setChildAudienceDirectionId}
+                selectedIds={childAudienceDirectionIds}
+                onChange={setChildAudienceDirectionIds}
               />
               <div className="adm-field" style={{ marginTop: 6 }}>
                 <span className="adm-label">Спикеры</span>

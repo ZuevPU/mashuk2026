@@ -11,11 +11,22 @@ export type EventDraft = {
   pushReminder: boolean;
   tagNames: string[];
   dayNumber: number;
-  audienceType: 'all' | 'direction';
-  audienceDirectionId: string;
+  /** Empty = all directions. */
+  audienceDirectionIds: number[];
   speakerIds: number[];
   hasSubSessions: boolean;
 };
+
+export function resolveDraftAudienceIds(e: ProgramEvent): number[] {
+  const raw = e.audienceDirectionIds;
+  if (Array.isArray(raw) && raw.length > 0) {
+    return raw.map(Number).filter(n => Number.isInteger(n) && n > 0);
+  }
+  if (e.audienceType === 'direction' && e.audienceDirectionId) {
+    return [e.audienceDirectionId];
+  }
+  return [];
+}
 
 export function emptyEventDraft(dayNumber: number, timeStart = '09:00', timeEnd = '10:30'): EventDraft {
   return {
@@ -29,8 +40,7 @@ export function emptyEventDraft(dayNumber: number, timeStart = '09:00', timeEnd 
     pushReminder: true,
     tagNames: [],
     dayNumber,
-    audienceType: 'all',
-    audienceDirectionId: '',
+    audienceDirectionIds: [],
     speakerIds: [],
     hasSubSessions: false,
   };
@@ -52,8 +62,7 @@ export function draftFromEvent(e: ProgramEvent): EventDraft {
     pushReminder: e.pushReminder !== false,
     tagNames: [...tags],
     dayNumber: e.dayNumber ?? 1,
-    audienceType: (e.audienceType === 'direction' ? 'direction' : 'all') as 'all' | 'direction',
-    audienceDirectionId: e.audienceDirectionId ? String(e.audienceDirectionId) : '',
+    audienceDirectionIds: resolveDraftAudienceIds(e),
     speakerIds: [...speakerIds],
     hasSubSessions: e.hasSubSessions === true,
   };
@@ -63,6 +72,7 @@ export function draftToBody(draft: EventDraft, opts?: { publish?: boolean; dayPu
   const blockType = draft.blockType;
   const isKeyBlock = blockType === 'key_block';
   const dayNumber = opts?.dayNumber ?? draft.dayNumber;
+  const ids = draft.audienceDirectionIds.filter(n => Number.isInteger(n) && n > 0);
   return {
     title: draft.title.trim(),
     place: draft.place.trim() || null,
@@ -74,10 +84,9 @@ export function draftToBody(draft: EventDraft, opts?: { publish?: boolean; dayPu
     isKeyBlock,
     pushReminder: draft.pushReminder,
     dayNumber,
-    audienceType: draft.audienceType,
-    audienceDirectionId: draft.audienceType === 'direction' && draft.audienceDirectionId
-      ? Number(draft.audienceDirectionId)
-      : null,
+    audienceType: ids.length ? 'direction' : 'all',
+    audienceDirectionId: ids[0] ?? null,
+    audienceDirectionIds: ids,
     speakerIds: draft.speakerIds,
     hasSubSessions: draft.hasSubSessions,
     ...(opts?.publish ? {

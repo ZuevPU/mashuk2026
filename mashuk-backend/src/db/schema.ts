@@ -514,6 +514,8 @@ export const events = pgTable('events', {
   hasSubSessions: boolean('has_sub_sessions').default(false),
   audienceType: varchar('audience_type', { length: 32 }).default('all'),
   audienceDirectionId: integer('audience_direction_id'),
+  /** Empty / null = all directions. Non-empty = only these direction ids. */
+  audienceDirectionIds: jsonb('audience_direction_ids').default([]),
   speakerIds: jsonb('speaker_ids').default([]),
   sortOrder: integer('sort_order').default(0),
 }, (table) => [

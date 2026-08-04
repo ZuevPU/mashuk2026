@@ -9,6 +9,7 @@ import { ThematicTagPick } from './ThematicTagPick';
 import { speakerFullLabel } from '../speakers/speakerFormat';
 import { NestedEventNode } from './NestedEventNode';
 import { EventParticipantPreview } from './EventParticipantPreview';
+import { DirectionAudiencePick } from './DirectionAudiencePick';
 import {
   BLOCK_TYPE_OPTIONS,
   buildTimeSlot,
@@ -73,8 +74,7 @@ export function EventEditorForm({
   const [childTimeEnd, setChildTimeEnd] = useState('');
   const [childSpeakerIds, setChildSpeakerIds] = useState<number[]>([]);
   const [childTagNames, setChildTagNames] = useState<string[]>([]);
-  const [childAudienceType, setChildAudienceType] = useState<'all' | 'direction'>('all');
-  const [childAudienceDirectionId, setChildAudienceDirectionId] = useState('');
+  const [childAudienceDirectionIds, setChildAudienceDirectionIds] = useState<number[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [dupDay, setDupDay] = useState(String(draft.dayNumber));
 
@@ -151,10 +151,7 @@ export function EventEditorForm({
       alert('Название подблока обязательно.');
       return;
     }
-    if (childAudienceType === 'direction' && !childAudienceDirectionId) {
-      alert('Выберите направление для аудитории.');
-      return;
-    }
+    const ids = childAudienceDirectionIds.filter(n => Number.isInteger(n) && n > 0);
     act(async () => {
       await adminFetch('/events', {
         method: 'POST',
@@ -169,10 +166,9 @@ export function EventEditorForm({
           blockType: 'session',
           tags: childTagNames,
           speakerIds: childSpeakerIds,
-          audienceType: childAudienceType,
-          audienceDirectionId: childAudienceType === 'direction' && childAudienceDirectionId
-            ? Number(childAudienceDirectionId)
-            : null,
+          audienceType: ids.length ? 'direction' : 'all',
+          audienceDirectionId: ids[0] ?? null,
+          audienceDirectionIds: ids,
         }),
       });
       setChildTitle('');
@@ -181,8 +177,7 @@ export function EventEditorForm({
       setChildTimeEnd('');
       setChildSpeakerIds([]);
       setChildTagNames([]);
-      setChildAudienceType('all');
-      setChildAudienceDirectionId('');
+      setChildAudienceDirectionIds([]);
       if (!draft.hasSubSessions) {
         await adminFetch(`/events/${event.id}`, {
           method: 'PATCH',
@@ -254,24 +249,11 @@ export function EventEditorForm({
           ))}
         </select>
       </label>
-      <div className="adm-forum-grid-2">
-        <label className="adm-field">
-          <span className="adm-label">Аудитория</span>
-          <select className="adm-input" value={draft.audienceType} onChange={e => setDraft({ ...draft, audienceType: e.target.value as 'all' | 'direction' })}>
-            <option value="all">Все участники</option>
-            <option value="direction">Направление</option>
-          </select>
-        </label>
-        {draft.audienceType === 'direction' && (
-          <label className="adm-field">
-            <span className="adm-label">Направление</span>
-            <select className="adm-input" value={draft.audienceDirectionId} onChange={e => setDraft({ ...draft, audienceDirectionId: e.target.value })}>
-              <option value="">—</option>
-              {directions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </label>
-        )}
-      </div>
+      <DirectionAudiencePick
+        directions={directions}
+        selectedIds={draft.audienceDirectionIds}
+        onChange={ids => setDraft({ ...draft, audienceDirectionIds: ids })}
+      />
       <div className="adm-field">
         <span className="adm-label">Спикеры</span>
         <SpeakerMultiPick speakers={speakers} selectedIds={draft.speakerIds} onChange={ids => setDraft({ ...draft, speakerIds: ids })} />
@@ -329,24 +311,11 @@ export function EventEditorForm({
                 <input type="time" className="adm-input" value={childTimeEnd} onChange={e => setChildTimeEnd(e.target.value)} />
               </label>
             </div>
-            <div className="adm-forum-grid-2" style={{ marginTop: 6 }}>
-              <label className="adm-field">
-                <span className="adm-label">Аудитория</span>
-                <select className="adm-input" value={childAudienceType} onChange={e => setChildAudienceType(e.target.value as 'all' | 'direction')}>
-                  <option value="all">Все участники</option>
-                  <option value="direction">Направление</option>
-                </select>
-              </label>
-              {childAudienceType === 'direction' && (
-                <label className="adm-field">
-                  <span className="adm-label">Направление</span>
-                  <select className="adm-input" value={childAudienceDirectionId} onChange={e => setChildAudienceDirectionId(e.target.value)}>
-                    <option value="">—</option>
-                    {directions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </label>
-              )}
-            </div>
+            <DirectionAudiencePick
+              directions={directions}
+              selectedIds={childAudienceDirectionIds}
+              onChange={setChildAudienceDirectionIds}
+            />
             <div className="adm-field" style={{ marginTop: 8 }}>
               <span className="adm-label">Спикеры подблока</span>
               <SpeakerMultiPick speakers={speakers} selectedIds={childSpeakerIds} onChange={setChildSpeakerIds} />

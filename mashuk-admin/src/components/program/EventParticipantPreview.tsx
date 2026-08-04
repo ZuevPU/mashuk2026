@@ -1,6 +1,7 @@
 import { parseOptionalTimeSlot, type ProgramEvent } from './types';
 import { speakerFullLabel } from '../speakers/speakerFormat';
 import { ParticipantPreviewFrame } from '../admin/ParticipantPreviewModal';
+import { resolveDraftAudienceIds } from './eventEditorShared';
 
 function timeLabel(slot?: string | null): string {
   const { start, end } = parseOptionalTimeSlot(slot);
@@ -8,12 +9,22 @@ function timeLabel(slot?: string | null): string {
   return end ? `${start}–${end}` : start;
 }
 
+function audienceLabel(n: ProgramEvent, directions?: { id: number; name: string }[]): string | null {
+  const ids = resolveDraftAudienceIds(n);
+  if (!ids.length) return null;
+  if (!directions?.length) return 'Только выбранные направления';
+  const names = ids.map(id => directions.find(d => d.id === id)?.name).filter(Boolean);
+  return names.length ? `Для: ${names.join(', ')}` : 'Только выбранные направления';
+}
+
 function NestedPreview({
   nodes,
   depth = 1,
+  directions,
 }: {
   nodes: ProgramEvent[];
   depth?: number;
+  directions?: { id: number; name: string }[];
 }) {
   if (!nodes.length) return null;
   return (
@@ -22,6 +33,7 @@ function NestedPreview({
         const kids = n.children || [];
         const time = timeLabel(n.timeSlot);
         const speakers = (n.speakers || []).map(s => speakerFullLabel(s)).filter(Boolean).join(', ');
+        const audience = audienceLabel(n, directions);
         return (
           <div
             key={n.id}
@@ -38,8 +50,8 @@ function NestedPreview({
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: depth >= 2 ? 12 : 13, fontWeight: 700 }}>{n.title}</div>
-                {n.audienceType === 'direction' && (
-                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>Только для направления</div>
+                {audience && (
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{audience}</div>
                 )}
                 {n.place && <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{n.place}</div>}
                 {speakers && <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>{speakers}</div>}
@@ -51,7 +63,7 @@ function NestedPreview({
                 <div style={{ fontSize: 11, color: '#888' }}>{kids.length}</div>
               )}
             </div>
-            {kids.length > 0 && <NestedPreview nodes={kids} depth={depth + 1} />}
+            {kids.length > 0 && <NestedPreview nodes={kids} depth={depth + 1} directions={directions} />}
           </div>
         );
       })}

@@ -15,6 +15,7 @@ export type ProgramEvent = {
   hasSubSessions?: boolean | null;
   audienceType?: string | null;
   audienceDirectionId?: number | null;
+  audienceDirectionIds?: number[] | null;
   speakerIds?: number[] | null;
   sortOrder?: number | null;
   children?: ProgramEvent[];
