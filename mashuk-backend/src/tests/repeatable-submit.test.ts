@@ -55,7 +55,7 @@ describe('repeatable task submit flow', { skip: !process.env.DATABASE_URL }, () 
             'командная работа учителей',
             'открытые уроки',
           ],
-          roleAnswers: [1, 1, 0, 1, 1, 2],
+          roleAnswers: [1, 1, 0, 1, 1, 2, 0, 3],
         });
       assert.equal(onboarding.status, 200, JSON.stringify(onboarding.body));
       const list2 = await request(app).get('/api/admin/participants').set(adminAuth);

@@ -69,7 +69,7 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
           'командная работа учителей',
           'открытые уроки',
         ],
-        roleAnswers: [1, 1, 0, 1, 1, 2],
+        roleAnswers: [1, 1, 0, 1, 1, 2, 0, 3],
       });
     assert.equal(onboarding.status, 200, JSON.stringify(onboarding.body));
     assert.equal(onboarding.body.status, 'ok');
@@ -350,7 +350,7 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
           'командная работа учителей',
           'открытые уроки',
         ],
-        roleAnswers: [1, 1, 0, 1, 1, 2],
+        roleAnswers: [1, 1, 0, 1, 1, 2, 0, 3],
       });
     assert.equal(bad.status, 400);
     assert.match(String(bad.body.error || ''), /согласия/i);

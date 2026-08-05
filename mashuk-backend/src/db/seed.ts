@@ -373,7 +373,7 @@ export async function runSeed() {
         'План на четверть',
         'Открытый обмен',
       ],
-      roleAnswers: [1, 1, 0, 1, 1, 2],
+      roleAnswers: [1, 1, 0, 1, 1, 2, 0, 3],
       onboardingCompletedAt: new Date(),
       pathPoints: 10,
       experiencePoints: 20,

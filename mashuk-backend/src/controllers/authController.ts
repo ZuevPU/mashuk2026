@@ -316,7 +316,7 @@ export const register = async (req: VkAuthRequest, res: Response): Promise<void>
       consentAnalyticsVersion: consentVersions.analytics,
       interests: ['проектная работа', 'подростки', 'осмысленность обучения', 'командная работа учителей', 'открытые уроки'],
       goalAnswers: ['—', '—', '—', '—', '—'],
-      roleAnswers: [1, 1, 0, 1, 1, 2],
+      roleAnswers: [1, 1, 0, 1, 1, 2, 0, 3],
       pedagogicalRole: 'practice_realizer',
       age: 30,
       workplace: 'Не указано',
