@@ -4,13 +4,25 @@ import type { InterestGroup } from './types';
 
 type Props = {
   groups: InterestGroup[];
+  interestMin: number;
+  interestMax: number;
   onChange: (next: InterestGroup[]) => void;
+  onLimitsChange: (min: number, max: number) => void;
   onSave: () => void;
   dirty: boolean;
   onOpenProgram?: () => void;
 };
 
-export function InterestsStepEditor({ groups, onChange, onSave, dirty, onOpenProgram }: Props) {
+export function InterestsStepEditor({
+  groups,
+  interestMin,
+  interestMax,
+  onChange,
+  onLimitsChange,
+  onSave,
+  dirty,
+  onOpenProgram,
+}: Props) {
   const [newTagByGroup, setNewTagByGroup] = useState<Record<number, string>>({});
 
   const addTag = (gi: number) => {
@@ -43,17 +55,52 @@ export function InterestsStepEditor({ groups, onChange, onSave, dirty, onOpenPro
     <div className="adm-forum-block card">
       <h3>Шаг «Интересы»</h3>
       <p className="adm-forum-hint">
-        Участник выбирает 5–8 тегов. Список — основа для рекомендаций в программе.
+        Участник выбирает теги интересов — по ним строятся рекомендации в программе.
         {onOpenProgram && (
           <>
             {' '}
-            Теги интересов должны совпадать с{' '}
+            Теги должны совпадать с{' '}
             <button type="button" className="adm-link-btn" onClick={onOpenProgram}>
               тематическими тегами программы →
             </button>
           </>
         )}
       </p>
+
+      <div className="adm-forum-grid-2" style={{ marginBottom: 12 }}>
+        <label className="adm-field">
+          <span className="adm-label">Минимум тегов</span>
+          <input
+            type="number"
+            className="adm-input"
+            min={1}
+            max={20}
+            value={interestMin}
+            onChange={e => {
+              const min = Math.max(1, Number(e.target.value) || 1);
+              onLimitsChange(min, Math.max(min, interestMax));
+            }}
+          />
+        </label>
+        <label className="adm-field">
+          <span className="adm-label">Максимум тегов</span>
+          <input
+            type="number"
+            className="adm-input"
+            min={1}
+            max={30}
+            value={interestMax}
+            onChange={e => {
+              const max = Math.max(1, Number(e.target.value) || 1);
+              onLimitsChange(Math.min(interestMin, max), max);
+            }}
+          />
+        </label>
+      </div>
+      <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 12 }}>
+        Сейчас участник должен выбрать от {interestMin} до {interestMax} интересов.
+      </p>
+
       {groups.map((group, gi) => (
         <div key={gi} className="card adm-forum-nested-card">
           <label className="adm-label">Название группы</label>

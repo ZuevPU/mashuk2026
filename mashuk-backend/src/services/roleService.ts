@@ -1,3 +1,5 @@
+import { NAV_DIAG_OPTION_TO_ROLE, NAV_DIAG_QUESTIONS } from './navDiagnosticsDefaults.js';
+
 export const ROLE_KEYS = [
   'meaning_researcher',
   'practice_realizer',
@@ -9,21 +11,13 @@ export const ROLE_KEYS = [
 
 export type RoleKey = (typeof ROLE_KEYS)[number];
 
-/** Option index 0..3 maps to role keys for each diagnostic question */
-export const DEFAULT_OPTION_TO_ROLE: RoleKey[][] = [
-  // Q1: When you take on a new task, what do you do first?
-  ['meaning_researcher', 'practice_realizer', 'communication_guide', 'process_navigator'],
-  // Q2: In a difficult conversation you usually...
-  ['meaning_researcher', 'communication_guide', 'environment_keeper', 'content_packer'],
-  // Q3: Your strongest contribution to a team is...
-  ['practice_realizer', 'content_packer', 'process_navigator', 'environment_keeper'],
-  // Q4: When something fails you first...
-  ['meaning_researcher', 'practice_realizer', 'process_navigator', 'communication_guide'],
-  // Q5: Colleagues come to you for...
-  ['content_packer', 'practice_realizer', 'environment_keeper', 'communication_guide'],
-  // Q6: Ideal workday looks like...
-  ['meaning_researcher', 'process_navigator', 'practice_realizer', 'environment_keeper'],
-];
+export const MIN_DIAG_QUESTIONS = 1;
+export const MAX_DIAG_QUESTIONS = 12;
+export const MIN_DIAG_OPTIONS = 2;
+export const MAX_DIAG_OPTIONS = 8;
+
+/** Option index maps to role keys for each diagnostic question (defaults: 8×6). */
+export const DEFAULT_OPTION_TO_ROLE: RoleKey[][] = NAV_DIAG_OPTION_TO_ROLE.map(row => [...row] as RoleKey[]);
 
 /** @deprecated use DEFAULT_OPTION_TO_ROLE */
 const OPTION_TO_ROLE = DEFAULT_OPTION_TO_ROLE;
@@ -36,24 +30,41 @@ export type RoleDiagnosticsConfig = {
 export type OnboardingConfig = {
   goalQuestions: string[];
   interestGroups: Array<{ title: string; tags: string[] }>;
+  /** How many interest tags the participant must pick (inclusive). */
+  interestMin: number;
+  interestMax: number;
   questions: Array<{ text: string; options: string[] }>;
   optionToRole: RoleKey[][];
 };
 
-export function normalizeOptionToRole(raw: unknown): RoleKey[][] {
-  if (!Array.isArray(raw) || raw.length !== 6) return DEFAULT_OPTION_TO_ROLE.map(row => [...row]);
+export const DEFAULT_INTEREST_MIN = 5;
+export const DEFAULT_INTEREST_MAX = 8;
+export const MIN_GOAL_QUESTIONS = 1;
+export const MAX_GOAL_QUESTIONS = 12;
+
+export function normalizeOptionToRole(
+  raw: unknown,
+  questions: Array<{ text: string; options: string[] }>,
+): RoleKey[][] {
+  const defaults = DEFAULT_OPTION_TO_ROLE.map(row => [...row]);
+  const qCount = questions.length;
   const out: RoleKey[][] = [];
-  for (let i = 0; i < 6; i++) {
-    const row = raw[i];
-    if (!Array.isArray(row) || row.length !== 4) return DEFAULT_OPTION_TO_ROLE.map(r => [...r]);
-    const mapped = row.map((k) => {
-      const key = String(k) as RoleKey;
-      return (ROLE_KEYS as readonly string[]).includes(key) ? key : null;
-    });
-    if (mapped.some(k => !k)) return DEFAULT_OPTION_TO_ROLE.map(r => [...r]);
-    out.push(mapped as RoleKey[]);
+
+  for (let i = 0; i < qCount; i++) {
+    const optCount = questions[i].options.length;
+    const rawRow = Array.isArray(raw) ? raw[i] : null;
+    const defRow = defaults[i] ?? defaults[0] ?? ROLE_KEYS.map(k => k);
+    const row: RoleKey[] = [];
+    for (let oi = 0; oi < optCount; oi++) {
+      const fromRaw = Array.isArray(rawRow) ? String(rawRow[oi] ?? '') : '';
+      const key = (ROLE_KEYS as readonly string[]).includes(fromRaw)
+        ? (fromRaw as RoleKey)
+        : (defRow[oi % defRow.length] as RoleKey);
+      row.push(key);
+    }
+    out.push(row);
   }
-  return out;
+  return out.length ? out : defaults;
 }
 
 export function getDefaultDiagnosticsConfig(): RoleDiagnosticsConfig {
@@ -167,62 +178,10 @@ export const ROLE_CATALOG: Array<{
   },
 ];
 
-export const DIAGNOSTIC_QUESTIONS: Array<{ text: string; options: string[] }> = [
-  {
-    text: 'Когда ты берёшься за новую задачу, что ты делаешь первым делом?',
-    options: [
-      'Разбираю смысл — зачем и почему это нужно',
-      'Ищу похожие задачи, которые я уже делал',
-      'Собираю команду / договариваюсь с людьми',
-      'Составляю план и этапы',
-    ],
-  },
-  {
-    text: 'В сложном разговоре ты обычно…',
-    options: [
-      'Ищешь скрытый смысл и настоящую причину',
-      'Помогаешь всем высказаться и услышать друг друга',
-      'Следишь, чтобы атмосфера оставалась безопасной',
-      'Фиксируешь договорённости и формулировки',
-    ],
-  },
-  {
-    text: 'Твой самый сильный вклад в команду — это…',
-    options: [
-      'Быстро запустить и проверить на практике',
-      'Сделать материал понятным и готовым к использованию',
-      'Выстроить процесс и не дать сбиться с курса',
-      'Поддержать людей и удержать рабочую атмосферу',
-    ],
-  },
-  {
-    text: 'Когда что-то идёт не так, ты сначала…',
-    options: [
-      'Переосмысливаешь задачу и исходные допущения',
-      'Пробуешь другой рабочий вариант прямо сейчас',
-      'Пересобираешь этапы и ближайшие шаги',
-      'Собираешь людей и проясняешь ожидания',
-    ],
-  },
-  {
-    text: 'Коллеги чаще всего приходят к тебе за…',
-    options: [
-      'Готовой структурой, схемой или текстом',
-      'Практическим приёмом, который уже работает',
-      'Поддержкой и советом «как быть с людьми»',
-      'Помощью договориться и снять напряжение',
-    ],
-  },
-  {
-    text: 'Идеальный рабочий день для тебя — это…',
-    options: [
-      'Глубоко разобраться в важном вопросе',
-      'Чётко пройти маршрут от плана к результату',
-      'Запустить несколько живых проб и увидеть эффект',
-      'Создать спокойную и поддерживающую среду',
-    ],
-  },
-];
+export const DIAGNOSTIC_QUESTIONS: Array<{ text: string; options: string[] }> = NAV_DIAG_QUESTIONS.map(q => ({
+  text: q.text,
+  options: [...q.options],
+}));
 
 export const GOAL_QUESTIONS = [
   'С какой целью ты приехал на Машук?',
@@ -280,12 +239,23 @@ export const INTEREST_GROUPS: Array<{ title: string; tags: string[] }> = [
 
 export function normalizeGoalQuestions(raw: unknown): string[] {
   const defaults = GOAL_QUESTIONS.map(q => q);
-  if (!Array.isArray(raw) || raw.length !== 5) return defaults;
-  const out = raw.map((q, i) => {
-    const s = String(q ?? '').trim();
-    return s.length > 0 ? s.slice(0, 2000) : defaults[i];
-  });
-  return out.length === 5 ? out : defaults;
+  if (!Array.isArray(raw) || raw.length < MIN_GOAL_QUESTIONS) return defaults;
+  const sliced = raw.slice(0, MAX_GOAL_QUESTIONS);
+  const out = sliced.map((q) => String(q ?? '').trim().slice(0, 2000));
+  // Keep empty placeholders (admin fills texts later); need at least one slot
+  return out.length >= MIN_GOAL_QUESTIONS ? out : defaults;
+}
+
+export function normalizeInterestPickLimits(raw: unknown): { interestMin: number; interestMax: number } {
+  const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  let min = Number(obj.interestMin);
+  let max = Number(obj.interestMax);
+  if (!Number.isFinite(min)) min = DEFAULT_INTEREST_MIN;
+  if (!Number.isFinite(max)) max = DEFAULT_INTEREST_MAX;
+  min = Math.max(1, Math.min(20, Math.floor(min)));
+  max = Math.max(1, Math.min(30, Math.floor(max)));
+  if (min > max) [min, max] = [max, min];
+  return { interestMin: min, interestMax: max };
 }
 
 export function normalizeInterestGroups(raw: unknown): Array<{ title: string; tags: string[] }> {
@@ -306,33 +276,47 @@ export function normalizeInterestGroups(raw: unknown): Array<{ title: string; ta
   return out.length > 0 ? out : defaults;
 }
 
+/** Old factory quiz was hardcoded 6 questions × 4 options; replace with NAV 8×6. */
+export function isLegacyDiag6x4(raw: unknown): boolean {
+  if (!Array.isArray(raw) || raw.length !== 6) return false;
+  return raw.every(item => {
+    if (!item || typeof item !== 'object') return false;
+    const opts = (item as { options?: unknown }).options;
+    return Array.isArray(opts) && opts.length === 4;
+  });
+}
+
 export function normalizeDiagnosticQuestions(raw: unknown): Array<{ text: string; options: string[] }> {
   const defaults = DIAGNOSTIC_QUESTIONS.map(q => ({ text: q.text, options: [...q.options] }));
-  if (!Array.isArray(raw) || raw.length !== 6) return defaults;
+  if (isLegacyDiag6x4(raw)) return defaults;
+  if (!Array.isArray(raw) || raw.length < MIN_DIAG_QUESTIONS) return defaults;
   const out: Array<{ text: string; options: string[] }> = [];
-  for (let i = 0; i < 6; i++) {
-    const item = raw[i];
-    const def = defaults[i];
-    if (!item || typeof item !== 'object') return defaults;
+  for (const item of raw.slice(0, MAX_DIAG_QUESTIONS)) {
+    if (!item || typeof item !== 'object') continue;
     const text = String((item as { text?: unknown }).text ?? '').trim().slice(0, 2000);
     const optsRaw = (item as { options?: unknown }).options;
-    if (!text || !Array.isArray(optsRaw) || optsRaw.length !== 4) return defaults;
-    const options = optsRaw.map((o, oi) => {
-      const s = String(o ?? '').trim().slice(0, 500);
-      return s.length > 0 ? s : def.options[oi];
-    });
-    out.push({ text, options });
+    if (!Array.isArray(optsRaw)) continue;
+    const options = optsRaw
+      .map(o => String(o ?? '').trim().slice(0, 500))
+      .slice(0, MAX_DIAG_OPTIONS);
+    if (options.length < MIN_DIAG_OPTIONS) continue;
+    out.push({ text: text || `Вопрос ${out.length + 1}`, options });
   }
-  return out.length === 6 ? out : defaults;
+  return out.length >= MIN_DIAG_QUESTIONS ? out : defaults;
 }
 
 export function normalizeOnboardingConfig(raw: unknown): OnboardingConfig {
   const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const limits = normalizeInterestPickLimits(obj);
+  const legacyDiag = isLegacyDiag6x4(obj.questions);
+  const questions = normalizeDiagnosticQuestions(obj.questions);
   return {
     goalQuestions: normalizeGoalQuestions(obj.goalQuestions),
     interestGroups: normalizeInterestGroups(obj.interestGroups),
-    questions: normalizeDiagnosticQuestions(obj.questions),
-    optionToRole: normalizeOptionToRole(obj.optionToRole),
+    interestMin: limits.interestMin,
+    interestMax: limits.interestMax,
+    questions,
+    optionToRole: normalizeOptionToRole(legacyDiag ? null : obj.optionToRole, questions),
   };
 }
 
@@ -348,11 +332,12 @@ export function scorePedagogicalRole(
   roleAnswers: number[],
   optionToRole: RoleKey[][] = DEFAULT_OPTION_TO_ROLE,
 ): RoleKey {
-  if (!Array.isArray(roleAnswers) || roleAnswers.length !== 6) {
-    throw new Error('roleAnswers must contain 6 option indices');
+  const matrix = optionToRole.length
+    ? optionToRole
+    : DEFAULT_OPTION_TO_ROLE.map(r => [...r]);
+  if (!Array.isArray(roleAnswers) || roleAnswers.length !== matrix.length) {
+    throw new Error(`roleAnswers must contain ${matrix.length} option indices`);
   }
-
-  const matrix = normalizeOptionToRole(optionToRole);
 
   const scores: Record<RoleKey, number> = {
     meaning_researcher: 0,
@@ -365,7 +350,7 @@ export function scorePedagogicalRole(
 
   roleAnswers.forEach((optionIndex, qIndex) => {
     const map = matrix[qIndex];
-    if (!map || optionIndex < 0 || optionIndex > 3) {
+    if (!map || optionIndex < 0 || optionIndex >= map.length) {
       throw new Error(`Invalid role answer at question ${qIndex + 1}`);
     }
     scores[map[optionIndex]] += 1;

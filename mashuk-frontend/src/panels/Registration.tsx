@@ -56,7 +56,9 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   const [groupId, setGroupId] = useState<number | null>(null);
   const [goalAnswers, setGoalAnswers] = useState<string[]>(['', '', '', '', '']);
   const [interests, setInterests] = useState<string[]>([]);
-  const [roleAnswers, setRoleAnswers] = useState<(number | null)[]>([null, null, null, null, null, null]);
+  const [roleAnswers, setRoleAnswers] = useState<(number | null)[]>(
+    () => DIAGNOSTIC_QUESTIONS.map(() => null),
+  );
   const [diagIndex, setDiagIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +66,8 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   const [interestGroups, setInterestGroups] = useState<Array<{ title: string; tags: string[] }>>(
     INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] })),
   );
+  const [interestMin, setInterestMin] = useState(5);
+  const [interestMax, setInterestMax] = useState(8);
   const [diagQuestions, setDiagQuestions] = useState<Array<{ text: string; options: string[] }>>(
     DIAGNOSTIC_QUESTIONS.map(q => ({ text: q.text, options: [...q.options] })),
   );
@@ -138,6 +142,8 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
       groups?: { id: number; name: string; seatsLeft: number | null }[];
       goalQuestions?: string[];
       interestGroups?: Array<{ title: string; tags: string[] }>;
+      interestMin?: number;
+      interestMax?: number;
       roles?: ApiRole[];
       diagnostics?: {
         questions?: Array<{ text: string; options: string[] }>;
@@ -147,20 +153,27 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
       .then(data => {
         setGroupAssignMode((data.groupAssignMode as 'list' | 'auto') || 'list');
         setGroups(data.groups || []);
-        if (data.goalQuestions?.length === 5) {
+        if (data.goalQuestions?.length) {
           setGoalQuestions(data.goalQuestions);
           setGoalAnswers(data.goalQuestions.map(() => ''));
         }
         if (data.interestGroups?.length) {
           setInterestGroups(data.interestGroups.map(g => ({ title: g.title, tags: [...g.tags] })));
         }
-        if (data.diagnostics?.questions?.length === 6) {
+        if (typeof data.interestMin === 'number' && data.interestMin >= 1) {
+          setInterestMin(data.interestMin);
+        }
+        if (typeof data.interestMax === 'number' && data.interestMax >= 1) {
+          setInterestMax(data.interestMax);
+        }
+        if (data.diagnostics?.questions?.length) {
           setDiagQuestions(data.diagnostics.questions.map(q => ({
             text: q.text,
             options: [...q.options],
           })));
+          setRoleAnswers(data.diagnostics.questions.map(() => null));
         }
-        if (data.diagnostics?.optionToRole?.length === 6) {
+        if (data.diagnostics?.optionToRole?.length) {
           setDiagOptionToRole(data.diagnostics.optionToRole);
         }
         if (data.roles?.length) setApiRoles(data.roles);
@@ -176,13 +189,13 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
     && (groupAssignMode !== 'list' || groups.length === 0 || groupId),
   );
   const canGoStep2 = goalQuestions.every((_, i) => (goalAnswers[i] || '').trim().length > 0);
-  const canGoStep3 = interests.length >= 5 && interests.length <= 8;
+  const canGoStep3 = interests.length >= interestMin && interests.length <= interestMax;
   const canGoStep4 = roleAnswers[diagIndex] !== null;
 
   const toggleInterest = (tag: string) => {
     setInterests(prev => {
       if (prev.includes(tag)) return prev.filter(t => t !== tag);
-      if (prev.length >= 8) return prev;
+      if (prev.length >= interestMax) return prev;
       return [...prev, tag];
     });
   };
@@ -304,7 +317,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
               </p>
             </Div>
             {goalQuestions.map((q, i) => (
-              <FormItem key={i} top={`${i + 1}. ${q}`} topMultiline>
+              <FormItem key={i} top={`${i + 1}. ${q.trim() || 'Вопрос'}`} topMultiline>
                 <Textarea
                   value={goalAnswers[i]}
                   onChange={e => {
@@ -330,7 +343,8 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
             <Div>
               <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>Твои интересы</h2>
               <p style={{ margin: 0, fontSize: 13, color: '#666' }}>
-                Выбери 5–8 тегов — по ним бот будет подбирать события и материалы.
+                Выбери {interestMin === interestMax ? interestMin : `${interestMin}–${interestMax}`} тег(ов) —
+                по ним бот будет подбирать события и материалы.
               </p>
             </Div>
             {interestGroups.map(group => (
@@ -362,8 +376,10 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 </div>
               </Div>
             ))}
-            <Div style={{ fontSize: 12, color: interests.length >= 5 ? '#2F855A' : '#C53030' }}>
-              {interests.length >= 5 ? `✓ Выбрано ${interests.length} из ≥5` : `Выбрано ${interests.length} — нужно минимум 5`}
+            <Div style={{ fontSize: 12, color: interests.length >= interestMin ? '#2F855A' : '#C53030' }}>
+              {interests.length >= interestMin
+                ? `✓ Выбрано ${interests.length}${interestMax > interestMin ? ` (макс. ${interestMax})` : ''}`
+                : `Выбрано ${interests.length} — нужно минимум ${interestMin}`}
             </Div>
             <Button size="l" stretched disabled={!canGoStep3} onClick={() => { setDiagIndex(0); setStep(4); }}>
               Дальше → Диагностика роли
@@ -379,7 +395,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
             <Div>
               <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>Диагностика роли</h2>
               <p style={{ margin: 0, fontSize: 13, color: '#666' }}>
-                Вопрос {diagIndex + 1} из 6
+                Вопрос {diagIndex + 1} из {diagQuestions.length}
               </p>
             </Div>
             <Div>
@@ -425,11 +441,11 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
               stretched
               disabled={!canGoStep4}
               onClick={() => {
-                if (diagIndex < 5) setDiagIndex(diagIndex + 1);
+                if (diagIndex < diagQuestions.length - 1) setDiagIndex(diagIndex + 1);
                 else setStep('result');
               }}
             >
-              {diagIndex < 5 ? 'Следующий вопрос →' : 'Узнать роль →'}
+              {diagIndex < diagQuestions.length - 1 ? 'Следующий вопрос →' : 'Узнать роль →'}
             </Button>
             <Button
               size="l"

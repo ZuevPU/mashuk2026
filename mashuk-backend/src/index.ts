@@ -4,6 +4,7 @@ import { validateEnv } from './config/validateEnv.js';
 import { createApp } from './app.js';
 import { runMigrations } from './db/migrate.js';
 import { ensureAdminPermissionsSeeded } from './services/adminPermissionsService.js';
+import { ensureNavDiagnosticsTemplateApplied } from './services/ensureNavDiagnosticsTemplate.js';
 import { runSeed } from './db/seed.js';
 import { startAnalyticsRefreshScheduler } from './services/analytics/refreshScheduler.js';
 import { startPushScheduler } from './services/pushScheduler.js';
@@ -34,6 +35,11 @@ app.listen(port, host, () => {
     try {
       await runMigrations();
       await ensureAdminPermissionsSeeded();
+      try {
+        await ensureNavDiagnosticsTemplateApplied();
+      } catch (err) {
+        console.error('Nav diagnostics template upgrade failed (non-fatal):', err);
+      }
       if (process.env.AUTO_SEED === 'true') {
         try {
           await runSeed();

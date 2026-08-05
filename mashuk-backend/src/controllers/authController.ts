@@ -17,7 +17,7 @@ async function getForumOnboardingConfig() {
   return normalizeOnboardingConfig(settings?.roleDiagnosticsConfig);
 }
 
-const onboardingSchema = z.object({
+const onboardingBaseSchema = z.object({
   firstName: z.string().min(1).max(255),
   lastName: z.string().min(1).max(255),
   age: z.coerce.number().int().min(14).max(100),
@@ -30,9 +30,9 @@ const onboardingSchema = z.object({
   consentPdVersion: z.coerce.number().int().positive().optional(),
   consentAnalyticsVersion: z.coerce.number().int().positive().optional(),
   groupId: z.coerce.number().int().positive().optional().nullable(),
-  goalAnswers: z.array(z.string().min(1).max(2000)).length(5),
-  interests: z.array(z.string().min(1).max(100)).min(5).max(8),
-  roleAnswers: z.array(z.coerce.number().int().min(0).max(3)).length(6),
+  goalAnswers: z.array(z.string().min(1).max(2000)).min(1).max(12),
+  interests: z.array(z.string().min(1).max(100)).min(1).max(30),
+  roleAnswers: z.array(z.coerce.number().int().min(0).max(11)).min(1).max(12),
   vkPhotoUrl: z.string().url().max(2000).optional(),
 });
 
@@ -125,7 +125,7 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       return;
     }
 
-    const parsed = onboardingSchema.safeParse(req.body);
+    const parsed = onboardingBaseSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
       return;
@@ -133,6 +133,34 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
 
     const data = parsed.data;
     const onboardingConfig = await getForumOnboardingConfig();
+    if (data.goalAnswers.length !== onboardingConfig.goalQuestions.length) {
+      res.status(400).json({
+        error: `Нужно ответить на ${onboardingConfig.goalQuestions.length} вопрос(а/ов) целеполагания`,
+      });
+      return;
+    }
+    if (
+      data.interests.length < onboardingConfig.interestMin
+      || data.interests.length > onboardingConfig.interestMax
+    ) {
+      res.status(400).json({
+        error: `Выберите от ${onboardingConfig.interestMin} до ${onboardingConfig.interestMax} интересов`,
+      });
+      return;
+    }
+    if (data.roleAnswers.length !== onboardingConfig.questions.length) {
+      res.status(400).json({
+        error: `Нужно ответить на ${onboardingConfig.questions.length} вопрос(а/ов) диагностики`,
+      });
+      return;
+    }
+    for (let i = 0; i < data.roleAnswers.length; i++) {
+      const optCount = onboardingConfig.questions[i]?.options.length ?? 0;
+      if (data.roleAnswers[i] < 0 || data.roleAnswers[i] >= optCount) {
+        res.status(400).json({ error: `Некорректный ответ на вопрос диагностики ${i + 1}` });
+        return;
+      }
+    }
     const allowedTags = interestTagsFromConfig(onboardingConfig);
     for (const tag of data.interests) {
       if (!allowedTags.has(tag)) {
@@ -338,6 +366,8 @@ export const listOnboardingMeta = async (_req: VkAuthRequest, res: Response): Pr
       roles: roles.length ? roles : undefined,
       goalQuestions: onboardingConfig.goalQuestions,
       interestGroups: onboardingConfig.interestGroups,
+      interestMin: onboardingConfig.interestMin,
+      interestMax: onboardingConfig.interestMax,
       diagnostics: {
         optionToRole: onboardingConfig.optionToRole,
         questions: onboardingConfig.questions,

@@ -32,6 +32,8 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
   const [interestGroups, setInterestGroups] = useState(
     () => DEFAULT_INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] })),
   );
+  const [interestMin, setInterestMin] = useState(5);
+  const [interestMax, setInterestMax] = useState(8);
   const [diagQuestions, setDiagQuestions] = useState(() => cloneDiagQuestions(DEFAULT_DIAG_QUESTIONS));
   const [diagMatrix, setDiagMatrix] = useState<string[][]>(() => DEFAULT_DIAG_MATRIX.map(r => [...r]));
   const [savedConfigJson, setSavedConfigJson] = useState('');
@@ -43,9 +45,11 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
   const currentConfig = useMemo((): RoleDiagnosticsConfig => ({
     goalQuestions,
     interestGroups,
+    interestMin,
+    interestMax,
     questions: diagQuestions,
     optionToRole: diagMatrix,
-  }), [goalQuestions, interestGroups, diagQuestions, diagMatrix]);
+  }), [goalQuestions, interestGroups, interestMin, interestMax, diagQuestions, diagMatrix]);
 
   const configDirty = snapshotConfig(currentConfig) !== savedConfigJson;
 
@@ -63,11 +67,13 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
     if (!savedConfigJson) return false;
     try {
       const saved = JSON.parse(savedConfigJson) as RoleDiagnosticsConfig;
-      return JSON.stringify(saved.interestGroups) !== JSON.stringify(interestGroups);
+      return JSON.stringify(saved.interestGroups) !== JSON.stringify(interestGroups)
+        || (saved.interestMin ?? 5) !== interestMin
+        || (saved.interestMax ?? 8) !== interestMax;
     } catch {
       return configDirty;
     }
-  }, [savedConfigJson, interestGroups, configDirty]);
+  }, [savedConfigJson, interestGroups, interestMin, interestMax, configDirty]);
 
   const diagDirty = useMemo(() => {
     if (!savedConfigJson) return false;
@@ -90,30 +96,48 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
       setRoles(rolesRes.roles || []);
 
       const cfg = fs.settings?.roleDiagnosticsConfig || {};
-      const matrix = cfg.optionToRole;
-      const dm = Array.isArray(matrix) && matrix.length === 6
-        ? matrix.map((r: string[]) => [...r])
-        : DEFAULT_DIAG_MATRIX.map(r => [...r]);
-      const gq = Array.isArray(cfg.goalQuestions) && cfg.goalQuestions.length === 5
-        ? [...cfg.goalQuestions]
+      const gq = Array.isArray(cfg.goalQuestions) && cfg.goalQuestions.length >= 1
+        ? cfg.goalQuestions.map((q: string) => String(q ?? ''))
         : [...DEFAULT_GOAL_QUESTIONS];
-      const dq = Array.isArray(cfg.questions) && cfg.questions.length === 6
+      const legacyDiag = Array.isArray(cfg.questions)
+        && cfg.questions.length === 6
+        && cfg.questions.every((q: { options?: unknown }) => Array.isArray(q?.options) && q.options.length === 4);
+      const dq = !legacyDiag && Array.isArray(cfg.questions) && cfg.questions.length >= 1
         ? cloneDiagQuestions(cfg.questions)
         : cloneDiagQuestions(DEFAULT_DIAG_QUESTIONS);
+      const matrix = legacyDiag ? DEFAULT_DIAG_MATRIX : cfg.optionToRole;
+      const dm = dq.map((q, qi) => {
+        const row = Array.isArray(matrix?.[qi]) ? [...matrix[qi]] : [...(DEFAULT_DIAG_MATRIX[qi] || DEFAULT_DIAG_MATRIX[0])];
+        while (row.length < q.options.length) {
+          row.push(DEFAULT_DIAG_MATRIX[qi]?.[row.length % 6] || 'meaning_researcher');
+        }
+        return row.slice(0, q.options.length);
+      });
       const ig = Array.isArray(cfg.interestGroups) && cfg.interestGroups.length > 0
         ? cfg.interestGroups.map((g: { title: string; tags: string[] }) => ({
           title: g.title,
           tags: [...g.tags],
         }))
         : DEFAULT_INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] }));
+      let imin = Number(cfg.interestMin);
+      let imax = Number(cfg.interestMax);
+      if (!Number.isFinite(imin)) imin = 5;
+      if (!Number.isFinite(imax)) imax = 8;
+      imin = Math.max(1, Math.min(20, Math.floor(imin)));
+      imax = Math.max(1, Math.min(30, Math.floor(imax)));
+      if (imin > imax) [imin, imax] = [imax, imin];
 
       setDiagMatrix(dm);
       setGoalQuestions(gq);
       setDiagQuestions(dq);
       setInterestGroups(ig);
+      setInterestMin(imin);
+      setInterestMax(imax);
       setSavedConfigJson(snapshotConfig({
         goalQuestions: gq,
         interestGroups: ig,
+        interestMin: imin,
+        interestMax: imax,
         questions: dq,
         optionToRole: dm,
       }));
@@ -193,7 +217,13 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
       {step === 'interests' && (
         <InterestsStepEditor
           groups={interestGroups}
+          interestMin={interestMin}
+          interestMax={interestMax}
           onChange={setInterestGroups}
+          onLimitsChange={(min, max) => {
+            setInterestMin(min);
+            setInterestMax(max);
+          }}
           onSave={() => saveConfig('Интересы сохранены')}
           dirty={interestsDirty}
           onOpenProgram={onOpenProgram}

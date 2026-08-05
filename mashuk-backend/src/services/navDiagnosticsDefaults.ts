@@ -1,58 +1,8 @@
-export const GOAL_QUESTIONS = [
-  'С какой целью ты приехал на Машук?',
-  'Что ты хочешь получить от программы?',
-  'Какой запрос ты хочешь принести своему направлению?',
-  'Что для тебя было бы главным результатом этих 8 дней?',
-  'Что ты ожидаешь от других участников?',
-] as const;
+/** New navigation diagnostics defaults from «НАВИГАЦИОННАЯ ДИАГНОСТИКА» (8×6). */
 
-export const INTEREST_GROUPS = [
-  {
-    title: 'Как я работаю',
-    tags: [
-      'проектная работа',
-      'исследовательская деятельность',
-      'игропрактики',
-      'воспитательная работа',
-      'классное руководство',
-      'детская редакция',
-    ],
-  },
-  {
-    title: 'С кем и как',
-    tags: [
-      'подростки',
-      'младшая школа',
-      'старшие классы',
-      'работа с родителями',
-      'командная работа учителей',
-      'наставничество',
-    ],
-  },
-  {
-    title: 'Про что говорить',
-    tags: [
-      'оценки и мотивация',
-      'осмысленность обучения',
-      'выгорание учителя',
-      'образование будущего',
-      'школа и семья',
-      'цифровая среда',
-    ],
-  },
-  {
-    title: 'Форматы, которые нравятся',
-    tags: [
-      'открытые уроки',
-      'лекции и большие форматы',
-      'клубы обсуждений',
-      'мастер-классы',
-      'полевые выезды',
-    ],
-  },
-] as const;
+export type DiagQuestionDef = { text: string; options: string[] };
 
-export const DIAGNOSTIC_QUESTIONS = [
+export const NAV_DIAG_QUESTIONS: DiagQuestionDef[] = [
   {
     text: 'Ты приходишь на незнакомое образовательное событие. Что ты, скорее всего, сделаешь сначала?',
     options: [
@@ -141,119 +91,24 @@ export const DIAGNOSTIC_QUESTIONS = [
       'Открыть новые вопросы, смыслы и возможности.',
     ],
   },
-] as const;
+];
 
-export type RoleKey =
-  | 'meaning_researcher'
-  | 'practice_realizer'
-  | 'communication_guide'
-  | 'content_packer'
-  | 'process_navigator'
-  | 'environment_keeper';
-
-const OPTION_TO_ROLE: RoleKey[][] = [
+/** Role keys per option index for each question (same order as NAV_DIAG_QUESTIONS options). */
+export const NAV_DIAG_OPTION_TO_ROLE = [
+  // Q1
   ['meaning_researcher', 'content_packer', 'practice_realizer', 'process_navigator', 'communication_guide', 'environment_keeper'],
+  // Q2
   ['content_packer', 'practice_realizer', 'process_navigator', 'communication_guide', 'environment_keeper', 'meaning_researcher'],
+  // Q3
   ['practice_realizer', 'process_navigator', 'communication_guide', 'environment_keeper', 'meaning_researcher', 'content_packer'],
+  // Q4
   ['process_navigator', 'communication_guide', 'environment_keeper', 'meaning_researcher', 'content_packer', 'practice_realizer'],
+  // Q5
   ['communication_guide', 'environment_keeper', 'meaning_researcher', 'content_packer', 'practice_realizer', 'process_navigator'],
+  // Q6
   ['environment_keeper', 'meaning_researcher', 'content_packer', 'practice_realizer', 'process_navigator', 'communication_guide'],
+  // Q7
   ['meaning_researcher', 'practice_realizer', 'communication_guide', 'content_packer', 'environment_keeper', 'process_navigator'],
+  // Q8
   ['process_navigator', 'environment_keeper', 'content_packer', 'communication_guide', 'practice_realizer', 'meaning_researcher'],
-];
-
-const ROLE_PRIORITY: RoleKey[] = [
-  'practice_realizer',
-  'meaning_researcher',
-  'communication_guide',
-  'content_packer',
-  'process_navigator',
-  'environment_keeper',
-];
-
-export const ROLE_CATALOG: Array<{
-  roleKey: RoleKey;
-  name: string;
-  quadrant: string;
-  essence: string;
-  inClass: string;
-  keywords: string;
-}> = [
-  {
-    roleKey: 'practice_realizer',
-    name: 'Реализатор практики',
-    quadrant: 'Лидерский · Действия',
-    essence: 'Человек действия. Быстро превращает идею в работающий процесс.',
-    inClass: 'Ты первый пробуешь новые форматы и адаптируешь их под своих детей.',
-    keywords: 'пробовать · собирать · сделать · запустить · применить',
-  },
-  {
-    roleKey: 'meaning_researcher',
-    name: 'Исследователь смыслов',
-    quadrant: 'Лидерский · Мышление',
-    essence: 'Ищет «зачем» раньше «как». Держит глубину и помогает не сваливаться в суету.',
-    inClass: 'Ты возвращаешь класс к смыслу задания.',
-    keywords: 'зачем · смысл · вопрос · понять · разобраться',
-  },
-  {
-    roleKey: 'communication_guide',
-    name: 'Проводник коммуникации',
-    quadrant: 'Лидерский · Люди',
-    essence: 'Связывает людей и разговоры, создаёт пространство для диалога.',
-    inClass: 'Ты умеешь включить тихих и охладить конфликт.',
-    keywords: 'связать · услышать · договориться · диалог · включить',
-  },
-  {
-    roleKey: 'content_packer',
-    name: 'Упаковщик содержания',
-    quadrant: 'Организационный · Мышление',
-    essence: 'Делает сложное понятным: схемы, инструкции, упаковка.',
-    inClass: 'У тебя появляются схемы и чек-листы, которыми можно пользоваться.',
-    keywords: 'структура · схема · инструкция · ясность · упаковать',
-  },
-  {
-    roleKey: 'process_navigator',
-    name: 'Навигатор процесса',
-    quadrant: 'Организационный · Действия',
-    essence: 'Держит ритм и этапы от старта до финиша.',
-    inClass: 'Урок и проекты идут по понятным этапам.',
-    keywords: 'план · этап · ритм · маршрут · довести',
-  },
-  {
-    roleKey: 'environment_keeper',
-    name: 'Хранитель среды',
-    quadrant: 'Организационный · Люди',
-    essence: 'Заботится об атмосфере, устойчивости и безопасности.',
-    inClass: 'В твоём классе безопасно ошибаться.',
-    keywords: 'атмосфера · забота · устойчивость · правила · поддержка',
-  },
-];
-
-export function scoreRoleClient(
-  roleAnswers: number[],
-  optionToRole: RoleKey[][] = OPTION_TO_ROLE,
-): RoleKey {
-  const matrix = optionToRole.length === roleAnswers.length ? optionToRole : OPTION_TO_ROLE;
-  const scores: Record<RoleKey, number> = {
-    meaning_researcher: 0,
-    practice_realizer: 0,
-    communication_guide: 0,
-    content_packer: 0,
-    process_navigator: 0,
-    environment_keeper: 0,
-  };
-  roleAnswers.forEach((optionIndex, qIndex) => {
-    const row = matrix[qIndex];
-    if (!row || optionIndex < 0 || optionIndex >= row.length) return;
-    scores[row[optionIndex]] += 1;
-  });
-  let best = ROLE_PRIORITY[0];
-  let bestScore = -1;
-  for (const key of ROLE_PRIORITY) {
-    if (scores[key] > bestScore) {
-      bestScore = scores[key];
-      best = key;
-    }
-  }
-  return best;
-}
+] as const;

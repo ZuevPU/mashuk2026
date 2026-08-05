@@ -48,7 +48,7 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
   useEffect(() => {
     apiGet<{ goalQuestions?: string[] }>('/auth/onboarding-meta')
       .then(data => {
-        if (data.goalQuestions?.length === 5) {
+        if (data.goalQuestions?.length) {
           setGoalQuestions(data.goalQuestions);
           setAnswers(data.goalQuestions.map(() => ''));
         }

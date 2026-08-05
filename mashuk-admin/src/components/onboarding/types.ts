@@ -7,6 +7,8 @@ export type DiagQuestion = { text: string; options: string[] };
 export type RoleDiagnosticsConfig = {
   goalQuestions: string[];
   interestGroups: InterestGroup[];
+  interestMin?: number;
+  interestMax?: number;
   questions: DiagQuestion[];
   optionToRole: string[][];
 };
