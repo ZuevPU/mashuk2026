@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, sql } from 'drizzle-orm';
 import type { Request } from 'express';
 import { db } from '../db/index.js';
 import {
@@ -306,25 +306,65 @@ export async function previewCopyShift(sourceId: number) {
   };
 }
 
+function rebaseShiftDate(
+  value: Date | null,
+  sourceStart: Date | null,
+  targetStart: Date | null,
+): Date | null {
+  if (!value || !sourceStart || !targetStart) return null;
+  return new Date(value.getTime() + targetStart.getTime() - sourceStart.getTime());
+}
+
 export async function copyShiftProgram(opts: {
   sourceId: number;
-  code: string;
-  name: string;
+  code?: string;
+  name?: string;
   startDate?: Date | null;
+  targetId?: number;
 }): Promise<{ shift: ShiftRow; preview: Awaited<ReturnType<typeof previewCopyShift>> }> {
   const source = await getShiftById(opts.sourceId);
   if (!source) throw new Error('Source shift not found');
   const preview = await previewCopyShift(opts.sourceId);
 
-  const newShift = await createShift({
-    code: opts.code,
-    name: opts.name,
-    startDate: opts.startDate ?? null,
-    totalDays: source.totalDays ?? 8,
-    isSandbox: false,
-  });
+  return db.transaction(async (tx) => {
+    let newShift: ShiftRow;
+    if (opts.targetId != null) {
+      if (opts.targetId === opts.sourceId) throw new Error('Source and target shifts must be different');
+      await tx.execute(sql`select ${shifts.id} from ${shifts} where ${shifts.id} = ${opts.targetId} for update`);
+      const [target] = await tx.select().from(shifts).where(eq(shifts.id, opts.targetId)).limit(1);
+      if (!target) throw new Error('Target shift not found');
+      if (target.status === 'active') throw new Error('Нельзя копировать структуру в активную смену');
+      const targetCounts = await Promise.all([
+        tx.select({ c: count() }).from(events).where(eq(events.shiftId, target.id)),
+        tx.select({ c: count() }).from(questions).where(eq(questions.shiftId, target.id)),
+        tx.select({ c: count() }).from(tasks).where(eq(tasks.shiftId, target.id)),
+        tx.select({ c: count() }).from(materials).where(eq(materials.shiftId, target.id)),
+        tx.select({ c: count() }).from(scheduleDays).where(eq(scheduleDays.shiftId, target.id)),
+        tx.select({ c: count() }).from(dayFocus).where(eq(dayFocus.shiftId, target.id)),
+        tx.select({ c: count() }).from(participantGroups).where(eq(participantGroups.shiftId, target.id)),
+        tx.select({ c: count() }).from(dayExperiments).where(eq(dayExperiments.shiftId, target.id)),
+        tx.select({ c: count() }).from(adminPushNotifications).where(eq(adminPushNotifications.shiftId, target.id)),
+      ]);
+      if (targetCounts.some(([row]) => Number(row.c) > 0)) {
+        throw new Error('Целевая смена не пустая. Копирование разрешено только в пустую смену');
+      }
+      newShift = target;
+    } else {
+      if (!opts.code || !opts.name) throw new Error('code and name required');
+      [newShift] = await tx.insert(shifts).values({
+        code: opts.code,
+        name: opts.name,
+        status: 'draft',
+        isSandbox: false,
+        startDate: opts.startDate ?? null,
+        totalDays: source.totalDays ?? 8,
+        currentDay: 1,
+        shiftLabel: opts.name,
+      }).returning();
+    }
 
-  await db.update(shifts).set({
+    await tx.update(shifts).set({
+    totalDays: source.totalDays,
     recommendationThreshold: source.recommendationThreshold,
     sectionsVisibility: source.sectionsVisibility,
     groupAssignMode: source.groupAssignMode,
@@ -338,7 +378,7 @@ export async function copyShiftProgram(opts: {
     eveningQuestionnaireByDay: source.eveningQuestionnaireByDay,
     answerConfirmation: source.answerConfirmation,
     profileProgressWeights: source.profileProgressWeights,
-    shiftLabel: opts.name,
+    shiftLabel: opts.name ?? newShift.name,
     pdfTemplate: source.pdfTemplate,
     recommendationTemplates: source.recommendationTemplates,
     programRecEmptyNoMatchText: source.programRecEmptyNoMatchText,
@@ -347,36 +387,42 @@ export async function copyShiftProgram(opts: {
     leaderboardScopes: source.leaderboardScopes,
     currentDay: 1,
     updatedAt: new Date(),
-  }).where(eq(shifts.id, newShift.id));
+    }).where(eq(shifts.id, newShift.id));
 
-  const srcDays = await db.select().from(scheduleDays).where(eq(scheduleDays.shiftId, opts.sourceId));
-  for (const d of srcDays) {
-    const { id: _id, ...rest } = d;
-    await db.insert(scheduleDays).values({ ...rest, shiftId: newShift.id, isPublished: false, publishedAt: null });
-  }
+    const srcDays = await tx.select().from(scheduleDays).where(eq(scheduleDays.shiftId, opts.sourceId));
+    for (const d of srcDays) {
+      const { id: _id, ...rest } = d;
+      await tx.insert(scheduleDays).values({
+        ...rest,
+        shiftId: newShift.id,
+        calendarDate: rebaseShiftDate(d.calendarDate, source.startDate, newShift.startDate),
+        isPublished: false,
+        publishedAt: null,
+      });
+    }
 
-  const srcFocus = await db.select().from(dayFocus).where(eq(dayFocus.shiftId, opts.sourceId));
-  for (const f of srcFocus) {
-    const { id: _id, ...rest } = f;
-    await db.insert(dayFocus).values({ ...rest, shiftId: newShift.id });
-  }
+    const srcFocus = await tx.select().from(dayFocus).where(eq(dayFocus.shiftId, opts.sourceId));
+    for (const f of srcFocus) {
+      const { id: _id, ...rest } = f;
+      await tx.insert(dayFocus).values({ ...rest, shiftId: newShift.id });
+    }
 
-  const srcExperiments = await db.select().from(dayExperiments).where(eq(dayExperiments.shiftId, opts.sourceId));
-  for (const e of srcExperiments) {
-    const { id: _id, ...rest } = e;
-    await db.insert(dayExperiments).values({ ...rest, shiftId: newShift.id });
-  }
+    const srcExperiments = await tx.select().from(dayExperiments).where(eq(dayExperiments.shiftId, opts.sourceId));
+    for (const e of srcExperiments) {
+      const { id: _id, ...rest } = e;
+      await tx.insert(dayExperiments).values({ ...rest, shiftId: newShift.id });
+    }
 
-  const groupIdMap = new Map<number, number>();
-  const srcGroups = await db.select().from(participantGroups).where(eq(participantGroups.shiftId, opts.sourceId));
-  for (const g of srcGroups) {
-    const { id: oldId, ...rest } = g;
-    const [created] = await db.insert(participantGroups).values({ ...rest, shiftId: newShift.id }).returning();
-    groupIdMap.set(oldId, created.id);
-  }
+    const groupIdMap = new Map<number, number>();
+    const srcGroups = await tx.select().from(participantGroups).where(eq(participantGroups.shiftId, opts.sourceId));
+    for (const g of srcGroups) {
+      const { id: oldId, ...rest } = g;
+      const [created] = await tx.insert(participantGroups).values({ ...rest, shiftId: newShift.id }).returning();
+      groupIdMap.set(oldId, created.id);
+    }
 
-  const eventIdMap = new Map<number, number>();
-  const srcEvents = await db.select().from(events).where(eq(events.shiftId, opts.sourceId)).orderBy(asc(events.id));
+    const eventIdMap = new Map<number, number>();
+    const srcEvents = await tx.select().from(events).where(eq(events.shiftId, opts.sourceId)).orderBy(asc(events.id));
   // Multi-pass so nested parents exist before children (depth > 1).
   const pending = [...srcEvents];
   let guard = 0;
@@ -389,9 +435,12 @@ export async function copyShiftProgram(opts: {
         continue;
       }
       const { id: oldId, qrToken: _q, parentEventId, ...rest } = e;
-      const [created] = await db.insert(events).values({
+      const [created] = await tx.insert(events).values({
         ...rest,
         shiftId: newShift.id,
+        eventDate: rebaseShiftDate(e.eventDate, source.startDate, newShift.startDate),
+        startTime: rebaseShiftDate(e.startTime, source.startDate, newShift.startDate),
+        endTime: rebaseShiftDate(e.endTime, source.startDate, newShift.startDate),
         parentEventId: parentEventId ? (eventIdMap.get(parentEventId) ?? null) : null,
         qrToken: null,
       }).returning();
@@ -401,9 +450,12 @@ export async function copyShiftProgram(opts: {
       // Orphaned parent refs — insert remaining as roots
       for (const e of still) {
         const { id: oldId, qrToken: _q, parentEventId: _p, ...rest } = e;
-        const [created] = await db.insert(events).values({
+        const [created] = await tx.insert(events).values({
           ...rest,
           shiftId: newShift.id,
+          eventDate: rebaseShiftDate(e.eventDate, source.startDate, newShift.startDate),
+          startTime: rebaseShiftDate(e.startTime, source.startDate, newShift.startDate),
+          endTime: rebaseShiftDate(e.endTime, source.startDate, newShift.startDate),
           parentEventId: null,
           qrToken: null,
         }).returning();
@@ -415,10 +467,10 @@ export async function copyShiftProgram(opts: {
     pending.push(...still);
   }
 
-  const srcMats = await db.select().from(materials).where(eq(materials.shiftId, opts.sourceId));
+  const srcMats = await tx.select().from(materials).where(eq(materials.shiftId, opts.sourceId));
   for (const m of srcMats) {
     const { id: _id, ...rest } = m;
-    await db.insert(materials).values({
+    await tx.insert(materials).values({
       ...rest,
       shiftId: newShift.id,
       eventId: rest.eventId ? (eventIdMap.get(rest.eventId) ?? null) : null,
@@ -426,46 +478,49 @@ export async function copyShiftProgram(opts: {
   }
 
   const questionIdMap = new Map<number, number>();
-  const srcQs = await db.select().from(questions).where(eq(questions.shiftId, opts.sourceId)).orderBy(asc(questions.id));
+  const srcQs = await tx.select().from(questions).where(eq(questions.shiftId, opts.sourceId)).orderBy(asc(questions.id));
   for (const q of srcQs) {
     const { id: oldId, ...rest } = q;
     const mappedGroup = rest.audienceGroupId && groupIdMap.has(rest.audienceGroupId)
       ? groupIdMap.get(rest.audienceGroupId)!
       : rest.audienceGroupId;
-    const [created] = await db.insert(questions).values({
+    const [created] = await tx.insert(questions).values({
       ...rest,
       shiftId: newShift.id,
       parentQuestionId: null,
       audienceGroupId: mappedGroup ?? null,
     }).returning();
     questionIdMap.set(oldId, created.id);
-    const optsRows = await db.select().from(questionOptions).where(eq(questionOptions.questionId, oldId));
+    const optsRows = await tx.select().from(questionOptions).where(eq(questionOptions.questionId, oldId));
     for (const o of optsRows) {
       const { id: _oid, ...oRest } = o;
-      await db.insert(questionOptions).values({ ...oRest, questionId: created.id });
+      await tx.insert(questionOptions).values({ ...oRest, questionId: created.id });
     }
   }
   for (const q of srcQs) {
     if (q.parentQuestionId && questionIdMap.has(q.id) && questionIdMap.has(q.parentQuestionId)) {
-      await db.update(questions)
+      await tx.update(questions)
         .set({ parentQuestionId: questionIdMap.get(q.parentQuestionId)! })
         .where(eq(questions.id, questionIdMap.get(q.id)!));
     }
   }
 
-  const srcTasks = await db.select().from(tasks).where(eq(tasks.shiftId, opts.sourceId));
+  const srcTasks = await tx.select().from(tasks).where(eq(tasks.shiftId, opts.sourceId));
   for (const t of srcTasks) {
     const { id: _id, qrToken: _q, ...rest } = t;
-    await db.insert(tasks).values({ ...rest, shiftId: newShift.id, qrToken: null });
+    await tx.insert(tasks).values({ ...rest, shiftId: newShift.id, qrToken: null });
   }
 
-  const srcPush = await db.select().from(adminPushNotifications).where(eq(adminPushNotifications.shiftId, opts.sourceId));
+  const srcPush = await tx.select().from(adminPushNotifications).where(eq(adminPushNotifications.shiftId, opts.sourceId));
   for (const p of srcPush) {
     const { id: _id, sentAt: _s, deliveredCount: _d, openedCount: _o, triggerFiredAt: _t, ...rest } = p;
-    await db.insert(adminPushNotifications).values({
+    await tx.insert(adminPushNotifications).values({
       ...rest,
       shiftId: newShift.id,
       status: 'draft',
+      programDate: rebaseShiftDate(p.programDate, source.startDate, newShift.startDate),
+      publishAt: rebaseShiftDate(p.publishAt, source.startDate, newShift.startDate),
+      visibleUntil: rebaseShiftDate(p.visibleUntil, source.startDate, newShift.startDate),
       sentAt: null,
       deliveredCount: 0,
       openedCount: 0,
@@ -473,8 +528,9 @@ export async function copyShiftProgram(opts: {
     });
   }
 
-  const fresh = (await getShiftById(newShift.id))!;
-  return { shift: fresh, preview };
+    const [fresh] = await tx.select().from(shifts).where(eq(shifts.id, newShift.id)).limit(1);
+    return { shift: fresh, preview };
+  });
 }
 
 export async function clearSandboxParticipantData(shiftId: number): Promise<{
@@ -500,6 +556,69 @@ export async function clearSandboxParticipantData(shiftId: number): Promise<{
   await db.delete(participants).where(eq(participants.shiftId, shiftId));
 
   return { participantsCleared: ids.length };
+}
+
+export async function copyParticipantsToShift(input: {
+  sourceShiftId: number;
+  targetShiftId: number;
+  participantIds: number[];
+}): Promise<{ copied: number; skipped: number; notFound: number }> {
+  if (input.sourceShiftId === input.targetShiftId) {
+    throw new Error('Исходная и целевая смены должны отличаться');
+  }
+  const target = await getShiftById(input.targetShiftId);
+  if (!target) throw new Error('Target shift not found');
+
+  const uniqueIds = [...new Set(input.participantIds)]
+    .filter(id => Number.isInteger(id) && id > 0);
+  if (!uniqueIds.length) throw new Error('Выберите хотя бы одного участника');
+  if (uniqueIds.length > 5000) throw new Error('За один раз можно перенести не более 5000 участников');
+
+  const sourceRows = await db.select().from(participants).where(and(
+    eq(participants.shiftId, input.sourceShiftId),
+    inArray(participants.id, uniqueIds),
+  ));
+  if (!sourceRows.length) {
+    return { copied: 0, skipped: 0, notFound: uniqueIds.length };
+  }
+
+  const sourceVkIds = sourceRows.map(row => row.vkId);
+  const existingRows = await db.select({ vkId: participants.vkId }).from(participants).where(and(
+    eq(participants.shiftId, input.targetShiftId),
+    inArray(participants.vkId, sourceVkIds),
+  ));
+  const existingVkIds = new Set(existingRows.map(row => row.vkId));
+  const rowsToCopy = sourceRows.filter(row => !existingVkIds.has(row.vkId));
+
+  let copied = 0;
+  if (rowsToCopy.length) {
+    const inserted = await db.insert(participants).values(rowsToCopy.map(source => ({
+      vkId: source.vkId,
+      shiftId: input.targetShiftId,
+      firstName: source.firstName,
+      lastName: source.lastName,
+      age: source.age,
+      workplace: source.workplace,
+      position: source.position,
+      region: source.region,
+      consentPd: source.consentPd,
+      consentAnalytics: source.consentAnalytics,
+      consentPdVersion: source.consentPdVersion,
+      consentAnalyticsVersion: source.consentAnalyticsVersion,
+      pushOptOut: source.pushOptOut,
+      avatarUrl: source.avatarUrl,
+      avatarSyncedAt: source.avatarSyncedAt,
+      qrToken: null,
+      onboardingCompletedAt: null,
+    }))).onConflictDoNothing().returning({ id: participants.id });
+    copied = inserted.length;
+  }
+
+  return {
+    copied,
+    skipped: sourceRows.length - copied,
+    notFound: uniqueIds.length - sourceRows.length,
+  };
 }
 
 export async function findParticipantByVkInActiveShift(vkId: number) {

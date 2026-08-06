@@ -80,6 +80,7 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [loading, setLoading] = useState(true);
   const [copyPreview, setCopyPreview] = useState<string | null>(null);
   const [copyDraft, setCopyDraft] = useState<CopyDraft | null>(null);
+  const [copyIntoTargetId, setCopyIntoTargetId] = useState<number | null>(null);
   const [createDraft, setCreateDraft] = useState<CreateDraft>({
     code: '',
     name: '',
@@ -127,6 +128,7 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     setDraft(s ? draftFromShift(s) : null);
     setCopyPreview(null);
     setCopyDraft(null);
+    setCopyIntoTargetId(null);
   }, [selectedId, shifts]);
 
   const selected = shifts.find(s => s.id === selectedId) || null;
@@ -180,12 +182,52 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     act(async () => {
       const res = await adminFetch(`/shifts/${selected.id}/copy-preview`);
       setCopyPreview(res.summary || 'Предпросмотр недоступен');
+      setCopyIntoTargetId(null);
       setCopyDraft({
         code: `${selected.code}-copy`,
         name: `${selected.name} (копия)`,
         startDate: toDateInput(selected.startDate),
       });
     }, 'Предпросмотр готов');
+  };
+
+  const startCopyInto = () => {
+    if (!selected) return;
+    const firstTarget = shifts.find(s => s.id !== selected.id && s.status !== 'active');
+    if (!firstTarget) {
+      alert('Нет доступной целевой смены. Создайте пустую смену-черновик.');
+      return;
+    }
+    act(async () => {
+      const res = await adminFetch(`/shifts/${selected.id}/copy-preview`);
+      setCopyPreview(res.summary || 'Предпросмотр недоступен');
+      setCopyDraft(null);
+      setCopyIntoTargetId(firstTarget.id);
+    }, 'Выберите целевую смену ниже');
+  };
+
+  const confirmCopyInto = () => {
+    if (!selected || copyIntoTargetId == null) return;
+    const target = shifts.find(s => s.id === copyIntoTargetId);
+    if (!target) return;
+    const ok = confirm(
+      `${copyPreview || ''}\n\n` +
+      `Скопировать структуру из «${selected.name}» в «${target.name}»?\n` +
+      'Целевая смена должна быть пустой. Участники и их данные не копируются.',
+    );
+    if (!ok) return;
+    act(async () => {
+      const res = await adminFetch(`/shifts/${selected.id}/copy-into`, {
+        method: 'POST',
+        body: JSON.stringify({ targetShiftId: target.id }),
+      });
+      setCopyPreview(null);
+      setCopyIntoTargetId(null);
+      await load();
+      setSelectedId(target.id);
+      setEditingContext(target.id);
+      return res.message;
+    }, 'Структура смены скопирована');
   };
 
   const confirmCopy = () => {
@@ -477,6 +519,9 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                 <button type="button" className="adm-btn adm-btn-secondary" onClick={startCopy}>
                   Копировать в новую смену
                 </button>
+                <button type="button" className="adm-btn adm-btn-secondary" onClick={startCopyInto}>
+                  Копировать в смену…
+                </button>
                 {selected.isSandbox && (
                   <button type="button" className="adm-btn adm-btn-danger" onClick={clearSandbox}>
                     Очистить данные участников
@@ -524,6 +569,47 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                       className="adm-btn adm-btn-ghost"
                       onClick={() => {
                         setCopyDraft(null);
+                        setCopyPreview(null);
+                      }}
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {copyIntoTargetId != null && (
+                <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--m-border)' }}>
+                  <h4>Копировать в существующую смену</h4>
+                  {copyPreview && <p className="adm-forum-hint">{copyPreview}</p>}
+                  <p className="adm-forum-hint">
+                    Копирование доступно только в пустую неактивную смену. Участники, ответы, баллы и посещения не переносятся.
+                  </p>
+                  <label className="adm-field">
+                    <span className="adm-label">Целевая смена</span>
+                    <select
+                      className="adm-input"
+                      value={copyIntoTargetId}
+                      onChange={e => setCopyIntoTargetId(Number(e.target.value))}
+                    >
+                      {shifts
+                        .filter(s => s.id !== selected.id && s.status !== 'active')
+                        .map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} ({s.code}) · {STATUS_LABELS[s.status] || s.status}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <div className="adm-forum-toolbar" style={{ marginTop: 12, gap: 8 }}>
+                    <button type="button" className="adm-btn adm-btn-primary" onClick={confirmCopyInto}>
+                      Копировать
+                    </button>
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-ghost"
+                      onClick={() => {
+                        setCopyIntoTargetId(null);
                         setCopyPreview(null);
                       }}
                     >

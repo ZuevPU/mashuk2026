@@ -5,12 +5,14 @@ import {
   activateShift,
   archiveShift,
   clearSandboxParticipantData,
+  copyParticipantsToShift,
   copyShiftProgram,
   createShift,
   getShiftById,
   listShifts,
   previewCopyShift,
   resolveActiveShift,
+  resolveAdminShiftId,
   updateShift,
 } from '../services/shiftService.js';
 
@@ -179,6 +181,32 @@ export const copyAdminShift = async (req: AdminRequest, res: Response): Promise<
   }
 };
 
+export const copyIntoAdminShift = async (req: AdminRequest, res: Response): Promise<void> => {
+  const sourceId = Number(req.params.id);
+  const targetId = Number(req.body?.targetShiftId);
+  if (!Number.isInteger(targetId) || targetId <= 0) {
+    res.status(400).json({ error: 'targetShiftId required' });
+    return;
+  }
+  try {
+    const result = await copyShiftProgram({ sourceId, targetId });
+    await logAdminAction({
+      req,
+      actionType: 'shift_copy_into',
+      section: 'forum',
+      objectId: targetId,
+      newValue: { sourceId, preview: result.preview },
+      isCritical: true,
+    });
+    res.json({
+      ...result,
+      message: `Структура скопирована в смену «${result.shift.name}»`,
+    });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : 'Copy failed' });
+  }
+};
+
 export const clearSandboxAdminShift = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
   const confirm = String(req.body?.confirm || '');
@@ -199,5 +227,43 @@ export const clearSandboxAdminShift = async (req: AdminRequest, res: Response): 
     res.json({ ok: true, ...result });
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : 'Clear failed' });
+  }
+};
+
+export const copyParticipantsAdminShift = async (req: AdminRequest, res: Response): Promise<void> => {
+  const sourceShiftId = await resolveAdminShiftId(req);
+  const targetShiftId = Number(req.body?.targetShiftId);
+  const participantIds = Array.isArray(req.body?.participantIds)
+    ? req.body.participantIds.map(Number)
+    : [];
+  if (!Number.isInteger(targetShiftId) || targetShiftId <= 0) {
+    res.status(400).json({ error: 'targetShiftId required' });
+    return;
+  }
+  try {
+    const result = await copyParticipantsToShift({
+      sourceShiftId,
+      targetShiftId,
+      participantIds,
+    });
+    await logAdminAction({
+      req,
+      actionType: 'participants_copy_to_shift',
+      section: 'participants',
+      objectId: targetShiftId,
+      newValue: {
+        sourceShiftId,
+        targetShiftId,
+        requested: participantIds.length,
+        ...result,
+      },
+      isCritical: true,
+    });
+    res.json({
+      ...result,
+      message: `Перенесено: ${result.copied}. Пропущено: ${result.skipped}. Не найдено: ${result.notFound}.`,
+    });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : 'Participant transfer failed' });
   }
 };

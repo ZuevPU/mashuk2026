@@ -36,6 +36,7 @@ router.post('/participants/:id/block', requireAdminRole('moderate'), wrap(admin.
 router.post('/participants/:id/unblock', requireAdminRole('moderate'), wrap(admin.unblockParticipant));
 router.post('/participants/:id/push', requireAdminRole('settings'), wrap(admin.pushParticipant));
 router.post('/participants/bulk-push', requireAdminRole('settings'), wrap(admin.bulkPushParticipants));
+router.post('/participants/copy-to-shift', requireAdminRole('settings'), wrap(shiftsCtrl.copyParticipantsAdminShift));
 router.post('/participants/:id/points/adjust', requireAdminRole('moderate'), wrap(admin.adjustParticipantPoints));
 router.post('/participants', requireAdminRole('settings'), wrap(admin.createParticipant));
 router.patch('/participants/:id/direction', requireAdminRole('settings'), wrap(admin.updateParticipantDirection));
@@ -93,6 +94,7 @@ router.post('/shifts/:id/activate', requireAdminRole('settings'), wrap(shiftsCtr
 router.post('/shifts/:id/archive', requireAdminRole('settings'), wrap(shiftsCtrl.archiveAdminShift));
 router.get('/shifts/:id/copy-preview', P('forum', 'read'), wrap(shiftsCtrl.previewCopyAdminShift));
 router.post('/shifts/:id/copy', requireAdminRole('settings'), wrap(shiftsCtrl.copyAdminShift));
+router.post('/shifts/:id/copy-into', requireAdminRole('settings'), wrap(shiftsCtrl.copyIntoAdminShift));
 router.post('/shifts/:id/clear-sandbox', requireAdminRole('delete'), wrap(shiftsCtrl.clearSandboxAdminShift));
 
 router.get('/forum-settings', wrap(admin.getForumSettings));

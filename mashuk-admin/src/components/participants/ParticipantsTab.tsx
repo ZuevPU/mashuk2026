@@ -34,6 +34,7 @@ type ParticipantRow = {
 };
 
 type ParticipantListMode = 'active' | 'hidden';
+type ShiftOption = { id: number; name: string; code: string; status: string };
 
 function buildListQuery(params: {
   page: number;
@@ -79,6 +80,9 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
   const [directions, setDirections] = useState<{ id: number; name: string }[]>([]);
   const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [shiftOptions, setShiftOptions] = useState<ShiftOption[]>([]);
+  const [currentShiftId, setCurrentShiftId] = useState<number | null>(null);
+  const [transferTargetId, setTransferTargetId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [pushModal, setPushModal] = useState<{ ids: number[] } | null>(null);
   const [pushText, setPushText] = useState('');
@@ -110,6 +114,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
       const res = await adminFetch(`/participants?${listQuery}`);
       setParticipants(res.participants || []);
       setParticipantsTotal(res.totalCount || 0);
+      setCurrentShiftId(res.shiftId ?? null);
       if (listMode === 'active') {
         const hiddenRes = await adminFetch('/participants?onlySelfDeleted=true&limit=1&page=1');
         setHiddenTotal(hiddenRes.totalCount || 0);
@@ -118,6 +123,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
       }
       setDirections((await adminFetch('/directions')).directions || []);
       setGroups((await adminFetch('/participants/groups')).groups || []);
+      setShiftOptions((await adminFetch('/shifts')).shifts || []);
     } finally {
       setLoading(false);
     }
@@ -182,6 +188,38 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
       setPushModal(null);
       setPushText('');
     }, 'Пуш отправлен');
+  };
+
+  const openTransfer = () => {
+    const target = shiftOptions.find(s => s.id !== currentShiftId);
+    if (!target) {
+      alert('Нет другой смены для переноса участников');
+      return;
+    }
+    setTransferTargetId(target.id);
+  };
+
+  const copyParticipantsToShift = () => {
+    if (transferTargetId == null || selected.size === 0) return;
+    const target = shiftOptions.find(s => s.id === transferTargetId);
+    if (!target) return;
+    if (!confirm(
+      `Добавить выбранных участников (${selected.size}) в смену «${target.name}»?\n\n` +
+      'В исходной смене участники и их история останутся. В целевой смене прогресс начнётся с нуля, ' +
+      'а при первом входе участники завершат регистрацию.',
+    )) return;
+    act(async () => {
+      const res = await adminFetch('/participants/copy-to-shift', {
+        method: 'POST',
+        body: JSON.stringify({
+          participantIds: [...selected],
+          targetShiftId: transferTargetId,
+        }),
+      });
+      setTransferTargetId(null);
+      setSelected(new Set());
+      return res.message || `Перенесено: ${res.copied || 0}`;
+    }, 'Участники добавлены в смену');
   };
 
   const isHiddenList = listMode === 'hidden';
@@ -275,6 +313,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
             <span className="adm-muted">Выбрано: {selected.size}</span>
             <button type="button" className="adm-btn adm-btn-sm" onClick={() => exportList([...selected])}>Выгрузить выбранных</button>
             <button type="button" className="adm-btn adm-btn-sm" onClick={() => setPushModal({ ids: [...selected] })}>Отправить пуш выбранным</button>
+            <button type="button" className="adm-btn adm-btn-sm adm-btn-primary" onClick={openTransfer}>Перенести в смену…</button>
             <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => setSelected(new Set())}>Снять выбор</button>
           </div>
         )}
@@ -444,6 +483,48 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
             <div className="form-row" style={{ marginTop: 12 }}>
               <button type="button" className="adm-btn adm-btn-primary" onClick={sendPush}>Отправить</button>
               <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setPushModal(null)}>Отмена</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {transferTargetId != null && (
+        <div className="adm-modal-backdrop" onClick={() => setTransferTargetId(null)}>
+          <div className="card" style={{ maxWidth: 460, width: '100%' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Перенести участников в смену</h3>
+            <p className="adm-muted">
+              Будет создана предварительная запись с теми же персональными данными. При первом входе
+              участник завершит регистрацию в новой смене. История исходной смены сохранится.
+            </p>
+            <p className="adm-forum-hint">
+              Ответы, баллы, задания, награды, направление, группа и роль не переносятся.
+            </p>
+            <label className="adm-field">
+              <span className="adm-label">Целевая смена</span>
+              <select
+                className="adm-input"
+                value={transferTargetId}
+                onChange={e => setTransferTargetId(Number(e.target.value))}
+              >
+                {shiftOptions
+                  .filter(s => s.id !== currentShiftId)
+                  .map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.code}){s.status === 'active' ? ' · активная' : ''}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <p className="adm-forum-hint">
+              Если участник уже есть в выбранной смене, он будет пропущен.
+            </p>
+            <div className="form-row" style={{ marginTop: 12 }}>
+              <button type="button" className="adm-btn adm-btn-primary" onClick={copyParticipantsToShift}>
+                Перенести {selected.size}
+              </button>
+              <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setTransferTargetId(null)}>
+                Отмена
+              </button>
             </div>
           </div>
         </div>

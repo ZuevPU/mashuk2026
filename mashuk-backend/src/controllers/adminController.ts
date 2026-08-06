@@ -84,11 +84,16 @@ export const listParticipants = async (req: AdminRequest, res: Response): Promis
   res.json({ ...result, participants, shiftId: parsed.shiftId });
 };
 
-export const listParticipantGroups = async (_req: AdminRequest, res: Response): Promise<void> => {
+export const listParticipantGroups = async (req: AdminRequest, res: Response): Promise<void> => {
+  const shiftId = await resolveAdminShiftId(req);
   const rows = await db.select({
     groupId: participants.groupId,
     groupName: participants.groupName,
-  }).from(participants).where(and(isNull(participants.selfDeletedAt), isNotNull(participants.groupId)));
+  }).from(participants).where(and(
+    eq(participants.shiftId, shiftId),
+    isNull(participants.selfDeletedAt),
+    isNotNull(participants.groupId),
+  ));
   const map = new Map<number, string>();
   for (const r of rows) {
     if (r.groupId != null) map.set(r.groupId, r.groupName || `Группа ${r.groupId}`);
