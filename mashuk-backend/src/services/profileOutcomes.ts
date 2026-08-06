@@ -52,14 +52,27 @@ export function buildNextStepsFromSources(input: {
 }
 
 export function parseOutcomesForDisplay(outcomesEdited: unknown, heuristic: string[]): string[] {
+  let raw: string[] = [];
   if (Array.isArray(outcomesEdited)) {
-    return outcomesEdited.map(String).filter(Boolean).slice(0, 8);
-  }
-  if (outcomesEdited && typeof outcomesEdited === 'object') {
+    raw = outcomesEdited.map(String).filter(Boolean);
+  } else if (outcomesEdited && typeof outcomesEdited === 'object') {
     const o = outcomesEdited as { summary?: string; bullets?: string[] };
-    if (Array.isArray(o.bullets) && o.bullets.length) return o.bullets.map(String);
-    if (typeof o.summary === 'string' && o.summary.trim()) return [o.summary.trim()];
+    if (Array.isArray(o.bullets) && o.bullets.length) raw = o.bullets.map(String);
+    else if (typeof o.summary === 'string' && o.summary.trim()) raw = [o.summary.trim()];
+  } else if (typeof outcomesEdited === 'string' && outcomesEdited.trim()) {
+    raw = [outcomesEdited.trim()];
+  } else {
+    raw = heuristic.map(String);
   }
-  if (typeof outcomesEdited === 'string' && outcomesEdited.trim()) return [outcomesEdited.trim()];
-  return heuristic;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const line of raw) {
+    const t = String(line ?? '').trim();
+    if (!t) continue;
+    const key = t.toLowerCase().replace(/\s+/g, ' ');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out.slice(0, 5);
 }

@@ -498,12 +498,32 @@ export const ProfilePanel: React.FC<{
               )}
             </div>
 
-            {(p.goalAnswers?.length > 0 || p.myRequest || p.goalSetting) && (
+            {(p.goalRequestItems?.length > 0 || p.goalAnswers?.length > 0 || p.myRequest || p.goalSetting) && (
               <div className="pb m-card">
                 <div className="pb-lbl">🎯 Мой запрос · Точка А</div>
-                {Array.isArray(p.goalAnswers) && p.goalAnswers.length > 0 ? (
+                {Array.isArray(p.goalRequestItems) && p.goalRequestItems.length > 0 ? (
+                  <div style={{ marginTop: 8 }}>
+                    {p.goalRequestItems.map((item: { question: string; answer: string }, i: number) => (
+                      <div
+                        key={i}
+                        style={{
+                          marginTop: i === 0 ? 0 : 12,
+                          paddingTop: i === 0 ? 0 : 10,
+                          borderTop: i === 0 ? undefined : '1px solid #EDE8DF',
+                        }}
+                      >
+                        <div style={{ fontSize: 11, color: '#888', lineHeight: 1.35, marginBottom: 4 }}>
+                          {item.question}
+                        </div>
+                        <div style={{ fontSize: 13, lineHeight: 1.45, color: '#1a1a1a' }}>
+                          {item.answer || '—'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : Array.isArray(p.goalAnswers) && p.goalAnswers.length > 0 ? (
                   <ul className="pb-checks" style={{ marginTop: 6 }}>
-                    {p.goalAnswers.map((ans: string, i: number) => (
+                    {p.goalAnswers.slice(0, 2).map((ans: string, i: number) => (
                       <li key={i}>{ans || '—'}</li>
                     ))}
                   </ul>

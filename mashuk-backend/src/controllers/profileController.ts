@@ -19,6 +19,9 @@ import {
 import { createPiggybankEntry, filterPiggybankEntries } from '../services/piggybankService.js';
 import { gatherProfileBundle, streamProfilePdf } from '../services/profilePdfBuilder.js';
 import { answerText } from '../services/exports/exportCommon.js';
+import { getForumSettings } from '../services/helpers.js';
+import { normalizeOnboardingConfig } from '../services/roleService.js';
+import { buildPointARequestItems } from '../services/pointARequest.js';
 
 export const getProfile = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
@@ -40,6 +43,11 @@ export const getProfile = async (req: ParticipantRequest, res: Response): Promis
       forumPoints: p.forumPoints,
     });
     const ratingLevel = await getLevel(ratingScore, 'experience');
+    const settings = await getForumSettings();
+    const onboarding = normalizeOnboardingConfig(
+      (settings as { roleDiagnosticsConfig?: unknown }).roleDiagnosticsConfig,
+    );
+    const goalRequestItems = buildPointARequestItems(onboarding.goalQuestions, bundle.goals);
 
     res.json({
       user: {
@@ -87,8 +95,10 @@ export const getProfile = async (req: ParticipantRequest, res: Response): Promis
         ratingLevel: unifiedRating ? ratingLevel : undefined,
       },
       trajectory: bundle.trajectory,
-      myRequest: bundle.goals[2] || null,
+      myRequest: goalRequestItems[0]?.answer || bundle.goals[0] || null,
       goalAnswers: bundle.goals,
+      goalQuestions: onboarding.goalQuestions,
+      goalRequestItems,
       goalSetting: p.interests ? { interests: p.interests } : null,
       interests: Array.isArray(p.interests) ? (p.interests as string[]) : [],
       actionStyle: bundle.actionStyle,
