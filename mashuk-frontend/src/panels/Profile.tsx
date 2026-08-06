@@ -360,6 +360,7 @@ export const ProfilePanel: React.FC<{
 
         {section === 'overview' ? (
           <>
+            {/* 1. Кто я и стартовая роль */}
             <div className="pf-hdr">
               <ParticipantAvatarCircle
                 firstName={p.user.firstName}
@@ -375,6 +376,11 @@ export const ProfilePanel: React.FC<{
                     ◆ Стартовая роль: {p.user.leadingRoleStartName || p.user.pedagogicalRoleName}
                   </div>
                 )}
+                {actionStyle?.startRole?.essence && (
+                  <div style={{ fontSize: 11, color: '#666', marginTop: 4, lineHeight: 1.4 }}>
+                    {actionStyle.startRole.essence}
+                  </div>
+                )}
                 {(p.user.workplace || p.user.position) && (
                   <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
                     {[p.user.position, p.user.workplace].filter(Boolean).join(' · ')}
@@ -386,10 +392,7 @@ export const ProfilePanel: React.FC<{
             {Array.isArray(p.interests) && p.interests.length > 0 && (
               <div className="m-card">
                 <div className="pb-lbl">Мои интересы</div>
-                <div style={{ fontSize: 11, color: '#888', marginTop: 4, lineHeight: 1.4 }}>
-                  Вы выбрали их при регистрации. В «Программе» сверху показываются события дня с теми же тематическими тегами.
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                   {p.interests.map((tag: string) => (
                     <span
                       key={tag}
@@ -409,95 +412,7 @@ export const ProfilePanel: React.FC<{
               </div>
             )}
 
-            {p.trajectory && (
-              <div className="ab-card">
-                <div className="pb-lbl">Траектория A → B</div>
-                <div className="ab-row">
-                  <span style={{ fontSize: 11, fontWeight: 700 }}>{p.trajectory.from}</span>
-                  <div className="ab-track">
-                    <div className="ab-track-fill" style={{ width: `${abPct}%` }} />
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 700 }}>{p.trajectory.to}</span>
-                </div>
-                <div className="ab-dates">
-                  <span>{p.trajectory.fromDate || 'Старт'}</span>
-                  <span>{abPct}% пути</span>
-                  <span>{p.trajectory.toDate || 'Цель'}</span>
-                </div>
-              </div>
-            )}
-
-            {(actionStyle?.route || p.roleTrajectory?.route) && (
-              <div className="m-card">
-                <div className="pb-lbl">Твой способ действия на программе</div>
-                {actionStyle?.startRole && (
-                  <div style={{ fontSize: 12, marginTop: 6, color: '#666' }}>
-                    Старт: {actionStyle.startRole.name}
-                    {actionStyle.startRole.essence ? ` — ${actionStyle.startRole.essence}` : ''}
-                  </div>
-                )}
-                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 8 }}>
-                  {actionStyle?.route || p.roleTrajectory.route}
-                </div>
-                {actionStyle?.roleCounts?.length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginTop: 10 }}>
-                    {actionStyle.roleCounts.map((r: { key: string; name: string; count: number }) => (
-                      <div key={r.key} style={{ fontSize: 11, background: '#FFF8E7', borderRadius: 8, padding: '6px 8px' }}>
-                        <span style={{ fontWeight: 700 }}>{r.name}</span>
-                        <span style={{ color: '#888' }}> · {r.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {actionStyle?.selfInsights?.length > 0 && (
-                  <ul className="pb-checks" style={{ marginTop: 10 }}>
-                    {actionStyle.selfInsights.map((line: string, i: number) => <li key={i}>{line}</li>)}
-                  </ul>
-                )}
-                {(p.user.strongRoleName || p.user.growthRoleName || p.user.nextExperiment) ? (
-                  <div style={{ marginTop: 10, fontSize: 12 }}>
-                    {p.user.strongRoleName && <div>Сильная роль: {p.user.strongRoleName}</div>}
-                    {p.user.growthRoleName && <div>Роль роста: {p.user.growthRoleName}</div>}
-                    {p.user.nextExperiment && <div>Эксперимент: {p.user.nextExperiment}</div>}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 11, color: '#888', marginTop: 8 }}>
-                    Выборы Точки Б появятся после финальной анкеты.
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="ab-card">
-              <div className="ab-stats">
-                <div className="abs"><div className="abs-v">{abPct}%</div><div className="abs-l">Прогресс A→B</div></div>
-                <div className="abs">
-                  <div className="abs-v">{m.activitiesVisited ?? p.stats.activities}/{m.activitiesTotal ?? '—'}</div>
-                  <div className="abs-l">Активностей</div>
-                </div>
-                <div className="abs"><div className="abs-v">{m.piggybankTotal ?? p.piggybankCount ?? 0}</div><div className="abs-l">Идей</div></div>
-                <div className="abs">
-                  <div className="abs-v">{m.eveningReflectionsDone ?? 0}/{m.eveningReflectionsTotal ?? 7}</div>
-                  <div className="abs-l">Точек дня</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="m-stats">
-              {p.points?.unified ? (
-                <div className="m-st">
-                  <div className="m-sv">✦ {p.points.rating ?? p.points.total}</div>
-                  <div className="m-sl">Баллы · ур. {p.points.ratingLevel ?? p.points.experienceLevel ?? 1}</div>
-                </div>
-              ) : (
-                <>
-                  <div className="m-st"><div className="m-sv">📍 {p.points.path}</div><div className="m-sl">Путь · ур. {p.points.pathLevel}</div></div>
-                  <div className="m-st"><div className="m-sv">⚡ {p.points.experience}</div><div className="m-sl">Опыт · ур. {p.points.experienceLevel}</div></div>
-                  <div className="m-st"><div className="m-sv">✦ {p.points.total ?? ((p.points.path ?? 0) + (p.points.experience ?? 0))}</div><div className="m-sl">Общий рейтинг</div></div>
-                </>
-              )}
-            </div>
-
+            {/* 2. Мой запрос и желаемый результат */}
             {(p.goalRequestItems?.length > 0 || p.goalAnswers?.length > 0 || p.myRequest || p.goalSetting) && (
               <div className="pb m-card">
                 <div className="pb-lbl">🎯 Мой запрос · Точка А</div>
@@ -533,10 +448,30 @@ export const ProfilePanel: React.FC<{
               </div>
             )}
 
+            {/* 3. Траектория А → Б */}
+            {p.trajectory && (
+              <div className="ab-card">
+                <div className="pb-lbl">Траектория A → B</div>
+                <div className="ab-row">
+                  <span style={{ fontSize: 11, fontWeight: 700 }}>{p.trajectory.from}</span>
+                  <div className="ab-track">
+                    <div className="ab-track-fill" style={{ width: `${abPct}%` }} />
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700 }}>{p.trajectory.to}</span>
+                </div>
+                <div className="ab-dates">
+                  <span>{p.trajectory.fromDate || 'Старт'}</span>
+                  <span>{abPct}% пути</span>
+                  <span>{p.trajectory.toDate || 'Цель'}</span>
+                </div>
+              </div>
+            )}
+
+            {/* 4. Что уже попробовал и понял */}
             <div className="pb m-card" style={{ opacity: showOutcomes ? 1 : 0.85 }}>
               <div className="pb-lbl">📋 Что получилось</div>
               <div style={{ fontSize: 11, color: '#888', marginBottom: 8, lineHeight: 1.4 }}>
-                Краткий итог по смене (не дословные ответы). Тексты рефлексий — ниже и в «Вопросы».
+                Краткий итог по смене (не дословные ответы). Тексты рефлексий — в «Вопросы».
               </div>
               {!showOutcomes ? (
                 <div style={{ fontSize: 12, color: '#888' }}>Блок откроется с 3-го дня форума.</div>
@@ -579,7 +514,7 @@ export const ProfilePanel: React.FC<{
                   role="button"
                   aria-expanded={answersOpen}
                 >
-                  <span>💬 Мои ответы · {recentReflections.length}</span>
+                  <span>💬 Что уже понял · {recentReflections.length}</span>
                   <span>{answersOpen ? '▲' : '▼'}</span>
                 </div>
                 {!answersOpen && (
@@ -619,20 +554,38 @@ export const ProfilePanel: React.FC<{
               </div>
             )}
 
-            {medals.length > 0 && (
+            {/* 5. Ролевые эксперименты */}
+            {(actionStyle?.route || p.roleTrajectory?.route || p.user.nextExperiment) && (
               <div className="m-card">
-                <div className="pb-lbl">Медали</div>
-                {medals.map((m: any) => (
-                  <div key={m.id} style={{ fontSize: 13, marginTop: 6 }}>
-                    <strong>{m.name}</strong>
-                    <span style={{ color: '#888' }}> · {m.level || 'bronze'}</span>
-                    {m.description && <div style={{ fontSize: 11, color: '#666' }}>{m.description}</div>}
+                <div className="pb-lbl">Ролевые эксперименты</div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 8 }}>
+                  {actionStyle?.route || p.roleTrajectory?.route}
+                </div>
+                {actionStyle?.roleCounts?.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginTop: 10 }}>
+                    {actionStyle.roleCounts.map((r: { key: string; name: string; count: number }) => (
+                      <div key={r.key} style={{ fontSize: 11, background: '#FFF8E7', borderRadius: 8, padding: '6px 8px' }}>
+                        <span style={{ fontWeight: 700 }}>{r.name}</span>
+                        <span style={{ color: '#888' }}> · {r.count}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-                <div className="pb-link" onClick={() => setSection('medals')}>Все медали →</div>
+                )}
+                {(p.user.strongRoleName || p.user.growthRoleName || p.user.nextExperiment) ? (
+                  <div style={{ marginTop: 10, fontSize: 12 }}>
+                    {p.user.strongRoleName && <div>Сильная роль: {p.user.strongRoleName}</div>}
+                    {p.user.growthRoleName && <div>Роль роста: {p.user.growthRoleName}</div>}
+                    {p.user.nextExperiment && <div>Эксперимент: {p.user.nextExperiment}</div>}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 8 }}>
+                    Выборы Точки Б появятся после финальной анкеты.
+                  </div>
+                )}
               </div>
             )}
 
+            {/* 6. Следующие шаги */}
             {p.showNextSteps && p.nextSteps?.length > 0 && (
               <div className="pb m-card">
                 <div className="pb-lbl">➡️ Следующие шаги</div>
@@ -649,124 +602,169 @@ export const ProfilePanel: React.FC<{
               </div>
             )}
 
-            <div className="profile-stack">
-              {tracker && (
-                <div className="m-card m-card--tracker">
-                  <div
-                    className="pb-lbl"
-                    style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', marginBottom: trackerOpen ? 7 : 0 }}
-                    onClick={() => setTrackerOpen(v => !v)}
+            {/* 7. Копилка */}
+            <div className="m-card m-card--piggybank">
+              <div className="pb-lbl">📁 Моя копилка</div>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
+                Идеи и заметки по тегам
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {PIGGYBANK_TAGS.map(tag => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => goPiggybank(tag, '')}
+                    style={{
+                      fontSize: 11, background: '#FFF3E0', color: '#B8621A',
+                      borderRadius: 12, padding: '4px 10px', fontWeight: 600, border: 'none', cursor: 'pointer',
+                    }}
                   >
-                    <span>📊 Мой трекер</span>
-                    <span>{trackerOpen ? '▲' : '▼'}</span>
+                    #{tag}{tagCounts[tag] ? ` · ${tagCounts[tag]}` : ''}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {PIGGYBANK_SOURCES.map(src => (
+                  <button
+                    key={src}
+                    type="button"
+                    onClick={() => goPiggybank('', src)}
+                    style={{
+                      fontSize: 10, background: '#f5f5f5', color: '#555',
+                      borderRadius: 12, padding: '4px 10px', border: 'none', cursor: 'pointer',
+                    }}
+                  >
+                    {src}{sourceCounts[src] ? ` · ${sourceCounts[src]}` : ''}
+                  </button>
+                ))}
+              </div>
+              {previewPiggy.length > 0 && (
+                <div className="profile-piggy-preview">
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                    Последние записи
                   </div>
-                  {!trackerOpen && (
-                    <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-                      Задания {tracker.tasksDone}/{tracker.tasksTotal} · 7 точек · состояние за смену
+                  {previewPiggy.map(entry => (
+                    <div key={entry.id} style={{ fontSize: 11, marginTop: 6, color: '#666' }}>
+                      {entry.tag}: {entry.text?.slice(0, 60)}
                     </div>
-                  )}
-                  {trackerOpen && (
-                    <div style={{ marginTop: 10, fontSize: 12 }}>
-                      {tracker.stateCurve?.length > 0 && (
-                        <div style={{ marginBottom: 12 }}>
-                          <div style={{ fontWeight: 700, marginBottom: 6 }}>Кривая состояния</div>
-                          {tracker.stateCurve.map((d: { day: number; energy?: number; emotion?: number; delta?: number }) => (
-                            <div key={d.day} style={{ color: '#666' }}>
-                              Д{d.day}: энергия {d.energy ?? '—'}, эмоция {d.emotion ?? '—'}
-                              {d.delta != null && d.delta !== 0 && (
-                                <span style={{ color: d.delta > 0 ? '#2F855A' : '#C53030' }}>
-                                  {' '}({d.delta > 0 ? '+' : ''}{d.delta})
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <div style={{ marginBottom: 8 }}>
-                        Задания: {tracker.tasksDone}/{tracker.tasksTotal} · Опыт: {tracker.experiencePoints}
-                      </div>
-                      {tracker.myExchangeQuestions?.length > 0 && (
-                        <div style={{ marginBottom: 8 }}>
-                          <div style={{ fontWeight: 700 }}>Мои вопросы</div>
-                          {tracker.myExchangeQuestions.slice(0, 5).map((q: { id: number; text: string }) => (
-                            <div key={q.id} style={{ color: '#666' }}>· {q.text?.slice(0, 80)}</div>
-                          ))}
-                        </div>
-                      )}
-                      {tracker.touchpointsToday?.length > 0 && (
-                        <div style={{ marginBottom: 8 }}>
-                          <div style={{ fontWeight: 700 }}>7 точек · день {p.currentDay ?? '—'}</div>
-                          {tracker.touchpointsToday.map((tp: { title?: string; done?: boolean; state?: string }, i: number) => {
-                            const ok = tp.done === true || tp.state === 'done';
-                            return (
-                              <div key={i}>{ok ? '✓' : '○'} {tp.title || `Точка ${i + 1}`}</div>
-                            );
-                          })}
-                        </div>
-                      )}
-                      {tracker.roleOfDay && (
-                        <div>
-                          Роль дня: {tracker.roleOfDay.activeRoleName || '—'}
-                          {tracker.roleOfDay.experimentStatus ? ` · ${tracker.roleOfDay.experimentStatus}` : ''}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  ))}
                 </div>
               )}
+              <div className="pb-link" style={{ marginTop: 10 }} onClick={() => setSection('piggybank')}>
+                {p.piggybankCount ?? 0} идей и инструментов →
+              </div>
+            </div>
 
-              <div className="m-card m-card--piggybank">
-                <div className="pb-lbl">📁 Моя копилка</div>
-                <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
-                  Идеи и заметки по тегам — отдельно от трекера дня
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                  {PIGGYBANK_TAGS.map(tag => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => goPiggybank(tag, '')}
-                      style={{
-                        fontSize: 11, background: '#FFF3E0', color: '#B8621A',
-                        borderRadius: 12, padding: '4px 10px', fontWeight: 600, border: 'none', cursor: 'pointer',
-                      }}
-                    >
-                      #{tag}{tagCounts[tag] ? ` · ${tagCounts[tag]}` : ''}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                  {PIGGYBANK_SOURCES.map(src => (
-                    <button
-                      key={src}
-                      type="button"
-                      onClick={() => goPiggybank('', src)}
-                      style={{
-                        fontSize: 10, background: '#f5f5f5', color: '#555',
-                        borderRadius: 12, padding: '4px 10px', border: 'none', cursor: 'pointer',
-                      }}
-                    >
-                      {src}{sourceCounts[src] ? ` · ${sourceCounts[src]}` : ''}
-                    </button>
-                  ))}
-                </div>
-                {previewPiggy.length > 0 && (
-                  <div className="profile-piggy-preview">
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-                      Последние записи
-                    </div>
-                    {previewPiggy.map(entry => (
-                      <div key={entry.id} style={{ fontSize: 11, marginTop: 6, color: '#666' }}>
-                        {entry.tag}: {entry.text?.slice(0, 60)}
-                      </div>
-                    ))}
+            {medals.length > 0 && (
+              <div className="m-card">
+                <div className="pb-lbl">Медали</div>
+                {medals.map((m: any) => (
+                  <div key={m.id} style={{ fontSize: 13, marginTop: 6 }}>
+                    <strong>{m.name}</strong>
+                    <span style={{ color: '#888' }}> · {m.level || 'bronze'}</span>
+                    {m.description && <div style={{ fontSize: 11, color: '#666' }}>{m.description}</div>}
                   </div>
-                )}
-                <div className="pb-link" style={{ marginTop: 10 }} onClick={() => setSection('piggybank')}>
-                  {p.piggybankCount ?? 0} идей и инструментов →
+                ))}
+                <div className="pb-link" onClick={() => setSection('medals')}>Все медали →</div>
+              </div>
+            )}
+
+            {/* 8. Баллы, рейтинг и техническая статистика */}
+            <div className="ab-card">
+              <div className="pb-lbl">Баллы и статистика</div>
+              <div className="ab-stats" style={{ marginTop: 8 }}>
+                <div className="abs"><div className="abs-v">{abPct}%</div><div className="abs-l">Прогресс A→B</div></div>
+                <div className="abs">
+                  <div className="abs-v">{m.activitiesVisited ?? p.stats.activities}/{m.activitiesTotal ?? '—'}</div>
+                  <div className="abs-l">Активностей</div>
+                </div>
+                <div className="abs"><div className="abs-v">{m.piggybankTotal ?? p.piggybankCount ?? 0}</div><div className="abs-l">Идей</div></div>
+                <div className="abs">
+                  <div className="abs-v">{m.eveningReflectionsDone ?? 0}/{m.eveningReflectionsTotal ?? 7}</div>
+                  <div className="abs-l">Точек дня</div>
                 </div>
               </div>
             </div>
+
+            <div className="m-stats">
+              {p.points?.unified ? (
+                <div className="m-st">
+                  <div className="m-sv">✦ {p.points.rating ?? p.points.total}</div>
+                  <div className="m-sl">Баллы · ур. {p.points.ratingLevel ?? p.points.experienceLevel ?? 1}</div>
+                </div>
+              ) : (
+                <>
+                  <div className="m-st"><div className="m-sv">📍 {p.points.path}</div><div className="m-sl">Путь · ур. {p.points.pathLevel}</div></div>
+                  <div className="m-st"><div className="m-sv">⚡ {p.points.experience}</div><div className="m-sl">Опыт · ур. {p.points.experienceLevel}</div></div>
+                  <div className="m-st"><div className="m-sv">✦ {p.points.total ?? ((p.points.path ?? 0) + (p.points.experience ?? 0))}</div><div className="m-sl">Общий рейтинг</div></div>
+                </>
+              )}
+            </div>
+
+            {tracker && (
+              <div className="m-card m-card--tracker">
+                <div
+                  className="pb-lbl"
+                  style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', marginBottom: trackerOpen ? 7 : 0 }}
+                  onClick={() => setTrackerOpen(v => !v)}
+                >
+                  <span>📊 Мой трекер</span>
+                  <span>{trackerOpen ? '▲' : '▼'}</span>
+                </div>
+                {!trackerOpen && (
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                    Задания {tracker.tasksDone}/{tracker.tasksTotal} · 7 точек · состояние за смену
+                  </div>
+                )}
+                {trackerOpen && (
+                  <div style={{ marginTop: 10, fontSize: 12 }}>
+                    {tracker.stateCurve?.length > 0 && (
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 6 }}>Кривая состояния</div>
+                        {tracker.stateCurve.map((d: { day: number; energy?: number; emotion?: number; delta?: number }) => (
+                          <div key={d.day} style={{ color: '#666' }}>
+                            Д{d.day}: энергия {d.energy ?? '—'}, эмоция {d.emotion ?? '—'}
+                            {d.delta != null && d.delta !== 0 && (
+                              <span style={{ color: d.delta > 0 ? '#2F855A' : '#C53030' }}>
+                                {' '}({d.delta > 0 ? '+' : ''}{d.delta})
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ marginBottom: 8 }}>
+                      Задания: {tracker.tasksDone}/{tracker.tasksTotal} · Опыт: {tracker.experiencePoints}
+                    </div>
+                    {tracker.myExchangeQuestions?.length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontWeight: 700 }}>Мои вопросы</div>
+                        {tracker.myExchangeQuestions.slice(0, 5).map((q: { id: number; text: string }) => (
+                          <div key={q.id} style={{ color: '#666' }}>· {q.text?.slice(0, 80)}</div>
+                        ))}
+                      </div>
+                    )}
+                    {tracker.touchpointsToday?.length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontWeight: 700 }}>7 точек · день {p.currentDay ?? '—'}</div>
+                        {tracker.touchpointsToday.map((tp: { title?: string; done?: boolean; state?: string }, i: number) => {
+                          const ok = tp.done === true || tp.state === 'done';
+                          return (
+                            <div key={i}>{ok ? '✓' : '○'} {tp.title || `Точка ${i + 1}`}</div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {tracker.roleOfDay && (
+                      <div>
+                        Роль дня: {tracker.roleOfDay.activeRoleName || '—'}
+                        {tracker.roleOfDay.experimentStatus ? ` · ${tracker.roleOfDay.experimentStatus}` : ''}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="ai-rec">
               <div className="ai-rec-t">💡 Рекомендация</div>
