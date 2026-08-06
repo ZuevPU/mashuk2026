@@ -10,6 +10,7 @@ import { buildParticipantVolunteerUrl } from '../utils/qrDeepLink';
 import { requestVkPushPermission } from '../utils/pushNotifications';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { ParticipantAvatarCircle } from '../components/ParticipantAvatarCircle';
+import { QrCodeImage } from '../components/QrCodeImage';
 
 const TAGS = ['', ...PIGGYBANK_TAGS];
 const SOURCES = ['', ...PIGGYBANK_SOURCES];
@@ -324,9 +325,6 @@ export const ProfilePanel: React.FC<{
 
   const qrDeepLink = p?.user?.qrToken
     ? buildParticipantVolunteerUrl(p.user.qrToken, p.user.id)
-    : null;
-  const qrImageUrl = qrDeepLink
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrDeepLink)}`
     : null;
 
   const sectionOptions = [
@@ -774,10 +772,10 @@ export const ProfilePanel: React.FC<{
               </div>
             </div>
 
-            {qrImageUrl && qrDeepLink && (
+            {qrDeepLink && (
               <div className="m-card" style={{ textAlign: 'center' }}>
                 <div className="pb-lbl">Мой QR</div>
-                <img src={qrImageUrl} alt="QR участника" width={160} height={160} style={{ margin: '12px auto', display: 'block' }} />
+                <QrCodeImage value={qrDeepLink} size={160} alt="QR участника" />
                 <div style={{ fontSize: 11, color: '#666', wordBreak: 'break-all' }}>{qrDeepLink}</div>
                 <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>Покажите волонтёру для подтверждения заданий</div>
                 <Button
@@ -1233,10 +1231,10 @@ export const ProfilePanel: React.FC<{
                 Скрыть меня из публичного рейтинга
               </Checkbox>
             </div>
-            {qrImageUrl && qrDeepLink && (
+            {qrDeepLink && (
               <div className="m-card" style={{ textAlign: 'center' }}>
                 <div className="pb-lbl">Мой QR</div>
-                <img src={qrImageUrl} alt="QR" width={180} height={180} style={{ margin: '8px auto', display: 'block' }} />
+                <QrCodeImage value={qrDeepLink} size={180} alt="QR" />
                 <Button
                   size="s"
                   mode="secondary"

@@ -30,7 +30,16 @@ export const getProfile = async (req: ParticipantRequest, res: Response): Promis
       res.status(404).json({ error: 'Not found' });
       return;
     }
-    const p = bundle.participant;
+    let p = bundle.participant;
+    // Ensure every participant has a QR token (needed for volunteer scan)
+    if (!p.qrToken) {
+      const token = generateQrToken();
+      const [updated] = await db.update(participants)
+        .set({ qrToken: token })
+        .where(eq(participants.id, p.id))
+        .returning();
+      if (updated) p = { ...p, qrToken: updated.qrToken };
+    }
     const role = p.pedagogicalRole ? getRoleMeta(p.pedagogicalRole) : null;
     const pathLevel = await getLevel(p.pathPoints ?? 0, 'path');
     const experienceLevel = await getLevel(p.experiencePoints ?? 0, 'experience');
