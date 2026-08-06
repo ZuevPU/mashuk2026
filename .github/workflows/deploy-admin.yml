@@ -9,6 +9,10 @@ on:
       - '.github/workflows/ci.yml'
   workflow_dispatch: {}
 
+concurrency:
+  group: deploy-admin
+  cancel-in-progress: true
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -46,3 +50,8 @@ jobs:
           curl -fsS -X POST "$TIMEWEB_ADMIN_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d '{"service":"admin","sha":"${{ github.sha }}"}'
+
+      - name: Warn if Timeweb webhook secret missing
+        if: ${{ env.TIMEWEB_ADMIN_WEBHOOK == '' }}
+        run: |
+          echo "::warning::TIMEWEB_ADMIN_WEBHOOK secret is empty — build artifact uploaded but host was NOT notified. Set the secret in repo Settings → Secrets."

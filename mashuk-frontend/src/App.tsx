@@ -16,6 +16,8 @@ import { ProfilePanel } from './panels/Profile';
 import { RegistrationPanel } from './panels/Registration';
 import { VolunteerPanel } from './panels/Volunteer';
 import { DelayedSurveyPanel } from './panels/DelayedSurvey';
+import { OpenInVkScreen } from './components/OpenInVkScreen';
+import { hasUsableLaunchParams } from './utils/launchParams';
 import { apiGet, getApiUrl, getHashSearchParams, initAuth } from './api/client';
 
 export const ModalContext = createContext<{ setModal: (modal: ReactNode | null) => void }>({ setModal: () => {} });
@@ -89,6 +91,12 @@ export const App = () => {
     setLoading(true);
     setInitError(null);
     try {
+      // Production outside Mini App: no launch params → friendly gate, don't spin on API 401.
+      if (import.meta.env.PROD && !isVkEnvironment() && !hasUsableLaunchParams()) {
+        setInitError('__OPEN_IN_VK__');
+        return;
+      }
+
       await initAuth();
 
       if (isVkEnvironment()) {
@@ -141,10 +149,17 @@ export const App = () => {
       console.error('Init error', error);
       const apiUrl = getApiUrl();
       let message = error instanceof Error ? error.message : String(error);
+      if (
+        message.includes('No Bearer token')
+        || message.includes('Unauthorized')
+        || message.includes('авторизация недоступна')
+        || message.includes('через VK Mini App')
+      ) {
+        setInitError('__OPEN_IN_VK__');
+        return;
+      }
       if (message.includes('Invalid sign')) {
         message = 'Ошибка VK-авторизации (неверная подпись). Проверьте на backend переменную VK_APP_SECRET — это «Защищённый ключ» из dev.vk.com → ваше приложение → Настройки → Ключи.';
-      } else if (message.includes('No Bearer token') || message.includes('Unauthorized')) {
-        message = 'Откройте приложение через VK Mini App (не в обычном браузере). Backend требует VK-авторизацию.';
       }
       setInitError(`Ошибка: ${message} | API: ${apiUrl}`);
     } finally {
@@ -212,6 +227,10 @@ export const App = () => {
         </div>
       </div>
     );
+  }
+
+  if (initError === '__OPEN_IN_VK__') {
+    return <OpenInVkScreen />;
   }
 
   if (initError) {

@@ -10,9 +10,15 @@
 
 | Workflow | Проверка |
 |----------|----------|
-| Deploy Frontend | Мини-app: главная → «Копилка» открывает модалку; профиль → «Создать запись». |
-| Deploy Backend | `GET /api/health` или старт без ошибок миграций в логах. |
+| Deploy Frontend | Мини-app: главная → «Копилка» открывает модалку; профиль → «Создать запись». В логе Actions не должно быть warning про пустой `TIMEWEB_STATIC_WEBHOOK`. |
+| Deploy Backend | `GET https://…twc1.net/health` (не `/api/health`) — 200. Старт без ошибок миграций в логах. Нет warning про пустой `TIMEWEB_DEPLOY_WEBHOOK`. |
 | Deploy Admin | Логин → аналитика «Программа» → блок NPS (если есть ответы вечерней анкеты). |
+
+### Стабильность очереди Actions
+
+- У Deploy Frontend / Backend включён `concurrency` с `cancel-in-progress: true` — повторный dispatch отменяет зависший queued run той же группы.
+- Если job долго в `queued` без runner: cancel + `gh workflow run "Deploy …" --ref main`.
+- Пустой webhook secret = сборка ок, но Timeweb не обновлён — проверить Secrets репозитория.
 
 ## Admin smoke (Wave 3)
 

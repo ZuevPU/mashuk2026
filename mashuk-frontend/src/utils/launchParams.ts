@@ -71,3 +71,13 @@ export function persistLaunchParams(raw: string): void {
     // ignore
   }
 }
+
+/** True when we already have (or can read) VK launch params for API Bearer auth. */
+export function hasUsableLaunchParams(): boolean {
+  if (isValidLaunchParamsString(readLaunchParamsFromLocation())) return true;
+  try {
+    return isValidLaunchParamsString(sessionStorage.getItem(STORAGE_KEY));
+  } catch {
+    return false;
+  }
+}

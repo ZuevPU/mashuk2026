@@ -2,6 +2,11 @@
 
 Краткий указатель; детали — [`admin-wave2-backlog.md`](admin-wave2-backlog.md), трекеры `scripts/spec-tracker-*.tsv`.
 
+## Режим живой смены
+
+Пока идёт активная смена: **не начинать later-пункты ниже** и не открывать новую «волну» фич.
+Только баги/UX с площадки → фикс → деплой. LLM / multi-tenant / телеметрия сессий / rating-analytics phase 4 — после смены.
+
 ## Multi-shift
 
 См. [`MULTI_SHIFT.md`](MULTI_SHIFT.md). Сделано: таблица `shifts`, resolve active, admin «Смены», copy/activate/sandbox clear, participant `(vkId, shiftId)`, авторотация (`SHIFT_AUTO_ROTATE`), medals/levels `shift_id` в schema.

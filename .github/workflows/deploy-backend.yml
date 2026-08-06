@@ -9,6 +9,10 @@ on:
       - '.github/workflows/ci.yml'
   workflow_dispatch: {}
 
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: true
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -60,3 +64,8 @@ jobs:
           curl -fsS -X POST "$TIMEWEB_DEPLOY_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d '{"service":"backend","sha":"${{ github.sha }}"}'
+
+      - name: Warn if Timeweb webhook secret missing
+        if: ${{ env.TIMEWEB_DEPLOY_WEBHOOK == '' }}
+        run: |
+          echo "::warning::TIMEWEB_DEPLOY_WEBHOOK secret is empty — image built but host was NOT notified. Set the secret in repo Settings → Secrets."
