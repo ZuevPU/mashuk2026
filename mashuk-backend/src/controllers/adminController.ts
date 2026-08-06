@@ -15,6 +15,7 @@ import { notifyAllParticipants, sendPushNotification } from '../services/pushSer
 import { recalculateDailyStats } from '../services/analyticsService.js';
 import { clearCache } from '../services/cache.js';
 import { normalizeOnboardingConfig } from '../services/roleService.js';
+import { participantAnswerSummary } from '../services/participantAnswerFormat.js';
 import { enrichSubmissionRow } from '../services/submissionLifecycle.js';
 import { entryTags, formatTagsForExport } from '../services/piggybankDict.js';
 import {
@@ -2326,9 +2327,7 @@ export const exportAnswers = async (req: AdminRequest, res: Response): Promise<v
     ? 'participant_id,name,direction,group_name,day,block,question_title,question_type,time_point,answer,word_count,depth_orientir,points,created_at\n'
     : 'participant_id,name,direction,group_name,day,block,question_title,question_type,time_point,answer,word_count,points,created_at\n';
   const csv = rows.map(r => {
-    const answerText = typeof r.a.answerData === 'string'
-      ? r.a.answerData
-      : JSON.stringify(r.a.answerData ?? '');
+    const answerText = participantAnswerSummary(r.a.answerData, r.q?.type);
     const cells: Array<string | number | null | undefined> = [
       r.p?.id, `${r.p?.firstName} ${r.p?.lastName}`, r.p?.direction, r.p?.groupName ?? '',
       r.q?.dayNumber ?? '', r.q?.block, r.q?.title, r.q?.type, r.q?.timePoint || '',

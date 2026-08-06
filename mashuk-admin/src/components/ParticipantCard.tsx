@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { adminDownloadBinary } from '../admin/client';
 import { CONFIRM_BLOCK_PARTICIPANT, CONFIRM_DELETE_PARTICIPANT, CONFIRM_REMOVE_FROM_PROGRAM, confirmDelete } from '../admin/confirmDelete';
 import { label } from '../labels/ru';
+import { formatAnswerPreview } from '../utils/formatAnswerPreview';
 
 import { VkProfileLink } from './VkProfileLink';
 import { ParticipantAvatar } from './participants/ParticipantAvatar';
@@ -794,7 +795,9 @@ export function ParticipantCardModal({
 
                     <td>{a.dayNumber ?? '—'}</td>
 
-                    <td style={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis' }}>{typeof a.answerData === 'string' ? a.answerData : JSON.stringify(a.answerData)}</td>
+                    <td style={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis' }} title={formatAnswerPreview(a.answerData)}>
+                      {formatAnswerPreview(a.answerData)}
+                    </td>
 
                   </tr>
 
