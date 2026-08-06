@@ -126,10 +126,14 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   useEffect(() => {
     const s = shifts.find(x => x.id === selectedId);
     setDraft(s ? draftFromShift(s) : null);
+  }, [selectedId, shifts]);
+
+  // Reset copy UI only when switching the selected shift, not on list reload.
+  useEffect(() => {
     setCopyPreview(null);
     setCopyDraft(null);
     setCopyIntoTargetId(null);
-  }, [selectedId, shifts]);
+  }, [selectedId]);
 
   const selected = shifts.find(s => s.id === selectedId) || null;
 
@@ -179,16 +183,18 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
   const startCopy = () => {
     if (!selected) return;
-    act(async () => {
-      const res = await adminFetch(`/shifts/${selected.id}/copy-preview`);
-      setCopyPreview(res.summary || 'Предпросмотр недоступен');
-      setCopyIntoTargetId(null);
-      setCopyDraft({
-        code: `${selected.code}-copy`,
-        name: `${selected.name} (копия)`,
-        startDate: toDateInput(selected.startDate),
-      });
-    }, 'Предпросмотр готов');
+    // Do not use act(): it reloads the tab and clears the copy form.
+    void adminFetch(`/shifts/${selected.id}/copy-preview`)
+      .then((res: { summary?: string }) => {
+        setCopyPreview(res.summary || 'Предпросмотр недоступен');
+        setCopyIntoTargetId(null);
+        setCopyDraft({
+          code: `${selected.code}-copy`,
+          name: `${selected.name} (копия)`,
+          startDate: toDateInput(selected.startDate),
+        });
+      })
+      .catch((e: unknown) => alert(String(e instanceof Error ? e.message : e)));
   };
 
   const startCopyInto = () => {
@@ -198,12 +204,14 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       alert('Нет доступной целевой смены. Создайте пустую смену-черновик.');
       return;
     }
-    act(async () => {
-      const res = await adminFetch(`/shifts/${selected.id}/copy-preview`);
-      setCopyPreview(res.summary || 'Предпросмотр недоступен');
-      setCopyDraft(null);
-      setCopyIntoTargetId(firstTarget.id);
-    }, 'Выберите целевую смену ниже');
+    // Do not use act(): reloadKey resets copyIntoTargetId via the shifts effect.
+    void adminFetch(`/shifts/${selected.id}/copy-preview`)
+      .then((res: { summary?: string }) => {
+        setCopyPreview(res.summary || 'Предпросмотр недоступен');
+        setCopyDraft(null);
+        setCopyIntoTargetId(firstTarget.id);
+      })
+      .catch((e: unknown) => alert(String(e instanceof Error ? e.message : e)));
   };
 
   const confirmCopyInto = () => {
