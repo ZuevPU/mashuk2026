@@ -111,6 +111,7 @@ export const getProfile = async (req: ParticipantRequest, res: Response): Promis
       goalSetting: p.interests ? { interests: p.interests } : null,
       interests: Array.isArray(p.interests) ? (p.interests as string[]) : [],
       actionStyle: bundle.actionStyle,
+      lastExperimentReflection: bundle.lastExperimentReflection ?? null,
       outcomes: bundle.outcomes,
       recentReflections: bundle.recentReflections,
       piggybankCount: bundle.piggybankCount,

@@ -15,6 +15,16 @@ import { QrCodeImage } from '../components/QrCodeImage';
 const TAGS = ['', ...PIGGYBANK_TAGS];
 const SOURCES = ['', ...PIGGYBANK_SOURCES];
 
+/** Russian pluralization for «эксперимент». */
+function formatExperimentCount(n: number): string {
+  const abs = Math.abs(Math.trunc(n)) % 100;
+  const d = abs % 10;
+  if (abs > 10 && abs < 20) return `${n} экспериментов`;
+  if (d === 1) return `${n} эксперимент`;
+  if (d >= 2 && d <= 4) return `${n} эксперимента`;
+  return `${n} экспериментов`;
+}
+
 const PUSH_TYPES = [
   { key: 'touchpoints', label: 'Точки осмысления / проверки состояния' },
   { key: 'program', label: 'Программа и события' },
@@ -216,6 +226,13 @@ export const ProfilePanel: React.FC<{
   const showFinal = !!finalCard?.available;
   const actionStyle = p.actionStyle;
   const tracker = p.dailyTracker;
+  const lastExperimentReflection: {
+    dayNumber?: number | null;
+    items?: { key: string; question: string; answer: string }[];
+  } | null = p.lastExperimentReflection ?? null;
+  const experimentReflectionItems = Array.isArray(lastExperimentReflection?.items)
+    ? lastExperimentReflection!.items!.filter(i => i?.answer?.trim())
+    : [];
   const outcomeBullets: string[] = p.outcomes?.bullets ?? [];
   const showOutcomes = p.outcomes?.visible ?? (p.currentDay >= 3);
   const recentReflections: { title?: string; preview?: string; answeredAt?: string }[] = p.recentReflections ?? [];
@@ -553,18 +570,21 @@ export const ProfilePanel: React.FC<{
             )}
 
             {/* 5. Ролевые эксперименты */}
-            {(actionStyle?.route || p.roleTrajectory?.route || p.user.nextExperiment) && (
+            {(actionStyle?.route || p.roleTrajectory?.route || p.user.nextExperiment
+              || (actionStyle?.roleCounts?.length > 0)) && (
               <div className="m-card">
                 <div className="pb-lbl">Ролевые эксперименты</div>
-                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 8 }}>
-                  {actionStyle?.route || p.roleTrajectory?.route}
-                </div>
+                {(actionStyle?.route || p.roleTrajectory?.route) && (
+                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 8 }}>
+                    {actionStyle?.route || p.roleTrajectory?.route}
+                  </div>
+                )}
                 {actionStyle?.roleCounts?.length > 0 && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginTop: 10 }}>
                     {actionStyle.roleCounts.map((r: { key: string; name: string; count: number }) => (
                       <div key={r.key} style={{ fontSize: 11, background: '#FFF8E7', borderRadius: 8, padding: '6px 8px' }}>
                         <span style={{ fontWeight: 700 }}>{r.name}</span>
-                        <span style={{ color: '#888' }}> · {r.count}</span>
+                        <span style={{ color: '#888' }}> · {formatExperimentCount(r.count ?? 0)}</span>
                       </div>
                     ))}
                   </div>
@@ -583,13 +603,53 @@ export const ProfilePanel: React.FC<{
               </div>
             )}
 
-            {/* 6. Следующие шаги */}
+            {experimentReflectionItems.length > 0 && (
+              <div className="m-card">
+                <div className="pb-lbl">Последняя рефлексия по эксперименту</div>
+                {lastExperimentReflection?.dayNumber != null && (
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                    День {lastExperimentReflection.dayNumber}
+                  </div>
+                )}
+                <div style={{ marginTop: 8 }}>
+                  {experimentReflectionItems.map((item, i) => (
+                    <div
+                      key={item.key || i}
+                      style={{
+                        marginTop: i ? 10 : 0,
+                        paddingTop: i ? 10 : 0,
+                        borderTop: i ? '1px solid #eee' : undefined,
+                      }}
+                    >
+                      <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35 }}>{item.question}</div>
+                      <div style={{ fontSize: 12, color: '#555', marginTop: 4, lineHeight: 1.4 }}>{item.answer}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 6. Следующие шаги — planned by default; ✓ only when status is explicitly done */}
             {p.showNextSteps && p.nextSteps?.length > 0 && (
               <div className="pb m-card">
                 <div className="pb-lbl">➡️ Следующие шаги</div>
-                <ol className="pb-checks" style={{ paddingLeft: 18 }}>
-                  {p.nextSteps.map((step: string, i: number) => <li key={i}>{step}</li>)}
-                </ol>
+                <ul className="pb-planned">
+                  {p.nextSteps.map((step: string | { text?: string; title?: string; status?: string; done?: boolean }, i: number) => {
+                    const text = typeof step === 'string'
+                      ? step
+                      : (step.text || step.title || '');
+                    const statusRaw = typeof step === 'string'
+                      ? ''
+                      : String(step.status || (step.done ? 'done' : '')).toLowerCase();
+                    const isDone = statusRaw === 'done' || statusRaw === 'completed' || statusRaw === 'complete';
+                    return (
+                      <li key={i} className={isDone ? 'is-done' : undefined}>
+                        <span style={{ flex: 1, lineHeight: 1.35 }}>{text}</span>
+                        {!isDone && <span className="pb-planned-status">Запланировано</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             )}
 
@@ -653,50 +713,26 @@ export const ProfilePanel: React.FC<{
               </div>
             </div>
 
-            {medals.length > 0 && (
-              <div className="m-card">
-                <div className="pb-lbl">Медали</div>
-                {medals.map((m: any) => (
-                  <div key={m.id} style={{ fontSize: 13, marginTop: 6 }}>
-                    <strong>{m.name}</strong>
-                    <span style={{ color: '#888' }}> · {m.level || 'bronze'}</span>
-                    {m.description && <div style={{ fontSize: 11, color: '#666' }}>{m.description}</div>}
-                  </div>
-                ))}
-                <div className="pb-link" onClick={() => setSection('medals')}>Все медали →</div>
-              </div>
-            )}
-
-            {/* 8. Баллы, рейтинг и техническая статистика */}
+            {/* 8. Три понятных индикатора (баллы/уровни — во вкладке «Результаты») */}
             <div className="ab-card">
-              <div className="pb-lbl">Баллы и статистика</div>
+              <div className="pb-lbl">Мой прогресс</div>
               <div className="ab-stats" style={{ marginTop: 8 }}>
-                <div className="abs"><div className="abs-v">{abPct}%</div><div className="abs-l">Прогресс A→B</div></div>
                 <div className="abs">
-                  <div className="abs-v">{m.activitiesVisited ?? p.stats.activities}/{m.activitiesTotal ?? '—'}</div>
-                  <div className="abs-l">Активностей</div>
+                  <div className="abs-v">{m.eveningReflectionsDone ?? m.touchpointsDone ?? 0}</div>
+                  <div className="abs-l">Заполнено точек рефлексии</div>
                 </div>
-                <div className="abs"><div className="abs-v">{m.piggybankTotal ?? p.piggybankCount ?? 0}</div><div className="abs-l">Идей</div></div>
                 <div className="abs">
-                  <div className="abs-v">{m.eveningReflectionsDone ?? 0}/{m.eveningReflectionsTotal ?? 7}</div>
-                  <div className="abs-l">Точек дня</div>
+                  <div className="abs-v">{m.piggybankTotal ?? p.piggybankCount ?? 0}</div>
+                  <div className="abs-l">Сохранено идей</div>
+                </div>
+                <div className="abs">
+                  <div className="abs-v">{p.stats?.tasksDone ?? tracker?.tasksDone ?? 0}</div>
+                  <div className="abs-l">Выполнено заданий</div>
                 </div>
               </div>
-            </div>
-
-            <div className="m-stats">
-              {p.points?.unified ? (
-                <div className="m-st">
-                  <div className="m-sv">✦ {p.points.rating ?? p.points.total}</div>
-                  <div className="m-sl">Баллы · ур. {p.points.ratingLevel ?? p.points.experienceLevel ?? 1}</div>
-                </div>
-              ) : (
-                <>
-                  <div className="m-st"><div className="m-sv">📍 {p.points.path}</div><div className="m-sl">Путь · ур. {p.points.pathLevel}</div></div>
-                  <div className="m-st"><div className="m-sv">⚡ {p.points.experience}</div><div className="m-sl">Опыт · ур. {p.points.experienceLevel}</div></div>
-                  <div className="m-st"><div className="m-sv">✦ {p.points.total ?? ((p.points.path ?? 0) + (p.points.experience ?? 0))}</div><div className="m-sl">Общий рейтинг</div></div>
-                </>
-              )}
+              <div className="pb-link" style={{ marginTop: 10 }} onClick={() => setSection('results')}>
+                Баллы, уровни и медали →
+              </div>
             </div>
 
             {tracker && (
@@ -711,7 +747,7 @@ export const ProfilePanel: React.FC<{
                 </div>
                 {!trackerOpen && (
                   <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-                    Задания {tracker.tasksDone}/{tracker.tasksTotal} · 7 точек · состояние за смену
+                    Заданий выполнено: {tracker.tasksDone ?? 0} · состояние за смену
                   </div>
                 )}
                 {trackerOpen && (
@@ -732,7 +768,7 @@ export const ProfilePanel: React.FC<{
                       </div>
                     )}
                     <div style={{ marginBottom: 8 }}>
-                      Задания: {tracker.tasksDone}/{tracker.tasksTotal} · Опыт: {tracker.experiencePoints}
+                      Заданий выполнено: {tracker.tasksDone ?? 0}
                     </div>
                     {tracker.myExchangeQuestions?.length > 0 && (
                       <div style={{ marginBottom: 8 }}>
@@ -744,7 +780,7 @@ export const ProfilePanel: React.FC<{
                     )}
                     {tracker.touchpointsToday?.length > 0 && (
                       <div style={{ marginBottom: 8 }}>
-                        <div style={{ fontWeight: 700 }}>7 точек · день {p.currentDay ?? '—'}</div>
+                        <div style={{ fontWeight: 700 }}>Точки дня · день {p.currentDay ?? '—'}</div>
                         {tracker.touchpointsToday.map((tp: { title?: string; done?: boolean; state?: string }, i: number) => {
                           const ok = tp.done === true || tp.state === 'done';
                           return (
@@ -797,18 +833,26 @@ export const ProfilePanel: React.FC<{
             <div className="m-card">
               <div className="pb-lbl">Мои результаты</div>
               <div className="m-results-grid">
-                <div className="m-st"><div className="m-sv">{p.points?.path ?? 0}</div><div className="m-sl">Путь</div></div>
-                <div className="m-st"><div className="m-sv">{p.points?.experience ?? 0}</div><div className="m-sl">Опыт</div></div>
+                {p.points?.unified ? (
+                  <div className="m-st">
+                    <div className="m-sv">✦ {p.points.rating ?? p.points.total ?? 0}</div>
+                    <div className="m-sl">Баллы · ур. {p.points.ratingLevel ?? p.points.experienceLevel ?? 1}</div>
+                  </div>
+                ) : null}
+                <div className="m-st"><div className="m-sv">📍 {p.points?.path ?? 0}</div><div className="m-sl">Путь{!p.points?.unified ? ` · ур. ${p.points?.pathLevel ?? 1}` : ''}</div></div>
+                <div className="m-st"><div className="m-sv">⚡ {p.points?.experience ?? 0}</div><div className="m-sl">Опыт{!p.points?.unified ? ` · ур. ${p.points?.experienceLevel ?? 1}` : ''}</div></div>
                 <div className="m-st"><div className="m-sv">{p.points?.bonus ?? 0}</div><div className="m-sl">Бонус</div></div>
-                <div className="m-st"><div className="m-sv">✦ {p.points?.total ?? 0}</div><div className="m-sl">Общий рейтинг</div></div>
+                {!p.points?.unified && (
+                  <div className="m-st"><div className="m-sv">✦ {p.points?.total ?? 0}</div><div className="m-sl">Общий рейтинг</div></div>
+                )}
               </div>
-              {p.points?.pathLevel && (
-                <div className="m-results-meta">
-                  Уровень Пути: {p.points.pathLevel.level} · Опыт: {p.points.experienceLevel?.level ?? 1}
-                </div>
-              )}
               <div className="m-results-meta">
-                Заданий выполнено: {p.stats?.tasksDone ?? 0} · Ответов: {p.stats?.answers ?? 0} · Идей в копилке: {p.stats?.ideas ?? 0}
+                Заданий выполнено: {p.stats?.tasksDone ?? 0}
+                {' · '}Точек рефлексии: {m.eveningReflectionsDone ?? m.touchpointsDone ?? 0}
+                {' · '}Идей: {m.piggybankTotal ?? p.piggybankCount ?? p.stats?.ideas ?? 0}
+              </div>
+              <div className="pb-link" style={{ marginTop: 8 }} onClick={() => setSection('rating')}>
+                Смотреть рейтинг →
               </div>
             </div>
 

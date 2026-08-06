@@ -31,6 +31,7 @@ import {
 } from './profileRecommendations.js';
 import { PIGGYBANK_TAGS, PIGGYBANK_SOURCES, entryHasTag, entryTags, formatTagsForExport, primaryTag } from './piggybankDict.js';
 import { participantAnswerSummary } from './participantAnswerFormat.js';
+import { buildLastExperimentReflection } from './experimentReflection.js';
 
 const NON_SUBSTANTIVE_TYPES = new Set([
   'checkin',
@@ -349,6 +350,18 @@ export async function gatherProfileBundle(participantId: number) {
   );
 
   const eveningNotes = extractEveningNotes(dayStates);
+  const lastExperimentReflection = buildLastExperimentReflection({
+    dayStates,
+    settings,
+    answerReflections: recentReflectionsForClient,
+  });
+  const experimentAnswerNorms = new Set(
+    (lastExperimentReflection?.items || []).map(i => i.answer.toLowerCase().replace(/\s+/g, ' ')),
+  );
+  // Keep experiment Q↔A in its own profile card — don't repeat as bare bullets in «Что уже понял»
+  const recentReflectionsWithoutExperiment = recentReflectionsForClient.filter(
+    r => !experimentAnswerNorms.has(r.preview.toLowerCase().replace(/\s+/g, ' ')),
+  );
   const heuristicOutcomes = buildOutcomesHeuristic({
     answersCount: userAnswers.length,
     tasksApproved,
@@ -464,13 +477,14 @@ export async function gatherProfileBundle(participantId: number) {
       growthRole: growthMeta ? { key: growthMeta.roleKey, name: growthMeta.name } : null,
       nextExperiment: p.nextExperiment,
     },
+    lastExperimentReflection,
     outcomes: {
       bullets: outcomeBullets,
       showFromDay: 3,
       visible: currentDay >= 3,
     },
     eveningNotes,
-    recentReflections: recentReflectionsForClient,
+    recentReflections: recentReflectionsWithoutExperiment,
     nextSteps: visibleNextSteps,
     showNextSteps,
     recommendation,
@@ -620,12 +634,21 @@ export async function streamProfilePdf(
   }
   doc.moveDown(0.4);
 
-  sectionTitle(doc, 'Твой способ действия');
+  sectionTitle(doc, 'Ролевые эксперименты');
   bodyText(doc, bundle.actionStyle.route || 'Маршрут ролей появится по ходу смены');
   doc.moveDown(0.25);
   if (bundle.actionStyle.strongRole) bullet(doc, `Сильная роль: ${bundle.actionStyle.strongRole.name}`);
   if (bundle.actionStyle.growthRole) bullet(doc, `Роль роста: ${bundle.actionStyle.growthRole.name}`);
   if (p.nextExperiment) bullet(doc, `Следующий эксперимент: ${p.nextExperiment}`);
+  const expRef = bundle.lastExperimentReflection;
+  if (expRef?.items?.length) {
+    doc.moveDown(0.35);
+    sectionTitle(doc, 'Последняя рефлексия по эксперименту');
+    if (expRef.dayNumber != null) mutedLine(doc, `День ${expRef.dayNumber}`);
+    for (const item of expRef.items) {
+      bullet(doc, `${item.question}: ${item.answer}`);
+    }
+  }
   doc.moveDown(0.3);
 
   sectionTitle(doc, 'Что получилось');
