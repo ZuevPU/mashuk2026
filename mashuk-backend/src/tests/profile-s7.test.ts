@@ -78,6 +78,34 @@ describe('profileOutcomes §7', () => {
     );
     assert.deepEqual(display, ['Админ правка']);
   });
+
+  it('replaces cached verbatim reflection duplicates with heuristic', () => {
+    const quote = 'Ценю каждого человека рядом здесь и тех, кто ждёт меня дома и на работе';
+    const heuristic = buildOutcomesHeuristic({
+      answersCount: 5,
+      tasksApproved: 2,
+      piggyTotal: 4,
+      piggyInWork: 1,
+      eveningNotes: [quote],
+    });
+    const display = parseOutcomesForDisplay(
+      { bullets: [quote, quote], generatedAt: '2026-01-01', source: 'heuristic' },
+      heuristic,
+      [quote],
+    );
+    assert.deepEqual(display, heuristic);
+    assert.ok(!display.some(b => b.includes('Ценю каждого')));
+  });
+
+  it('keeps admin summary that is not a reflection quote', () => {
+    const quote = 'Ценю каждого человека рядом здесь и тех, кто ждёт меня дома и на работе';
+    const display = parseOutcomesForDisplay(
+      { bullets: ['Сформировал привычку короткой вечерней рефлексии'] },
+      ['heuristic'],
+      [quote],
+    );
+    assert.deepEqual(display, ['Сформировал привычку короткой вечерней рефлексии']);
+  });
 });
 
 describe('isSubstantiveProfileReflection', () => {

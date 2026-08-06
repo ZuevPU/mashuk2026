@@ -24,6 +24,7 @@ import {
   buildOutcomesHeuristic,
   buildNextStepsFromSources,
   parseOutcomesForDisplay,
+  outcomesEditedLooksVerbatim,
 } from './profileOutcomes.js';
 import {
   pickProfileRecommendation,
@@ -362,6 +363,10 @@ export async function gatherProfileBundle(participantId: number) {
   const recentReflectionsWithoutExperiment = recentReflectionsForClient.filter(
     r => !experimentAnswerNorms.has(r.preview.toLowerCase().replace(/\s+/g, ' ')),
   );
+  const reflectionTextsForOutcomes = [
+    ...recentReflectionsForClient.map(r => r.preview),
+    ...eveningNotes,
+  ];
   const heuristicOutcomes = buildOutcomesHeuristic({
     answersCount: userAnswers.length,
     tasksApproved,
@@ -370,7 +375,25 @@ export async function gatherProfileBundle(participantId: number) {
     eveningNotes,
     recentAnswerTexts: recentReflectionsForClient.map(r => r.preview),
   });
-  const outcomeBullets = parseOutcomesForDisplay(p.outcomesEdited, heuristicOutcomes);
+  // Old synthesize / heuristic cached verbatim evening answers in outcomesEdited —
+  // drop that cache and rebuild summary so users don't need «Обновить итог».
+  let outcomeBullets = parseOutcomesForDisplay(
+    p.outcomesEdited,
+    heuristicOutcomes,
+    reflectionTextsForOutcomes,
+  );
+  if (outcomesEditedLooksVerbatim(p.outcomesEdited, reflectionTextsForOutcomes)) {
+    const refreshed = {
+      bullets: heuristicOutcomes,
+      generatedAt: new Date().toISOString(),
+      source: 'heuristic',
+    };
+    await db.update(participants)
+      .set({ outcomesEdited: refreshed })
+      .where(eq(participants.id, p.id));
+    p.outcomesEdited = refreshed;
+    outcomeBullets = heuristicOutcomes;
+  }
 
   const piggyPlans = allPiggy.filter(e => entryHasTag(e, 'в работу')).map(e => e.text);
   const fallbackTasks = publishedTasks

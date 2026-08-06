@@ -233,9 +233,35 @@ export const ProfilePanel: React.FC<{
   const experimentReflectionItems = Array.isArray(lastExperimentReflection?.items)
     ? lastExperimentReflection!.items!.filter(i => i?.answer?.trim())
     : [];
-  const outcomeBullets: string[] = p.outcomes?.bullets ?? [];
-  const showOutcomes = p.outcomes?.visible ?? (p.currentDay >= 3);
   const recentReflections: { title?: string; preview?: string; answeredAt?: string }[] = p.recentReflections ?? [];
+  // Belt-and-suspenders: never show verbatim reflection text under «Что получилось»
+  // (backend should already replace bad outcomesEdited cache).
+  const reflectionNorms = new Set(
+    recentReflections
+      .map(r => (r.preview || '').toLowerCase().replace(/\s+/g, ' ').trim())
+      .filter(t => t.length >= 12),
+  );
+  const experimentNorms = new Set(
+    experimentReflectionItems
+      .map(i => (i.answer || '').toLowerCase().replace(/\s+/g, ' ').trim())
+      .filter(t => t.length >= 12),
+  );
+  const outcomeBulletsRaw: string[] = p.outcomes?.bullets ?? [];
+  const outcomeBullets: string[] = (() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const line of outcomeBulletsRaw) {
+      const t = String(line || '').trim();
+      if (!t) continue;
+      const key = t.toLowerCase().replace(/\s+/g, ' ');
+      if (seen.has(key)) continue;
+      if (reflectionNorms.has(key) || experimentNorms.has(key)) continue;
+      seen.add(key);
+      out.push(t);
+    }
+    return out;
+  })();
+  const showOutcomes = p.outcomes?.visible ?? (p.currentDay >= 3);
   const tagCounts = (p.piggybankTags ?? {}) as Record<string, number>;
   const sourceCounts = (p.piggybankSources ?? tracker?.piggybankSources ?? {}) as Record<string, number>;
   const shiftLine = [p.user.direction, p.user.groupName ? `Группа «${p.user.groupName}»` : null, p.user.shiftLabel]
