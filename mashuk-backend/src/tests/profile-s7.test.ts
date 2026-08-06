@@ -55,20 +55,27 @@ describe('profileRecommendations §7', () => {
 });
 
 describe('profileOutcomes §7', () => {
-  it('builds heuristic bullets from activity', () => {
+  it('builds summary bullets without verbatim answer quotes', () => {
+    const quote = 'Ценю каждого человека рядом здесь и тех, кто ждёт меня дома и на работе';
     const bullets = buildOutcomesHeuristic({
       answersCount: 5,
       tasksApproved: 2,
       piggyTotal: 4,
       piggyInWork: 1,
-      eveningNotes: ['Получилось держать фокус на группе'],
+      eveningNotes: [quote],
+      recentAnswerTexts: [quote, quote],
     });
-    assert.ok(bullets.length >= 2);
     assert.ok(bullets.some(b => b.includes('задан')));
+    assert.ok(bullets.some(b => /рефлекс/i.test(b)));
+    assert.ok(bullets.some(b => /итогов/i.test(b) || /анкет/i.test(b)));
+    assert.ok(!bullets.some(b => b.includes('Ценю каждого')), `must not leak quote: ${bullets.join(' | ')}`);
   });
 
-  it('prefers edited bullets over heuristic', () => {
-    const display = parseOutcomesForDisplay({ bullets: ['Админ правка'] }, ['heuristic']);
+  it('prefers edited bullets over heuristic and dedupes', () => {
+    const display = parseOutcomesForDisplay(
+      { bullets: ['Админ правка', 'Админ правка'] },
+      ['heuristic'],
+    );
     assert.deepEqual(display, ['Админ правка']);
   });
 });

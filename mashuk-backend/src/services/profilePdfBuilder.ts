@@ -96,19 +96,21 @@ function buildRoleRoute(startKey: string | null, dayRoles: string[], growthKey: 
 
 function extractEveningNotes(dayStates: typeof participantDayState.$inferSelect[]): string[] {
   const notes: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw: string) => {
+    const t = raw.trim();
+    if (t.length < 8) return;
+    const key = t.toLowerCase().replace(/\s+/g, ' ');
+    if (seen.has(key)) return;
+    seen.add(key);
+    notes.push(t);
+  };
   for (const s of dayStates) {
     const r = s.eveningRatings as Record<string, unknown> | null;
     if (!r) continue;
-    for (const key of ['likedMost', 'improveTomorrow', 'experimentResult', 'note', 'mainThesis']) {
+    for (const key of ['likedMost', 'improveTomorrow', 'experimentResult', 'note', 'mainThesis', 'freeNote']) {
       const v = r[key];
-      if (typeof v === 'string' && v.trim()) notes.push(v.trim());
-    }
-    const draft = s.eveningDraft as { form?: Record<string, unknown> } | null;
-    const form = draft?.form;
-    if (form) {
-      for (const v of Object.values(form)) {
-        if (typeof v === 'string' && v.trim().length > 10) notes.push(v.trim());
-      }
+      if (typeof v === 'string') push(v);
     }
   }
   return notes;
@@ -177,37 +179,56 @@ export async function gatherProfileBundle(participantId: number) {
     .where(eq(participantDayState.participantId, p.id))
     .orderBy(asc(participantDayState.dayNumber));
 
-  // Only free-text evening fields — not program scale ratings
-  for (const s of dayStates) {
-    const r = s.eveningRatings as Record<string, unknown> | null;
-    if (!r) continue;
-    const labels: Record<string, string> = {
-      mainThesis: 'Главный тезис дня',
-      likedMost: 'Что понравилось',
-      freeNote: 'Заметка',
-      experimentResult: 'Эксперимент с ролью',
-    };
-    for (const [key, label] of Object.entries(labels)) {
-      const v = r[key];
-      if (typeof v !== 'string' || !v.trim()) continue;
-      const preview = v.trim().slice(0, 320);
-      if (!isSubstantiveProfileReflection({
-        type: 'open',
-        block: 'Итоги дня',
-        preview,
-      })) continue;
-      recentReflections.push({
-        questionId: 0,
-        title: `Итоговая анкета · день ${s.dayNumber} · ${label}`,
-        block: 'Итоги дня',
-        answeredAt: s.updatedAt ?? s.createdAt,
-        preview,
-      });
+  // Evening free-text already lives in answers («Итоги дня») — don't re-add from day_state
+  // (that duplicated the same phrase in profile «Мои ответы»).
+  const reflectionPreviews = new Set(
+    recentReflections.map(r => r.preview.toLowerCase().replace(/\s+/g, ' ')),
+  );
+  const hasEveningAnswer = recentReflections.some(r => (r.block || '').includes('Итоги'));
+  if (!hasEveningAnswer) {
+    for (const s of dayStates) {
+      const r = s.eveningRatings as Record<string, unknown> | null;
+      if (!r) continue;
+      const labels: Record<string, string> = {
+        mainThesis: 'Главный тезис дня',
+        likedMost: 'Что понравилось',
+        freeNote: 'Заметка',
+        experimentResult: 'Эксперимент с ролью',
+      };
+      for (const [key, label] of Object.entries(labels)) {
+        const v = r[key];
+        if (typeof v !== 'string' || !v.trim()) continue;
+        const preview = v.trim().slice(0, 320);
+        const norm = preview.toLowerCase().replace(/\s+/g, ' ');
+        if (reflectionPreviews.has(norm)) continue;
+        if (!isSubstantiveProfileReflection({
+          type: 'open',
+          block: 'Итоги дня',
+          preview,
+        })) continue;
+        reflectionPreviews.add(norm);
+        recentReflections.push({
+          questionId: 0,
+          title: `Итоговая анкета · день ${s.dayNumber} · ${label}`,
+          block: 'Итоги дня',
+          answeredAt: s.updatedAt ?? s.createdAt,
+          preview,
+        });
+      }
     }
   }
   recentReflections.sort((a, b) =>
     new Date(b.answeredAt ?? 0).getTime() - new Date(a.answeredAt ?? 0).getTime());
-  const recentReflectionsForClient = recentReflections.slice(0, 24);
+  // Dedupe identical previews (same text from twin questions / copies)
+  const dedupedReflections: typeof recentReflections = [];
+  const seenPreview = new Set<string>();
+  for (const r of recentReflections) {
+    const key = r.preview.toLowerCase().replace(/\s+/g, ' ');
+    if (seenPreview.has(key)) continue;
+    seenPreview.add(key);
+    dedupedReflections.push(r);
+  }
+  const recentReflectionsForClient = dedupedReflections.slice(0, 24);
 
   const answeredIds = new Set(userAnswers.map(a => a.questionId));
 
@@ -438,7 +459,7 @@ export async function gatherProfileBundle(participantId: number) {
         count: roleCounts[k] ?? 0,
       })),
       route: roleRoute,
-      selfInsights: eveningNotes.slice(0, 5),
+      selfInsights: [] as string[],
       strongRole: strongMeta ? { key: strongMeta.roleKey, name: strongMeta.name } : null,
       growthRole: growthMeta ? { key: growthMeta.roleKey, name: growthMeta.name } : null,
       nextExperiment: p.nextExperiment,
@@ -448,6 +469,7 @@ export async function gatherProfileBundle(participantId: number) {
       showFromDay: 3,
       visible: currentDay >= 3,
     },
+    eveningNotes,
     recentReflections: recentReflectionsForClient,
     nextSteps: visibleNextSteps,
     showNextSteps,

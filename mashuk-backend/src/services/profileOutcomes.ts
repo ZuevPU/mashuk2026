@@ -6,29 +6,48 @@ export function buildOutcomesHeuristic(input: {
   eveningNotes: string[];
   recentAnswerTexts?: string[];
 }): string[] {
+  // Profile «Что получилось» — краткий итог смены, не дословные цитаты из ответов.
+  // Полный архив текстов — в разделе «Вопросы».
   const bullets: string[] = [];
   if (input.tasksApproved > 0) {
     bullets.push(`Выполнено заданий на форуме: ${input.tasksApproved}`);
   }
-  if (input.answersCount >= 1 && input.recentAnswerTexts?.length) {
-    for (const t of input.recentAnswerTexts.slice(0, 3)) {
-      if (t.trim()) bullets.push(t.trim().slice(0, 160));
-    }
-  } else if (input.answersCount >= 3) {
+  if (input.answersCount >= 3) {
     bullets.push(`Рефлексия: ${input.answersCount} ответов на вопросы программы`);
   } else if (input.answersCount > 0) {
-    bullets.push(`Рефлексия: ${input.answersCount} ответ${input.answersCount === 1 ? '' : 'а'} — тексты в «Общение» → «Мои ответы»`);
+    bullets.push(
+      `Рефлексия: ${input.answersCount} ответ${input.answersCount === 1 ? '' : 'а'} — тексты в «Вопросы»`,
+    );
   }
-  if (input.piggyTotal >= 2) {
+  if (input.piggyTotal >= 1) {
     bullets.push(`Копилка: ${input.piggyTotal} записей (${input.piggyInWork} «в работу»)`);
   }
-  for (const note of input.eveningNotes.slice(0, 2)) {
-    if (note.trim()) bullets.push(note.trim().slice(0, 120));
+  const eveningUnique = uniqueNormalized(input.eveningNotes);
+  if (eveningUnique.length > 0) {
+    bullets.push(
+      eveningUnique.length === 1
+        ? 'Заполнена итоговая анкета дня — текст в «Вопросы»'
+        : `Итоговых анкет дня: ${eveningUnique.length} — тексты в «Вопросы»`,
+    );
   }
   if (bullets.length === 0) {
     bullets.push('Продолжайте отмечать идеи и отвечать на вопросы — итог сформируется по ходу смены.');
   }
-  return bullets.slice(0, 5);
+  return uniqueNormalized(bullets).slice(0, 5);
+}
+
+function uniqueNormalized(lines: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const line of lines) {
+    const t = String(line ?? '').trim();
+    if (!t) continue;
+    const key = t.toLowerCase().replace(/\s+/g, ' ');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
 }
 
 export function buildNextStepsFromSources(input: {
@@ -48,7 +67,7 @@ export function buildNextStepsFromSources(input: {
     if (steps.length >= 5) break;
     if (!steps.includes(t)) steps.push(t);
   }
-  return steps.slice(0, 5);
+  return uniqueNormalized(steps).slice(0, 5);
 }
 
 export function parseOutcomesForDisplay(outcomesEdited: unknown, heuristic: string[]): string[] {
@@ -64,15 +83,5 @@ export function parseOutcomesForDisplay(outcomesEdited: unknown, heuristic: stri
   } else {
     raw = heuristic.map(String);
   }
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const line of raw) {
-    const t = String(line ?? '').trim();
-    if (!t) continue;
-    const key = t.toLowerCase().replace(/\s+/g, ' ');
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(t);
-  }
-  return out.slice(0, 5);
+  return uniqueNormalized(raw).slice(0, 5);
 }

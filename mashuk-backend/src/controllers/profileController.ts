@@ -492,7 +492,7 @@ export const synthesizeMyOutcomes = async (req: ParticipantRequest, res: Respons
       tasksApproved: bundle.userTasks.filter(t => t.status === 'approved').length,
       piggyTotal: bundle.allPiggy.length,
       piggyInWork: bundle.allPiggy.filter(e => entryHasTag(e, 'в работу')).length,
-      eveningNotes: bundle.actionStyle.selfInsights,
+      eveningNotes: bundle.eveningNotes ?? [],
     });
     await db.update(participants)
       .set({ outcomesEdited: { bullets, generatedAt: new Date().toISOString(), source: 'heuristic' } })
