@@ -17,6 +17,42 @@ describe('profile PDF fonts and Cyrillic', () => {
     assert.equal(participantAnswerSummary({ interests: ['спорт', 'медиа'] }), 'спорт, медиа');
   });
 
+  it('humanizes evening questionnaire ratings instead of raw JSON', () => {
+    const payload = {
+      food: 5,
+      curator: 5,
+      housing: 5,
+      tripYes: false,
+      direction: 5,
+      workshops: 5,
+      openLessons: 5,
+      practiceYes: false,
+      recommendYes: false,
+      morningHealth: 5,
+      lessonsImportant: 5,
+      eveningAtmosphere: 5,
+    };
+    const summary = participantAnswerSummary(payload, 'day_summary');
+    assert.ok(!summary.includes('{'), `must not leak JSON: ${summary}`);
+    assert.ok(!summary.includes('"food"'), `must not leak keys: ${summary}`);
+    assert.match(summary, /Оценки программ 5\/5/);
+    assert.match(summary, /Выезд: нет/);
+    assert.match(summary, /Практика: нет/);
+  });
+
+  it('parses stringified evening JSON and formats choice/multi', () => {
+    const asString = JSON.stringify({ direction: 4, food: 3, tripYes: true, tripScore: 4 });
+    const summary = participantAnswerSummary(asString);
+    assert.ok(!summary.startsWith('{'), summary);
+    assert.match(summary, /Направление 4\/5|Оценки|Питание/);
+    assert.equal(participantAnswerSummary({ choice: 'Вариант А' }, 'choice'), 'Вариант А');
+    assert.equal(participantAnswerSummary({ choices: ['a', 'b'] }, 'multi'), 'a, b');
+    assert.equal(
+      participantAnswerSummary({ masterChoice: 'Да', dependentAnswer: 'потому что' }, 'dependent'),
+      'Да · потому что',
+    );
+  });
+
   it('streamProfilePdf emits PDF with Cyrillic ToUnicode', async () => {
     const chunks: Buffer[] = [];
     const out = new PassThrough();
