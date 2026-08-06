@@ -243,7 +243,12 @@ export const RoleOfDayCard: React.FC<{
             aria-expanded={expOpen}
             onClick={toggleExp}
           >
-            <span>Эксперимент дня — рекомендация</span>
+            <span className="m-role-exp-toggle-text">
+              <span className="m-role-exp-toggle-title">Эксперимент дня – сегодня ты можешь попробовать…</span>
+              {!expOpen && (
+                <span className="m-role-exp-toggle-hint">разверни рекомендацию дня</span>
+              )}
+            </span>
             <span className="m-role-exp-chevron" aria-hidden>{expOpen ? '▾' : '▸'}</span>
           </button>
           {expOpen && (
@@ -281,7 +286,12 @@ export const ExperimentCard: React.FC<{
         aria-expanded={open}
         onClick={() => setOpen(o => !o)}
       >
-        <span>Эксперимент дня — рекомендация</span>
+        <span className="m-role-exp-toggle-text">
+          <span className="m-role-exp-toggle-title">Эксперимент дня – сегодня ты можешь попробовать…</span>
+          {!open && (
+            <span className="m-role-exp-toggle-hint">разверни рекомендацию дня</span>
+          )}
+        </span>
         <span className="m-role-exp-chevron" aria-hidden>{open ? '▾' : '▸'}</span>
       </button>
       {open && (
