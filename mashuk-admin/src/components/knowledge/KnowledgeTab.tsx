@@ -115,30 +115,46 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
     });
   }, [materials, search, dayFilter, directionFilter, eventFilter]);
 
-  const createMaterial = () =>
+  const buildCreateBody = (status: 'draft' | 'published', extra: Record<string, unknown> = {}) => {
+    const tags = newMaterial.tags.split(',').map(s => s.trim()).filter(Boolean);
+    return {
+      dayNumber: Number(newMaterial.dayNumber),
+      eventId: newMaterial.isGeneral ? null : (newMaterial.eventId ? Number(newMaterial.eventId) : null),
+      direction: newMaterial.audienceAll ? null : (newMaterial.direction || null),
+      tags,
+      title: newMaterial.title.trim(),
+      url: newMaterial.url.trim() || null,
+      type: newMaterial.type || null,
+      speakerIds: newMaterial.speakerIds,
+      speakerName: newMaterial.speakerName || null,
+      isGeneral: !!newMaterial.isGeneral,
+      kbUnlockMode: newMaterial.kbUnlockMode,
+      kbUnlockMinTouchpoints: newMaterial.kbUnlockMode === 'touchpoints' && newMaterial.kbUnlockMinTouchpoints !== ''
+        ? newMaterial.kbUnlockMinTouchpoints
+        : null,
+      status,
+      ...extra,
+    };
+  };
+
+  const createMaterial = (status: 'draft' | 'published') => {
+    if (!newMaterial.title.trim()) {
+      alert('Укажите название материала');
+      return;
+    }
+    if (!newMaterial.url.trim() && status === 'published') {
+      alert('Для публикации укажите ссылку или сначала загрузите файл');
+      return;
+    }
     act(async () => {
-      const tags = newMaterial.tags.split(',').map(s => s.trim()).filter(Boolean);
       await adminFetch('/materials', {
         method: 'POST',
-        body: JSON.stringify({
-          ...newMaterial,
-          dayNumber: Number(newMaterial.dayNumber),
-          eventId: newMaterial.isGeneral ? null : (newMaterial.eventId ? Number(newMaterial.eventId) : null),
-          direction: newMaterial.audienceAll ? null : (newMaterial.direction || null),
-          tags,
-          type: newMaterial.type || null,
-          speakerIds: newMaterial.speakerIds,
-          isGeneral: !!newMaterial.isGeneral,
-          kbUnlockMode: newMaterial.kbUnlockMode,
-          kbUnlockMinTouchpoints: newMaterial.kbUnlockMode === 'touchpoints' && newMaterial.kbUnlockMinTouchpoints !== ''
-            ? newMaterial.kbUnlockMinTouchpoints
-            : null,
-          status: 'draft',
-        }),
+        body: JSON.stringify(buildCreateBody(status)),
       });
       setNewMaterial(emptyMaterial());
       await load();
-    });
+    }, status === 'published' ? 'Материал опубликован' : 'Черновик сохранён');
+  };
 
   const uploadFile = async (file: File) => {
     const dataUrl = await readFileAsDataUrl(file);
@@ -147,6 +163,25 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
       body: JSON.stringify({ dataUrl, filename: file.name }),
     });
     return res.fileUrl || res.url;
+  };
+
+  const createWithFile = (file: File) => {
+    if (!newMaterial.title.trim()) {
+      alert('Сначала укажите название материала');
+      return;
+    }
+    act(async () => {
+      const fileUrl = await uploadFile(file);
+      await adminFetch('/materials', {
+        method: 'POST',
+        body: JSON.stringify(buildCreateBody('draft', {
+          fileUrl,
+          url: newMaterial.url.trim() || fileUrl,
+        })),
+      });
+      setNewMaterial(emptyMaterial());
+      await load();
+    }, 'Файл загружен, черновик сохранён');
   };
 
   const openCard = (id: number) => {
@@ -272,118 +307,171 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
           <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => load()}>Обновить</button>
         </div>
 
-        <div className="form-row" style={{ marginBottom: 12 }}>
-          <select
-            className="adm-input"
-            value={newMaterial.dayNumber}
-            onChange={e => setNewMaterial({
-              ...newMaterial,
-              dayNumber: Number(e.target.value),
-              eventId: '',
-            })}
-            title="День смены"
-          >
-            {dayOptions.map(d => (
-              <option key={d} value={d}>День {d}</option>
-            ))}
-          </select>
-          <select
-            className="adm-input"
-            value={newMaterial.eventId}
-            onChange={e => {
-              const eventId = e.target.value;
-              const ev = events.find(x => String(x.id) === eventId);
-              setNewMaterial({
-                ...newMaterial,
-                eventId,
-                ...(ev ? { dayNumber: ev.dayNumber } : {}),
-              });
-            }}
-          >
-            <option value="">— событие —</option>
-            {events
-              .filter(ev =>
-                !newMaterial.dayNumber
-                || ev.dayNumber === newMaterial.dayNumber
-                || String(ev.id) === newMaterial.eventId,
-              )
-              .map(ev => (
-                <option key={ev.id} value={String(ev.id)}>Д{ev.dayNumber} · {ev.title}</option>
-              ))}
-          </select>
-          <select className="adm-input" value={newMaterial.direction} onChange={e => setNewMaterial({ ...newMaterial, direction: e.target.value, audienceAll: false })} disabled={newMaterial.audienceAll}>
-            <option value="">Направление</option>
-            {directions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-          </select>
-          <label className="adm-forum-check">
-            <input type="checkbox" checked={newMaterial.audienceAll} onChange={e => setNewMaterial({ ...newMaterial, audienceAll: e.target.checked, direction: e.target.checked ? '' : newMaterial.direction })} />
-            Аудитория: для всех
-          </label>
-          <select className="adm-input" value={newMaterial.type} onChange={e => setNewMaterial({ ...newMaterial, type: e.target.value })}>
-            <option value="">Тип</option>
-            {materialTypes.map(t => <option key={t.key} value={t.key}>{t.name}</option>)}
-          </select>
-          <div className="adm-field" style={{ minWidth: 200 }}>
-            <span className="adm-label">Спикеры</span>
-            <SpeakerMultiPick
-              speakers={speakers}
-              selectedIds={newMaterial.speakerIds}
-              onChange={ids => setNewMaterial({ ...newMaterial, speakerIds: ids })}
-            />
-          </div>
-          <input className="adm-input" value={newMaterial.title} onChange={e => setNewMaterial({ ...newMaterial, title: e.target.value })} placeholder="Название" />
-          <input className="adm-input" value={newMaterial.url} onChange={e => setNewMaterial({ ...newMaterial, url: e.target.value })} placeholder="Ссылка" />
-          <label className="adm-forum-check">
-            <input type="checkbox" checked={newMaterial.isGeneral} onChange={e => setNewMaterial({ ...newMaterial, isGeneral: e.target.checked })} />
-            Общий
-          </label>
-          <select className="adm-input" value={newMaterial.kbUnlockMode} onChange={e => setNewMaterial({ ...newMaterial, kbUnlockMode: e.target.value as 'immediate' | 'touchpoints' })}>
-            <option value="touchpoints">Открытие: ≥ N точек</option>
-            <option value="immediate">Открытие: сразу</option>
-          </select>
-          {newMaterial.kbUnlockMode === 'touchpoints' && (
-            <input
-              type="number"
-              min={1}
-              max={7}
-              className="adm-input"
-              style={{ width: 56 }}
-              placeholder={String(kbForumThreshold)}
-              value={newMaterial.kbUnlockMinTouchpoints === '' ? '' : newMaterial.kbUnlockMinTouchpoints}
-              onChange={e => setNewMaterial({ ...newMaterial, kbUnlockMinTouchpoints: e.target.value === '' ? '' : Number(e.target.value) })}
-            />
-          )}
-          <input type="file" className="adm-input" onChange={e => {
-            const f = e.target.files?.[0];
-            if (!f) return;
-            act(async () => {
-              const fileUrl = await uploadFile(f);
-              await adminFetch('/materials', {
-                method: 'POST',
-                body: JSON.stringify({
+        <div className="adm-kb-create card" style={{ marginBottom: 16, padding: 16, background: '#FAFAF8' }}>
+          <h4 style={{ margin: '0 0 12px' }}>Новый материал</h4>
+          <div className="adm-forum-grid-2">
+            <label className="adm-field">
+              <span className="adm-label">Название *</span>
+              <input
+                className="adm-input"
+                value={newMaterial.title}
+                onChange={e => setNewMaterial({ ...newMaterial, title: e.target.value })}
+                placeholder="Название материала"
+              />
+            </label>
+            <label className="adm-field">
+              <span className="adm-label">Ссылка</span>
+              <input
+                className="adm-input"
+                value={newMaterial.url}
+                onChange={e => setNewMaterial({ ...newMaterial, url: e.target.value })}
+                placeholder="https://…"
+              />
+            </label>
+            <label className="adm-field">
+              <span className="adm-label">День смены</span>
+              <select
+                className="adm-input"
+                value={newMaterial.dayNumber}
+                onChange={e => setNewMaterial({
                   ...newMaterial,
-                  dayNumber: Number(newMaterial.dayNumber),
-                  eventId: newMaterial.isGeneral ? null : (newMaterial.eventId ? Number(newMaterial.eventId) : null),
-                  direction: newMaterial.audienceAll ? null : (newMaterial.direction || null),
-                  tags: newMaterial.tags.split(',').map(s => s.trim()).filter(Boolean),
-                  type: newMaterial.type || null,
-                  speakerIds: newMaterial.speakerIds,
-                  fileUrl,
-                  url: newMaterial.url || fileUrl,
-                  isGeneral: !!newMaterial.isGeneral,
-                  kbUnlockMode: newMaterial.kbUnlockMode,
-                  kbUnlockMinTouchpoints: newMaterial.kbUnlockMode === 'touchpoints' && newMaterial.kbUnlockMinTouchpoints !== ''
-                    ? newMaterial.kbUnlockMinTouchpoints
-                    : null,
-                  status: 'draft',
-                }),
-              });
-              setNewMaterial(emptyMaterial());
-              await load();
-            }, 'Файл загружен');
-            e.target.value = '';
-          }} />
-          <button type="button" className="adm-btn" onClick={createMaterial}>Добавить черновик</button>
+                  dayNumber: Number(e.target.value),
+                  eventId: '',
+                })}
+              >
+                {dayOptions.map(d => (
+                  <option key={d} value={d}>День {d}</option>
+                ))}
+              </select>
+            </label>
+            <label className="adm-field">
+              <span className="adm-label">Событие программы</span>
+              <select
+                className="adm-input"
+                value={newMaterial.eventId}
+                disabled={newMaterial.isGeneral}
+                onChange={e => {
+                  const eventId = e.target.value;
+                  const ev = events.find(x => String(x.id) === eventId);
+                  setNewMaterial({
+                    ...newMaterial,
+                    eventId,
+                    ...(ev ? { dayNumber: ev.dayNumber } : {}),
+                  });
+                }}
+              >
+                <option value="">— без события —</option>
+                {events
+                  .filter(ev =>
+                    !newMaterial.dayNumber
+                    || ev.dayNumber === newMaterial.dayNumber
+                    || String(ev.id) === newMaterial.eventId,
+                  )
+                  .map(ev => (
+                    <option key={ev.id} value={String(ev.id)}>Д{ev.dayNumber} · {ev.title}</option>
+                  ))}
+              </select>
+            </label>
+            <label className="adm-field">
+              <span className="adm-label">Тип</span>
+              <select className="adm-input" value={newMaterial.type} onChange={e => setNewMaterial({ ...newMaterial, type: e.target.value })}>
+                <option value="">—</option>
+                {materialTypes.map(t => <option key={t.key} value={t.key}>{t.name}</option>)}
+              </select>
+            </label>
+            <div className="adm-field">
+              <span className="adm-label">Спикеры</span>
+              <SpeakerMultiPick
+                speakers={speakers}
+                selectedIds={newMaterial.speakerIds}
+                onChange={ids => setNewMaterial({ ...newMaterial, speakerIds: ids })}
+              />
+            </div>
+            <div className="adm-field">
+              <span className="adm-label">Аудитория</span>
+              <label className="adm-forum-check" style={{ display: 'block', marginBottom: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={newMaterial.audienceAll}
+                  onChange={e => setNewMaterial({
+                    ...newMaterial,
+                    audienceAll: e.target.checked,
+                    direction: e.target.checked ? '' : newMaterial.direction,
+                  })}
+                />
+                Для всех направлений
+              </label>
+              <select
+                className="adm-input"
+                value={newMaterial.direction}
+                onChange={e => setNewMaterial({ ...newMaterial, direction: e.target.value, audienceAll: false })}
+                disabled={newMaterial.audienceAll}
+              >
+                <option value="">Направление</option>
+                {directions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+              </select>
+            </div>
+            <div className="adm-field">
+              <span className="adm-label">Открытие для участника</span>
+              <select
+                className="adm-input"
+                value={newMaterial.kbUnlockMode}
+                onChange={e => setNewMaterial({ ...newMaterial, kbUnlockMode: e.target.value as 'immediate' | 'touchpoints' })}
+              >
+                <option value="touchpoints">После ≥ N точек осмысления</option>
+                <option value="immediate">Сразу</option>
+              </select>
+              {newMaterial.kbUnlockMode === 'touchpoints' && (
+                <input
+                  type="number"
+                  min={1}
+                  max={7}
+                  className="adm-input"
+                  style={{ width: 72, marginTop: 6 }}
+                  placeholder={String(kbForumThreshold)}
+                  value={newMaterial.kbUnlockMinTouchpoints === '' ? '' : newMaterial.kbUnlockMinTouchpoints}
+                  onChange={e => setNewMaterial({
+                    ...newMaterial,
+                    kbUnlockMinTouchpoints: e.target.value === '' ? '' : Number(e.target.value),
+                  })}
+                />
+              )}
+            </div>
+          </div>
+          <div className="form-row" style={{ marginTop: 12, marginBottom: 0 }}>
+            <label className="adm-forum-check">
+              <input
+                type="checkbox"
+                checked={newMaterial.isGeneral}
+                onChange={e => setNewMaterial({ ...newMaterial, isGeneral: e.target.checked, eventId: e.target.checked ? '' : newMaterial.eventId })}
+              />
+              Общий материал (без привязки к событию)
+            </label>
+            <label className="adm-field" style={{ minWidth: 220 }}>
+              <span className="adm-label">Или загрузить файл</span>
+              <input
+                type="file"
+                className="adm-input"
+                onChange={e => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  createWithFile(f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          </div>
+          <div className="adm-forum-actions">
+            <button type="button" className="adm-btn adm-btn-secondary" onClick={() => createMaterial('draft')}>
+              Сохранить черновик
+            </button>
+            <button type="button" className="adm-btn adm-btn-primary" onClick={() => createMaterial('published')}>
+              Опубликовать
+            </button>
+            <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setNewMaterial(emptyMaterial())}>
+              Очистить форму
+            </button>
+          </div>
         </div>
 
         <table className="adm-table">

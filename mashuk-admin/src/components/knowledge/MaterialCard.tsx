@@ -122,14 +122,15 @@ export function MaterialCard({
   const typeName = typeOptions.find(t => t.key === material.type)?.name || material.type || '—';
   const audienceStr = material.direction ? material.direction : 'Для всех';
 
-  const persist = () => {
+  const persist = (statusOverride?: string) => {
     const direction = draft.audienceAll ? '' : draft.direction;
+    const nextStatus = statusOverride ?? draft.status;
     onSave({
       title: draft.title,
       url: draft.url || null,
       fileUrl: draft.fileUrl || null,
       type: draft.type || null,
-      status: draft.status,
+      status: nextStatus,
       tags: draft.tags,
       speakerIds: draft.speakerIds,
       dayNumber: draft.dayNumber,
@@ -158,6 +159,10 @@ export function MaterialCard({
           <RowActionsMenu
             actions={[
               { label: 'Редактировать', onClick: () => setEditing(true) },
+              ...(material.status !== 'published' ? [{
+                label: 'Опубликовать',
+                onClick: () => onSave({ status: 'published' }),
+              }] : []),
               ...(link && onCopyLink ? [{ label: 'Скопировать ссылку', onClick: () => onCopyLink(link) }] : []),
               ...(onPreview ? [{ label: 'Превью', onClick: onPreview }] : []),
               ...(material.status !== 'archived' ? [{
@@ -308,8 +313,15 @@ export function MaterialCard({
       </td>
       <td>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          <button type="button" className="adm-btn adm-btn-sm" onClick={persist}>Сохранить</button>
-          <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => { setDraft(mkDraft(material)); setEditing(false); }}>Отмена</button>
+          <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => persist('draft')}>
+            Сохранить черновик
+          </button>
+          <button type="button" className="adm-btn adm-btn-sm adm-btn-primary" onClick={() => persist('published')}>
+            Опубликовать
+          </button>
+          <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => { setDraft(mkDraft(material)); setEditing(false); }}>
+            Отмена
+          </button>
         </div>
       </td>
     </tr>

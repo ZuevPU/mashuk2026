@@ -2092,29 +2092,104 @@ export const crudMaterials = {
   },
   create: async (req: AdminRequest, res: Response) => {
     const shiftId = await resolveAdminShiftId(req);
-    const kb = normalizeMaterialKbUnlock(req.body as Record<string, unknown>);
-    let tags = req.body.tags;
+    const body = req.body as Record<string, unknown>;
+    const title = String(body.title ?? '').trim();
+    if (!title) {
+      res.status(400).json({ error: 'Укажите название материала' });
+      return;
+    }
+    const kb = normalizeMaterialKbUnlock(body);
+    let tags = body.tags;
     if (Array.isArray(tags)) {
       const { ensureThematicTagRegistry } = await import('../services/thematicTagRegistry.js');
       tags = await ensureThematicTagRegistry(tags as string[]);
     }
+    const statusRaw = String(body.status ?? 'draft');
+    const status = statusRaw === 'published' || statusRaw === 'archived' ? statusRaw : 'draft';
+    const eventIdRaw = body.eventId;
+    const eventId = eventIdRaw == null || eventIdRaw === '' ? null : Number(eventIdRaw);
+    const dayNumber = body.dayNumber != null && body.dayNumber !== '' ? Number(body.dayNumber) : null;
     const [m] = await db.insert(materials).values({
-      ...req.body,
-      ...kb,
-      ...(tags !== undefined ? { tags } : {}),
       shiftId,
-      isNew: req.body.isNew !== false,
-      status: req.body.status || 'draft',
+      title,
+      url: body.url != null && String(body.url).trim() ? String(body.url).trim().slice(0, 500) : null,
+      fileUrl: body.fileUrl != null && String(body.fileUrl).trim() ? String(body.fileUrl).trim().slice(0, 500) : null,
+      type: body.type != null && String(body.type).trim() ? String(body.type).trim().slice(0, 50) : null,
+      direction: body.direction != null && String(body.direction).trim() ? String(body.direction).trim().slice(0, 255) : null,
+      speakerName: body.speakerName != null && String(body.speakerName).trim()
+        ? String(body.speakerName).trim().slice(0, 255)
+        : null,
+      speakerIds: Array.isArray(body.speakerIds) ? body.speakerIds.map(Number).filter(n => Number.isFinite(n)) : [],
+      tags: Array.isArray(tags) ? tags : [],
+      eventId: Number.isFinite(eventId as number) ? (eventId as number) : null,
+      dayNumber: Number.isFinite(dayNumber as number) ? (dayNumber as number) : null,
+      isGeneral: body.isGeneral === true,
+      isNew: body.isNew !== false,
+      status,
+      ...kb,
     }).returning();
     res.json({ material: m });
   },
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
-    const kb = normalizeMaterialKbUnlock(req.body as Record<string, unknown>);
-    const patch = { ...req.body, ...kb } as Record<string, unknown>;
-    if (Array.isArray(patch.tags)) {
-      const { ensureThematicTagRegistry } = await import('../services/thematicTagRegistry.js');
-      patch.tags = await ensureThematicTagRegistry(patch.tags as string[]);
+    const body = req.body as Record<string, unknown>;
+    const kb = normalizeMaterialKbUnlock(body);
+    const patch: Record<string, unknown> = { ...kb };
+    if (body.title !== undefined) {
+      const title = String(body.title ?? '').trim();
+      if (!title) {
+        res.status(400).json({ error: 'Укажите название материала' });
+        return;
+      }
+      patch.title = title;
+    }
+    if (body.url !== undefined) {
+      patch.url = body.url != null && String(body.url).trim() ? String(body.url).trim().slice(0, 500) : null;
+    }
+    if (body.fileUrl !== undefined) {
+      patch.fileUrl = body.fileUrl != null && String(body.fileUrl).trim()
+        ? String(body.fileUrl).trim().slice(0, 500)
+        : null;
+    }
+    if (body.type !== undefined) {
+      patch.type = body.type != null && String(body.type).trim() ? String(body.type).trim().slice(0, 50) : null;
+    }
+    if (body.direction !== undefined) {
+      patch.direction = body.direction != null && String(body.direction).trim()
+        ? String(body.direction).trim().slice(0, 255)
+        : null;
+    }
+    if (body.speakerName !== undefined) {
+      patch.speakerName = body.speakerName != null && String(body.speakerName).trim()
+        ? String(body.speakerName).trim().slice(0, 255)
+        : null;
+    }
+    if (body.speakerIds !== undefined) {
+      patch.speakerIds = Array.isArray(body.speakerIds)
+        ? body.speakerIds.map(Number).filter(n => Number.isFinite(n))
+        : [];
+    }
+    if (body.tags !== undefined) {
+      if (Array.isArray(body.tags)) {
+        const { ensureThematicTagRegistry } = await import('../services/thematicTagRegistry.js');
+        patch.tags = await ensureThematicTagRegistry(body.tags as string[]);
+      } else {
+        patch.tags = [];
+      }
+    }
+    if (body.eventId !== undefined) {
+      const eventId = body.eventId == null || body.eventId === '' ? null : Number(body.eventId);
+      patch.eventId = Number.isFinite(eventId as number) ? eventId : null;
+    }
+    if (body.dayNumber !== undefined) {
+      const dayNumber = body.dayNumber == null || body.dayNumber === '' ? null : Number(body.dayNumber);
+      patch.dayNumber = Number.isFinite(dayNumber as number) ? dayNumber : null;
+    }
+    if (body.isGeneral !== undefined) patch.isGeneral = body.isGeneral === true;
+    if (body.isNew !== undefined) patch.isNew = body.isNew !== false;
+    if (body.status !== undefined) {
+      const statusRaw = String(body.status);
+      patch.status = statusRaw === 'published' || statusRaw === 'archived' ? statusRaw : 'draft';
     }
     const [updated] = await db.update(materials).set(patch).where(eq(materials.id, id)).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
