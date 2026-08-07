@@ -7,8 +7,8 @@ import {
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
   getForumSettings, formatTime, getMoscowPhase, isEveningWrapWindow,
-  getTouchpointAccess, resolveEffectiveCurrentDay, resolveLiveScheduleDateKey,
-  resolveLiveScheduleDay, stateCheckTimePointOrder,
+  getTouchpointAccess, getForumOperationalDateKey, resolveEffectiveCurrentDay,
+  resolveLiveProgramDay, stateCheckTimePointOrder,
 } from '../services/helpers.js';
 import {
   getEventLiveStatus,
@@ -32,7 +32,6 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const settings = await getForumSettings();
     const now = new Date();
     const currentDay = resolveEffectiveCurrentDay(settings, now);
-    const liveScheduleDay = resolveLiveScheduleDay(settings, now);
     const totalDays = settings.totalDays ?? 8;
     const timeSlot = getMoscowPhase(now);
     let eveningWrap = isEveningWrapWindow(now);
@@ -113,8 +112,17 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       return access === 'open' || access === 'overdue';
     });
 
+    const publishedDayRows = await db.select({ dayNumber: scheduleDays.dayNumber })
+      .from(scheduleDays)
+      .where(and(
+        eq(scheduleDays.shiftId, shiftIdForQs),
+        eq(scheduleDays.isPublished, true),
+      ));
+    const publishedDays = publishedDayRows.map(r => r.dayNumber);
+    const liveProgramDay = resolveLiveProgramDay(settings, publishedDays, now);
+
     const [dayMeta] = await db.select().from(scheduleDays).where(and(
-      eq(scheduleDays.dayNumber, liveScheduleDay),
+      eq(scheduleDays.dayNumber, liveProgramDay),
       eq(scheduleDays.shiftId, shiftIdForQs),
     )).limit(1);
     const dayIsLive = dayMeta?.isPublished === true;
@@ -123,7 +131,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       ? await db.select().from(events)
         .where(and(
           eq(events.shiftId, shiftIdForQs),
-          eq(events.dayNumber, liveScheduleDay),
+          eq(events.dayNumber, liveProgramDay),
           eq(events.isPublished, true),
           eq(events.dayPublished, true),
           isNull(events.parentEventId),
@@ -133,19 +141,16 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
 
     const SOON_MIN_MS = 15 * 60_000;
     const SOON_MAX_MS = 30 * 60_000;
+    // Bind active program clocks to today's MSK date so «Сейчас» follows
+    // the wall clock even when the published day lags the calendar day.
     const scheduleContext = {
       startDate: settings.startDate ?? null,
-      dayCalendarDateKey: resolveLiveScheduleDateKey(
-        settings,
-        liveScheduleDay,
-        now,
-        dayMeta?.calendarDate ?? null,
-      ),
+      dayCalendarDateKey: getForumOperationalDateKey(now),
     };
 
     const enrichedEvents = dayEvents.map(e => {
       const { start, end } = resolveEventInterval(e, scheduleContext);
-      const status = getEventLiveStatus(liveScheduleDay, liveScheduleDay, start, end, now);
+      const status = getEventLiveStatus(liveProgramDay, liveProgramDay, start, end, now);
       return { event: e, start, end, status };
     }).filter(x => x.start);
 

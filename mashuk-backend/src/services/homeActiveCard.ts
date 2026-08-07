@@ -89,7 +89,8 @@ export function resolveHomeActiveCard(input: ResolveHomeActiveCardInput): HomeAc
   }
 
   const nowEvents = schedule.filter(s => s.kind === 'now');
-  if (nowEvents.length > 0 && currentDay !== 8 && (phase === 'day' || phase === 'evening')) {
+  // Show the live program card in any daytime phase (morning/day/evening).
+  if (nowEvents.length > 0 && currentDay !== 8) {
     const parallel = nowEvents.length > 1;
     return {
       kind: 'program_now',

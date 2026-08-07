@@ -4,14 +4,15 @@ import { db } from '../db/index.js';
 import { events, eventAttendance, materials, questions, answers, scheduleDays, dayFocus, kbDayUnlocks, programSpeakers } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
-  getForumSettings, formatTime, resolveEffectiveCurrentDay,
-  resolveLiveScheduleDateKey, resolveLiveScheduleDay,
+  getForumSettings, formatTime, getForumOperationalDateKey,
+  resolveEffectiveCurrentDay, resolveLiveProgramDay,
 } from '../services/helpers.js';
 import { isPublishedStatus } from '../services/publishStatus.js';
 import { getForumDayDateLabel } from '../services/timePhase.js';
 import {
   getEventLiveStatus,
   calendarDateKeyFromTimestamp,
+  forumDayDateKey,
   recommendationSubtitle,
   resolveProgramRecEmptyTexts,
   resolveEventInterval,
@@ -37,16 +38,17 @@ export const getProgramSettings = async (req: ParticipantRequest, res: Response)
     eq(scheduleDays.isPublished, true),
   ));
   const currentDay = resolveEffectiveCurrentDay(settings, now);
-  const liveScheduleDay = resolveLiveScheduleDay(settings, now);
+  const publishedDays = publishedRows.map(r => r.dayNumber).sort((a, b) => a - b);
+  const liveScheduleDay = resolveLiveProgramDay(settings, publishedDays, now);
   res.json({
-    // Same “today” as home — not raw admin currentDay (often stuck at 1)
+    // Same “today” as home — published day that drives «Сейчас»
     currentDay,
     liveScheduleDay,
     totalDays: settings.totalDays ?? 8,
     recommendationThreshold: settings.recommendationThreshold ?? 1,
     sectionsVisibility: settings.sectionsVisibility ?? {},
     startDate: settings.startDate ?? null,
-    publishedDays: publishedRows.map(r => r.dayNumber).sort((a, b) => a - b),
+    publishedDays,
   });
 };
 
@@ -215,8 +217,21 @@ export const getKnowledgeBaseDays = async (req: ParticipantRequest, res: Respons
 
 export const getProgram = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
-    const day = Number(req.query.day) || (await getForumSettings()).currentDay || 1;
+    const settings = await getForumSettings();
+    const now = new Date();
     const shiftId = await resolveActiveShiftId();
+    const publishedDayRows = await db.select({ dayNumber: scheduleDays.dayNumber })
+      .from(scheduleDays)
+      .where(and(
+        eq(scheduleDays.shiftId, shiftId),
+        eq(scheduleDays.isPublished, true),
+      ));
+    const liveScheduleDay = resolveLiveProgramDay(
+      settings,
+      publishedDayRows.map(r => r.dayNumber),
+      now,
+    );
+    const day = Number(req.query.day) || liveScheduleDay || 1;
 
     const [dayMeta] = await db.select().from(scheduleDays).where(and(
       eq(scheduleDays.dayNumber, day),
@@ -263,15 +278,15 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
           initials: s.initials,
         }));
     };
-
-    const settings = await getForumSettings();
-    const now = new Date();
-    const liveScheduleDay = resolveLiveScheduleDay(settings, now);
     const scheduleContext = {
       startDate: settings.startDate ?? null,
+      // Active program day uses today's wall clock; other days keep their forum date.
       dayCalendarDateKey: day === liveScheduleDay
-        ? resolveLiveScheduleDateKey(settings, liveScheduleDay, now, dayMeta?.calendarDate ?? null)
-        : calendarDateKeyFromTimestamp(dayMeta?.calendarDate ?? null),
+        ? getForumOperationalDateKey(now)
+        : (
+          calendarDateKeyFromTimestamp(dayMeta?.calendarDate ?? null)
+          || forumDayDateKey(settings.startDate ?? null, day)
+        ),
     };
     type NestedProgramChild = {
       id: number;

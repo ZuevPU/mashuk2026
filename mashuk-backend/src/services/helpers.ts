@@ -53,6 +53,7 @@ export {
   resolveEffectiveCurrentDay,
   resolveLiveScheduleDay,
   resolveLiveScheduleDateKey,
+  resolveLiveProgramDay,
   toTouchpointUiStatus,
   getCalendarForumDay,
   getPreferredStateCheckPhase,

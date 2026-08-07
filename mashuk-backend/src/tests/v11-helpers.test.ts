@@ -124,6 +124,23 @@ describe('home active card', () => {
     assert.match(card?.title || '', /Культурная программа/);
     assert.match(card?.title || '', /Консультации/);
   });
+
+  it('shows program now in morning phase too', async () => {
+    const { resolveHomeActiveCard } = await import('../services/homeActiveCard.js');
+    const morning = new Date(Date.UTC(2026, 7, 12, 5, 0, 0)); // 08:00 MSK
+    const card = resolveHomeActiveCard({
+      now: morning,
+      eveningWrap: false,
+      currentDay: 2,
+      priorityAction: { type: 'question', title: 'Точка', subtitle: 'Проверка состояния', route: '/questions?q=1' },
+      eveningCard: null,
+      eveningQuestionnaire: { available: false, completed: false },
+      schedule: [{ kind: 'now', title: 'Утренний круг', time: '08:00', place: 'Площадка' }],
+      touchpointItems: [],
+    });
+    assert.equal(card?.kind, 'program_now');
+    assert.equal(card?.title, 'Утренний круг');
+  });
 });
 
 describe('piggybank dict', () => {
