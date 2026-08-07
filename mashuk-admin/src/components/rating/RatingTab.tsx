@@ -40,8 +40,10 @@ function parseHashFilters(): Partial<LeaderboardFiltersState> {
 
 export function LeaderboardScreen({
   adminFetch,
+  onOpenCard,
 }: {
   adminFetch: AdminTabProps['adminFetch'];
+  onOpenCard?: (participantId: number) => void;
 }) {
   const initial = useMemo(() => parseHashFilters(), []);
   const [filters, setFilters] = useState<LeaderboardFiltersState>({
@@ -120,13 +122,18 @@ export function LeaderboardScreen({
           participantCount={participantCount ?? undefined}
           maxRows={filters.showAll ? undefined : 50}
           searchHighlight={filters.search}
+          onOpenCard={onOpenCard}
         />
       </div>
     </div>
   );
 }
 
-export function RatingTab({ adminFetch, setTab }: AdminTabProps) {
+export function RatingTab({
+  adminFetch,
+  setTab,
+  onOpenCard,
+}: AdminTabProps & { onOpenCard?: (participantId: number) => void }) {
   const [forumDay, setForumDay] = useState('1');
 
   useEffect(() => {
@@ -157,6 +164,7 @@ export function RatingTab({ adminFetch, setTab }: AdminTabProps) {
         forumDay={forumDay}
         autoRefreshMs={60_000}
         onOpenFullscreen={openScreen}
+        onOpenCard={onOpenCard}
       />
 
       <div className="adm-card-grid lb-quick-grid">

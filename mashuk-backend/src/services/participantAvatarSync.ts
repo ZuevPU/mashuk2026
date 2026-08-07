@@ -66,17 +66,21 @@ type ParticipantAvatarRow = {
   selfDeletedAt?: Date | null;
 };
 
-/** Admin list: batch VK photos, fallback to stored mirror URL. */
+/** Batch VK photos + stored mirror. Admin: preferStored for stable /uploads URLs. */
 export async function enrichParticipantsWithAvatarUrls<T extends ParticipantAvatarRow>(
   rows: T[],
+  opts?: { preferStored?: boolean },
 ): Promise<(T & { avatarUrl: string | null })[]> {
   const active = rows.filter(r => !r.selfDeletedAt && r.vkId);
   const vkMap = await batchFetchVkAvatarUrls(active.map(r => r.vkId!));
+  const preferStored = opts?.preferStored === true;
 
   return rows.map(r => {
     if (r.selfDeletedAt) return { ...r, avatarUrl: null };
     const vk = r.vkId ? vkMap.get(r.vkId) ?? null : null;
-    const avatarUrl = vk || r.avatarUrl || null;
+    const avatarUrl = preferStored
+      ? (r.avatarUrl || vk || null)
+      : (vk || r.avatarUrl || null);
     if (r.vkId && !r.avatarUrl && vk) {
       scheduleParticipantAvatarSync(r.id);
     }

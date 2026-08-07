@@ -229,8 +229,9 @@ const TaskSubmitModal = ({
     try {
       const url = await uploadTaskPhoto();
       if (url) setPhotoUrl(url);
-    } catch {
-      setSnackbar('Не удалось загрузить фото');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message.trim() : '';
+      setSnackbar(msg || 'Не удалось загрузить фото');
     }
   };
 

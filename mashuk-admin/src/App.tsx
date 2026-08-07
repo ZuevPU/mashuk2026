@@ -173,7 +173,31 @@ export const App = () => {
   const tabProps = { adminFetch, act, reloadKey, setTab, adminRole };
 
   if (isAuthenticated && isLeaderboardHash()) {
-    return <LeaderboardScreen adminFetch={adminFetch} />;
+    return (
+      <>
+        <LeaderboardScreen adminFetch={adminFetch} onOpenCard={openParticipantCard} />
+        {participantCard && (
+          <ParticipantCardModal
+            card={participantCard}
+            tab={participantCardTab}
+            setTab={t => setParticipantCardTab(t as typeof participantCardTab)}
+            onClose={() => setParticipantCard(null)}
+            onReloadCard={() => {
+              const id = participantCard.participant?.id;
+              if (id) openParticipantCard(id, participantCardTab);
+            }}
+            adminFetch={adminFetch}
+            act={act}
+            roleOptions={ROLE_OPTIONS}
+          />
+        )}
+        {toast && (
+          <div className="toast" onClick={() => setToast(null)} role="status">
+            {toast}
+          </div>
+        )}
+      </>
+    );
   }
 
   if (!isAuthenticated) {
@@ -292,7 +316,7 @@ export const App = () => {
         </header>
 
         <main className="admin-main">
-          {tab === 'rating' && <RatingTab {...tabProps} />}
+          {tab === 'rating' && <RatingTab {...tabProps} onOpenCard={openParticipantCard} />}
           {tab === 'participants' && (
             <ParticipantsTab {...tabProps} onOpenCard={openParticipantCard} />
           )}

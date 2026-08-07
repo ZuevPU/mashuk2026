@@ -29,7 +29,7 @@ interface HomeData {
   timeSlot?: 'morning' | 'day' | 'evening' | string;
   eveningWrap?: boolean;
   currentDate: string;
-  dayFocus: { title: string; text?: string; keyQuestion?: string } | null;
+  dayFocus: { title: string; text?: string; textHtml?: string | null; keyQuestion?: string } | null;
   priorityAction: { type: string; title: string; subtitle: string; route: string } | null;
   activeCard?: {
     kind: string;
@@ -227,6 +227,7 @@ export const HomePanel: React.FC<{
           totalDays={d.totalDays}
           focusTitle={d.dayFocus?.title || 'Фокус дня'}
           focusSubtitle={d.dayFocus?.text || ''}
+          focusSubtitleHtml={d.dayFocus?.textHtml}
           focusKeyQuestion={d.dayFocus?.keyQuestion}
           progressPercent={(d.currentDay / d.totalDays) * 100}
         />

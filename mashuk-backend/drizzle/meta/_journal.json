@@ -323,6 +323,13 @@
       "when": 1825000000000,
       "tag": "0046_event_audience_direction_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1826000000000,
+      "tag": "0047_day_focus_text_html",
+      "breakpoints": true
     }
   ]
 }

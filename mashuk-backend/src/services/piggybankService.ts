@@ -67,7 +67,7 @@ export async function createPiggybankEntry(input: {
     forumDay,
   }).returning();
 
-  await awardPoints(input.participantId, pointsActionForTags(tags));
+  await awardPoints(input.participantId, pointsActionForTags(tags), undefined, forumDay ?? undefined);
   return entry;
 }
 

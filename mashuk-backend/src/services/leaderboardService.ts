@@ -111,7 +111,11 @@ export async function computeLeaderboardScores(
   if (opts.scope === 'day' && opts.day) {
     conditions.push(eq(pointsLog.forumDay, opts.day));
   } else if (opts.scope === 'shift') {
-    conditions.push(sql`${pointsLog.forumDay} IS NOT NULL AND ${pointsLog.forumDay} BETWEEN 1 AND ${FORUM_RATING_MAX_DAY}`);
+    // Include undated legacy awards (forum_day NULL) — many accruals historically omitted the day.
+    conditions.push(sql`(
+      ${pointsLog.forumDay} IS NULL
+      OR (${pointsLog.forumDay} BETWEEN 1 AND ${FORUM_RATING_MAX_DAY})
+    )`);
   }
 
   const rows = await db.select({

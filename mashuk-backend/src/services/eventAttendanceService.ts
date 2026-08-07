@@ -62,7 +62,12 @@ export async function recordEventAttendance(
     eventId,
   }).returning();
 
-  const pointsResult = await awardPoints(participantId, 'attendance');
+  const pointsResult = await awardPoints(
+    participantId,
+    'attendance',
+    undefined,
+    event.dayNumber ?? undefined,
+  );
 
   return {
     ok: true,

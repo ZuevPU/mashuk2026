@@ -219,11 +219,12 @@ export function participantRatingScore(p: {
   bonusPoints?: number | null;
   forumPoints?: number | null;
 }): number {
-  if (isUnifiedRatingEnabled()) {
-    if (p.forumPoints != null) return p.forumPoints;
-    return totalRatingScore(p.pathPoints ?? 0, p.experiencePoints ?? 0, p.bonusPoints ?? 0);
-  }
-  return totalRatingScore(p.pathPoints ?? 0, p.experiencePoints ?? 0, p.bonusPoints ?? 0);
+  const computed = totalRatingScore(p.pathPoints ?? 0, p.experiencePoints ?? 0, p.bonusPoints ?? 0);
+  if (!isUnifiedRatingEnabled()) return computed;
+  const cached = p.forumPoints;
+  // forum_points defaults to 0 in DB — treat stale 0 as unsynced when track totals are non-zero
+  if (cached != null && (cached > 0 || computed === 0)) return cached;
+  return computed;
 }
 
 export async function syncForumPoints(participantId: number): Promise<void> {

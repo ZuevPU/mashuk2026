@@ -80,7 +80,7 @@ export const listParticipants = async (req: AdminRequest, res: Response): Promis
     parsed.shiftId = await resolveAdminShiftId(req);
   }
   const result = await queryParticipants(parsed);
-  const participants = await enrichParticipantsWithAvatarUrls(result.participants);
+  const participants = await enrichParticipantsWithAvatarUrls(result.participants, { preferStored: true });
   res.json({ ...result, participants, shiftId: parsed.shiftId });
 };
 
@@ -334,6 +334,12 @@ export const adjustParticipantPoints = async (req: AdminRequest, res: Response):
         .set({ pathPoints: sql`GREATEST(0, ${participants.pathPoints} - ${abs})` })
         .where(eq(participants.id, participantId));
     }
+  }
+  const { syncForumPoints } = await import('../services/pointsService.js');
+  try {
+    await syncForumPoints(participantId);
+  } catch (err) {
+    console.warn('syncForumPoints after adjust failed:', err);
   }
   const { logAdminAction } = await import('../services/adminActionsLog.js');
   await logAdminAction({
@@ -1033,18 +1039,25 @@ export const resetAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
 };
 
 export const upsertDayFocus = async (req: AdminRequest, res: Response): Promise<void> => {
-  const { dayNumber, title, text, keyQuestion } = req.body;
+  const { dayNumber, title, text, textHtml, keyQuestion } = req.body;
   const shiftId = await resolveAdminShiftId(req);
+  const html = typeof textHtml === 'string' ? textHtml : null;
+  const plain = typeof text === 'string'
+    ? text
+    : (html ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : null);
   const [existing] = await db.select().from(dayFocus).where(and(
     eq(dayFocus.dayNumber, dayNumber),
     eq(dayFocus.shiftId, shiftId),
   )).limit(1);
   if (existing) {
     const [updated] = await db.update(dayFocus)
-      .set({ title, text, keyQuestion }).where(eq(dayFocus.id, existing.id)).returning();
+      .set({ title, text: plain, textHtml: html, keyQuestion })
+      .where(eq(dayFocus.id, existing.id)).returning();
     res.json({ focus: updated });
   } else {
-    const [created] = await db.insert(dayFocus).values({ dayNumber, title, text, keyQuestion, shiftId }).returning();
+    const [created] = await db.insert(dayFocus).values({
+      dayNumber, title, text: plain, textHtml: html, keyQuestion, shiftId,
+    }).returning();
     res.json({ focus: created });
   }
 };

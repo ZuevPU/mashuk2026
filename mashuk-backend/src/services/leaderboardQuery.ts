@@ -18,6 +18,7 @@ export type LeaderboardParticipantRow = {
   hideFromLeaderboard: boolean | null;
   selfDeletedAt: Date | null;
   avatarUrl?: string | null;
+  vkId?: number | null;
 };
 
 export type ParsedLeaderboardQuery = {

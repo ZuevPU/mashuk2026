@@ -569,6 +569,26 @@ body {
 .m-hdr-dhl { font-size: 10px; color: var(--m-accent); font-weight: 700; margin-top: 2px; text-align: right; }
 .m-hdr-fl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--m-accent); margin-top: 9px; }
 .m-hdr-fv { font-size: 13px; font-weight: 600; color: #F5F0E8; margin-top: 3px; line-height: 1.35; }
+.m-hdr-focus-body {
+  font-size: 10px;
+  color: #888;
+  margin-top: 4px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+.m-hdr-focus-body p { margin: 0 0 0.35em; }
+.m-hdr-focus-body p:last-child { margin-bottom: 0; }
+.m-hdr-focus-body ul,
+.m-hdr-focus-body ol {
+  margin: 0.3em 0 0.3em 1.2em;
+  padding: 0;
+}
+.m-hdr-focus-body li { margin: 0.1em 0; }
+.m-hdr-focus-body b,
+.m-hdr-focus-body strong { font-weight: 700; color: #aaa; }
+.m-hdr-focus-body i,
+.m-hdr-focus-body em { font-style: italic; }
+.m-hdr-focus-body u { text-decoration: underline; }
 .m-hdr-kq { font-size: 11px; color: rgba(245, 240, 232, 0.85); margin-top: 6px; line-height: 1.4; font-style: italic; }
 
 .m-role-exp-toggle {

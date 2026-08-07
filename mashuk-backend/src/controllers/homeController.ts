@@ -330,6 +330,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       dayFocus: focus ? {
         title: focus.title,
         text: focus.text,
+        textHtml: focus.textHtml,
         keyQuestion: focus.keyQuestion,
       } : null,
       priorityAction,

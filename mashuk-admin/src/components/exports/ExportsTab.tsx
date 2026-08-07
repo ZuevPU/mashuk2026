@@ -22,7 +22,8 @@ const EXPORT_TYPE_LABEL_KEY: Record<string, string> = {
 };
 
 const NOMINATIONS = [
-  'sport', 'creative', 'media', 'education', 'culture', 'volunteer', 'team', 'general',
+  'sport', 'creative', 'media', 'education', 'culture', 'volunteer', 'team',
+  'networking', 'leadership', 'general',
 ] as const;
 
 const NOMINATION_LABELS: Record<string, string> = {
@@ -33,6 +34,8 @@ const NOMINATION_LABELS: Record<string, string> = {
   culture: 'Культура',
   volunteer: 'Волонтёрство',
   team: 'Командность',
+  networking: 'Нетворкинг',
+  leadership: 'Лидерство',
   general: 'Общий зачёт',
 };
 

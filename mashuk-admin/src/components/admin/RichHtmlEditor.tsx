@@ -21,7 +21,7 @@ export function RichHtmlEditor({ value, onChange, resetKey, minHeight = 100, lab
   const persist = () => onChange(editorRef.current?.innerHTML || '');
 
   return (
-    <label className="adm-field">
+    <div className="adm-field">
       {label && <span className="adm-label">{label}</span>}
       <RichFormatToolbar editorRef={editorRef} onAfterCommand={persist} />
       <div
@@ -30,8 +30,9 @@ export function RichHtmlEditor({ value, onChange, resetKey, minHeight = 100, lab
         style={{ minHeight }}
         contentEditable
         suppressContentEditableWarning
+        data-placeholder="Текст с абзацами, жирным, курсивом…"
         onInput={persist}
       />
-    </label>
+    </div>
   );
 }

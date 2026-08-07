@@ -139,7 +139,7 @@ export function TaskForm({
         <input className="adm-input" value={draft.title} onChange={e => onChange({ title: e.target.value })} />
       </label>
 
-      <label className="adm-field">
+      <div className="adm-field">
         <span className="adm-label">Описание (rich text)</span>
         <RichFormatToolbar
           editorRef={editorRef}
@@ -152,7 +152,7 @@ export function TaskForm({
           suppressContentEditableWarning
           onInput={() => onChange({ descriptionHtml: editorRef.current?.innerHTML || '' })}
         />
-      </label>
+      </div>
 
       <div className="adm-forum-grid-2">
         <label className="adm-field">

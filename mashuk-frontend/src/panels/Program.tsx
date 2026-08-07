@@ -151,8 +151,57 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   });
 
   const handleRecClick = async (eventId: number) => {
-    const ev = slots.flatMap(s => s.events).find(e => e.id === eventId);
-    if (ev) setSelectedEvent(ev);
+    type Nested = NonNullable<ProgramEvent['children']>[number];
+    const toDetail = (root: ProgramEvent, node: Nested): ProgramEvent => {
+      const speakerNames = (node.speakers || []).map(s => s.name).filter(Boolean).join(', ');
+      const nestedSub = [node.place, speakerNames].filter(Boolean).join(' · ');
+      return {
+        ...root,
+        id: node.id,
+        title: node.title,
+        place: node.place || undefined,
+        time: node.time,
+        endTime: node.endTime,
+        tags: node.tags,
+        speakers: node.speakers,
+        description: undefined,
+        descriptionHtml: undefined,
+        subtitle: nestedSub,
+        hasSubSessions: false,
+        children: [],
+      };
+    };
+    const findNested = (
+      nodes: Nested[] | undefined,
+      id: number,
+      ancestors: number[],
+    ): { node: Nested; ancestors: number[] } | null => {
+      for (const n of nodes || []) {
+        if (n.id === id) return { node: n, ancestors };
+        const deeper = findNested(n.children, id, [...ancestors, n.id]);
+        if (deeper) return deeper;
+      }
+      return null;
+    };
+
+    let found: ProgramEvent | null = null;
+    for (const root of slots.flatMap(s => s.events)) {
+      if (root.id === eventId) {
+        found = root;
+        break;
+      }
+      const nested = findNested(root.children, eventId, [root.id]);
+      if (nested) {
+        setExpandedParents(prev => {
+          const next = { ...prev };
+          for (const aid of nested.ancestors) next[aid] = true;
+          return next;
+        });
+        found = toDetail(root, nested.node);
+        break;
+      }
+    }
+    if (found) setSelectedEvent(found);
     try {
       await apiPost(`/program/events/${eventId}/attendance`);
     } catch {
@@ -276,22 +325,24 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
               {recommendations.length > 0 && (
                 <div className="m-rec-block">
                   <div className="m-rec-block-hdr">Рекомендуем тебе</div>
-                  {recommendations.map(r => (
+                  {recommendations.map(r => {
+                    const themeLine = r.matchedThemes?.length
+                      ? `Тема: ${r.matchedThemes.join(' · ')}`
+                      : (r.subtitle || '');
+                    const meta = [r.time, r.place, themeLine].filter(Boolean).join(' · ');
+                    return (
                     <div key={r.id} className="m-rec-item" onClick={() => handleRecClick(r.eventId || r.id)} style={{ cursor: 'pointer' }}>
                       <div className="m-rec-cb">✓</div>
                       <div style={{ flex: 1 }}>
                         <div className="m-rec-item-t">{r.title}</div>
-                        {(r.matchedThemes?.length > 0 || r.subtitle) && (
-                          <div className="m-rec-item-s">
-                            {r.matchedThemes?.length
-                              ? `Тема: ${r.matchedThemes.join(' · ')}`
-                              : r.subtitle}
-                          </div>
+                        {meta && (
+                          <div className="m-rec-item-s">{meta}</div>
                         )}
                       </div>
                       <div className="m-rec-arr">›</div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
               {recommendations.length === 0 && recMeta && recMeta.interests.length > 0 && activeDay !== 8 && (

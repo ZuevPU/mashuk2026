@@ -11,6 +11,7 @@ export function LeaderboardTable({
   maxRows,
   emptyHint,
   searchHighlight,
+  onOpenCard,
 }: {
   rows: LeaderboardRow[];
   filters: LeaderboardFiltersState;
@@ -20,6 +21,7 @@ export function LeaderboardTable({
   maxRows?: number;
   emptyHint?: string;
   searchHighlight?: string;
+  onOpenCard?: (participantId: number) => void;
 }) {
   const shown = maxRows != null ? rows.slice(0, maxRows) : rows;
   const prefix = scorePrefix(filters);
@@ -59,10 +61,26 @@ export function LeaderboardTable({
       <div className="lb-table">
         {shown.map(row => {
           const top3 = row.rank <= 3;
+          const clickable = !!onOpenCard;
+          const className = [
+            'lb-row',
+            top3 ? `lb-row-top${row.rank}` : '',
+            nameMatches(row) ? 'lb-row-highlight' : '',
+            clickable ? 'lb-row-clickable' : '',
+          ].filter(Boolean).join(' ');
           return (
             <div
               key={row.id}
-              className={`lb-row ${top3 ? `lb-row-top${row.rank}` : ''} ${nameMatches(row) ? 'lb-row-highlight' : ''}`}
+              className={className}
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              onClick={clickable ? () => onOpenCard!(row.id) : undefined}
+              onKeyDown={clickable ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onOpenCard!(row.id);
+                }
+              } : undefined}
             >
               <div className={`lb-rank ${top3 ? 'lb-rank-top' : ''}`}>{row.rank}</div>
               <ParticipantAvatar

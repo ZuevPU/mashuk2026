@@ -30,7 +30,13 @@ export function ParticipantAvatar({
       aria-hidden={!src}
     >
       {src ? (
-        <img src={src} alt="" className="adm-participant-avatar-img" onError={() => setFailed(true)} />
+        <img
+          src={src}
+          alt=""
+          className="adm-participant-avatar-img"
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
+        />
       ) : (
         initials
       )}

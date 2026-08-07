@@ -7,6 +7,7 @@ import {
   participantDisplayName,
 } from '../services/leaderboardQuery.js';
 import { NOMINATION_LEADERBOARD_KEYS, NOMINATION_LABELS } from '../services/leaderboardService.js';
+import { participantRatingScore } from '../services/pointsService.js';
 
 describe('clampForumDay', () => {
   it('clamps to 1-6', () => {
@@ -61,5 +62,25 @@ describe('nominations TZ list', () => {
 describe('participantDisplayName', () => {
   it('formats name', () => {
     assert.equal(participantDisplayName({ firstName: 'Иван', lastName: 'Иванов' }), 'Иванов Иван');
+  });
+});
+
+describe('participantRatingScore', () => {
+  it('falls back to path+exp+bonus when forum_points is stale zero', () => {
+    assert.equal(participantRatingScore({
+      pathPoints: 10,
+      experiencePoints: 5,
+      bonusPoints: 2,
+      forumPoints: 0,
+    }), 17);
+  });
+
+  it('keeps zero when participant truly has no points', () => {
+    assert.equal(participantRatingScore({
+      pathPoints: 0,
+      experiencePoints: 0,
+      bonusPoints: 0,
+      forumPoints: 0,
+    }), 0);
   });
 });

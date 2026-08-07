@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TASK_NOMINATIONS } from '../services/taskAdminHelpers.js';
 
 const optionalString = z.string().optional().nullable();
 const optionalBool = z.boolean().optional();
@@ -56,7 +57,7 @@ export const taskCreateSchema = z.object({
   taskKind: z.enum(['once', 'daily', 'repeatable', 'team']).optional(),
   catalogStatus: z.enum(['active', 'hidden', 'completed', 'draft']).optional(),
   eventTime: z.coerce.date().optional().nullable(),
-  nomination: z.enum(['sport', 'creative', 'media', 'education', 'culture', 'volunteer', 'team', 'general']).optional().nullable(),
+  nomination: z.enum(TASK_NOMINATIONS).optional().nullable(),
   programPlaceId: z.coerce.number().int().positive().optional().nullable(),
   iconKey: optionalString,
   allowRetry: optionalBool,

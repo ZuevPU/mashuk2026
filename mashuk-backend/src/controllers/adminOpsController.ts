@@ -501,6 +501,7 @@ export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<
   const { parseLeaderboardQuery } = await import('../services/leaderboardQuery.js');
   const { buildLeaderboardResult } = await import('../services/leaderboardBuild.js');
   const { NOMINATION_LEADERBOARD_KEYS } = await import('../services/leaderboardService.js');
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
 
   const query = parseLeaderboardQuery(req.query as Record<string, unknown>);
 
@@ -510,6 +511,7 @@ export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<
     return;
   }
 
+  const shiftId = await resolveAdminShiftId(req);
   const list = await db.select({
     id: participants.id,
     firstName: participants.firstName,
@@ -524,9 +526,12 @@ export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<
     hideFromLeaderboard: participants.hideFromLeaderboard,
     selfDeletedAt: participants.selfDeletedAt,
     avatarUrl: participants.avatarUrl,
-  }).from(participants);
+    vkId: participants.vkId,
+  }).from(participants).where(eq(participants.shiftId, shiftId));
 
-  const result = await buildLeaderboardResult(list, query, { hideFromLeaderboard: true });
+  const { enrichParticipantsWithAvatarUrls } = await import('../services/participantAvatarSync.js');
+  const withAvatars = await enrichParticipantsWithAvatarUrls(list, { preferStored: true });
+  const result = await buildLeaderboardResult(withAvatars, query, { hideFromLeaderboard: true });
   res.json(result);
 };
 

@@ -429,24 +429,9 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
       }
     }
 
-    /** Tags on the block itself + all nested subblocks (for ranking parents). */
-    const subtreeTags = (rootId: number): string[] => {
-      const out: string[] = [];
-      const walk = (id: number) => {
-        const node = eventList.find(e => e.id === id);
-        if (!node) return;
-        const tags = Array.isArray(node.tags) ? (node.tags as string[]) : [];
-        out.push(...tags);
-        for (const ch of childByParent.get(id) || []) walk(ch.id);
-      };
-      walk(rootId);
-      return out;
-    };
-
-    // Top-level blocks that match participant interests (via own or nested tags)
-    const topLevel = eventList.filter(e => !e.parentEventId);
-    const scored = topLevel.map(e => {
-      const tags = subtreeTags(e.id);
+    /** Score a concrete event by its own tags ∩ participant interests (no parent rollup). */
+    const scoreEvent = (e: (typeof eventList)[number]) => {
+      const tags = Array.isArray(e.tags) ? (e.tags as string[]) : [];
       const matchedByNorm = new Map<string, string>();
       for (const raw of tags) {
         const key = norm(raw);
@@ -458,12 +443,26 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
         score: matchedByNorm.size,
         matchedThemes: [...matchedByNorm.values()],
       };
-    }).filter(x => x.score >= threshold)
+    };
+
+    // Match specific sessions/slots, not enlarged parent blocks that only aggregate nested tags.
+    const matched = eventList.map(scoreEvent).filter(x => x.score >= threshold);
+    const matchedIds = new Set(matched.map(x => x.event.id));
+    const hasMatchedDescendant = (id: number): boolean => {
+      for (const ch of childByParent.get(id) || []) {
+        if (matchedIds.has(ch.id) || hasMatchedDescendant(ch.id)) return true;
+      }
+      return false;
+    };
+
+    const scored = matched
+      .filter(x => !hasMatchedDescendant(x.event.id))
       .sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;
         const ta = a.event.startTime ? new Date(a.event.startTime).getTime() : 0;
         const tb = b.event.startTime ? new Date(b.event.startTime).getTime() : 0;
-        return ta - tb;
+        if (ta !== tb) return ta - tb;
+        return (a.event.sortOrder ?? 0) - (b.event.sortOrder ?? 0) || a.event.id - b.event.id;
       });
 
     res.json({
@@ -471,6 +470,8 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
         id: s.event.id,
         eventId: s.event.id,
         title: s.event.title,
+        time: s.event.timeSlot || null,
+        place: s.event.place || null,
         subtitle: s.matchedThemes.length
           ? `Тема: ${s.matchedThemes.join(' · ')}`
           : recommendationSubtitle(s.score, threshold),

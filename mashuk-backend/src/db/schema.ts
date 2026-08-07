@@ -302,6 +302,7 @@ export const dayFocus = pgTable('day_focus', {
   shiftId: integer('shift_id').notNull(),
   title: varchar('title', { length: 255 }).notNull(),
   text: text('text'),
+  textHtml: text('text_html'),
   keyQuestion: text('key_question'),
 }, (table) => [
   uniqueIndex('day_focus_shift_day_unique').on(table.shiftId, table.dayNumber),

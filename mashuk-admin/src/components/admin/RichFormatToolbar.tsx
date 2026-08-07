@@ -76,6 +76,31 @@ export function RichFormatToolbar({ editorRef, onAfterCommand }: ToolbarProps) {
       >
         Абзац
       </button>
+      <span className="adm-rich-toolbar-sep" aria-hidden />
+      <button
+        type="button"
+        className="adm-btn adm-btn-sm adm-btn-secondary adm-rich-btn"
+        title="По левому краю"
+        onMouseDown={e => { e.preventDefault(); exec('justifyLeft'); }}
+      >
+        ⟸
+      </button>
+      <button
+        type="button"
+        className="adm-btn adm-btn-sm adm-btn-secondary adm-rich-btn"
+        title="По центру"
+        onMouseDown={e => { e.preventDefault(); exec('justifyCenter'); }}
+      >
+        ≡
+      </button>
+      <button
+        type="button"
+        className="adm-btn adm-btn-sm adm-btn-secondary adm-rich-btn"
+        title="По правому краю"
+        onMouseDown={e => { e.preventDefault(); exec('justifyRight'); }}
+      >
+        ⟹
+      </button>
     </div>
   );
 }

@@ -331,9 +331,13 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       hideFromLeaderboard: participants.hideFromLeaderboard,
       selfDeletedAt: participants.selfDeletedAt,
       avatarUrl: participants.avatarUrl,
+      vkId: participants.vkId,
     }).from(participants);
 
-    const full = await buildLeaderboardResult(list, { ...query, limit: 0 }, {
+    const { enrichParticipantsWithAvatarUrls } = await import('../services/participantAvatarSync.js');
+    const withAvatars = await enrichParticipantsWithAvatarUrls(list);
+
+    const full = await buildLeaderboardResult(withAvatars, { ...query, limit: 0 }, {
       keepParticipantId: me,
       hideFromLeaderboard: true,
     });

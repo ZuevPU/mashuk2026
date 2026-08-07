@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import request from 'supertest';
 import { createApp } from '../app.js';
 import { getAdminBearerToken } from './adminTestHelper.js';
+import { TINY_PNG_DATA_URL } from './fixtures/tinyPng.js';
 
 const E2E_VK_ID = 999002;
 
@@ -84,22 +85,43 @@ describe('repeatable task submit flow', { skip: !process.env.DATABASE_URL }, () 
     assert.ok(taskId);
 
     try {
+      const uploadOne = await request(app)
+        .post('/api/upload')
+        .set(headers)
+        .send({ dataUrl: TINY_PNG_DATA_URL });
+      assert.equal(uploadOne.status, 200, JSON.stringify(uploadOne.body));
+      const photoUrl1 = uploadOne.body.url as string;
+      assert.ok(photoUrl1?.includes('/uploads/'));
+
+      const uploadTwo = await request(app)
+        .post('/api/upload')
+        .set(headers)
+        .send({ dataUrl: TINY_PNG_DATA_URL });
+      assert.equal(uploadTwo.status, 200, JSON.stringify(uploadTwo.body));
+      const photoUrl2 = uploadTwo.body.url as string;
+
       const first = await request(app)
         .post(`/api/tasks/${taskId}/submit`)
         .set(headers)
-        .send({ answerText: 'first', photoUrl: 'https://example.com/1.jpg' });
+        .send({ answerText: 'first', photoUrl: photoUrl1 });
       assert.equal(first.status, 200, JSON.stringify(first.body));
 
       const second = await request(app)
         .post(`/api/tasks/${taskId}/submit`)
         .set(headers)
-        .send({ answerText: 'second', photoUrl: 'https://example.com/2.jpg' });
+        .send({ answerText: 'second', photoUrl: photoUrl2 });
       assert.equal(second.status, 200, JSON.stringify(second.body));
+
+      const uploadThree = await request(app)
+        .post('/api/upload')
+        .set(headers)
+        .send({ dataUrl: TINY_PNG_DATA_URL });
+      assert.equal(uploadThree.status, 200, JSON.stringify(uploadThree.body));
 
       const third = await request(app)
         .post(`/api/tasks/${taskId}/submit`)
         .set(headers)
-        .send({ answerText: 'third', photoUrl: 'https://example.com/3.jpg' });
+        .send({ answerText: 'third', photoUrl: uploadThree.body.url });
       assert.equal(third.status, 400);
       assert.match(String(third.body.error || ''), /лимит/i);
 

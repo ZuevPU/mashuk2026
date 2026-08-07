@@ -5,15 +5,56 @@ import { env } from '../config/env.js';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 
+export const MAX_PARTICIPANT_IMAGE_BYTES = 5 * 1024 * 1024;
+
+export const ALLOWED_IMAGE_MIMES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
+
 export function ensureUploadDir(): void {
   if (!fs.existsSync(UPLOAD_DIR)) {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
   }
 }
 
+export function publicUploadBaseUrl(): string {
+  return (env.PUBLIC_URL || `http://localhost:${env.PORT}`).replace(/\/$/, '');
+}
+
 export function publicUploadUrl(filename: string): string {
-  const baseUrl = env.PUBLIC_URL || `http://localhost:${env.PORT}`;
-  return `${baseUrl}/uploads/${filename}`;
+  return `${publicUploadBaseUrl()}/uploads/${filename}`;
+}
+
+/** True if URL points at our /uploads/ tree (same origin as PUBLIC_URL / local API). */
+export function isOwnUploadUrl(raw: string): boolean {
+  try {
+    const base = publicUploadBaseUrl();
+    const u = new URL(raw);
+    const expected = new URL(`${base}/uploads/`);
+    if (u.origin !== expected.origin) return false;
+    if (!u.pathname.startsWith(expected.pathname)) return false;
+    const name = u.pathname.slice(expected.pathname.length);
+    return /^[a-zA-Z0-9._-]+$/.test(name) && name.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export class UploadImageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UploadImageError';
+  }
 }
 
 /** Persist image bytes under uploads/ and return public URL. */
@@ -26,14 +67,26 @@ export function saveImageBuffer(buffer: Buffer, ext: string): string {
 }
 
 export async function saveUploadedImage(dataUrl: string): Promise<string> {
-  const match = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+  const match = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
   if (!match) {
-    throw new Error('Invalid dataUrl format');
+    throw new UploadImageError('Некорректный формат изображения');
   }
-  const ext = match[1].split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
-  const buffer = Buffer.from(match[2], 'base64');
-  if (buffer.length > 5 * 1024 * 1024) {
-    throw new Error('Image too large (max 5MB)');
+  const mime = match[1].toLowerCase();
+  if (!ALLOWED_IMAGE_MIMES.has(mime)) {
+    throw new UploadImageError('Допустимы только JPEG, PNG, WebP или GIF');
+  }
+  const ext = MIME_TO_EXT[mime] || 'jpg';
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(match[2], 'base64');
+  } catch {
+    throw new UploadImageError('Некорректный формат изображения');
+  }
+  if (buffer.length === 0) {
+    throw new UploadImageError('Пустой файл');
+  }
+  if (buffer.length > MAX_PARTICIPANT_IMAGE_BYTES) {
+    throw new UploadImageError('Фото слишком большое (макс. 5 МБ)');
   }
   return saveImageBuffer(buffer, ext);
 }

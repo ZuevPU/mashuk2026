@@ -1,8 +1,13 @@
 import { Response } from 'express';
-import { env } from '../config/env.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
-import { saveUploadedImage, ensureUploadDir, publicUploadUrl } from '../utils/uploadImageStorage.js';
+import {
+  saveUploadedImage,
+  ensureUploadDir,
+  publicUploadUrl,
+  isOwnUploadUrl,
+  UploadImageError,
+} from '../utils/uploadImageStorage.js';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -14,19 +19,29 @@ export const uploadPhoto = async (req: ParticipantRequest, res: Response): Promi
   try {
     const { dataUrl, photoUrl } = req.body as { dataUrl?: string; photoUrl?: string };
 
-    if (photoUrl && /^https?:\/\//.test(photoUrl)) {
-      res.json({ url: photoUrl });
+    // Re-use of a file already stored under our /uploads/ (no arbitrary remote URLs).
+    if (typeof photoUrl === 'string' && photoUrl.trim()) {
+      const trimmed = photoUrl.trim();
+      if (isOwnUploadUrl(trimmed)) {
+        res.json({ url: trimmed });
+        return;
+      }
+      res.status(400).json({ error: 'Разрешены только загруженные через приложение фото' });
       return;
     }
 
-    if (!dataUrl || !dataUrl.startsWith('data:image/')) {
-      res.status(400).json({ error: 'Expected dataUrl (base64 image) or photoUrl' });
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
+      res.status(400).json({ error: 'Ожидается файл изображения (dataUrl)' });
       return;
     }
 
     const url = await saveUploadedImage(dataUrl);
     res.json({ url });
   } catch (err) {
+    if (err instanceof UploadImageError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: 'Upload failed' });
   }

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { AdminTabProps } from '../admin/types';
 import { RichFormatToolbar } from '../admin/RichFormatToolbar';
 import type { MedalDraft, RuleMetricOption } from './types';
@@ -7,6 +7,7 @@ type Props = {
   draft: MedalDraft;
   metrics: RuleMetricOption[];
   editing: boolean;
+  editingKey?: string | number;
   saving?: boolean;
   onChange: (patch: Partial<MedalDraft>) => void;
   onSave: () => void;
@@ -20,6 +21,7 @@ export function MedalForm({
   draft,
   metrics,
   editing,
+  editingKey = 'new',
   saving = false,
   onChange,
   onSave,
@@ -29,6 +31,9 @@ export function MedalForm({
   act,
 }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (editorRef.current) editorRef.current.innerHTML = draft.descriptionHtml || '';
+  }, [editingKey]);
   const canSave = draft.name.trim().length > 0;
   const saveLabel = editing ? 'Сохранить медаль' : 'Создать медаль';
 
@@ -80,7 +85,7 @@ export function MedalForm({
         <input className="adm-input" value={draft.name} onChange={e => onChange({ name: e.target.value })} />
       </label>
 
-      <label className="adm-field">
+      <div className="adm-field">
         <span className="adm-label">Описание (rich text)</span>
         <RichFormatToolbar
           editorRef={editorRef}
@@ -91,10 +96,9 @@ export function MedalForm({
           className="adm-input adm-rich-editor"
           contentEditable
           suppressContentEditableWarning
-          dangerouslySetInnerHTML={{ __html: draft.descriptionHtml }}
           onInput={() => onChange({ descriptionHtml: editorRef.current?.innerHTML || '' })}
         />
-      </label>
+      </div>
 
       <div className="adm-forum-grid-2">
         <label className="adm-field">

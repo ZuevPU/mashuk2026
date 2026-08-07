@@ -11,14 +11,27 @@ interface HeaderInfoProps {
   currentDateStr: string;
   focusTitle: string;
   focusSubtitle: string;
+  focusSubtitleHtml?: string | null;
   focusKeyQuestion?: string;
   progressPercent: number;
 }
 
+function plainToFocusHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br/>');
+}
+
 export const HeaderInfo: React.FC<HeaderInfoProps> = ({
   firstName, lastName, direction, groupName, dayCount, totalDays, currentDateStr,
-  focusTitle, focusSubtitle, focusKeyQuestion, progressPercent,
+  focusTitle, focusSubtitle, focusSubtitleHtml, focusKeyQuestion, progressPercent,
 }) => {
+  const bodyHtml = (focusSubtitleHtml && focusSubtitleHtml.trim())
+    ? focusSubtitleHtml
+    : (focusSubtitle ? plainToFocusHtml(focusSubtitle) : '');
+
   return (
     <div className="m-hdr">
       <div className="m-hdr-row">
@@ -39,8 +52,11 @@ export const HeaderInfo: React.FC<HeaderInfoProps> = ({
 
       <div className="m-hdr-fl">Фокус дня</div>
       <div className="m-hdr-fv">{focusTitle}</div>
-      {focusSubtitle && (
-        <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{focusSubtitle}</div>
+      {bodyHtml && (
+        <div
+          className="m-hdr-focus-body"
+          dangerouslySetInnerHTML={{ __html: bodyHtml }}
+        />
       )}
       {focusKeyQuestion && (
         <div className="m-hdr-kq">Ключевой вопрос: {focusKeyQuestion}</div>

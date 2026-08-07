@@ -2,10 +2,26 @@ import { useCallback, useEffect, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
 import { label } from '../../labels/ru';
 import type { AdminTabProps } from '../admin/types';
+import { RichHtmlEditor } from '../admin/RichHtmlEditor';
+import { htmlToPlain } from '../admin/RichFormatToolbar';
 import { EveningQuestionnaireBuilder } from './EveningQuestionnaireBuilder';
 import { ProfilePdfSettings } from './ProfilePdfSettings';
 import { OrgThreadsSection } from './OrgThreadsSection';
 import { SECTIONS } from './types';
+
+function plainFocusToHtml(text: string): string {
+  if (!text.trim()) return '';
+  return text
+    .split(/\n/)
+    .map(line => {
+      const escaped = line
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return `<p>${escaped || '<br>'}</p>`;
+    })
+    .join('');
+}
 
 type ForumSegment = 'settings' | 'org';
 
@@ -19,7 +35,13 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [kbThreshold, setKbThreshold] = useState(4);
   const [sectionsVis, setSectionsVis] = useState<Record<string, boolean>>({});
   const [dayFocusList, setDayFocusList] = useState<any[]>([]);
-  const [dayFocusForm, setDayFocusForm] = useState({ dayNumber: 1, title: '', text: '', keyQuestion: '' });
+  const [dayFocusForm, setDayFocusForm] = useState({
+    dayNumber: 1,
+    title: '',
+    text: '',
+    textHtml: '',
+    keyQuestion: '',
+  });
   const [groups, setGroups] = useState<any[]>([]);
   const [groupDrafts, setGroupDrafts] = useState<Record<number, { name: string; capacity: number }>>({});
   const [directions, setDirections] = useState<any[]>([]);
@@ -89,13 +111,35 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
   const loadDayFocusIntoForm = (dayNumber: number) => {
     const f = dayFocusList.find(d => d.dayNumber === dayNumber);
-    if (f) setDayFocusForm({ dayNumber, title: f.title || '', text: f.text || '', keyQuestion: f.keyQuestion || '' });
-    else setDayFocusForm({ dayNumber, title: '', text: '', keyQuestion: '' });
+    if (f) {
+      const text = f.text || '';
+      const textHtml = f.textHtml || (text ? plainFocusToHtml(text) : '');
+      setDayFocusForm({
+        dayNumber,
+        title: f.title || '',
+        text,
+        textHtml,
+        keyQuestion: f.keyQuestion || '',
+      });
+    } else {
+      setDayFocusForm({ dayNumber, title: '', text: '', textHtml: '', keyQuestion: '' });
+    }
   };
 
   const saveDayFocus = () =>
     act(async () => {
-      await adminFetch('/day-focus', { method: 'POST', body: JSON.stringify(dayFocusForm) });
+      const textHtml = dayFocusForm.textHtml || '';
+      const text = htmlToPlain(textHtml) || dayFocusForm.text || '';
+      await adminFetch('/day-focus', {
+        method: 'POST',
+        body: JSON.stringify({
+          dayNumber: dayFocusForm.dayNumber,
+          title: dayFocusForm.title,
+          keyQuestion: dayFocusForm.keyQuestion,
+          text,
+          textHtml,
+        }),
+      });
       setDayFocusList((await adminFetch('/day-focus')).focus || []);
     }, 'Фокус дня сохранён');
 
@@ -141,7 +185,9 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const publishedDaySet = new Set(
     scheduleDays.filter(d => d.isPublished).map(d => d.dayNumber),
   );
-  const focusFilled = new Set(dayFocusList.filter(f => f.title || f.text).map(f => f.dayNumber));
+  const focusFilled = new Set(
+    dayFocusList.filter(f => f.title || f.text || f.textHtml).map(f => f.dayNumber),
+  );
 
   return (
     <div className="adm-forum">
@@ -492,16 +538,30 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             <input className="adm-input" value={dayFocusForm.keyQuestion} onChange={e => setDayFocusForm({ ...dayFocusForm, keyQuestion: e.target.value })} />
           </label>
         </div>
-        <label className="adm-field">
-          <span className="adm-label">Текст фокуса</span>
-          <textarea className="adm-input" rows={3} value={dayFocusForm.text} onChange={e => setDayFocusForm({ ...dayFocusForm, text: e.target.value })} />
-        </label>
+        <RichHtmlEditor
+          label="Текст фокуса"
+          value={dayFocusForm.textHtml}
+          resetKey={dayFocusForm.dayNumber}
+          minHeight={120}
+          onChange={html => setDayFocusForm(prev => ({
+            ...prev,
+            textHtml: html,
+            text: htmlToPlain(html),
+          }))}
+        />
         {dayFocusForm.title && (
           <div className="adm-forum-preview adm-forum-focus-preview">
             <div className="adm-forum-preview-label">Как на главной</div>
             <strong>{dayFocusForm.title}</strong>
             {dayFocusForm.keyQuestion && <p>{dayFocusForm.keyQuestion}</p>}
-            {dayFocusForm.text && <p className="adm-muted">{dayFocusForm.text}</p>}
+            {dayFocusForm.textHtml ? (
+              <div
+                className="adm-forum-focus-html"
+                dangerouslySetInnerHTML={{ __html: dayFocusForm.textHtml }}
+              />
+            ) : dayFocusForm.text ? (
+              <p className="adm-muted" style={{ whiteSpace: 'pre-wrap' }}>{dayFocusForm.text}</p>
+            ) : null}
           </div>
         )}
         <button type="button" className="adm-btn adm-btn-primary" onClick={saveDayFocus}>Сохранить фокус</button>

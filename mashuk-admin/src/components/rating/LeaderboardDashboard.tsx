@@ -20,6 +20,7 @@ export function LeaderboardDashboard({
   autoRefreshMs,
   maxRows,
   onOpenFullscreen,
+  onOpenCard,
   showModeTabs,
   onExport,
 }: {
@@ -29,6 +30,7 @@ export function LeaderboardDashboard({
   autoRefreshMs?: number;
   maxRows?: number;
   onOpenFullscreen?: (q: URLSearchParams) => void;
+  onOpenCard?: (participantId: number) => void;
   showModeTabs?: boolean;
   onExport?: (q: URLSearchParams) => void | Promise<void>;
 }) {
@@ -159,6 +161,7 @@ export function LeaderboardDashboard({
         participantCount={participantCount ?? undefined}
         maxRows={uiMaxRows}
         searchHighlight={filters.search.trim()}
+        onOpenCard={onOpenCard}
       />
     </div>
   );

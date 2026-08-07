@@ -263,7 +263,7 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       [user] = await db.insert(participants).values(values).returning();
     }
 
-    await awardPoints(user.id, 'point_a_complete');
+    await awardPoints(user.id, 'point_a_complete', undefined, 1);
 
     scheduleParticipantAvatarSync(user.id, { vkPhotoUrl: data.vkPhotoUrl });
 

@@ -76,7 +76,7 @@ export const ProfilePanel: React.FC<{
   const [lbTrack, setLbTrack] = useState<'total' | 'path' | 'experience'>('total');
   const [lbMode, setLbMode] = useState<'points' | 'nomination'>('points');
   const [lbNomination, setLbNomination] = useState('sport');
-  const [lbScope, setLbScope] = useState<'total' | 'day' | 'shift'>('shift');
+  const [lbScope, setLbScope] = useState<'total' | 'day' | 'shift'>('total');
   const [lbDay, setLbDay] = useState('1');
   const [lbDirection, setLbDirection] = useState('');
   const [lbGroupId, setLbGroupId] = useState('');

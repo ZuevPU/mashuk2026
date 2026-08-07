@@ -89,6 +89,8 @@ export const TASK_NOMINATIONS = [
   'culture',
   'volunteer',
   'team',
+  'networking',
+  'leadership',
   'general',
 ] as const;
 

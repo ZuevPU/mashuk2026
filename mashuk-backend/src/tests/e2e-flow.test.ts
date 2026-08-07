@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import request from 'supertest';
 import { createApp } from '../app.js';
 import { getAdminBearerToken } from './adminTestHelper.js';
+import { TINY_PNG_DATA_URL } from './fixtures/tinyPng.js';
 
 const E2E_VK_ID = 999001;
 
@@ -139,7 +140,14 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
       const ct = task.confirmationType || 'text_photo';
       const at = task.answerType || 'text_and_photo';
       if (ct === 'post_url') payload.postUrl = 'https://vk.com/wall-1_1';
-      if (at === 'photo' || at === 'text_and_photo') payload.photoUrl = 'https://example.com/e2e-photo.jpg';
+      if (at === 'photo' || at === 'text_and_photo') {
+        const up = await request(app)
+          .post('/api/upload')
+          .set(headers)
+          .send({ dataUrl: TINY_PNG_DATA_URL });
+        assert.equal(up.status, 200, JSON.stringify(up.body));
+        payload.photoUrl = up.body.url;
+      }
       const sub = await request(app)
         .post(`/api/tasks/${task.id}/submit`)
         .set(headers)

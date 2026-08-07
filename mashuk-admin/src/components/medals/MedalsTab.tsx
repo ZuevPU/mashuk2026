@@ -146,6 +146,7 @@ export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           draft={draft}
           metrics={metrics}
           editing={!!editingId}
+          editingKey={editingId ?? 'new'}
           saving={saving}
           onChange={patch => setDraft(d => ({ ...d, ...patch }))}
           onSave={save}
