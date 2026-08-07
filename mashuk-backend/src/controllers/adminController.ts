@@ -80,7 +80,7 @@ export const listParticipants = async (req: AdminRequest, res: Response): Promis
     parsed.shiftId = await resolveAdminShiftId(req);
   }
   const result = await queryParticipants(parsed);
-  const participants = await enrichParticipantsWithAvatarUrls(result.participants, { preferStored: true });
+  const participants = await enrichParticipantsWithAvatarUrls(result.participants, { preferStored: false });
   res.json({ ...result, participants, shiftId: parsed.shiftId });
 };
 

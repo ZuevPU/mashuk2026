@@ -26,10 +26,14 @@ async function vkUsersGetMany(userIds: string, token: string): Promise<VkUserPho
   });
   const res = await fetch(`${VK_API}/users.get?${qs}`);
   const data = await res.json() as {
-    error?: { error_msg: string };
+    error?: { error_msg: string; error_code?: number };
     response?: VkUserPhoto[];
   };
-  if (data.error || !data.response?.length) return [];
+  if (data.error) {
+    console.warn('VK users.get avatars:', data.error.error_code, data.error.error_msg);
+    return [];
+  }
+  if (!data.response?.length) return [];
   return data.response;
 }
 

@@ -8,20 +8,22 @@ export function ParticipantAvatar({
   firstName,
   lastName,
   avatarUrl,
+  avatarFallbackUrl,
   size = 'sm',
 }: {
   firstName?: string | null;
   lastName?: string | null;
   avatarUrl?: string | null;
+  /** Tried when primary URL fails to load (e.g. broken /uploads mirror). */
+  avatarFallbackUrl?: string | null;
   size?: Size;
 }) {
-  const [failed, setFailed] = useState(false);
+  const [src, setSrc] = useState<string | null>(avatarUrl || avatarFallbackUrl || null);
   useEffect(() => {
-    setFailed(false);
-  }, [avatarUrl]);
+    setSrc(avatarUrl || avatarFallbackUrl || null);
+  }, [avatarUrl, avatarFallbackUrl]);
   const px = SIZE[size];
   const initials = `${(firstName || '?')[0]}${(lastName || '?')[0]}`.toUpperCase();
-  const src = !failed && avatarUrl ? avatarUrl : null;
 
   return (
     <span
@@ -35,7 +37,13 @@ export function ParticipantAvatar({
           alt=""
           className="adm-participant-avatar-img"
           referrerPolicy="no-referrer"
-          onError={() => setFailed(true)}
+          onError={() => {
+            if (src === avatarUrl && avatarFallbackUrl && avatarFallbackUrl !== avatarUrl) {
+              setSrc(avatarFallbackUrl);
+              return;
+            }
+            setSrc(null);
+          }}
         />
       ) : (
         initials

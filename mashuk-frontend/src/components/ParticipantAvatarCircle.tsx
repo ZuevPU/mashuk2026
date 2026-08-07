@@ -21,7 +21,7 @@ export function ParticipantAvatarCircle({
   return (
     <span className="m-avatar-circle" style={{ width: px, height: px, fontSize: Math.round(px * 0.38) }}>
       {src ? (
-        <img src={src} alt="" onError={() => setFailed(true)} />
+        <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
       ) : (
         initials
       )}

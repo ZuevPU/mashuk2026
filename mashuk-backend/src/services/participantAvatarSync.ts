@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { participants } from '../db/schema.js';
 import { fetchVkAvatarUrl, batchFetchVkAvatarUrls } from './vkUserProfile.js';
-import { saveImageBuffer } from '../utils/uploadImageStorage.js';
+import { publicUploadUrl, saveImageBuffer } from '../utils/uploadImageStorage.js';
 
 const MAX_AVATAR_BYTES = 512 * 1024;
 const RESYNC_MS = 24 * 60 * 60 * 1000;
@@ -17,6 +17,53 @@ export function isAllowedVkPhotoUrl(raw: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Rewrite /uploads/… to current PUBLIC_URL; drop unusable values. */
+export function normalizeStoredAvatarUrl(stored: string | null | undefined): string | null {
+  if (!stored?.trim()) return null;
+  const raw = stored.trim();
+  try {
+    const u = new URL(raw);
+    const marker = '/uploads/';
+    const idx = u.pathname.indexOf(marker);
+    if (idx >= 0) {
+      const name = u.pathname.slice(idx + marker.length);
+      if (!/^[a-zA-Z0-9._-]+$/.test(name)) return null;
+      return publicUploadUrl(name);
+    }
+    return raw;
+  } catch {
+    if (raw.startsWith('/uploads/')) {
+      const name = raw.slice('/uploads/'.length);
+      if (/^[a-zA-Z0-9._-]+$/.test(name)) return publicUploadUrl(name);
+    }
+    return null;
+  }
+}
+
+/** URLs the admin browser can load (not localhost mirrors from a remote admin host). */
+export function isBrowserReachableAvatarUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function pickParticipantAvatarUrl(opts: {
+  stored?: string | null;
+  vk?: string | null;
+  preferStored?: boolean;
+}): string | null {
+  const normalized = normalizeStoredAvatarUrl(opts.stored);
+  const stored = normalized && isBrowserReachableAvatarUrl(normalized) ? normalized : null;
+  const vk = opts.vk?.trim() || null;
+  if (opts.preferStored) return stored || vk;
+  return vk || stored;
 }
 
 function extFromContentType(ct: string | null): string {
@@ -66,7 +113,7 @@ type ParticipantAvatarRow = {
   selfDeletedAt?: Date | null;
 };
 
-/** Batch VK photos + stored mirror. Admin: preferStored for stable /uploads URLs. */
+/** Batch VK photos + stored mirror. Skips localhost/broken mirrors so VK can win. */
 export async function enrichParticipantsWithAvatarUrls<T extends ParticipantAvatarRow>(
   rows: T[],
   opts?: { preferStored?: boolean },
@@ -78,10 +125,12 @@ export async function enrichParticipantsWithAvatarUrls<T extends ParticipantAvat
   return rows.map(r => {
     if (r.selfDeletedAt) return { ...r, avatarUrl: null };
     const vk = r.vkId ? vkMap.get(r.vkId) ?? null : null;
-    const avatarUrl = preferStored
-      ? (r.avatarUrl || vk || null)
-      : (vk || r.avatarUrl || null);
-    if (r.vkId && !r.avatarUrl && vk) {
+    const avatarUrl = pickParticipantAvatarUrl({
+      stored: r.avatarUrl,
+      vk,
+      preferStored,
+    });
+    if (r.vkId && !normalizeStoredAvatarUrl(r.avatarUrl) && vk) {
       scheduleParticipantAvatarSync(r.id);
     }
     return { ...r, avatarUrl };

@@ -530,7 +530,7 @@ export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<
   }).from(participants).where(eq(participants.shiftId, shiftId));
 
   const { enrichParticipantsWithAvatarUrls } = await import('../services/participantAvatarSync.js');
-  const withAvatars = await enrichParticipantsWithAvatarUrls(list, { preferStored: true });
+  const withAvatars = await enrichParticipantsWithAvatarUrls(list, { preferStored: false });
   const result = await buildLeaderboardResult(withAvatars, query, { hideFromLeaderboard: true });
   res.json(result);
 };
