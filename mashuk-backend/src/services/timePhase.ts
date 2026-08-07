@@ -128,9 +128,23 @@ export function resolveLiveScheduleDay(
   settings: { currentDay?: number | null; totalDays?: number | null; startDate?: Date | null },
   now = new Date(),
 ): number {
+  const adminDay = settings.currentDay ?? 1;
   const total = settings.totalDays ?? 8;
-  const cal = getCalendarForumDay(settings.startDate ?? null, now, total);
-  if (cal != null) return cal;
+  const startDate = settings.startDate ?? null;
+  if (startDate) {
+    const startParts = getMoscowParts(startDate);
+    const nowKey = getForumOperationalDateKey(now);
+    const startUtc = Date.parse(`${startParts.dateKey}T00:00:00+03:00`);
+    const nowUtc = Date.parse(`${nowKey}T00:00:00+03:00`);
+    if (!Number.isNaN(startUtc) && !Number.isNaN(nowUtc)) {
+      const calendarDay = Math.floor((nowUtc - startUtc) / 86_400_000) + 1;
+      // Calendar controls live status only during the configured shift window.
+      // Before/after that window, the admin-selected day is the reliable source
+      // (important for live rehearsals and shifts with a stale startDate).
+      if (calendarDay >= 1 && calendarDay <= total) return calendarDay;
+    }
+  }
+  if (adminDay >= 1 && adminDay <= total) return adminDay;
   return resolveEffectiveCurrentDay(settings, now);
 }
 

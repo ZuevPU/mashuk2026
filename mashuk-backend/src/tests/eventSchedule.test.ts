@@ -43,6 +43,21 @@ describe('eventSchedule', () => {
     assert.equal(getEventLiveStatus(1, 1, start, end, now), 'now');
   });
 
+  it('rebinds legacy stored clocks to the configured forum day', () => {
+    const staleStart = new Date('2026-06-30T05:00:00.000Z'); // 08:00 MSK
+    const staleEnd = new Date('2026-06-30T06:30:00.000Z'); // 09:30 MSK
+    const { start, end } = resolveEventInterval(
+      { dayNumber: 2, startTime: staleStart, endTime: staleEnd },
+      { startDate: START },
+    );
+    assert.equal(start?.toISOString(), '2026-08-13T05:00:00.000Z');
+    assert.equal(end?.toISOString(), '2026-08-13T06:30:00.000Z');
+    assert.equal(
+      getEventLiveStatus(2, 2, start, end, new Date('2026-08-13T05:30:00.000Z')),
+      'now',
+    );
+  });
+
   it('marks only one block as now on current day', () => {
     const settings = { startDate: START };
     const morning = resolveEventInterval({ dayNumber: 3, timeSlot: '09:00–10:00' }, settings);

@@ -95,6 +95,26 @@ export function resolveEventInterval(
     return { start, end };
   }
 
+  const storedStart = event.startTime ?? event.eventDate ?? null;
+  if (dateKey && storedStart) {
+    // Legacy/copied events may keep the right MSK clock but an old calendar
+    // date. Bind that clock to the configured forum day so «Сейчас» survives
+    // shift date changes even when timeSlot was not populated.
+    const startClock = getMoscowParts(storedStart);
+    const start = mskInstant(dateKey, startClock.hours, startClock.minutes);
+    let end: Date | null = null;
+    if (event.endTime) {
+      const endClock = getMoscowParts(event.endTime);
+      end = mskInstant(dateKey, endClock.hours, endClock.minutes);
+      if (end.getTime() <= start.getTime()) {
+        end = new Date(end.getTime() + 86_400_000);
+      }
+    } else {
+      end = new Date(start.getTime() + DEFAULT_EVENT_DURATION_MS);
+    }
+    return { start, end };
+  }
+
   let start = event.startTime ?? null;
   let end = event.endTime ?? null;
   if (!start && event.eventDate) {
