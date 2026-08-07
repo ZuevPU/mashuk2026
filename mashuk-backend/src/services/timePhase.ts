@@ -149,6 +149,36 @@ export function resolveLiveScheduleDay(
 }
 
 /**
+ * Calendar date to use for the live schedule's wall clock.
+ * During the configured shift window it follows startDate. Outside that
+ * window the admin-selected live day is treated as running today.
+ */
+export function resolveLiveScheduleDateKey(
+  settings: { currentDay?: number | null; totalDays?: number | null; startDate?: Date | null },
+  liveScheduleDay: number,
+  now = new Date(),
+  explicitDayDate?: Date | null,
+): string {
+  const total = settings.totalDays ?? 8;
+  const startDate = settings.startDate ?? null;
+  if (startDate) {
+    const startParts = getMoscowParts(startDate);
+    const nowKey = getForumOperationalDateKey(now);
+    const startUtc = Date.parse(`${startParts.dateKey}T00:00:00+03:00`);
+    const nowUtc = Date.parse(`${nowKey}T00:00:00+03:00`);
+    if (!Number.isNaN(startUtc) && !Number.isNaN(nowUtc)) {
+      const calendarDay = Math.floor((nowUtc - startUtc) / 86_400_000) + 1;
+      if (calendarDay >= 1 && calendarDay <= total) {
+        if (explicitDayDate) return getMoscowParts(explicitDayDate).dateKey;
+        const liveDateMs = startUtc + (liveScheduleDay - 1) * 86_400_000;
+        return getMoscowParts(new Date(liveDateMs)).dateKey;
+      }
+    }
+  }
+  return getForumOperationalDateKey(now);
+}
+
+/**
  * Точка осмысления:
  * - dayNumber < effectiveCurrentDay → locked (день закончился / прошёл)
  * - dayNumber > effectiveCurrentDay → soon

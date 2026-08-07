@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveLiveScheduleDay } from '../services/timePhase.js';
+import { resolveLiveScheduleDateKey, resolveLiveScheduleDay } from '../services/timePhase.js';
 
 describe('resolveLiveScheduleDay', () => {
   const settings = {
@@ -10,17 +10,15 @@ describe('resolveLiveScheduleDay', () => {
   };
 
   it('uses admin day before the configured calendar window', () => {
-    assert.equal(
-      resolveLiveScheduleDay(settings, new Date('2026-08-07T11:00:00+03:00')),
-      6,
-    );
+    const now = new Date('2026-08-07T11:00:00+03:00');
+    assert.equal(resolveLiveScheduleDay(settings, now), 6);
+    assert.equal(resolveLiveScheduleDateKey(settings, 6, now), '2026-08-07');
   });
 
   it('uses calendar day while the shift is running', () => {
-    assert.equal(
-      resolveLiveScheduleDay(settings, new Date('2026-08-14T11:00:00+03:00')),
-      3,
-    );
+    const now = new Date('2026-08-14T11:00:00+03:00');
+    assert.equal(resolveLiveScheduleDay(settings, now), 3);
+    assert.equal(resolveLiveScheduleDateKey(settings, 3, now), '2026-08-14');
   });
 
   it('uses admin day after the configured calendar window', () => {

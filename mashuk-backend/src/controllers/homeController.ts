@@ -7,10 +7,10 @@ import {
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
   getForumSettings, formatTime, getMoscowPhase, isEveningWrapWindow,
-  getTouchpointAccess, resolveEffectiveCurrentDay, resolveLiveScheduleDay, stateCheckTimePointOrder,
+  getTouchpointAccess, resolveEffectiveCurrentDay, resolveLiveScheduleDateKey,
+  resolveLiveScheduleDay, stateCheckTimePointOrder,
 } from '../services/helpers.js';
 import {
-  calendarDateKeyFromTimestamp,
   getEventLiveStatus,
   resolveEventInterval,
 } from '../services/eventSchedule.js';
@@ -135,7 +135,12 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const SOON_MAX_MS = 30 * 60_000;
     const scheduleContext = {
       startDate: settings.startDate ?? null,
-      dayCalendarDateKey: calendarDateKeyFromTimestamp(dayMeta?.calendarDate ?? null),
+      dayCalendarDateKey: resolveLiveScheduleDateKey(
+        settings,
+        liveScheduleDay,
+        now,
+        dayMeta?.calendarDate ?? null,
+      ),
     };
 
     const enrichedEvents = dayEvents.map(e => {

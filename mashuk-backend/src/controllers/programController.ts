@@ -3,7 +3,10 @@ import { eq, and, asc, lte, or, isNull, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { events, eventAttendance, materials, questions, answers, scheduleDays, dayFocus, kbDayUnlocks, programSpeakers } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
-import { getForumSettings, formatTime, resolveEffectiveCurrentDay, resolveLiveScheduleDay } from '../services/helpers.js';
+import {
+  getForumSettings, formatTime, resolveEffectiveCurrentDay,
+  resolveLiveScheduleDateKey, resolveLiveScheduleDay,
+} from '../services/helpers.js';
 import { isPublishedStatus } from '../services/publishStatus.js';
 import { getForumDayDateLabel } from '../services/timePhase.js';
 import {
@@ -266,7 +269,9 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
     const liveScheduleDay = resolveLiveScheduleDay(settings, now);
     const scheduleContext = {
       startDate: settings.startDate ?? null,
-      dayCalendarDateKey: calendarDateKeyFromTimestamp(dayMeta?.calendarDate ?? null),
+      dayCalendarDateKey: day === liveScheduleDay
+        ? resolveLiveScheduleDateKey(settings, liveScheduleDay, now, dayMeta?.calendarDate ?? null)
+        : calendarDateKeyFromTimestamp(dayMeta?.calendarDate ?? null),
     };
     type NestedProgramChild = {
       id: number;

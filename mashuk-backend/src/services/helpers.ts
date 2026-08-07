@@ -52,6 +52,7 @@ export {
   getTouchpointAccess,
   resolveEffectiveCurrentDay,
   resolveLiveScheduleDay,
+  resolveLiveScheduleDateKey,
   toTouchpointUiStatus,
   getCalendarForumDay,
   getPreferredStateCheckPhase,
