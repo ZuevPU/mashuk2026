@@ -909,13 +909,25 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   color: #5D4B37;
   margin-top: 6px;
 }
-.adm-forum-focus-preview .adm-forum-focus-html p { margin: 0 0 0.35em; }
-.adm-forum-focus-preview .adm-forum-focus-html p:last-child { margin-bottom: 0; }
+.adm-forum-focus-preview .adm-forum-focus-html p,
+.adm-forum-focus-preview .adm-forum-focus-html div { margin: 0 0 0.35em; }
+.adm-forum-focus-preview .adm-forum-focus-html p:last-child,
+.adm-forum-focus-preview .adm-forum-focus-html div:last-child { margin-bottom: 0; }
 .adm-forum-focus-preview .adm-forum-focus-html ul,
 .adm-forum-focus-preview .adm-forum-focus-html ol {
   margin: 0.3em 0 0.3em 1.2em;
   padding: 0;
 }
+.adm-forum-focus-preview .adm-forum-focus-html b,
+.adm-forum-focus-preview .adm-forum-focus-html strong { font-weight: 700; }
+.adm-forum-focus-preview .adm-forum-focus-html i,
+.adm-forum-focus-preview .adm-forum-focus-html em { font-style: italic; }
+.adm-forum-focus-preview .adm-forum-focus-html [style*="text-align: center"],
+.adm-forum-focus-preview .adm-forum-focus-html [style*="text-align:center"] { text-align: center; }
+.adm-forum-focus-preview .adm-forum-focus-html [style*="text-align: right"],
+.adm-forum-focus-preview .adm-forum-focus-html [style*="text-align:right"] { text-align: right; }
+.adm-forum-focus-preview .adm-forum-focus-html [style*="text-align: left"],
+.adm-forum-focus-preview .adm-forum-focus-html [style*="text-align:left"] { text-align: left; }
 
 .adm-medal-form-footer {
   margin-top: 16px;
