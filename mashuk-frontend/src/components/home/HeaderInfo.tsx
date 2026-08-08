@@ -69,7 +69,9 @@ export const HeaderInfo: React.FC<HeaderInfoProps> = ({
         </div>
       </div>
 
-      <div className="m-hdr-fl">Фокус дня</div>
+      {focusTitle && focusTitle.toLowerCase() !== 'фокус дня' && (
+        <div className="m-hdr-fl">Фокус дня</div>
+      )}
       <div className="m-hdr-fv">{focusTitle}</div>
       {bodyHtml && (
         <div

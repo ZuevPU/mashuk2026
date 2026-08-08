@@ -5,7 +5,7 @@ import {
 } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  adminPushNotifications, adminUsers, participants, pushTemplates,
+  adminPushNotifications, adminUsers, participants, participantPushDeliveries, pushTemplates, pushTriggerFires,
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { formatAudienceLabel, type AudiencePayload } from '../services/pushAudienceResolve.js';
@@ -140,6 +140,11 @@ export const updatePushNotification = async (req: AdminRequest, res: Response): 
 
 export const deletePushNotification = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
+
+  // Сначала удаляем доставки и фиксации триггеров, чтобы уведомление исчезло у участников
+  await db.delete(participantPushDeliveries).where(eq(participantPushDeliveries.notificationId, id));
+  await db.delete(pushTriggerFires).where(eq(pushTriggerFires.notificationId, id));
+
   const [deleted] = await db.delete(adminPushNotifications)
     .where(eq(adminPushNotifications.id, id)).returning();
   if (!deleted) { res.status(404).json({ error: 'Not found' }); return; }
