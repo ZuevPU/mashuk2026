@@ -274,10 +274,10 @@ export function getTouchpointAccess(
   latePolicy: LateAnswerPolicy = 'until_day_rollover',
 ): 'open' | 'overdue' | 'locked' | 'soon' {
   const qDay = questionDay ?? currentDay;
-  if (publishTime && publishTime > now) return 'soon';
 
-  // Админ закрывает вручную — день и closeTime не лочат ответ
+  // Админ закрывает вручную — прошлый день и closeTime не лочат ответ
   if (latePolicy === 'until_admin') {
+    if (publishTime && publishTime > now) return 'soon';
     if (qDay > currentDay) return 'soon';
     if (closeTime && closeTime < now) return 'overdue';
     return 'open';
@@ -285,6 +285,7 @@ export function getTouchpointAccess(
 
   if (qDay < currentDay) return 'locked';
   if (qDay > currentDay) return 'soon';
+  if (publishTime && publishTime > now) return 'soon';
   if (closeTime && closeTime < now) {
     if (latePolicy === 'hard_close') return 'locked';
     if (latePolicy === 'until_midnight') {
