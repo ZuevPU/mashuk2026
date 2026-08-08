@@ -66,10 +66,15 @@ export function CustomExportModal({
 
   useEffect(() => {
     if (!open) return;
-    adminFetch('/exports/meta').then(m => setMeta(m as ExportMeta)).catch(() => undefined);
     setStep(0);
     setLastReady(null);
     setFormError(null);
+    setMeta(null);
+    adminFetch('/exports/meta')
+      .then(m => setMeta(m as ExportMeta))
+      .catch((err: unknown) => {
+        setFormError(err instanceof Error ? err.message : 'Не удалось загрузить источники выгрузки');
+      });
   }, [open, adminFetch]);
 
   const srcDef = meta?.sources.find(s => s.id === source);
@@ -151,8 +156,14 @@ export function CustomExportModal({
                 Одна строка = участник × активности. Без галочки «вся смена» берётся D{forumDay}.
               </p>
             )}
-            <button type="button" className="adm-btn adm-btn-primary" style={{ marginTop: 12 }} onClick={() => setStep(1)}>
-              Далее
+            <button
+              type="button"
+              className="adm-btn adm-btn-primary"
+              style={{ marginTop: 12 }}
+              disabled={!meta?.sources?.length}
+              onClick={() => setStep(1)}
+            >
+              {meta?.sources?.length ? 'Далее' : 'Загрузка источников…'}
             </button>
           </>
         )}

@@ -152,13 +152,35 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
     load().catch(() => setLoading(false));
   }, [load, reloadKey]);
 
+  const goalsValid = goalQuestions.every((q) => {
+    if (!q.text.trim()) return false;
+    if (q.type === 'choice' || q.type === 'multi') {
+      return q.options.map(o => o.trim()).filter(Boolean).length >= 2;
+    }
+    return true;
+  });
+
   const saveConfig = (msg: string) =>
     act(async () => {
+      if (!goalsValid) {
+        throw new Error('В целях: у каждого вопроса нужен текст; для выбора — минимум 2 варианта ответа');
+      }
+      const payload: RoleDiagnosticsConfig = {
+        ...currentConfig,
+        goalQuestions: goalQuestions.map(q => ({
+          text: q.text.trim(),
+          type: q.type,
+          options: q.type === 'open'
+            ? []
+            : q.options.map(o => o.trim()).filter(Boolean),
+        })),
+      };
       await adminFetch('/forum-settings', {
         method: 'PATCH',
-        body: JSON.stringify({ roleDiagnosticsConfig: currentConfig }),
+        body: JSON.stringify({ roleDiagnosticsConfig: payload }),
       });
-      setSavedConfigJson(snapshotConfig(currentConfig));
+      setGoalQuestions(payload.goalQuestions);
+      setSavedConfigJson(snapshotConfig(payload));
     }, msg);
 
   const saveAllConfig = () => saveConfig('Вся регистрация (config) сохранена');
@@ -201,7 +223,13 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
         </div>
         {configDirty && (
           <div className="adm-forum-actions" style={{ marginTop: 12 }}>
-            <button type="button" className="adm-btn" onClick={saveAllConfig}>
+            <button
+              type="button"
+              className="adm-btn"
+              disabled={!goalsValid}
+              onClick={saveAllConfig}
+              title={goalsValid ? undefined : 'Сначала исправьте вопросы в шаге «Цели»'}
+            >
               Сохранить всё (config) •
             </button>
           </div>

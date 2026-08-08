@@ -11,14 +11,28 @@ const MAX_GOALS = 12;
 const MAX_OPT = 12;
 const MIN_OPT = 2;
 
-const TYPE_OPTIONS: { value: GoalQuestion['type']; label: string }[] = [
-  { value: 'open', label: 'Свободный ответ' },
-  { value: 'choice', label: 'Один вариант' },
-  { value: 'multi', label: 'Несколько вариантов' },
+const TYPE_OPTIONS: { value: GoalQuestion['type']; label: string; hint: string }[] = [
+  { value: 'open', label: 'Открытый ответ', hint: 'Участник сам вводит текст' },
+  { value: 'choice', label: 'Один ответ', hint: 'Выбор одного варианта из списка' },
+  { value: 'multi', label: 'Несколько ответов', hint: 'Можно отметить несколько вариантов' },
 ];
 
 function emptyQuestion(): GoalQuestion {
   return { text: '', type: 'open', options: [] };
+}
+
+function filledOptions(options: string[]): string[] {
+  return options.map(o => o.trim()).filter(Boolean);
+}
+
+function questionError(q: GoalQuestion): string | null {
+  if (!q.text.trim()) return 'Введите текст вопроса';
+  if (q.type === 'choice' || q.type === 'multi') {
+    if (filledOptions(q.options).length < MIN_OPT) {
+      return `Добавьте минимум ${MIN_OPT} варианта ответа`;
+    }
+  }
+  return null;
 }
 
 export function GoalsStepEditor({ questions, onChange, onSave, dirty }: Props) {
@@ -26,16 +40,33 @@ export function GoalsStepEditor({ questions, onChange, onSave, dirty }: Props) {
     onChange(questions.map((q, idx) => (idx === i ? { ...q, ...patch } : q)));
   };
 
+  const setType = (i: number, type: GoalQuestion['type']) => {
+    const q = questions[i];
+    if (type === 'open') {
+      updateAt(i, { type, options: [] });
+      return;
+    }
+    const options = q.options.length >= MIN_OPT
+      ? q.options
+      : [...q.options, '', ''].slice(0, Math.max(MIN_OPT, q.options.length));
+    while (options.length < MIN_OPT) options.push('');
+    updateAt(i, { type, options });
+  };
+
+  const errors = questions.map(questionError);
+  const canSave = errors.every(e => !e);
+
   return (
     <div className="adm-forum-block card">
       <h3>Шаг «Цели» (Точка А)</h3>
       <p className="adm-forum-hint">
-        Вопросы целеполагания при регистрации. Можно добавить или убрать пункты (1–{MAX_GOALS}).
-        Для каждого вопроса выберите формат: свободный текст, один вариант или несколько.
+        Вопросы целеполагания при регистрации. Для каждого вопроса выберите формат ответа:
+        открытый текст, один вариант или несколько. Варианты для выбора админ добавляет кнопкой.
         Ответы попадут в профиль и PDF; на выезде (Точка Б) будут те же вопросы.
       </p>
       {questions.map((q, i) => {
         const needsOptions = q.type === 'choice' || q.type === 'multi';
+        const err = errors[i];
         return (
           <div key={i} className="card adm-forum-nested-card">
             <div className="adm-forum-toolbar" style={{ marginBottom: 6 }}>
@@ -56,29 +87,32 @@ export function GoalsStepEditor({ questions, onChange, onSave, dirty }: Props) {
               placeholder="Текст вопроса для участника…"
               onChange={e => updateAt(i, { text: e.target.value })}
             />
-            <label className="adm-label" style={{ marginTop: 8 }}>Формат ответа</label>
-            <select
-              className="adm-input"
-              value={q.type}
-              onChange={e => {
-                const type = e.target.value as GoalQuestion['type'];
-                if (type === 'open') {
-                  updateAt(i, { type, options: [] });
-                  return;
-                }
-                const options = q.options.length >= MIN_OPT
-                  ? q.options
-                  : [...q.options, '', ''].slice(0, MIN_OPT);
-                updateAt(i, { type, options });
-              }}
-            >
+
+            <div className="adm-label" style={{ marginTop: 10 }}>Формат ответа</div>
+            <div className="adm-seg" style={{ flexWrap: 'wrap', marginTop: 6 }}>
               {TYPE_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
+                <button
+                  key={o.value}
+                  type="button"
+                  className={q.type === o.value ? 'on' : ''}
+                  title={o.hint}
+                  onClick={() => setType(i, o.value)}
+                >
+                  {o.label}
+                </button>
               ))}
-            </select>
+            </div>
+            <p className="adm-muted" style={{ marginTop: 6, fontSize: 12 }}>
+              {TYPE_OPTIONS.find(o => o.value === q.type)?.hint}
+            </p>
+
             {needsOptions && (
               <div style={{ marginTop: 10 }}>
                 <div className="adm-label">Варианты ответа</div>
+                <p className="adm-muted" style={{ fontSize: 12, marginTop: 0 }}>
+                  Добавляйте варианты кнопкой ниже — участник увидит их как
+                  {q.type === 'choice' ? ' радиокнопки (один выбор)' : ' чекбоксы (несколько)'}.
+                </p>
                 {q.options.map((opt, oi) => (
                   <div key={oi} className="adm-forum-diag-row" style={{ marginTop: 6 }}>
                     <span className="adm-muted adm-forum-diag-opt-label">Вариант {oi + 1}</span>
@@ -112,14 +146,13 @@ export function GoalsStepEditor({ questions, onChange, onSave, dirty }: Props) {
                   disabled={q.options.length >= MAX_OPT}
                   onClick={() => updateAt(i, { options: [...q.options, ''] })}
                 >
-                  + Вариант ответа
+                  + Добавить вариант ответа
                 </button>
-                {q.options.filter(o => o.trim()).length < MIN_OPT && (
-                  <p className="adm-muted" style={{ marginTop: 6, fontSize: 12 }}>
-                    Нужно минимум {MIN_OPT} заполненных варианта.
-                  </p>
-                )}
               </div>
+            )}
+
+            {err && (
+              <p className="adm-insights-warn" style={{ marginTop: 8, marginBottom: 0 }}>{err}</p>
             )}
           </div>
         );
@@ -133,7 +166,13 @@ export function GoalsStepEditor({ questions, onChange, onSave, dirty }: Props) {
         + Добавить вопрос
       </button>
       <div className="adm-forum-actions">
-        <button type="button" className="adm-btn adm-btn-primary" onClick={onSave}>
+        <button
+          type="button"
+          className="adm-btn adm-btn-primary"
+          disabled={!canSave}
+          onClick={onSave}
+          title={canSave ? undefined : 'Исправьте ошибки в вопросах перед сохранением'}
+        >
           Сохранить цели{dirty ? ' •' : ''}
         </button>
       </div>

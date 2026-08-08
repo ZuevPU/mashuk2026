@@ -5,31 +5,261 @@ import type { AdminTabProps } from '../admin/types';
 import { TaskModerationQueue } from './TaskModerationQueue';
 
 type Segment = 'exchange' | 'org' | 'archive' | 'tasks';
+type ArchiveFilter = 'approved' | 'rejected' | 'all';
 
 type ParticipantCardTab = 'profile' | 'answers' | 'tasks' | 'medals' | 'points' | 'piggybank';
+
+type ExchangeAnswer = {
+  id: number;
+  participantId?: number;
+  text: string;
+  parentAnswerId?: number | null;
+  authorName?: string;
+  direction?: string | null;
+  reactions?: { likes?: number; discuss?: number } | null;
+  createdAt?: string | null;
+};
+
+type ExchangeQuestion = {
+  id: number;
+  text: string;
+  audience?: string | null;
+  moderationStatus?: string | null;
+  moderatorComment?: string | null;
+  authorName?: string;
+  direction?: string | null;
+  groupName?: string | null;
+  participantId?: number;
+  answerCount?: number;
+  answers?: ExchangeAnswer[];
+  createdAt?: string | null;
+};
 
 export type ModerationTabProps = AdminTabProps & {
   onOpenCard: (id: number, tab?: ParticipantCardTab) => void;
 };
 
-export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard: _onOpenCard }: ModerationTabProps) {
+function audienceLabel(audience?: string | null): string {
+  const a = (audience || 'all').toLowerCase();
+  if (a === 'direction' || a === 'my_direction') return 'Своему направлению';
+  return 'Всем участникам';
+}
+
+function formatWhen(value?: string | null): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('ru-RU');
+}
+
+function ExchangeAnswersBlock({
+  answers,
+  onOpenCard,
+}: {
+  answers: ExchangeAnswer[];
+  onOpenCard: (id: number) => void;
+}) {
+  const top = answers.filter(a => !a.parentAnswerId);
+  const replies = (parentId: number) => answers.filter(a => a.parentAnswerId === parentId);
+
+  if (answers.length === 0) {
+    return <p className="adm-muted" style={{ marginTop: 8, marginBottom: 0 }}>Ответов пока нет</p>;
+  }
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div className="adm-label">Ответы участников · {top.length}</div>
+      {top.map(a => (
+        <div key={a.id} style={{ marginTop: 8, padding: 10, background: '#F7F5F1', borderRadius: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <strong style={{ fontSize: 13 }}>
+              {a.authorName || 'Участник'}
+              {a.direction ? ` · ${a.direction}` : ''}
+            </strong>
+            <span className="adm-muted" style={{ fontSize: 11 }}>
+              {formatWhen(a.createdAt)}
+              {a.reactions ? ` · 👍 ${a.reactions.likes ?? 0}` : ''}
+            </span>
+          </div>
+          <div style={{ fontSize: 13, marginTop: 4, whiteSpace: 'pre-wrap' }}>{a.text}</div>
+          {a.participantId != null && (
+            <button
+              type="button"
+              className="adm-btn adm-btn-ghost adm-btn-sm"
+              style={{ marginTop: 6 }}
+              onClick={() => onOpenCard(a.participantId!)}
+            >
+              Карточка автора ответа
+            </button>
+          )}
+          {replies(a.id).map(r => (
+            <div
+              key={r.id}
+              style={{
+                marginTop: 8,
+                marginLeft: 12,
+                padding: 8,
+                background: '#fff',
+                borderRadius: 6,
+                borderLeft: '3px solid #D8D0C4',
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 600 }}>
+                {r.authorName || 'Участник'}
+                <span className="adm-muted" style={{ fontWeight: 400 }}>
+                  {' · комментарий'}
+                  {formatWhen(r.createdAt) ? ` · ${formatWhen(r.createdAt)}` : ''}
+                </span>
+              </div>
+              <div style={{ fontSize: 12, marginTop: 4, whiteSpace: 'pre-wrap' }}>{r.text}</div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ExchangeQuestionCard({
+  q,
+  mode,
+  rejectDraft,
+  onRejectDraftChange,
+  onApprove,
+  onReject,
+  onDelete,
+  onOpenCard,
+  onToggleAnswers,
+  answersOpen,
+}: {
+  q: ExchangeQuestion;
+  mode: 'pending' | 'archive';
+  rejectDraft?: string;
+  onRejectDraftChange?: (value: string) => void;
+  onApprove?: () => void;
+  onReject?: () => void;
+  onDelete: () => void;
+  onOpenCard: (id: number) => void;
+  onToggleAnswers?: () => void;
+  answersOpen?: boolean;
+}) {
+  const answers = q.answers || [];
+  const showAnswers = mode === 'archive' ? !!answersOpen : answers.length > 0;
+
+  return (
+    <div className="card" style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <div>
+          <strong>{q.authorName || 'Участник'}</strong>
+          <span className="adm-muted" style={{ fontSize: 12 }}>
+            {q.direction ? ` · ${q.direction}` : ''}
+            {q.groupName ? ` · ${q.groupName}` : ''}
+            {` · ${audienceLabel(q.audience)}`}
+            {q.createdAt ? ` · ${formatWhen(q.createdAt)}` : ''}
+          </span>
+        </div>
+        <span className="adm-muted" style={{ fontSize: 12 }}>
+          {label(q.moderationStatus || 'pending')}
+          {typeof q.answerCount === 'number' ? ` · ответов: ${q.answerCount}` : ''}
+        </span>
+      </div>
+      <p style={{ marginTop: 8, marginBottom: 0, whiteSpace: 'pre-wrap' }}>{q.text}</p>
+      {q.moderationStatus === 'rejected' && q.moderatorComment && (
+        <p className="adm-insights-warn" style={{ marginTop: 8, marginBottom: 0 }}>
+          Причина отклонения: {q.moderatorComment}
+        </p>
+      )}
+
+      {mode === 'pending' && (
+        <>
+          <label className="adm-label" style={{ marginTop: 10 }}>Комментарий при отклонении (опционально)</label>
+          <input
+            className="adm-input"
+            value={rejectDraft || ''}
+            onChange={e => onRejectDraftChange?.(e.target.value)}
+            placeholder="Почему вопрос не публикуем…"
+          />
+          <div className="form-row" style={{ marginTop: 8 }}>
+            <button type="button" className="adm-btn adm-btn-primary" onClick={onApprove}>
+              Одобрить
+            </button>
+            <button type="button" className="adm-btn btn-danger" onClick={onReject}>
+              Отклонить
+            </button>
+            <button type="button" className="adm-btn adm-btn-ghost" onClick={onDelete}>
+              Удалить
+            </button>
+            {q.participantId != null && (
+              <button type="button" className="adm-btn adm-btn-secondary" onClick={() => onOpenCard(q.participantId!)}>
+                Карточка автора
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {mode === 'archive' && (
+        <div className="form-row" style={{ marginTop: 8 }}>
+          <button type="button" className="adm-btn adm-btn-secondary" onClick={onToggleAnswers}>
+            {answersOpen ? 'Скрыть ответы' : `Показать ответы (${q.answerCount ?? answers.length})`}
+          </button>
+          {q.moderationStatus === 'rejected' && (
+            <button type="button" className="adm-btn" onClick={onApprove}>
+              Одобрить повторно
+            </button>
+          )}
+          {q.moderationStatus === 'approved' && (
+            <button type="button" className="adm-btn btn-danger" onClick={onReject}>
+              Снять с публикации
+            </button>
+          )}
+          <button type="button" className="adm-btn adm-btn-ghost" onClick={onDelete}>
+            Удалить
+          </button>
+          {q.participantId != null && (
+            <button type="button" className="adm-btn adm-btn-secondary" onClick={() => onOpenCard(q.participantId!)}>
+              Карточка автора
+            </button>
+          )}
+        </div>
+      )}
+
+      {showAnswers && (
+        <ExchangeAnswersBlock answers={answers} onOpenCard={onOpenCard} />
+      )}
+    </div>
+  );
+}
+
+export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: ModerationTabProps) {
   const [segment, setSegment] = useState<Segment>('exchange');
+  const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>('approved');
   const [loading, setLoading] = useState(true);
-  const [pendingExchange, setPendingExchange] = useState<any[]>([]);
-  const [exchangeArchive, setExchangeArchive] = useState<any[]>([]);
+  const [pendingExchange, setPendingExchange] = useState<ExchangeQuestion[]>([]);
+  const [exchangeArchive, setExchangeArchive] = useState<ExchangeQuestion[]>([]);
   const [orgThreads, setOrgThreads] = useState<any[]>([]);
   const [orgReplyDraft, setOrgReplyDraft] = useState<Record<number, string>>({});
+  const [rejectDraft, setRejectDraft] = useState<Record<number, string>>({});
+  const [openAnswers, setOpenAnswers] = useState<Record<number, boolean>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setPendingExchange((await adminFetch('/exchange/pending')).questions || []);
-      setExchangeArchive((await adminFetch('/exchange?status=approved')).questions || []);
-      setOrgThreads((await adminFetch('/org/threads')).threads || []);
+      const archivePath = archiveFilter === 'all'
+        ? '/exchange?limit=100'
+        : `/exchange?status=${archiveFilter}&limit=100`;
+      const [pendingRes, archiveRes, orgRes] = await Promise.all([
+        adminFetch('/exchange/pending'),
+        adminFetch(archivePath),
+        adminFetch('/org/threads'),
+      ]);
+      setPendingExchange((pendingRes as { questions?: ExchangeQuestion[] }).questions || []);
+      setExchangeArchive((archiveRes as { questions?: ExchangeQuestion[] }).questions || []);
+      setOrgThreads((orgRes as { threads?: unknown[] }).threads || []);
     } finally {
       setLoading(false);
     }
-  }, [adminFetch]);
+  }, [adminFetch, archiveFilter]);
 
   useEffect(() => {
     load().catch(() => setLoading(false));
@@ -37,8 +267,33 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard: _onOpenC
 
   const reload = () => load().catch(() => {});
 
+  const moderate = (id: number, moderationStatus: 'approved' | 'rejected', comment?: string) =>
+    act(async () => {
+      await adminFetch(`/exchange/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          moderationStatus,
+          moderatorComment: comment || undefined,
+        }),
+      });
+      setRejectDraft(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      await reload();
+    }, moderationStatus === 'approved' ? 'Вопрос одобрен' : 'Вопрос отклонён');
+
+  const removeQuestion = (id: number) => {
+    if (!window.confirm('Удалить вопрос обмена опытом вместе со всеми ответами?')) return;
+    act(async () => {
+      await adminFetch(`/exchange/${id}`, { method: 'DELETE' });
+      await reload();
+    }, 'Вопрос удалён');
+  };
+
   const segments: { key: Segment; label: string }[] = [
-    { key: 'exchange', label: 'Обмен (ожидает)' },
+    { key: 'exchange', label: `Обмен (ожидает${pendingExchange.length ? ` · ${pendingExchange.length}` : ''})` },
     { key: 'tasks', label: 'Задания на проверке' },
     { key: 'org', label: 'Организаторы' },
     { key: 'archive', label: 'Архив обмена' },
@@ -48,7 +303,10 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard: _onOpenC
 
   return (
     <div className="adm-forum">
-      <AdminPageHero title="Модерация" hint="Обмен опытом, очередь заданий и обращения к организаторам." />
+      <AdminPageHero
+        title="Модерация"
+        hint="Вопросы обмена опытом сначала попадают сюда. После одобрения их видят другие участники и могут отвечать."
+      />
 
       <div className="adm-seg" style={{ marginBottom: 12 }}>
         {segments.map(s => (
@@ -64,32 +322,58 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard: _onOpenC
 
       {segment === 'exchange' && (
         <>
+          <p className="adm-forum-hint">
+            Пользователь отправил вопрос → статус «на модерации». Одобрите — вопрос появится у остальных;
+            отклоните или удалите, если публиковать нельзя.
+          </p>
           {pendingExchange.length === 0 && <p className="adm-muted">Нет вопросов на модерации</p>}
           {pendingExchange.map(q => (
-            <div key={q.id} className="card">
-              <p>{q.text}</p>
-              <div className="form-row">
-                <button type="button" className="adm-btn" onClick={() => adminFetch(`/exchange/${q.id}`, { method: 'PATCH', body: JSON.stringify({ moderationStatus: 'approved' }) }).then(reload)}>Одобрить</button>
-                <button type="button" className="adm-btn btn-danger" onClick={() => adminFetch(`/exchange/${q.id}`, { method: 'PATCH', body: JSON.stringify({ moderationStatus: 'rejected' }) }).then(reload)}>Отклонить</button>
-              </div>
-            </div>
+            <ExchangeQuestionCard
+              key={q.id}
+              q={q}
+              mode="pending"
+              rejectDraft={rejectDraft[q.id] || ''}
+              onRejectDraftChange={value => setRejectDraft(prev => ({ ...prev, [q.id]: value }))}
+              onApprove={() => moderate(q.id, 'approved')}
+              onReject={() => moderate(q.id, 'rejected', rejectDraft[q.id])}
+              onDelete={() => removeQuestion(q.id)}
+              onOpenCard={id => onOpenCard(id)}
+            />
           ))}
         </>
       )}
 
       {segment === 'archive' && (
         <>
+          <div className="adm-seg" style={{ marginBottom: 12 }}>
+            {([
+              { key: 'approved' as const, label: 'Опубликованные' },
+              { key: 'rejected' as const, label: 'Отклонённые' },
+              { key: 'all' as const, label: 'Все' },
+            ]).map(f => (
+              <button
+                key={f.key}
+                type="button"
+                className={archiveFilter === f.key ? 'on' : ''}
+                onClick={() => setArchiveFilter(f.key)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          {exchangeArchive.length === 0 && <p className="adm-muted">Нет вопросов в архиве</p>}
           {exchangeArchive.map(q => (
-            <div key={q.id} className="card">
-              <p>{q.text}</p>
-              <p style={{ fontSize: 11, color: '#888' }}>{q.authorName} · {label(q.moderationStatus)}</p>
-              {q.answers?.map((a: any) => (
-                <div key={a.id} style={{ marginTop: 6, padding: 6, background: '#f5f5f5', borderRadius: 6, fontSize: 12 }}>
-                  {a.authorName}: {a.text}
-                  {a.reactions && ` · 👍 ${a.reactions.likes ?? 0}`}
-                </div>
-              ))}
-            </div>
+            <ExchangeQuestionCard
+              key={q.id}
+              q={q}
+              mode="archive"
+              answersOpen={!!openAnswers[q.id]}
+              onToggleAnswers={() => setOpenAnswers(prev => ({ ...prev, [q.id]: !prev[q.id] }))}
+              onApprove={() => moderate(q.id, 'approved')}
+              onReject={() => moderate(q.id, 'rejected', 'Снято с публикации модератором')}
+              onDelete={() => removeQuestion(q.id)}
+              onOpenCard={id => onOpenCard(id)}
+            />
           ))}
         </>
       )}

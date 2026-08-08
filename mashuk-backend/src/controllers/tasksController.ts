@@ -450,16 +450,23 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
         });
       }
     } else if (submission && (status === 'pending' || status === 'pending_team')) {
-      const { pushCopy } = await import('../services/pushCopy.js');
-      await sendPushNotification(
-        [req.participant!.id],
-        isTeam
-          ? pushCopy.taskPendingTeam(task.title)
-          : pushCopy.taskPendingModerator(task.title),
-        `transactional_task_pending_${submission.id}`,
-      );
+      const pendingSubmissionId = submission.id;
+      const pendingTitle = task.title;
+      const pendingIsTeam = isTeam;
+      void import('../services/pushCopy.js')
+        .then(({ pushCopy }) => sendPushNotification(
+          [req.participant!.id],
+          pendingIsTeam
+            ? pushCopy.taskPendingTeam(pendingTitle)
+            : pushCopy.taskPendingModerator(pendingTitle),
+          `transactional_task_pending_${pendingSubmissionId}`,
+        ))
+        .catch((err) => console.error('task pending push failed:', err));
     }
-    await evaluateMedalsForParticipant(req.participant!.id);
+    // Medals/push must not delay the client response — otherwise the submit modal hangs.
+    void evaluateMedalsForParticipant(req.participant!.id).catch((err) => {
+      console.error('evaluateMedalsForParticipant after submitTask:', err);
+    });
 
     res.json({
       submission: submission ? enrichSubmissionRow(submission) : null,

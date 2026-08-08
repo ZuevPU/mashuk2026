@@ -54,6 +54,8 @@ describe('admin role matrix', () => {
   it('analyst can export', () => {
     assert.equal(roleCan('analyst', 'export'), true);
     assert.equal(roleCan('analyst', 'settings'), false);
+    assert.equal(roleCan('gamification', 'export'), true);
+    assert.equal(roleCan('gamification', 'settings'), false);
   });
 });
 

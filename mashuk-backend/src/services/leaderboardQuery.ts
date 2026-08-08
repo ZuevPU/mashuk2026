@@ -27,7 +27,8 @@ export type ParsedLeaderboardQuery = {
   track: string;
   day?: number;
   nomination: string;
-  medalMode: MedalMode;
+  /** Explicit medal filter only; omit/null = ordinary points leaderboard. */
+  medalMode: MedalMode | null;
   medalId?: number;
   direction: string;
   groupId?: number;
@@ -52,8 +53,13 @@ export function parseLeaderboardQuery(q: Record<string, unknown>): ParsedLeaderb
   const track = String(q.track || 'total');
   const dayNum = q.day != null ? Number(q.day) : undefined;
   const nomination = String(q.nomination || '');
-  const medalModeRaw = String(q.medalMode || 'count');
-  const medalMode: MedalMode = medalModeRaw === 'holders' ? 'holders' : 'count';
+  const medalModeRaw = q.medalMode != null && String(q.medalMode).trim() !== ''
+    ? String(q.medalMode).trim()
+    : '';
+  const medalMode: MedalMode | null =
+    medalModeRaw === 'holders' ? 'holders'
+      : medalModeRaw === 'count' ? 'count'
+        : null;
   const medalId = q.medalId != null ? Number(q.medalId) : undefined;
   const direction = String(q.direction || '');
   const groupId = q.groupId != null ? Number(q.groupId) : undefined;

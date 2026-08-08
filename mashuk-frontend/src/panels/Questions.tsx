@@ -591,7 +591,9 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                       {q.moderationStatus === 'pending'
                         ? 'На модерации — появится после одобления'
                         : q.moderationStatus === 'rejected'
-                          ? 'Не прошёл модерацию'
+                          ? (q.moderatorComment
+                            ? `Не прошёл модерацию: ${q.moderatorComment}`
+                            : 'Не прошёл модерацию')
                           : exchangeAnswerCountLabel(q)}
                     </div>
                   </div>

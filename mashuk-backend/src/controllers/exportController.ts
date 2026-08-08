@@ -226,7 +226,7 @@ export const exportLeaderboardSnapshotHandler = async (req: AdminRequest, res: R
       ...exportFilters,
       scope: query.scope === 'day' ? 'day' : query.scope === 'total' ? 'shift' : 'shift',
       day: query.scope === 'day' ? query.day : undefined,
-      medalMode: query.medalMode,
+      medalMode: query.medalMode ?? 'count',
       medalId: query.medalId,
     });
     return;

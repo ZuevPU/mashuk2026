@@ -1805,6 +1805,11 @@ export const moderateExchange = async (req: AdminRequest, res: Response): Promis
   const { moderationStatus, moderatorComment, rejectReason } = req.body;
   const comment = moderatorComment ?? rejectReason;
 
+  if (!['approved', 'rejected', 'pending'].includes(String(moderationStatus || ''))) {
+    res.status(400).json({ error: 'moderationStatus must be approved, rejected or pending' });
+    return;
+  }
+
   const [before] = await db.select().from(exchangeQuestions).where(eq(exchangeQuestions.id, id)).limit(1);
   if (!before) {
     res.status(404).json({ error: 'Question not found' });
@@ -1812,8 +1817,10 @@ export const moderateExchange = async (req: AdminRequest, res: Response): Promis
   }
 
   const patch: { moderationStatus: string; moderatorComment?: string | null } = { moderationStatus };
-  if (comment != null && moderationStatus === 'rejected') {
-    patch.moderatorComment = String(comment).slice(0, 500);
+  if (moderationStatus === 'rejected') {
+    patch.moderatorComment = comment != null ? String(comment).slice(0, 500) : before.moderatorComment;
+  } else if (moderationStatus === 'approved') {
+    patch.moderatorComment = null;
   }
 
   const [updated] = await db.update(exchangeQuestions)
@@ -1825,13 +1832,115 @@ export const moderateExchange = async (req: AdminRequest, res: Response): Promis
     await awardPoints(updated.participantId, 'exchange_question');
   }
 
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req,
+    actionType: 'exchange_moderate',
+    section: 'moderation',
+    objectId: id,
+    oldValue: { moderationStatus: before.moderationStatus },
+    newValue: { moderationStatus, moderatorComment: patch.moderatorComment ?? null },
+  });
+
   res.json({ question: updated });
 };
 
+export const deleteExchangeQuestion = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id < 1) {
+    res.status(400).json({ error: 'Invalid id' });
+    return;
+  }
+
+  const [before] = await db.select().from(exchangeQuestions).where(eq(exchangeQuestions.id, id)).limit(1);
+  if (!before) {
+    res.status(404).json({ error: 'Question not found' });
+    return;
+  }
+
+  await db.delete(exchangeAnswers).where(eq(exchangeAnswers.questionId, id));
+  await db.delete(exchangeQuestions).where(eq(exchangeQuestions.id, id));
+
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req,
+    actionType: 'exchange_delete',
+    section: 'moderation',
+    objectId: id,
+    oldValue: {
+      text: before.text,
+      participantId: before.participantId,
+      moderationStatus: before.moderationStatus,
+    },
+    isCritical: true,
+  });
+
+  res.json({ ok: true, id });
+};
+
+async function mapExchangeAdminRows(
+  rows: Array<{ q: typeof exchangeQuestions.$inferSelect; p: typeof participants.$inferSelect | null }>,
+) {
+  const qIds = rows.map(r => r.q.id);
+  const answersByQ = new Map<number, Array<{
+    id: number;
+    participantId: number;
+    text: string;
+    parentAnswerId: number | null;
+    authorName: string;
+    direction: string | null;
+    reactions: unknown;
+    createdAt: Date | null;
+  }>>();
+
+  if (qIds.length > 0) {
+    const allAnswers = await db.select({
+      a: exchangeAnswers,
+      author: participants,
+    }).from(exchangeAnswers)
+      .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
+      .where(inArray(exchangeAnswers.questionId, qIds))
+      .orderBy(asc(exchangeAnswers.createdAt), asc(exchangeAnswers.id));
+
+    for (const row of allAnswers) {
+      const qid = row.a.questionId;
+      if (!answersByQ.has(qid)) answersByQ.set(qid, []);
+      answersByQ.get(qid)!.push({
+        id: row.a.id,
+        participantId: row.a.participantId,
+        text: row.a.text,
+        parentAnswerId: row.a.parentAnswerId ?? null,
+        authorName: `${row.author?.firstName ?? ''} ${row.author?.lastName ?? ''}`.trim() || '—',
+        direction: row.author?.direction ?? null,
+        reactions: row.a.reactions,
+        createdAt: row.a.createdAt,
+      });
+    }
+  }
+
+  return rows.map(r => {
+    const answers = answersByQ.get(r.q.id) || [];
+    return {
+      ...r.q,
+      authorName: `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim() || '—',
+      direction: r.p?.direction ?? null,
+      groupName: r.p?.groupName ?? null,
+      answerCount: answers.filter(a => !a.parentAnswerId).length,
+      answers,
+    };
+  });
+}
+
 export const listPendingExchange = async (_req: AdminRequest, res: Response): Promise<void> => {
-  const list = await db.select().from(exchangeQuestions)
-    .where(eq(exchangeQuestions.moderationStatus, 'pending'));
-  res.json({ questions: list });
+  const rows = await db.select({
+    q: exchangeQuestions,
+    p: participants,
+  }).from(exchangeQuestions)
+    .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
+    .where(eq(exchangeQuestions.moderationStatus, 'pending'))
+    .orderBy(desc(exchangeQuestions.createdAt));
+
+  res.json({ questions: await mapExchangeAdminRows(rows) });
 };
 
 export const listAllExchange = async (req: AdminRequest, res: Response): Promise<void> => {
@@ -1856,37 +1965,8 @@ export const listAllExchange = async (req: AdminRequest, res: Response): Promise
   const [total] = await countQuery;
   const rows = await baseQuery.orderBy(desc(exchangeQuestions.createdAt)).limit(limit).offset(offset);
 
-  const qIds = rows.map(r => r.q.id);
-  let answersByQ = new Map<number, any[]>();
-
-  if (qIds.length > 0) {
-    const allAnswers = await db.select({
-      a: exchangeAnswers,
-      author: participants,
-    }).from(exchangeAnswers)
-      .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
-      .where(inArray(exchangeAnswers.questionId, qIds));
-
-    for (const row of allAnswers) {
-      const qid = row.a.questionId;
-      if (!answersByQ.has(qid)) answersByQ.set(qid, []);
-      answersByQ.get(qid)!.push(row);
-    }
-  }
-
   res.json({
-    questions: rows.map(r => ({
-      ...r.q,
-      authorName: `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(),
-      direction: r.p?.direction,
-      answers: (answersByQ.get(r.q.id) || []).map(ar => ({
-        id: ar.a.id,
-        text: ar.a.text,
-        authorName: `${ar.author?.firstName ?? ''} ${ar.author?.lastName ?? ''}`.trim(),
-        reactions: ar.a.reactions,
-        createdAt: ar.a.createdAt,
-      })),
-    })),
+    questions: await mapExchangeAdminRows(rows),
     totalCount: total.count,
   });
 };

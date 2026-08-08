@@ -35,11 +35,13 @@ export function verifyAdminToken(token: string): { adminId: number; login: strin
   }
 }
 
-/** Матрица прав v1 */
+/** Матрица прав v1 (legacy routes). Prefer requireAdminPermission / section matrix. */
 export function roleCan(role: string, action: 'read' | 'moderate' | 'export' | 'settings' | 'users' | 'delete'): boolean {
   if (role === 'admin' || role === 'superadmin') return true;
   if (role === 'director') return action === 'read' || action === 'export';
   if (role === 'analyst') return action === 'read' || action === 'export';
+  // Gamification matrix grants exports.canExport — keep legacy export checks in sync.
+  if (role === 'gamification') return action === 'read' || action === 'export' || action === 'moderate';
   if (role === 'moderator') return action === 'read' || action === 'moderate';
   return false;
 }

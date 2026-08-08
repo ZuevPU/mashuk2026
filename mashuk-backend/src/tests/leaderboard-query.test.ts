@@ -25,9 +25,14 @@ describe('parseLeaderboardQuery', () => {
     assert.equal(q.limit, 0);
   });
 
-  it('defaults medal mode on points filter', () => {
+  it('keeps explicit medal mode on points filter', () => {
     const q = parseLeaderboardQuery({ mode: 'points', medalMode: 'count' });
     assert.equal(q.medalMode, 'count');
+  });
+
+  it('does not treat missing medalMode as medal-count ranking', () => {
+    const q = parseLeaderboardQuery({ mode: 'points', scope: 'shift', track: 'total' });
+    assert.equal(q.medalMode, null);
   });
 });
 

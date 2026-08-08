@@ -75,7 +75,7 @@ export async function buildLeaderboardResult(
       scope: query.scope,
       day: query.day,
       nomination: effectiveMode === 'nomination' ? query.nomination : undefined,
-      medalMode: query.medalMode,
+      medalMode: query.medalMode ?? undefined,
       medalId: query.medalId,
       medalAsScore,
     },

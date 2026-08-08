@@ -86,6 +86,8 @@ function isTaskAlreadySubmittedError(message: string): boolean {
   const m = message.toLowerCase();
   return m.includes('already submitted')
     || m.includes('уже выполн')
+    || m.includes('уже на проверке')
+    || m.includes('заявка уже')
     || m.includes('одноразовое')
     || m.includes('лимит выполнений')
     || m.includes('этого устройства');
@@ -137,6 +139,8 @@ const TaskSubmitModal = ({
   const [scannedQr, setScannedQr] = useState('');
   const [selectedChoice, setSelectedChoice] = useState('');
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const autoQrSubmitRef = useRef(false);
   const methods = taskMethodsFromMeta(meta);
   const answerType = meta?.answerType || (methods.includes('photo') ? 'text_and_photo' : 'text');
@@ -150,8 +154,30 @@ const TaskSubmitModal = ({
     setSelectedMulti([]);
     setAnswerText('');
     setPhotoUrl(null);
+    setSubmitting(false);
+    setFormError(null);
     autoQrSubmitRef.current = false;
   }, [taskId, meta?._scannedQr]);
+
+  const finishSuccess = useCallback((payload: SubmitSuccessPayload) => {
+    onClose();
+    onSubmitSuccess(payload);
+    onSuccess();
+  }, [onClose, onSubmitSuccess, onSuccess]);
+
+  const finishAlreadySubmitted = useCallback((message: string) => {
+    onClose();
+    onSubmitSuccess({
+      confirm: {
+        ...TASK_SUBMIT_CONFIRM,
+        titleTemplate: message.includes('проверк') ? 'Задание уже на проверке' : 'Задание уже отправлено',
+        showPoints: false,
+      },
+      xpAwarded: 0,
+      track: 'experience',
+    });
+    onSuccess();
+  }, [onClose, onSubmitSuccess, onSuccess]);
 
   const submitAnswerText = useCallback(() => {
     if (answerType === 'choice') return selectedChoice;
@@ -160,7 +186,9 @@ const TaskSubmitModal = ({
   }, [answerType, selectedChoice, selectedMulti, answerText]);
 
   const submitQrTask = useCallback(async (qrValue: string) => {
-    if (!taskId || !qrValue) return;
+    if (!taskId || !qrValue || submitting) return;
+    setSubmitting(true);
+    setFormError(null);
     try {
       const res = await apiPost<{ xpAwarded?: number; track?: 'path' | 'experience' }>(`/tasks/${taskId}/submit`, {
         answerText: 'Готово',
@@ -168,7 +196,7 @@ const TaskSubmitModal = ({
         deviceKey: getDeviceKey(),
       });
       const xp = res.xpAwarded ?? 0;
-      onSubmitSuccess({
+      finishSuccess({
         confirm: {
           ...TASK_SUBMIT_CONFIRM,
           titleTemplate: 'QR-задание выполнено',
@@ -177,17 +205,16 @@ const TaskSubmitModal = ({
         xpAwarded: xp,
         track: res.track ?? 'experience',
       });
-      onSuccess();
-      onClose();
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Ошибка отправки';
-      setSnackbar(msg);
       if (err instanceof ApiError && isTaskAlreadySubmittedError(msg)) {
-        onSuccess();
-        onClose();
+        finishAlreadySubmitted(msg);
+        return;
       }
+      setFormError(msg);
+      setSubmitting(false);
     }
-  }, [taskId, onSubmitSuccess, onSuccess, onClose, setSnackbar]);
+  }, [taskId, submitting, finishSuccess, finishAlreadySubmitted]);
 
   const needsFreeText = answerType === 'text' || answerType === 'text_and_photo';
   const needsPhoto = answerType === 'photo' || answerType === 'text_and_photo';
@@ -236,35 +263,37 @@ const TaskSubmitModal = ({
   };
 
   const handleSubmit = async () => {
-    if (!taskId) return;
+    if (!taskId || submitting) return;
     if (answerType === 'text' && !answerText.trim()) {
-      setSnackbar('Введите текст ответа');
+      setFormError('Введите текст ответа');
       return;
     }
     if (isChoice && !selectedChoice) {
-      setSnackbar('Выберите вариант ответа');
+      setFormError('Выберите вариант ответа');
       return;
     }
     if (isMulti && selectedMulti.length === 0) {
-      setSnackbar('Выберите хотя бы один вариант');
+      setFormError('Выберите хотя бы один вариант');
       return;
     }
     if (needsPhoto && !photoUrl) {
-      setSnackbar('Прикрепите фото');
+      setFormError('Прикрепите фото');
       return;
     }
     if (needsPostUrl && !postUrl.trim()) {
-      setSnackbar('Укажите ссылку на пост');
+      setFormError('Укажите ссылку на пост');
       return;
     }
     if (needsTeam && selectedTeam.length < 1) {
-      setSnackbar('Добавьте участников команды');
+      setFormError('Добавьте участников команды');
       return;
     }
     if (isQr && !effectiveQr) {
-      setSnackbar('Отсканируйте QR задания');
+      setFormError('Отсканируйте QR задания');
       return;
     }
+    setSubmitting(true);
+    setFormError(null);
     try {
       const teamIds = selectedTeam.map(p => p.id);
       const res = await apiPost<{ xpAwarded?: number; track?: 'path' | 'experience' }>(`/tasks/${taskId}/submit`, {
@@ -277,7 +306,7 @@ const TaskSubmitModal = ({
       });
       const xp = res.xpAwarded ?? 0;
       const teamPending = methods.includes('team');
-      onSubmitSuccess({
+      finishSuccess({
         confirm: {
           ...TASK_SUBMIT_CONFIRM,
           titleTemplate: teamPending ? 'Задание отправлено команде' : TASK_SUBMIT_CONFIRM.titleTemplate,
@@ -286,15 +315,14 @@ const TaskSubmitModal = ({
         xpAwarded: xp,
         track: res.track ?? 'experience',
       });
-      onSuccess();
-      onClose();
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Ошибка отправки';
-      setSnackbar(msg);
       if (err instanceof ApiError && isTaskAlreadySubmittedError(msg)) {
-        onSuccess();
-        onClose();
+        finishAlreadySubmitted(msg);
+        return;
       }
+      setFormError(msg);
+      setSubmitting(false);
     }
   };
 
@@ -411,14 +439,24 @@ const TaskSubmitModal = ({
             </div>
           </div>
         )}
+        {formError && (
+          <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 10, background: '#FDECEC', color: '#C53030', fontSize: 13 }}>
+            {formError}
+          </div>
+        )}
         <Button
           size="l"
           stretched
-          onClick={handleSubmit}
+          onClick={() => void handleSubmit()}
           style={{ marginTop: 12 }}
-          disabled={(isChoice && !selectedChoice) || (isMulti && selectedMulti.length === 0) || (answerType === 'text' && !answerText.trim()) || (needsPhoto && !photoUrl) || (isQr && !effectiveQr)}
+          loading={submitting}
+          disabled={submitting || (isChoice && !selectedChoice) || (isMulti && selectedMulti.length === 0) || (answerType === 'text' && !answerText.trim()) || (needsPhoto && !photoUrl) || (isQr && !effectiveQr)}
         >
-          {isAuto || (isQr && effectiveQr) ? 'Подтвердить' : 'Отправить на проверку'}
+          {submitting
+            ? 'Отправляем…'
+            : isAuto || (isQr && effectiveQr)
+              ? 'Подтвердить'
+              : 'Отправить на проверку'}
         </Button>
       </Group>
     </ModalPage>

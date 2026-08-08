@@ -169,12 +169,16 @@ export async function adminDownloadBinary(path: string, filename: string) {
   const res = await fetch(`${base}${path}`, {
     headers: adminAuthHeaders(),
   });
-  if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(parseAdminErrorResponse(res.status, text));
+  }
   const blob = await res.blob();
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = filename;
   a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 export async function adminFetchHtml(path: string): Promise<string> {
