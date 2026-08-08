@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { label } from '../../labels/ru';
 import { confirmDelete, CONFIRM_DELETE_EVENT } from '../../admin/confirmDelete';
+import { downloadDataUrl } from '../../admin/client';
 import { ParticipantPreviewModal } from '../admin/ParticipantPreviewModal';
 import { DescriptionEditor } from '../admin/DescriptionEditor';
 import { PlaceSelect } from './ProgramPlacesBlock';
@@ -446,8 +447,9 @@ export function EventCard({
               className="adm-btn adm-btn-secondary adm-btn-sm"
               onClick={() => act(async () => {
                 const r = await adminFetch('/qr/download', { method: 'POST', body: JSON.stringify({ type: 'event', id: event.id }) });
-                if (r.qrImageUrl) window.open(r.qrImageUrl, '_blank');
-              }, 'QR готов')}
+                if (!r?.qrImageUrl) throw new Error('Не удалось получить QR');
+                downloadDataUrl(r.qrImageUrl, `event-${event.id}-qr.png`);
+              }, 'QR скачан')}
             >
               QR посещаемости
             </button>

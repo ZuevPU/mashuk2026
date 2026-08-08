@@ -162,6 +162,34 @@ export function downloadCsv(path: string, filename: string) {
   }).catch(console.error);
 }
 
+/** Save a data: URL (e.g. QR PNG) as a file — window.open(dataUrl) is blocked after async. */
+export function downloadDataUrl(dataUrl: string, filename: string): void {
+  if (!dataUrl) throw new Error('Пустой файл');
+  let href = dataUrl;
+  let revoke: string | null = null;
+  if (dataUrl.startsWith('data:')) {
+    const comma = dataUrl.indexOf(',');
+    if (comma < 0) throw new Error('Некорректный data URL');
+    const header = dataUrl.slice(0, comma);
+    const payload = dataUrl.slice(comma + 1);
+    const mime = header.match(/data:([^;]+)/)?.[1] || 'application/octet-stream';
+    const isBase64 = /;base64/i.test(header);
+    const bytes = isBase64
+      ? Uint8Array.from(atob(payload), c => c.charCodeAt(0))
+      : new TextEncoder().encode(decodeURIComponent(payload));
+    revoke = URL.createObjectURL(new Blob([bytes], { type: mime }));
+    href = revoke;
+  }
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  if (revoke) URL.revokeObjectURL(revoke);
+}
+
 export async function adminDownloadBinary(path: string, filename: string) {
   const base = getAdminApiBase();
   const token = getAdminToken();

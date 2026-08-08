@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
-import { adminFetchHtml } from '../../admin/client';
+import { adminFetchHtml, downloadDataUrl } from '../../admin/client';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
 import type { ProgramPlace } from '../program/types';
@@ -222,8 +222,9 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const qrTask = (id: number) =>
     act(async () => {
       const r = await adminFetch('/qr/download', { method: 'POST', body: JSON.stringify({ type: 'task', id }) });
-      if (r.qrImageUrl) window.open(r.qrImageUrl, '_blank');
-    }, 'QR готов');
+      if (!r?.qrImageUrl) throw new Error('Не удалось получить QR');
+      downloadDataUrl(r.qrImageUrl, `task-${id}-qr.png`);
+    }, 'QR скачан');
 
   const addCategory = () => {
     const name = newCategoryName.trim();
