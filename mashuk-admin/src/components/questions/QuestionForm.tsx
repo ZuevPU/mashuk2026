@@ -24,6 +24,7 @@ type Props = {
   onReorderOption: (from: number, to: number) => void;
   onAddOption: () => void;
   onRemoveOption: (index: number) => void;
+  programEvents?: any[];
   /** Published questions for showWhen parent picker (same day / earlier). */
   branchParents?: { id: number; title: string; options: { label: string; value: string }[] }[];
   previewSlot?: ReactNode;
@@ -51,6 +52,7 @@ export function QuestionForm({
   onReorderOption,
   onAddOption,
   onRemoveOption,
+  programEvents = [],
   branchParents = [],
   previewSlot,
 }: Props) {
@@ -164,6 +166,7 @@ export function QuestionForm({
                 <option value="">—</option>
                 <option value="state_check">Проверка состояния</option>
                 <option value="after_event">После события</option>
+                <option value="after_blocks">После блоков</option>
                 <option value="evening_summary">Итоги дня</option>
                 <option value="point_a">Точка А</option>
                 <option value="point_b">Точка Б</option>
@@ -179,6 +182,42 @@ export function QuestionForm({
               </select>
             </label>
           </div>
+
+          {(draft.questionKind === 'after_blocks' || draft.reflectionKind === 'after_blocks') && (
+            <div className="adm-field">
+              <span className="adm-label">Связать с блоками программы</span>
+              <p className="adm-muted" style={{ fontSize: 12, marginTop: 0 }}>
+                Выберите блоки программы из списка, после которых будет показан этот вопрос.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 200, overflowY: 'auto', padding: 10, background: '#f9f9f9', borderRadius: 8, border: '1px solid #eee' }}>
+                {programEvents
+                  .filter(ev => draft.dayNumbers.includes(ev.dayNumber))
+                  .sort((a, b) => (a.dayNumber - b.dayNumber) || (a.startTime || '').localeCompare(b.startTime || '') || a.id - b.id)
+                  .map(ev => {
+                    const checked = draft.linkedEventIds.includes(ev.id);
+                    return (
+                      <label key={ev.id} className="adm-forum-check" style={{ display: 'flex', gap: 6, minWidth: '45%', fontSize: 12 }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const next = checked
+                              ? draft.linkedEventIds.filter(id => id !== ev.id)
+                              : [...draft.linkedEventIds, ev.id];
+                            onChange({ linkedEventIds: next });
+                          }}
+                        />
+                        <span style={{ color: '#888', marginRight: 4 }}>D{ev.dayNumber}</span>
+                        {ev.title}
+                      </label>
+                    );
+                  })}
+                {programEvents.filter(ev => draft.dayNumbers.includes(ev.dayNumber)).length === 0 && (
+                  <p className="adm-muted" style={{ fontSize: 12 }}>Нет событий в выбранные дни.</p>
+                )}
+              </div>
+            </div>
+          )}
 
           {(draft.questionKind === 'day_summary'
             || draft.reflectionKind === 'evening_summary'

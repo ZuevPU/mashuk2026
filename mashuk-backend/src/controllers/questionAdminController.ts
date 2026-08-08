@@ -502,6 +502,37 @@ export const crudQuestions = {
       .orderBy(asc(questionOptions.sortOrder));
     res.json({ options: opts });
   },
+  bulkAction: async (req: AdminRequest, res: Response) => {
+    const { bulkTasksSchema } = await import('../validation/adminSchemas.js');
+    const parsed = bulkTasksSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
+    const { ids, action } = parsed.data;
+
+    if (action === 'delete') {
+      await db.delete(answers).where(inArray(answers.questionId, ids));
+      await db.delete(questionOptions).where(inArray(questionOptions.questionId, ids));
+      await db.delete(questions).where(inArray(questions.id, ids));
+    } else if (action === 'hide') {
+      await db.update(questions).set({ isHidden: true }).where(inArray(questions.id, ids));
+    } else if (action === 'unhide') {
+      await db.update(questions).set({ isHidden: false }).where(inArray(questions.id, ids));
+    } else if (action === 'publish') {
+      await db.update(questions).set({ status: 'published', isHidden: false }).where(inArray(questions.id, ids));
+    } else if (action === 'draft') {
+      await db.update(questions).set({ status: 'draft' }).where(inArray(questions.id, ids));
+    }
+
+    const { logAdminAction } = await import('../services/adminActionsLog.js');
+    await logAdminAction({
+      req,
+      actionType: 'questions_bulk_action',
+      section: 'questions',
+      objectId: ids.join(','),
+      newValue: { action, count: ids.length },
+    });
+
+    res.json({ ok: true });
+  },
 };
 
 export const copyQuestionsSelected = async (req: AdminRequest, res: Response): Promise<void> => {

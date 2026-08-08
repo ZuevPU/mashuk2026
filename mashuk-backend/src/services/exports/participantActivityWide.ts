@@ -161,7 +161,8 @@ export async function buildParticipantActivityWide(params: WideParams = {}): Pro
     shiftId: params.shiftId ?? undefined,
   };
   const enriched = await loadEnrichedParticipants(listQuery);
-  const people = enriched.filter(p => cohortMatch(p, params));
+  const people = enriched.filter(p => cohortMatch(p, params))
+    .filter(p => (p.direction || '').toLowerCase() !== 'организатор форума');
   const ids = people.map(p => p.id);
   const idSet = new Set(ids);
 

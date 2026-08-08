@@ -14,7 +14,8 @@ import { createWorkbook, sendWorkbook } from './workbook.js';
 export async function writeRolesExperimentsExport(res: Response): Promise<void> {
   const roleRows = await db.select({ s: participantDayState, p: participants })
     .from(participantDayState)
-    .leftJoin(participants, eq(participantDayState.participantId, participants.id));
+    .innerJoin(participants, eq(participantDayState.participantId, participants.id))
+    .where(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
   const experiments = await db.select().from(dayExperiments);
 
   const expMap = new Map<string, typeof experiments[0]>();
@@ -36,10 +37,10 @@ export async function writeRolesExperimentsExport(res: Response): Promise<void> 
       : undefined;
     const ratings = r.s.eveningRatings as Record<string, unknown> | null;
     byDay.addRow([
-      r.p?.id, r.p?.direction, r.p?.groupName, r.s.dayNumber,
-      roleLabel(r.p?.pedagogicalRole),
+      r.p.id, r.p.direction, r.p.groupName, r.s.dayNumber,
+      roleLabel(r.p.pedagogicalRole),
       roleLabel(r.s.activeRoleKey),
-      dayModeLabel(r.p?.pedagogicalRole, r.s.activeRoleKey),
+      dayModeLabel(r.p.pedagogicalRole, r.s.activeRoleKey),
       experimentStatusLabel(r.s.experimentStatus),
       exp?.title ?? '', exp?.body ?? '',
       ratings?.experimentResult ?? '',
@@ -47,7 +48,7 @@ export async function writeRolesExperimentsExport(res: Response): Promise<void> 
     ]);
   }
 
-  const allP = await db.select().from(participants);
+  const allP = await db.select().from(participants).where(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
   const byParticipant = new Map<number, typeof roleRows>();
   for (const r of roleRows) {
     const id = r.p?.id;

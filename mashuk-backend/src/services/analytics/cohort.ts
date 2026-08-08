@@ -17,6 +17,10 @@ export async function loadCohortParticipants(filters: AnalyticsFilters, req?: Ad
   }
   const where = buildParticipantWhere(q);
   let rows = await db.select().from(participants).where(where ?? isNull(participants.selfDeletedAt));
+  
+  // Исключаем организаторов из аналитики и рейтингов
+  rows = rows.filter(p => (p.direction || '').toLowerCase() !== 'организатор форума');
+
   if (filters.direction) {
     rows = rows.filter(p => p.direction === filters.direction);
   }

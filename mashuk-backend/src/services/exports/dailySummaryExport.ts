@@ -24,7 +24,8 @@ type Filters = {
 export async function writeDailySummaryExport(res: Response, filters: Filters): Promise<void> {
   const rows = await db.select({ s: participantDayState, p: participants })
     .from(participantDayState)
-    .leftJoin(participants, eq(participantDayState.participantId, participants.id));
+    .innerJoin(participants, eq(participantDayState.participantId, participants.id))
+    .where(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
 
   let filtered = rows.filter(r => r.s.eveningRatings != null);
   if (filters.day) filtered = filtered.filter(r => r.s.dayNumber === filters.day);

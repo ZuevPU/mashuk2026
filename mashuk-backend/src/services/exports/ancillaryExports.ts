@@ -145,6 +145,7 @@ export async function writeRatingDayExport(
   if (opts.groupId != null && !Number.isNaN(opts.groupId)) {
     conditions.push(eq(participants.groupId, opts.groupId));
   }
+  conditions.push(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
   const allP = await db.select().from(participants).where(and(...conditions));
   const ids = allP.map(p => p.id);
   const { computeLeaderboardScores, computeMedalCountLeaderboard } = await import('../leaderboardService.js');
@@ -233,6 +234,7 @@ export async function writeRatingTotalExport(
   if (opts.groupId != null && !Number.isNaN(opts.groupId)) {
     conditions.push(eq(participants.groupId, opts.groupId));
   }
+  conditions.push(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
   const allP = await db.select().from(participants).where(and(...conditions));
   const ids = allP.map(p => p.id);
   const { computeLeaderboardScores } = await import('../leaderboardService.js');
@@ -298,6 +300,7 @@ export async function writeRatingShiftExport(
   if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
     conditions.push(eq(participants.shiftId, opts.shiftId));
   }
+  conditions.push(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
   const allP = await db.select().from(participants).where(and(...conditions));
   const ids = allP.map(p => p.id);
   const { computeLeaderboardScores } = await import('../leaderboardService.js');
@@ -383,6 +386,7 @@ export async function writeRatingNominationExport(
   if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
     conditions.push(eq(participants.shiftId, opts.shiftId));
   }
+  conditions.push(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
   const allP = await db.select().from(participants).where(and(...conditions));
   const ids = allP.map(p => p.id);
   const { computeNominationLeaderboard, NOMINATION_LABELS } = await import('../leaderboardService.js');
@@ -442,6 +446,7 @@ export async function writeMedalLeaderboardExport(
   if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
     conditions.push(eq(participants.shiftId, opts.shiftId));
   }
+  conditions.push(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
   const allP = await db.select().from(participants).where(and(...conditions));
   const ids = allP.map(p => p.id);
   const {

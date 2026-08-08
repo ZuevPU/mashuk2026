@@ -43,8 +43,9 @@ function QuestionRows({
     <>
       {questions.map(q => {
         const days = q.dayNumbers?.length ? q.dayNumbers.join(', ') : String(q.dayNumber ?? '—');
+        const isHidden = q.isHidden;
         return (
-          <tr key={`${q.source || 'q'}-${q.id}`}>
+          <tr key={`${q.source || 'q'}-${q.id}`} className={isHidden ? 'adm-row-hidden' : ''} style={isHidden ? { opacity: 0.6, background: '#f5f5f5' } : undefined}>
             {!readOnly && (
               <td>
                 <input
@@ -85,7 +86,7 @@ function QuestionRows({
                     { label: 'Дублировать', onClick: () => onDuplicate(q.id) },
                     { label: 'Просмотр ответов', onClick: () => onViewAnswers(q) },
                     { label: 'Скопировать на другой день', onClick: () => onCopyToDay(q.id) },
-                    { label: 'Скрыть', onClick: () => onHide(q.id) },
+                    { label: q.isHidden ? 'Показать' : 'Скрыть', onClick: () => onHide(q.id) },
                     { label: 'Удалить', onClick: () => onDelete(q.id), danger: true },
                   ]}
                 />

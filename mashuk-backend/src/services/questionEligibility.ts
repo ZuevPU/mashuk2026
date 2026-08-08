@@ -29,6 +29,7 @@ type QuestionLike = {
   questionKind?: string | null;
   closeTime?: Date | null;
   publishTime?: Date | null;
+  linkedEventIds?: number[] | null;
 };
 
 /** Audience rules without day filter (for viewing own past answers). */
@@ -66,8 +67,17 @@ export function questionVisibleToParticipant(
   q: QuestionLike,
   participant: ParticipantLike,
   currentDay: number,
+  options?: { attendedEventIds?: Set<number> },
 ): boolean {
   if (q.isHidden) return false;
+
+  // Если вопрос привязан к блокам программы, показываем его только если участник был на них
+  if (Array.isArray(q.linkedEventIds) && q.linkedEventIds.length > 0) {
+    const attended = options?.attendedEventIds ?? new Set<number>();
+    const matched = q.linkedEventIds.some(id => attended.has(id));
+    if (!matched) return false;
+  }
+
   const block = q.block;
   const dayNum = q.dayNumber ?? 8;
   if (block === 'Точка Б' && currentDay >= dayNum) {

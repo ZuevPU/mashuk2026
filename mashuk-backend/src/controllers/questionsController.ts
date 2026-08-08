@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { eq, and, or, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  questions, questionOptions, answers, exchangeQuestions, exchangeAnswers, participants, events,
+  questions, questionOptions, answers, exchangeQuestions, exchangeAnswers, participants, events, eventAttendance,
 } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
@@ -93,17 +93,20 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
       ));
 
     const me = req.participant!;
-    const userAnswers = await db.select().from(answers)
-      .where(eq(answers.participantId, me.id));
+    const [userAnswers, userAttendance] = await Promise.all([
+      db.select().from(answers).where(eq(answers.participantId, me.id)),
+      db.select({ eventId: eventAttendance.eventId }).from(eventAttendance).where(eq(eventAttendance.participantId, me.id)),
+    ]);
     const answeredIds = new Set(userAnswers.map(a => a.questionId));
     const answerByQuestion = new Map(userAnswers.map(a => [a.questionId, a]));
+    const attendedEventIds = new Set(userAttendance.map(a => a.eventId));
 
     // Текущий день + уже отвеченные (в т.ч. прошлых дней) — чтобы можно было перечитать свои ответы
     const visible = list.filter(q => {
       if (answeredIds.has(q.id)) {
         return questionAudienceAllowsParticipant(q, me);
       }
-      return questionVisibleToParticipant(q, me, currentDay);
+      return questionVisibleToParticipant(q, me, currentDay, { attendedEventIds });
     });
 
     const result = visible
@@ -182,11 +185,15 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       res.status(403).json({ error: 'Question not available' });
       return;
     }
-    const [existingAnswer] = await db.select().from(answers)
-      .where(and(
-        eq(answers.participantId, req.participant!.id),
-        eq(answers.questionId, id),
-      )).limit(1);
+    const [existingAnswer, userAttendance] = await Promise.all([
+      db.select().from(answers)
+        .where(and(
+          eq(answers.participantId, req.participant!.id),
+          eq(answers.questionId, id),
+        )).limit(1)
+        .then(rows => rows[0] ?? null),
+      db.select({ eventId: eventAttendance.eventId }).from(eventAttendance).where(eq(eventAttendance.participantId, req.participant!.id)),
+    ]);
     const hasOwnAnswer = !!existingAnswer;
     if (question.isHidden && !hasOwnAnswer) {
       res.status(403).json({ error: 'Question not available' });
@@ -194,13 +201,15 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
     }
     const settings = await getForumSettings();
     const currentDay = resolveEffectiveCurrentDay(settings, new Date());
+    const attendedEventIds = new Set(userAttendance.map(a => a.eventId));
+
     // Свой ответ можно открыть даже если день вопроса уже прошёл
     if (hasOwnAnswer) {
       if (!questionAudienceAllowsParticipant(question, req.participant!)) {
         res.status(403).json({ error: 'Question not available' });
         return;
       }
-    } else if (!questionVisibleToParticipant(question, req.participant!, currentDay)) {
+    } else if (!questionVisibleToParticipant(question, req.participant!, currentDay, { attendedEventIds })) {
       res.status(403).json({ error: 'Question not available' });
       return;
     }
@@ -217,8 +226,14 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       programThemeCount: number;
       emptyReason: 'none' | 'none_in_program' | 'none_conducted_yet';
     } | null = null;
-    if (isLessonReflectionQuestion(question) && question.dayNumber) {
+
+    const isLessonRef = isLessonReflectionQuestion(question);
+    const hasLinkedEvents = Array.isArray(question.linkedEventIds) && question.linkedEventIds.length > 0;
+    const isAfterBlocks = question.questionKind === 'after_blocks' || question.reflectionKind === 'after_blocks';
+
+    if ((isLessonRef || hasLinkedEvents || isAfterBlocks) && question.dayNumber) {
       const { resolveActiveShiftId } = await import('../services/shiftService.js');
+      const { collectLessonSlotThemes } = await import('../services/lessonSlotEvents.js');
       const shiftId = question.shiftId ?? await resolveActiveShiftId();
       const dayEv = await db.select().from(events).where(and(
         eq(events.dayNumber, question.dayNumber),
@@ -226,7 +241,15 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       ));
       const published = dayEv.filter(e => e.isPublished !== false && e.dayPublished !== false);
       const collected = collectLessonSlotThemes(question, published, settings, new Date());
-      dayEvents = collected.items.map(e => ({
+      
+      let items = collected.items;
+      if (hasLinkedEvents) {
+        // Если есть явный список блоков от админа, ограничиваем выбор ими
+        const linkedIds = new Set(question.linkedEventIds);
+        items = items.filter(e => linkedIds.has(e.id));
+      }
+
+      dayEvents = items.map(e => ({
         id: e.id,
         title: e.title,
         place: e.place ?? null,
@@ -234,8 +257,8 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
         endTime: e.endTime ?? null,
       }));
       lessonPickMeta = {
-        programThemeCount: collected.programThemeCount,
-        emptyReason: collected.items.length > 0
+        programThemeCount: hasLinkedEvents ? question.linkedEventIds!.length : collected.programThemeCount,
+        emptyReason: dayEvents.length > 0
           ? 'none'
           : (collected.programThemeCount > 0 ? 'none_conducted_yet' : 'none_in_program'),
       };
@@ -243,7 +266,7 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
     res.json({
       question: {
         ...question,
-        requiresLessonPick: isLessonReflectionQuestion(question),
+        requiresLessonPick: isLessonRef || hasLinkedEvents || isAfterBlocks,
         allowRetry: question.allowRetry ?? false,
       },
       options,
@@ -329,7 +352,11 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
         emotionZoneLabel: zone ? EMOTION_ZONE_LABELS[zone] : null,
       };
     }
-    if (isLessonReflectionQuestion(question) && answerData && typeof answerData === 'object') {
+    const isLessonRef = isLessonReflectionQuestion(question);
+    const hasLinkedEvents = Array.isArray(question.linkedEventIds) && question.linkedEventIds.length > 0;
+    const isAfterBlocks = question.questionKind === 'after_blocks' || question.reflectionKind === 'after_blocks';
+
+    if ((isLessonRef || hasLinkedEvents || isAfterBlocks) && answerData && typeof answerData === 'object') {
       const slotIndex = lessonSlotIndexForQuestion(question);
       const payload = answerData as {
         eventId?: unknown;
@@ -353,18 +380,27 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
         ));
         const published = dayEv.filter(e => e.isPublished !== false && e.dayPublished !== false);
         const collected = collectLessonSlotThemes(question, published, settings, now);
-        if (collected.programThemeCount > 0 && collected.items.length === 0) {
-          res.status(400).json({
-            error: 'Уроки по программе ещё не начались — дождитесь проведения занятия',
-          });
-          return;
+        
+        let allowed = collected.items;
+        if (hasLinkedEvents) {
+          const linkedIds = new Set(question.linkedEventIds);
+          allowed = allowed.filter(e => linkedIds.has(e.id));
         }
-        if (collected.items.length > 0) {
+
+        if (collected.programThemeCount > 0 && allowed.length === 0 && !isLessonRef && !isAfterBlocks) {
+           // Если вопрос жестко привязан к блокам, и они еще не прошли
+           res.status(400).json({
+             error: 'Уроки, к которым привязан этот вопрос, ещё не начались',
+           });
+           return;
+        }
+
+        if (allowed.length > 0) {
           const eventId = Number(payload.eventId);
-          const picked = collected.items.find(e => e.id === eventId);
+          const picked = allowed.find(e => e.id === eventId);
           if (!picked) {
             res.status(400).json({
-              error: 'Выберите урок из списка уже проведённых тем программы',
+              error: 'Выберите урок из предложенного списка проведённых тем',
             });
             return;
           }

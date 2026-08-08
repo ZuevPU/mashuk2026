@@ -33,7 +33,7 @@ function buildListQuery(params: {
   if (params.tab === 'active') sp.set('status', 'published');
   if (params.tab === 'drafts') sp.set('status', 'draft');
   if (params.tab === 'archive') sp.set('status', 'archived');
-  if (params.tab === 'active') sp.set('includeHidden', 'false');
+  sp.set('includeHidden', 'true');
   if (params.q.trim()) sp.set('q', params.q.trim());
   if (params.categoryId) sp.set('categoryId', params.categoryId);
   if (params.day) sp.set('day', params.day);

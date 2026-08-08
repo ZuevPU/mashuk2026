@@ -28,7 +28,8 @@ export async function buildActivityDashboard(filters: AnalyticsFilters, req?: Ad
   const cohort = await loadCohortParticipants(filters, req);
   const ids = cohort.map(p => p.id);
 
-  const allP = cohort.length ? cohort : await db.select().from(participants).where(isNull(participants.selfDeletedAt));
+  let allP = cohort.length ? cohort : await db.select().from(participants).where(isNull(participants.selfDeletedAt));
+  allP = allP.filter(p => (p.direction || '').toLowerCase() !== 'организатор форума');
   const allIds = allP.map(p => p.id);
 
   const day = filters.day ?? settings.currentDay ?? 1;

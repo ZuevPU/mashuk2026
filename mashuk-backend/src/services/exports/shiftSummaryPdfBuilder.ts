@@ -17,6 +17,7 @@ import type { ArchiveProgress } from './participantArchiveExport.js';
 async function gatherShiftSummaryAggregates() {
   const shift = await resolveActiveShift();
   const conditions = [isNull(participants.selfDeletedAt)];
+  conditions.push(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
   if (shift?.id != null) {
     conditions.push(eq(participants.shiftId, shift.id));
   }

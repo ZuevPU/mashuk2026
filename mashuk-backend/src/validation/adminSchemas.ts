@@ -107,6 +107,7 @@ export const questionCreateSchema = z.object({
   }).nullable().optional(),
   pushOnPublish: optionalBool,
   pushTemplate: optionalString,
+  linkedEventIds: z.array(z.coerce.number().int().positive()).optional().default([]),
   publishTime: z.coerce.date().optional().nullable(),
   closeTime: z.coerce.date().optional().nullable(),
 }).strict();

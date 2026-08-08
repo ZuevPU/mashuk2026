@@ -4,7 +4,11 @@ import { eq } from 'drizzle-orm';
 import { emotionIdToZone, emptyZoneDistribution, incrementZone } from './emotionZones.js';
 
 export async function recalculateDailyStats(_direction = 'all'): Promise<void> {
-  const allParticipants = await db.select().from(participants);
+  let allParticipants = await db.select().from(participants);
+  
+  // Исключаем организаторов форума из статистики
+  allParticipants = allParticipants.filter(p => (p.direction || '').toLowerCase() !== 'организатор форума');
+
   const allAnswers = await db.select().from(answers);
   const publishedQuestions = await db.select().from(questions)
     .where(eq(questions.status, 'published'));

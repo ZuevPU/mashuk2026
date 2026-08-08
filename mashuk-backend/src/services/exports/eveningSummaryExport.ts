@@ -69,6 +69,7 @@ export async function writeEveningSummaryExport(
   filters: EveningSummaryExportFilters = {},
 ): Promise<void> {
   const conditions = [isNull(participants.selfDeletedAt)];
+  conditions.push(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
   if (filters.shiftId != null && !Number.isNaN(filters.shiftId)) {
     conditions.push(eq(participants.shiftId, filters.shiftId));
   }

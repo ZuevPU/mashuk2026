@@ -71,6 +71,7 @@ export type AdminQuestion = {
   pushTemplate?: string | null;
   allowRetry?: boolean;
   allowOther?: boolean;
+  linkedEventIds?: number[];
   showWhen?: { questionId: number; optionValues: string[] } | null;
   answerCount?: number;
   readOnly?: boolean;
@@ -104,6 +105,7 @@ export type QuestionDraft = {
   pushTemplate: string;
   allowRetry: boolean;
   allowOther: boolean;
+  linkedEventIds: number[];
   showWhenQuestionId: string;
   showWhenOptionValues: string[];
   status: string;
@@ -160,6 +162,7 @@ export function emptyDraft(day: number): QuestionDraft {
     pushTemplate: '',
     allowRetry: false,
     allowOther: false,
+    linkedEventIds: [],
     showWhenQuestionId: '',
     showWhenOptionValues: [],
     status: 'draft',
@@ -201,6 +204,7 @@ export function draftFromQuestion(q: AdminQuestion, options: QuestionOption[] = 
     pushTemplate: q.pushTemplate || '',
     allowRetry: !!q.allowRetry,
     allowOther: !!q.allowOther,
+    linkedEventIds: q.linkedEventIds ?? [],
     showWhenQuestionId: q.showWhen?.questionId != null ? String(q.showWhen.questionId) : '',
     showWhenOptionValues: q.showWhen?.optionValues ?? [],
     status: q.status || 'draft',
@@ -229,6 +233,7 @@ export function bodyFromDraft(draft: QuestionDraft, publish: boolean): Record<st
     sortOrder: Number(draft.sortOrder),
     pushOnPublish: draft.pushOnPublish,
     pushTemplate: draft.pushTemplate.trim() || null,
+    linkedEventIds: draft.linkedEventIds,
     allowRetry: draft.allowRetry,
     allowOther: ['choice', 'multi'].includes(draft.answerType) ? draft.allowOther : false,
     showWhen: draft.showWhenQuestionId && draft.showWhenOptionValues.length
@@ -267,5 +272,6 @@ export function buildListQuery(params: {
   if (params.audienceType) sp.set('audienceType', params.audienceType);
   if (params.status) sp.set('status', params.status);
   sp.set('includeArchived', 'false');
+  sp.set('includeHidden', 'true');
   return sp.toString();
 }

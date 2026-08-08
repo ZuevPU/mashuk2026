@@ -61,6 +61,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
 
   const [directions, setDirections] = useState<{ id: number; name: string }[]>([]);
   const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
+  const [allEvents, setAllEvents] = useState<any[]>([]);
 
   const readOnly = kindTab === 'exchange' || kindTab === 'org_director';
 
@@ -91,13 +92,15 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
     }
     const allRes = await adminFetch('/questions');
     setTotalAll(allRes.totalCount ?? allRes.questions?.length ?? 0);
-    const [dirRes, grpRes, shiftsRes] = await Promise.all([
+    const [dirRes, grpRes, shiftsRes, evRes] = await Promise.all([
       adminFetch('/directions').catch(() => ({ directions: [] })),
       adminFetch('/participants/groups').catch(() => ({ groups: [] })),
       adminFetch('/shifts').catch(() => ({ shifts: [] })),
+      adminFetch('/events').catch(() => ({ events: [] })),
     ]);
     setDirections(dirRes.directions || []);
     setGroups(grpRes.groups || []);
+    setAllEvents(evRes.events || []);
     const shifts = (shiftsRes.shifts || []) as { id: number; name: string; code?: string }[];
     const sid = getAdminEditingShiftId();
     const current = sid != null ? shifts.find(s => s.id === sid) : shifts[0];
@@ -268,11 +271,14 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
     }, 'Скопировано на день');
   };
 
-  const hideQuestion = (id: number) =>
+  const hideQuestion = (id: number) => {
+    const q = questions.find(x => x.id === id);
+    const nextHidden = !q?.isHidden;
     act(async () => {
-      await adminFetch(`/questions/${id}`, { method: 'PATCH', body: JSON.stringify({ isHidden: true }) });
+      await adminFetch(`/questions/${id}`, { method: 'PATCH', body: JSON.stringify({ isHidden: nextHidden }) });
       await loadQuestions();
-    }, 'Скрыто');
+    }, nextHidden ? 'Скрыто' : 'Отображается');
+  };
 
   const deleteQuestion = (id: number) => {
     if (!confirmDelete('Удалить вопрос?')) return;
@@ -299,6 +305,20 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
       setSelectedIds(new Set());
       await loadQuestions();
     }, 'Скопировано');
+  };
+
+  const bulkAction = (action: 'publish' | 'hide' | 'unhide' | 'draft' | 'delete') => {
+    if (selectedIds.size === 0) return;
+    if (action === 'delete' && !confirmDelete('Удалить выбранные вопросы?')) return;
+
+    act(async () => {
+      await adminFetch('/questions/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ ids: [...selectedIds], action }),
+      });
+      setSelectedIds(new Set());
+      await loadQuestions();
+    }, 'Действие выполнено');
   };
 
   const toggleSelect = (id: number) => {
@@ -432,6 +452,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
           directions={directions}
           groups={groups}
           roleOptions={ROLE_OPTIONS}
+          programEvents={allEvents}
         />
       )}
 
@@ -541,8 +562,16 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
           )}
 
           {!readOnly && selectedIds.size > 0 && (
-            <div className="form-row card" style={{ marginBottom: 12, alignItems: 'center' }}>
-              <span>Выбрано: {selectedIds.size}</span>
+            <div className="form-row card" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 12, alignItems: 'center', background: '#F5F0E8', padding: '8px 12px' }}>
+              <span style={{ fontWeight: 700 }}>Выбрано: {selectedIds.size}</span>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('publish')}>Опубликовать</button>
+                <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('hide')}>Скрыть</button>
+                <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('unhide')}>Показать</button>
+                <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('draft')}>В черновики</button>
+                <button type="button" className="adm-btn btn-danger adm-btn-xs" onClick={() => bulkAction('delete')}>Удалить</button>
+              </div>
+              <div style={{ width: '100%', height: 1, background: '#e0dad0', margin: '4px 0' }} />
               <span>→ день</span>
               <input type="number" className="adm-input" style={{ width: 64 }} min={1} max={8} value={bulkTargetDay} onChange={e => setBulkTargetDay(Number(e.target.value))} />
               <button type="button" className="adm-btn adm-btn-sm" onClick={bulkCopy}>Скопировать выбранные</button>

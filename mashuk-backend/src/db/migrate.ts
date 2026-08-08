@@ -69,6 +69,21 @@ async function ensurePushDeliveryStatusLen(pool: ReturnType<typeof createPool>):
   await pool.query(sql);
 }
 
+/** Add linked_event_ids to questions if missing (0052). */
+async function ensureQuestionLinkedEventsSchema(pool: ReturnType<typeof createPool>): Promise<void> {
+  const { rows } = await pool.query<{ ok: number }>(
+    `SELECT 1 AS ok FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'questions' AND column_name = 'linked_event_ids'
+     LIMIT 1`,
+  );
+  if (rows.length > 0) return;
+
+  const sqlPath = path.join(__dirname, '../../drizzle/0052_question_linked_events.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  console.warn('Repair: applying 0052_question_linked_events.sql');
+  await pool.query(sql);
+}
+
 export async function runMigrations(): Promise<void> {
   const pool = createPool(process.env.DATABASE_URL!);
   const db = drizzle(pool);
@@ -81,6 +96,7 @@ export async function runMigrations(): Promise<void> {
     await ensureTaskQrScansSchema(pool);
     await ensureDayExperimentsTripleSchema(pool);
     await ensurePushDeliveryStatusLen(pool);
+    await ensureQuestionLinkedEventsSchema(pool);
     await pool.end();
   }
 }

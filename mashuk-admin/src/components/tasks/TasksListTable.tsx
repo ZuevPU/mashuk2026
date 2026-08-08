@@ -82,8 +82,9 @@ export function TasksListTable({
             const days = t.dayNumbers?.length ? t.dayNumbers.join(', ') : String(t.dayNumber ?? '—');
             const short = (t.shortDescription || t.description || '').slice(0, 60);
             const isSelected = selectedIds.has(t.id);
+            const isHidden = t.isHidden;
             return (
-              <tr key={t.id} className={isSelected ? 'adm-row-selected' : ''}>
+              <tr key={t.id} className={`${isSelected ? 'adm-row-selected' : ''} ${isHidden ? 'adm-row-hidden' : ''}`} style={isHidden ? { opacity: 0.6, background: '#f5f5f5' } : undefined}>
                 <td>
                   <input
                     type="checkbox"

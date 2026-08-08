@@ -468,6 +468,8 @@ export const questions = pgTable('questions', {
   allowOther: boolean('allow_other').default(false),
   /** { questionId: number, optionValues: string[] } — show if parent answer matches */
   showWhen: jsonb('show_when').$type<{ questionId: number; optionValues: string[] } | null>(),
+  /** IDs of program events (blocks) that this question belongs to (for questionKind=after_blocks) */
+  linkedEventIds: jsonb('linked_event_ids').$type<number[]>().default([]),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('questions_shift_id_idx').on(table.shiftId),

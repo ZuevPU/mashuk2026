@@ -161,7 +161,10 @@ async function fetchTaskRows(params: CustomParams) {
 }
 
 async function fetchRatingDayRows(day: number, params: CustomParams) {
-  const allP = await db.select().from(participants).where(isNull(participants.selfDeletedAt));
+  const allP = await db.select().from(participants).where(and(
+    isNull(participants.selfDeletedAt),
+    ne(sql`LOWER(${participants.direction})`, 'организатор форума'),
+  ));
   const filtered = allP.filter(p => cohortFilter(p, params));
   const ids = filtered.map(p => p.id);
   const { computeLeaderboardScores } = await import('../leaderboardService.js');

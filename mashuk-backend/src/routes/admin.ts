@@ -136,6 +136,7 @@ router.post('/task-submissions/bulk-moderate', P('moderation', 'confirm'), wrap(
 router.patch('/task-submissions/:id', P('moderation', 'confirm'), wrap(admin.moderateTask));
 
 router.get('/questions', wrap(admin.crudQuestions.list));
+router.post('/questions/bulk', requireAdminRole('settings'), wrap(admin.crudQuestions.bulkAction));
 router.get('/questions/:id', wrap(admin.crudQuestions.getOne));
 router.post('/questions', requireAdminRole('settings'), wrap(admin.crudQuestions.create));
 router.patch('/questions/:id', requireAdminRole('settings'), wrap(admin.crudQuestions.update));
