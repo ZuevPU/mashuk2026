@@ -407,6 +407,12 @@ export const dayExperiments = pgTable('day_experiments', {
   title: varchar('title', { length: 255 }).notNull(),
   body: text('body'),
   hint: text('hint'),
+  title2: varchar('title2', { length: 255 }),
+  body2: text('body2'),
+  hint2: text('hint2'),
+  title3: varchar('title3', { length: 255 }),
+  body3: text('body3'),
+  hint3: text('hint3'),
   status: varchar('status', { length: 32 }).default('published').notNull(),
 }, (table) => [
   index('day_experiments_day_role_idx').on(table.dayNumber, table.roleKey),

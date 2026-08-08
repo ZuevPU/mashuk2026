@@ -223,6 +223,12 @@ export const dayAdviceUpsertSchema = z.object({
   title: z.string().min(1).max(60),
   body: z.string().max(500).optional().nullable(),
   hint: z.string().optional().nullable(),
+  title2: z.string().max(60).optional().nullable(),
+  body2: z.string().max(500).optional().nullable(),
+  hint2: z.string().optional().nullable(),
+  title3: z.string().max(60).optional().nullable(),
+  body3: z.string().max(500).optional().nullable(),
+  hint3: z.string().optional().nullable(),
   status: adviceStatusEnum.optional(),
 }).strict();
 

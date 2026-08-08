@@ -37,6 +37,21 @@ function isBreak(e: { blockType?: string | null }): boolean {
   return (e.blockType || '').toLowerCase() === 'break';
 }
 
+function isLessonEvent(e: { title: string; blockType?: string | null }): boolean {
+  const t = e.title.toLowerCase();
+  const bt = (e.blockType || '').toLowerCase();
+  // "Уроки о важном", "Темы уроков", "Открытые уроки" и т.п.
+  return (
+    t.includes('урок') ||
+    bt.includes('урок') ||
+    bt.includes('lesson') ||
+    t.includes('важн') ||
+    bt.includes('important') ||
+    t.includes('тема') ||
+    bt.includes('topic')
+  );
+}
+
 function childrenOf(parentId: number, byParent: Map<number, LessonPickEvent[]>): LessonPickEvent[] {
   return (byParent.get(parentId) || []).slice().sort((a, b) => (
     (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id
@@ -84,7 +99,7 @@ export function filterEventsForLessonSlot(
   const idx = lessonSlotIndex(question);
   if (!idx || !question.dayNumber) {
     // No slot window — still prefer themes over parent containers
-    const roots = dayEvents.filter(e => e.parentEventId == null && !isBreak(e));
+    const roots = dayEvents.filter(e => e.parentEventId == null && !isBreak(e) && isLessonEvent(e));
     const themes = roots.flatMap(r => lessonThemeLeaves(r, byParent));
     const seen = new Set<number>();
     return themes.filter(e => {
@@ -97,7 +112,7 @@ export function filterEventsForLessonSlot(
   const { openMin, closeMin } = slotWindowMinutes(idx);
   const dateKey = forumDayDateKey(settings.startDate ?? null, question.dayNumber);
   if (!dateKey) {
-    const roots = dayEvents.filter(e => e.parentEventId == null && !isBreak(e));
+    const roots = dayEvents.filter(e => e.parentEventId == null && !isBreak(e) && isLessonEvent(e));
     return roots.flatMap(r => lessonThemeLeaves(r, byParent)).map(e => mapPick(e));
   }
 
@@ -106,6 +121,7 @@ export function filterEventsForLessonSlot(
 
   const overlapping = dayEvents.filter(e => {
     if (isBreak(e)) return false;
+    if (!isLessonEvent(e)) return false;
     const { start, end } = resolveEventInterval(e, settings);
     if (!start) return false;
     const evStart = start.getTime();

@@ -214,19 +214,35 @@ export const StatsRow: React.FC<{
   );
 };
 
+export interface ExperimentItem {
+  id: number;
+  title: string;
+  body?: string | null;
+  hint?: string | null;
+  title2?: string | null;
+  body2?: string | null;
+  hint2?: string | null;
+  title3?: string | null;
+  body3?: string | null;
+  hint3?: string | null;
+  roleName?: string | null;
+}
+
 export const RoleOfDayCard: React.FC<{
   name: string;
   quadrant?: string | null;
   essence?: string | null;
-  experiment?: {
-    title: string;
-    body?: string | null;
-    hint?: string | null;
-    roleName?: string | null;
-  } | null;
+  experiment?: ExperimentItem | null;
 }> = ({ name, quadrant, essence, experiment }) => {
   const [expOpen, setExpOpen] = React.useState(false);
   const toggleExp = () => setExpOpen(o => !o);
+
+  const items = [];
+  if (experiment) {
+    if (experiment.title) items.push({ t: experiment.title, b: experiment.body, h: experiment.hint });
+    if (experiment.title2) items.push({ t: experiment.title2, b: experiment.body2, h: experiment.hint2 });
+    if (experiment.title3) items.push({ t: experiment.title3, b: experiment.body3, h: experiment.hint3 });
+  }
 
   return (
     <div className="m-card m-role-day" style={{ background: 'linear-gradient(135deg,#FFF3E0 0%,#FFECB3 100%)' }}>
@@ -235,7 +251,7 @@ export const RoleOfDayCard: React.FC<{
       {quadrant && <div style={{ fontSize: 11, color: '#B8621A', marginTop: 2 }}>{quadrant}</div>}
       {essence && <div style={{ fontSize: 12, marginTop: 8, lineHeight: 1.4, color: '#5D4B37' }}>{essence}</div>}
 
-      {experiment && (
+      {items.length > 0 && (
         <div className="m-role-exp" style={{ marginTop: 12 }}>
           <button
             type="button"
@@ -244,24 +260,31 @@ export const RoleOfDayCard: React.FC<{
             onClick={toggleExp}
           >
             <span className="m-role-exp-toggle-text">
-              <span className="m-role-exp-toggle-title">Эксперимент дня – сегодня ты можешь попробовать…</span>
+              <span className="m-role-exp-toggle-title">
+                {items.length > 1 ? `Советы дня (${items.length})` : 'Эксперимент дня'} – попробуй сегодня…
+              </span>
               {!expOpen && (
-                <span className="m-role-exp-toggle-hint">разверни рекомендацию дня</span>
+                <span className="m-role-exp-toggle-hint">разверни рекомендации дня</span>
               )}
             </span>
             <span className="m-role-exp-chevron" aria-hidden>{expOpen ? '▾' : '▸'}</span>
           </button>
           {expOpen && (
             <div className="m-role-exp-body">
-              {experiment.title && (
-                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, lineHeight: 1.35 }}>{experiment.title}</div>
-              )}
-              {experiment.body && (
-                <p style={{ fontSize: 13, lineHeight: 1.45, margin: '0 0 8px', color: '#3D3429' }}>{experiment.body}</p>
-              )}
-              {experiment.hint && (
-                <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>{experiment.hint}</div>
-              )}
+              {items.map((it, i) => (
+                <div key={i} style={{ borderTop: i > 0 ? '1px dashed rgba(61,52,41,0.2)' : 'none', paddingTop: i > 0 ? 10 : 0, marginTop: i > 0 ? 10 : 0 }}>
+                  {items.length > 1 && <div style={{ fontSize: 10, fontWeight: 800, color: '#B8621A', marginBottom: 4 }}>СОВЕТ №{i + 1}</div>}
+                  {it.t && (
+                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, lineHeight: 1.35 }}>{it.t}</div>
+                  )}
+                  {it.b && (
+                    <p style={{ fontSize: 13, lineHeight: 1.45, margin: '0 0 8px', color: '#3D3429' }}>{it.b}</p>
+                  )}
+                  {it.h && (
+                    <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>{it.h}</div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -271,13 +294,15 @@ export const RoleOfDayCard: React.FC<{
 };
 
 export const ExperimentCard: React.FC<{
-  title: string;
-  body?: string | null;
-  hint?: string | null;
-  roleName?: string | null;
-  onSaveFixation?: () => void;
-}> = ({ title, body, hint, roleName, onSaveFixation }) => {
+  experiment: ExperimentItem;
+  onSaveFixation?: (item: { t: string, b?: string | null }) => void;
+}> = ({ experiment, onSaveFixation }) => {
   const [open, setOpen] = React.useState(false);
+  const items = [];
+  if (experiment.title) items.push({ t: experiment.title, b: experiment.body, h: experiment.hint });
+  if (experiment.title2) items.push({ t: experiment.title2, b: experiment.body2, h: experiment.hint2 });
+  if (experiment.title3) items.push({ t: experiment.title3, b: experiment.body3, h: experiment.hint3 });
+
   return (
     <div className="m-card">
       <button
@@ -287,28 +312,35 @@ export const ExperimentCard: React.FC<{
         onClick={() => setOpen(o => !o)}
       >
         <span className="m-role-exp-toggle-text">
-          <span className="m-role-exp-toggle-title">Эксперимент дня – сегодня ты можешь попробовать…</span>
+          <span className="m-role-exp-toggle-title">
+            {items.length > 1 ? `Советы дня (${items.length})` : 'Эксперимент дня'} – попробуй сегодня…
+          </span>
           {!open && (
-            <span className="m-role-exp-toggle-hint">разверни рекомендацию дня</span>
+            <span className="m-role-exp-toggle-hint">разверни рекомендации дня</span>
           )}
         </span>
         <span className="m-role-exp-chevron" aria-hidden>{open ? '▾' : '▸'}</span>
       </button>
       {open && (
         <div className="m-role-exp-body" style={{ marginTop: 10 }}>
-          {roleName && (
+          {experiment.roleName && (
             <div style={{ fontSize: 11, marginBottom: 8 }}>
-              Развиваю сегодня · <strong style={{ color: '#B8621A' }}>◆ {roleName}</strong>
+              Развиваю сегодня · <strong style={{ color: '#B8621A' }}>◆ {experiment.roleName}</strong>
             </div>
           )}
-          {title && <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>{title}</div>}
-          {body && <p style={{ fontSize: 13, lineHeight: 1.45, margin: '0 0 8px' }}>{body}</p>}
-          {hint && <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>{hint}</div>}
-          {onSaveFixation && (
-            <Button size="m" stretched mode="secondary" style={{ marginTop: 4 }} onClick={onSaveFixation}>
-              Сохранить фиксацию в копилку
-            </Button>
-          )}
+          {items.map((it, i) => (
+            <div key={i} style={{ borderTop: i > 0 ? '1px dashed rgba(61,52,41,0.1)' : 'none', paddingTop: i > 0 ? 12 : 0, marginTop: i > 0 ? 12 : 0 }}>
+              {items.length > 1 && <div style={{ fontSize: 10, fontWeight: 800, color: '#B8621A', marginBottom: 4 }}>СОВЕТ №{i + 1}</div>}
+              {it.t && <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>{it.t}</div>}
+              {it.b && <p style={{ fontSize: 13, lineHeight: 1.45, margin: '0 0 8px' }}>{it.b}</p>}
+              {it.h && <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>{it.h}</div>}
+              {onSaveFixation && (
+                <Button size="s" mode="secondary" onClick={() => onSaveFixation(it)}>
+                  Сохранить совет №{items.length > 1 ? i + 1 : ''} в копилку
+                </Button>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

@@ -160,8 +160,8 @@ export function AdviceCatalogSection({
   return (
     <>
       <AdminPageHero
-        title={`Каталог советов · ${totalInDb} советов`}
-        hint={`Каждой паре (роль × день) — ровно один совет (${totalInDb}/${TOTAL_CELLS} ячеек). Участник на главной видит только опубликованные (дни 2–7).`}
+        title={`Каталог советов · ${totalInDb} групп`}
+        hint={`Каждой паре (роль × день) — от 1 до 3 советов (${totalInDb}/${TOTAL_CELLS} ячеек). Участник на главной видит только опубликованные (дни 2–7).`}
       >
         <div className="adm-forum-toolbar adm-advice-toolbar">
           <input
@@ -225,9 +225,9 @@ export function AdviceCatalogSection({
               <tr>
                 <th>Роль</th>
                 <th>День</th>
-                <th>Заголовок</th>
-                <th>Текст</th>
-                <th>Превью «Совет дня»</th>
+                <th>Совет дня №1</th>
+                <th>Совет дня №2</th>
+                <th>Совет дня №3</th>
                 <th>Статус</th>
                 <th>Действия</th>
               </tr>
@@ -237,13 +237,29 @@ export function AdviceCatalogSection({
                 <tr key={e.id}>
                   <td>{roleName(e.roleKey)}</td>
                   <td>{e.dayNumber}</td>
-                  <td>{e.title}</td>
-                  <td className="adm-role-table-desc">
-                    {(e.body || '').slice(0, 120)}{(e.body || '').length > 120 ? '…' : ''}
-                  </td>
                   <td style={{ fontSize: 12, maxWidth: 160, color: '#555' }}>
                     <strong>{e.title}</strong>
                     <div>{(e.body || '').slice(0, 80)}{(e.body || '').length > 80 ? '…' : ''}</div>
+                  </td>
+                  <td style={{ fontSize: 12, maxWidth: 160, color: '#555' }}>
+                    {e.title2 ? (
+                      <>
+                        <strong>{e.title2}</strong>
+                        <div>{(e.body2 || '').slice(0, 80)}{(e.body2 || '').length > 80 ? '…' : ''}</div>
+                      </>
+                    ) : (
+                      <span className="adm-muted">—</span>
+                    )}
+                  </td>
+                  <td style={{ fontSize: 12, maxWidth: 160, color: '#555' }}>
+                    {e.title3 ? (
+                      <>
+                        <strong>{e.title3}</strong>
+                        <div>{(e.body3 || '').slice(0, 80)}{(e.body3 || '').length > 80 ? '…' : ''}</div>
+                      </>
+                    ) : (
+                      <span className="adm-muted">—</span>
+                    )}
                   </td>
                   <td>{statusLabel(e.status)}</td>
                   <td>

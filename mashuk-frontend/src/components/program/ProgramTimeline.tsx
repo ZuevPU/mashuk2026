@@ -8,6 +8,8 @@ export interface ProgramChildEvent {
   place?: string | null;
   time: string;
   endTime?: string;
+  description?: string;
+  descriptionHtml?: string | null;
   tags?: string[];
   speakers?: ProgramSpeakerInfo[];
   hasSubSessions?: boolean;
@@ -87,8 +89,8 @@ export function ProgramTimeline({
                 endTime: ch.endTime,
                 tags: ch.tags,
                 speakers: ch.speakers,
-                description: undefined,
-                descriptionHtml: undefined,
+                description: ch.description,
+                descriptionHtml: ch.descriptionHtml,
                 subtitle: nestedSub,
                 hasSubSessions: false,
                 children: [],

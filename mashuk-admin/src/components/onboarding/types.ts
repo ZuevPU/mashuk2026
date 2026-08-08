@@ -49,6 +49,12 @@ export type DayExperiment = {
   title: string;
   body?: string | null;
   hint?: string | null;
+  title2?: string | null;
+  body2?: string | null;
+  hint2?: string | null;
+  title3?: string | null;
+  body3?: string | null;
+  hint3?: string | null;
   status?: string | null;
 };
 

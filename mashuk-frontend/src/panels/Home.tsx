@@ -282,24 +282,16 @@ export const HomePanel: React.FC<{
             name={d.roleOfDay.name}
             quadrant={d.roleOfDay.quadrant}
             essence={d.roleOfDay.essence}
-            experiment={d.experiment && d.currentDay !== 8 ? {
-              title: d.experiment.title,
-              body: d.experiment.body,
-              hint: d.experiment.hint,
-              roleName: d.experiment.roleName,
-            } : null}
+            experiment={d.experiment && d.currentDay !== 8 ? d.experiment : null}
           />
         )}
 
         {d.experiment && d.currentDay !== 8 && !d.roleOfDay && (
           <ExperimentCard
-            title={d.experiment.title}
-            body={d.experiment.body}
-            hint={d.experiment.hint}
-            roleName={d.experiment.roleName}
-            onSaveFixation={() => openQuickCapture(setModal, {
+            experiment={d.experiment}
+            onSaveFixation={(it) => openQuickCapture(setModal, {
               initialTags: ['мысль'],
-              prefillText: [d.experiment!.title, d.experiment!.body].filter(Boolean).join('\n\n'),
+              prefillText: [it.t, it.b].filter(Boolean).join('\n\n'),
               ...piggyCaptureOpts(() => setSnackbar('Фиксация сохранена в копилку')),
             })}
           />

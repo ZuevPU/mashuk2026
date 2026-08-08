@@ -11,6 +11,12 @@ export type DayAdviceRow = {
   title: string;
   body?: string | null;
   hint?: string | null;
+  title2?: string | null;
+  body2?: string | null;
+  hint2?: string | null;
+  title3?: string | null;
+  body3?: string | null;
+  hint3?: string | null;
   status: AdviceStatus;
 };
 
@@ -22,6 +28,12 @@ export function validateAdvicePayload(raw: {
   title: unknown;
   body?: unknown;
   hint?: unknown;
+  title2?: unknown;
+  body2?: unknown;
+  hint2?: unknown;
+  title3?: unknown;
+  body3?: unknown;
+  hint3?: unknown;
   status?: unknown;
 }): { ok: true; data: DayAdviceRow } | { ok: false; error: string } {
   const dayNumber = Number(raw.dayNumber);
@@ -38,6 +50,19 @@ export function validateAdvicePayload(raw: {
   const body = raw.body == null || raw.body === '' ? null : String(raw.body);
   if (body && body.length > 500) return { ok: false, error: 'body max 500 characters' };
   const hint = raw.hint == null || raw.hint === '' ? null : String(raw.hint);
+
+  const title2 = raw.title2 == null || raw.title2 === '' ? null : String(raw.title2).trim();
+  if (title2 && title2.length > 60) return { ok: false, error: 'title2 max 60 characters' };
+  const body2 = raw.body2 == null || raw.body2 === '' ? null : String(raw.body2);
+  if (body2 && body2.length > 500) return { ok: false, error: 'body2 max 500 characters' };
+  const hint2 = raw.hint2 == null || raw.hint2 === '' ? null : String(raw.hint2);
+
+  const title3 = raw.title3 == null || raw.title3 === '' ? null : String(raw.title3).trim();
+  if (title3 && title3.length > 60) return { ok: false, error: 'title3 max 60 characters' };
+  const body3 = raw.body3 == null || raw.body3 === '' ? null : String(raw.body3);
+  if (body3 && body3.length > 500) return { ok: false, error: 'body3 max 500 characters' };
+  const hint3 = raw.hint3 == null || raw.hint3 === '' ? null : String(raw.hint3);
+
   const statusRaw = raw.status == null || raw.status === '' ? 'draft' : String(raw.status);
   if (statusRaw !== 'draft' && statusRaw !== 'published') {
     return { ok: false, error: 'status must be draft or published' };
@@ -50,6 +75,12 @@ export function validateAdvicePayload(raw: {
       title,
       body,
       hint,
+      title2,
+      body2,
+      hint2,
+      title3,
+      body3,
+      hint3,
       status: statusRaw as AdviceStatus,
     },
   };
@@ -98,6 +129,12 @@ export async function upsertDayAdvice(data: DayAdviceRow) {
         title: data.title,
         body: data.body,
         hint: data.hint,
+        title2: data.title2,
+        body2: data.body2,
+        hint2: data.hint2,
+        title3: data.title3,
+        body3: data.body3,
+        hint3: data.hint3,
         status: data.status,
       })
       .where(eq(dayExperiments.id, existing.id))
@@ -111,6 +148,12 @@ export async function upsertDayAdvice(data: DayAdviceRow) {
     title: data.title,
     body: data.body,
     hint: data.hint,
+    title2: data.title2,
+    body2: data.body2,
+    hint2: data.hint2,
+    title3: data.title3,
+    body3: data.body3,
+    hint3: data.hint3,
     status: data.status,
   }).returning();
   return { row: created!, created: true };

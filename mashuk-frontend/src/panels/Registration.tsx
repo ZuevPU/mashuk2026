@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Panel, PanelHeader, Group, FormItem, CustomSelect, Button, Div, Cell,
-  Snackbar, Input, Checkbox, Progress,
+  Snackbar, Input, Progress,
 } from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
@@ -63,8 +63,6 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   const [regionSelect, setRegionSelect] = useState<string>('');
   const [regionOther, setRegionOther] = useState('');
   const region = regionSelect === REGION_OTHER_VALUE ? regionOther.trim() : regionSelect;
-  const [consentPd, setConsentPd] = useState(false);
-  const [consentAnalytics, setConsentAnalytics] = useState(false);
   const [consentPdMeta, setConsentPdMeta] = useState<{ version: number; title: string; body: string } | null>(null);
   const [consentAnalyticsMeta, setConsentAnalyticsMeta] = useState<{ version: number; title: string; body: string } | null>(null);
   const [groupAssignMode, setGroupAssignMode] = useState<'list' | 'auto'>('list');
@@ -205,7 +203,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
 
   const canGoStep1 = Boolean(
     directionId && age && Number(age) >= 14 && Number(age) <= 100
-    && workplace.trim() && position.trim() && region && consentPd && consentAnalytics
+    && workplace.trim() && position.trim() && region
     && (groupAssignMode !== 'list' || groups.length === 0 || groupId),
   );
   const canGoStep2 = visibleGoalQuestionsFilled(goalQuestions, goalAnswers);
@@ -325,22 +323,13 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 />
               </FormItem>
             )}
-            <FormItem top="Согласия *">
-              <Checkbox checked={consentPd} onChange={e => setConsentPd(e.target.checked)}>
-                {consentPdMeta?.title || 'Согласен на обработку персональных данных'}
-                {consentPdMeta?.version ? ` (v${consentPdMeta.version})` : ''}
-              </Checkbox>
-              {consentPdMeta?.body && (
-                <div style={{ fontSize: 11, color: '#666', margin: '4px 0 10px', lineHeight: 1.4 }}>{consentPdMeta.body}</div>
-              )}
-              <Checkbox checked={consentAnalytics} onChange={e => setConsentAnalytics(e.target.checked)}>
-                {consentAnalyticsMeta?.title || 'Согласен на обезличенную аналитику ответов'}
-                {consentAnalyticsMeta?.version ? ` (v${consentAnalyticsMeta.version})` : ''}
-              </Checkbox>
-              {consentAnalyticsMeta?.body && (
-                <div style={{ fontSize: 11, color: '#666', margin: '4px 0 10px', lineHeight: 1.4 }}>{consentAnalyticsMeta.body}</div>
-              )}
-            </FormItem>
+            <Div style={{ marginBottom: 12 }}>
+              <p style={{ margin: 0, fontSize: 14, lineHeight: 1.45, color: 'var(--vkui--color_text_primary)' }}>
+                Всё официально: те согласия, что ты оставил на бумаге, работают и здесь.
+                Ты заходишь в приложение — а мы подхватываем твой профиль, считаем баллы и ведем по программе.
+                Машук — это про доверие и крутой движ. Рады, что ты с нами! ⚡️
+              </p>
+            </Div>
             <Button size="l" stretched disabled={!canGoStep1} onClick={() => setStep(2)}>
               Дальше → Целеполагание
             </Button>

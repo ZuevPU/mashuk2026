@@ -295,6 +295,8 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
       place: string | null;
       time: string;
       endTime: string;
+      description?: string | null;
+      descriptionHtml?: string | null;
       tags: string[];
       speakers: ReturnType<typeof mapSpeakers>;
       hasSubSessions: boolean;
@@ -325,6 +327,8 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
         place: c.place,
         time: c.timeSlot ? formatTime(iv.start) : '',
         endTime: c.timeSlot ? formatTime(iv.end) : '',
+        description: c.description,
+        descriptionHtml: c.descriptionHtml,
         tags: (c.tags as string[]) || [],
         speakers,
         hasSubSessions: nested.length > 0 || c.hasSubSessions === true,
@@ -473,6 +477,8 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
         id: s.event.id,
         eventId: s.event.id,
         title: s.event.title,
+        description: s.event.description,
+        descriptionHtml: s.event.descriptionHtml,
         time: s.event.timeSlot || null,
         place: s.event.place || null,
         subtitle: s.matchedThemes.length
