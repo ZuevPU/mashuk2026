@@ -15,6 +15,7 @@ import {
   formatTs,
   fullName,
 } from './exportCommon.js';
+import { isEveningSummaryQuestion } from './eveningExportData.js';
 import { touchpointTypeForQuestion } from './touchpointFilter.js';
 import { loadEnrichedParticipants } from './participantEnrichment.js';
 import { roleLabel } from './exportLabels.js';
@@ -253,7 +254,11 @@ export async function buildParticipantActivityWide(params: WideParams = {}): Pro
 
       const state = pStates.find(s => s.dayNumber === day);
       const ratings = (state?.eveningRatings ?? null) as Record<string, unknown> | null;
-      const eveningDone = ratings ? 1 : 0;
+      const eveningFromAnswers = dayAnswers.some(a => {
+        const q = a.questionId != null ? qById.get(a.questionId) : undefined;
+        return q ? isEveningSummaryQuestion(q) : false;
+      });
+      const eveningDone = ratings || eveningFromAnswers ? 1 : 0;
 
       const daySubs = pSubs.filter(r => r.t?.dayNumber === day);
       const approved = daySubs.filter(r => r.s.status === 'approved');
@@ -331,7 +336,11 @@ export async function buildParticipantActivityWide(params: WideParams = {}): Pro
           return q && touchpointTypeForQuestion(q) === 'checkin';
         });
         const state = pStates.find(s => s.dayNumber === d);
-        const evening = state?.eveningRatings ? 1 : 0;
+        const eveningFromAnswers = dayAnswers.some(a => {
+          const q = a.questionId != null ? qById.get(a.questionId) : undefined;
+          return q ? isEveningSummaryQuestion(q) : false;
+        });
+        const evening = state?.eveningRatings || eveningFromAnswers ? 1 : 0;
         const daySubs = pSubs.filter(r => r.t?.dayNumber === d);
         answersTotal += dayAnswers.length;
         if (hasCheckin) checkinDays += 1;

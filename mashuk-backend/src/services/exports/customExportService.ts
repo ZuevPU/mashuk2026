@@ -87,6 +87,7 @@ type CustomParams = {
   group?: string;
   type?: string;
   participantId?: number;
+  shiftId?: number;
 };
 
 function cohortFilter(p: typeof participants.$inferSelect | null, params: CustomParams): boolean {
@@ -107,6 +108,7 @@ async function fetchAnswerRows(source: 'answers' | 'reflections', params: Custom
     direction: params.direction,
     group: params.group,
     participantId: params.participantId,
+    shiftId: params.shiftId,
     touchpoint: source === 'reflections' ? 'all' : params.type,
     publishedOnly: true,
   });
@@ -203,24 +205,32 @@ async function fetchPiggybankRows(req: AdminRequest, params: CustomParams) {
   }));
 }
 
+async function resolveParamsShiftId(req: AdminRequest, params: CustomParams): Promise<CustomParams> {
+  if (params.shiftId != null && !Number.isNaN(params.shiftId)) return params;
+  const { resolveAdminShiftId } = await import('../shiftService.js');
+  return { ...params, shiftId: await resolveAdminShiftId(req) };
+}
+
 async function buildRowsForSource(
   req: AdminRequest,
   source: ExportSourceId,
   params: CustomParams,
 ): Promise<Record<string, unknown>[]> {
+  const withShift = await resolveParamsShiftId(req, params);
   switch (source) {
     case 'answers':
-      return fetchAnswerRows('answers', params);
+      return fetchAnswerRows('answers', withShift);
     case 'reflections':
-      return fetchAnswerRows('reflections', params);
+      return fetchAnswerRows('reflections', withShift);
     case 'participants':
-      return fetchParticipantRows(params);
+      return fetchParticipantRows(withShift);
     case 'participant_activity_wide': {
       const built = await buildParticipantActivityWide({
-        day: params.day,
-        direction: params.direction,
-        group: params.group,
-        participantId: params.participantId,
+        day: withShift.day,
+        direction: withShift.direction,
+        group: withShift.group,
+        participantId: withShift.participantId,
+        shiftId: withShift.shiftId,
       });
       return built.rows;
     }
@@ -250,19 +260,22 @@ export async function writeCustomExportToFile(
   const fileName = `${safeName}_${opts.historyId.slice(0, 8)}.xlsx`;
   const filePath = path.join(getExportStorageDir(), fileName);
 
+  const params = await resolveParamsShiftId(req, opts.params);
+
   if (opts.source === 'participant_activity_wide') {
     const written = await writeParticipantActivityWideToFile(filePath, {
-      day: opts.params.day,
-      direction: opts.params.direction,
-      group: opts.params.group,
-      participantId: opts.params.participantId,
+      day: params.day,
+      direction: params.direction,
+      group: params.group,
+      participantId: params.participantId,
+      shiftId: params.shiftId,
     }, opts.columns);
     return { filePath, fileName, byteSize: written.byteSize };
   }
 
   const keys = opts.columns.length ? opts.columns : [...ANSWER_ROW_HEADERS];
   const labels = resolveColumnLabels(opts.source, keys);
-  const rows = await buildRowsForSource(req, opts.source, opts.params);
+  const rows = await buildRowsForSource(req, opts.source, params);
   const wb = await createWorkbook();
   const ws = wb.addWorksheet('Данные');
   ws.addRow(labels.map(c => c.label));

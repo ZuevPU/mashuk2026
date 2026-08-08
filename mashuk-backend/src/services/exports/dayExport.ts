@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, or, isNull } from 'drizzle-orm';
 import type { Response } from 'express';
 import { db } from '../../db/index.js';
 import {
@@ -6,30 +6,44 @@ import {
 } from '../../db/schema.js';
 import { inferReflectionDepth } from '../reflectionDepth.js';
 import { isPublishedStatus } from '../publishStatus.js';
-import { EVENING_SCALE_KEYS } from '../touchpointTemplates.js';
 import {
-  ANSWER_ROW_HEADERS_RU, addReadmeSheet, answerText, buildAnswerRow, filterAnswersByTouchpoint, fullName,
+  ANSWER_ROW_HEADERS_RU, addReadmeSheet, answerText, buildAnswerRow, filterAnswersByTouchpoint, formatTs, fullName,
 } from './exportCommon.js';
 import { queryAnswerJoinRows } from './answerJoinQuery.js';
+import {
+  collectEveningExportRows,
+  formatEveningFieldValue,
+} from './eveningExportData.js';
 import { experimentStatusLabel, roleLabel, submissionStatusLabel } from './exportLabels.js';
 import { normalizeExportTouchpointFilter } from './touchpointFilter.js';
 import { createWorkbook, sendWorkbook } from './workbook.js';
 
-export async function loadDayAnswerRows(day: number) {
+export async function loadDayAnswerRows(day: number, shiftId?: number | null) {
   const dayQuestions = await db.select().from(questions)
     .where(eq(questions.dayNumber, day));
-  const publishedQ = dayQuestions.filter(q => isPublishedStatus(q.status));
+  const publishedQ = dayQuestions.filter(q => {
+    if (!isPublishedStatus(q.status)) return false;
+    if (shiftId == null || Number.isNaN(shiftId)) return true;
+    return q.shiftId == null || q.shiftId === shiftId;
+  });
   const qIds = publishedQ.map(q => q.id);
   return queryAnswerJoinRows({
     day,
     questionIds: qIds,
     publishedOnly: false, // already filtered to published ids
+    shiftId: shiftId ?? undefined,
   });
 }
 
-export async function writeDayWorkbook(res: Response, day: number, typeRaw: string | undefined): Promise<void> {
+export async function writeDayWorkbook(
+  res: Response,
+  day: number,
+  typeRaw: string | undefined,
+  opts: { shiftId?: number | null } = {},
+): Promise<void> {
   const type = normalizeExportTouchpointFilter(typeRaw);
-  let dayAns = await loadDayAnswerRows(day);
+  const shiftId = opts.shiftId ?? null;
+  let dayAns = await loadDayAnswerRows(day, shiftId);
   dayAns = filterAnswersByTouchpoint(dayAns, type);
 
   const dayEvents = await db.select().from(events).where(eq(events.dayNumber, day));
@@ -43,18 +57,32 @@ export async function writeDayWorkbook(res: Response, day: number, typeRaw: stri
     .leftJoin(tasks, eq(taskSubmissions.taskId, tasks.id));
   const daySubs = subs.filter(r => r.t && (r.t.dayNumber === day || dayTasks.some(t => t.id === r.t!.id)));
 
+  const roleConds = [eq(participantDayState.dayNumber, day)];
+  if (shiftId != null && !Number.isNaN(shiftId)) {
+    roleConds.push(or(eq(participants.shiftId, shiftId), isNull(participants.shiftId))!);
+  }
   const roleRows = await db.select({ s: participantDayState, p: participants })
     .from(participantDayState)
-    .leftJoin(participants, eq(participantDayState.participantId, participants.id));
-  const dayRoles = roleRows.filter(r => r.s.dayNumber === day);
-  const allParticipants = await db.select().from(participants);
+    .leftJoin(participants, eq(participantDayState.participantId, participants.id))
+    .where(and(...roleConds));
+  const dayRoles = roleRows;
+  const allParticipants = shiftId != null && !Number.isNaN(shiftId)
+    ? await db.select().from(participants).where(
+      or(eq(participants.shiftId, shiftId), isNull(participants.shiftId))!,
+    )
+    : await db.select().from(participants);
+
+  const eveningPack = await collectEveningExportRows({ day, shiftId });
 
   const wb = await createWorkbook();
   addReadmeSheet(wb, [
     `Выгрузка по дню ${day}, фильтр типа точки: ${type}.`,
     'Лист «Ответы дня» — сквозные поля ТЗ (11 колонок + depth).',
+    'Лист «Итоговая анкета» — evening_ratings + ответы «Итоги дня».',
+    `Итоговых анкет: ${eveningPack.rows.length}.`,
+    eveningPack.emptyReason || '',
     'Черновики вопросов не включены.',
-  ]);
+  ].filter(Boolean));
 
   const sheetAns = wb.addWorksheet('Ответы дня');
   sheetAns.addRow([...ANSWER_ROW_HEADERS_RU, 'Глубина', 'ID вопроса', 'Блок']);
@@ -98,21 +126,18 @@ export async function writeDayWorkbook(res: Response, day: number, typeRaw: stri
   const sheetEvening = wb.addWorksheet('Итоговая анкета');
   sheetEvening.addRow([
     'ID участника', 'ФИО', 'Направление', 'Группа', 'День', 'Отправлено', 'Роль на завтра',
-    ...EVENING_SCALE_KEYS,
-    'Поездка да/нет', 'Оценка поездки', 'Практика да/нет', 'Название практики', 'Рекомендация да/нет', 'Оценка рекомендации',
-    'Главный тезис', 'Изменение понимания', 'Больше всего понравилось', 'Улучшить завтра', 'Свободная заметка', 'Результат эксперимента',
+    ...eveningPack.fields.map(f => f.label || f.key),
   ]);
-  for (const r of dayRoles) {
-    const ratings = r.s.eveningRatings as Record<string, unknown> | null;
-    if (!ratings) continue;
+  for (const r of eveningPack.rows) {
     sheetEvening.addRow([
-      r.p?.id, fullName(r.p), r.p?.direction, r.p?.groupName, r.s.dayNumber,
-      r.s.updatedAt?.toISOString?.() ?? '', roleLabel(r.s.tomorrowRoleKey),
-      ...EVENING_SCALE_KEYS.map(k => ratings[k] ?? ''),
-      ratings.tripYes, ratings.tripScore, ratings.practiceYes, ratings.practiceName,
-      ratings.recommendYes, ratings.recommendScore,
-      ratings.mainThesis, ratings.understandingChange, ratings.likedMost,
-      ratings.improveTomorrow, ratings.freeNote, ratings.experimentResult,
+      r.p.id,
+      fullName(r.p),
+      r.directionName ?? r.p.direction ?? '',
+      r.p.groupName ?? '',
+      r.dayNumber,
+      formatTs(r.filledAt),
+      roleLabel(r.tomorrowRoleKey),
+      ...eveningPack.fields.map(f => formatEveningFieldValue(f, r.ratings, r.tomorrowRoleKey)),
     ]);
   }
 

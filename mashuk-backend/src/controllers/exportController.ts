@@ -51,7 +51,9 @@ export async function exportParticipantActivityWideHandler(req: AdminRequest, re
 export async function exportDayWorkbookHandler(req: AdminRequest, res: Response): Promise<void> {
   const day = Number(req.query.day) || 1;
   const type = req.query.type as string | undefined;
-  await writeDayWorkbook(res, day, type);
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
+  await writeDayWorkbook(res, day, type, { shiftId });
 }
 
 export async function exportDayStatsHandler(req: AdminRequest, res: Response): Promise<void> {
@@ -112,6 +114,8 @@ export async function exportAnswersHandler(req: AdminRequest, res: Response): Pr
 }
 
 export const exportDailySummaryHandler = async (req: AdminRequest, res: Response) => {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
   await writeDailySummaryExport(res, {
     day: req.query.day ? Number(req.query.day) : null,
     direction: typeof req.query.direction === 'string' ? req.query.direction : undefined,
@@ -120,6 +124,7 @@ export const exportDailySummaryHandler = async (req: AdminRequest, res: Response
     ageMax: req.query.ageMax ? Number(req.query.ageMax) : undefined,
     ageCategory: typeof req.query.ageCategory === 'string' ? req.query.ageCategory : undefined,
     activityQ: typeof req.query.activity === 'string' ? req.query.activity : undefined,
+    shiftId,
   });
 };
 

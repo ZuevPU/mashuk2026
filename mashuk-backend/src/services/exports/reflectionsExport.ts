@@ -108,11 +108,34 @@ export async function writeParticipantAnswersExport(
   const fname = `participant_${participantId}_answers`;
 
   if (format === 'xlsx') {
+    const {
+      collectEveningExportRows,
+      formatEveningFieldValue,
+    } = await import('./eveningExportData.js');
+    const evening = await collectEveningExportRows({
+      shiftId: p.shiftId,
+      participantId,
+    });
+    const eveningRows = evening.rows;
+
     const wb = await createWorkbook();
     const ws = wb.addWorksheet('Ответы');
     ws.addRow([...ANSWER_ROW_HEADERS_RU, 'ID вопроса']);
     for (const r of rows) {
       ws.addRow([...buildAnswerRow(r, { source: 'question' }), r.q?.id]);
+    }
+    const sheetEve = wb.addWorksheet('Итоговая анкета');
+    sheetEve.addRow([
+      'День', 'Время заполнения', 'Роль на завтра',
+      ...evening.fields.map(f => f.label || f.key),
+    ]);
+    for (const r of eveningRows) {
+      sheetEve.addRow([
+        r.dayNumber,
+        r.filledAt?.toISOString?.() ?? '',
+        r.tomorrowRoleKey ?? '',
+        ...evening.fields.map(f => formatEveningFieldValue(f, r.ratings, r.tomorrowRoleKey)),
+      ]);
     }
     await sendWorkbook(res, wb, `${fname}.xlsx`);
     return;

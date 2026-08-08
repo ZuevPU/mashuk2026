@@ -230,7 +230,14 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             </tr>
             <tr>
               <td>Итоги дня (вопросы анкеты)</td>
-              <td className="adm-muted">Аналитик · 1 строка = участник × день; все вопросы вечерней анкеты в колонках</td>
+              <td className="adm-muted">
+                Аналитик · 1 строка = участник × день; колонки = Итоговая анкета вечера.
+                <div style={{ marginTop: 4, fontSize: 11 }}>
+                  День берётся из фильтра Insights (сейчас D{forumDay}).
+                  Если файл пустой — снимите направление/группу или скачайте «Вся смена».
+                  На листе «Описание» будет причина, если строк 0.
+                </div>
+              </td>
               <td>
                 <span className="adm-muted">D{forumDay}{direction ? ` · ${direction}` : ''}{group ? ` · ${group}` : ''}</span>
               </td>
@@ -274,7 +281,7 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             </tr>
             <tr>
               <td>По направлению / группе</td>
-              <td className="adm-muted">Куратор · сводка по когорте</td>
+              <td className="adm-muted">Куратор · сводка по когорте (те же данные, что «Итоги дня»)</td>
               <td>
                 <span className="adm-muted">{direction || 'направление?'} · {group || 'группа?'}</span>
               </td>

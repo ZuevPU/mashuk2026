@@ -375,23 +375,40 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
     assert.equal(before.status, 200);
     const prevDay = before.body.settings?.currentDay ?? before.body.currentDay ?? 1;
 
-    const qsBefore = await request(app).get('/api/questions').set(headers);
-    assert.equal(qsBefore.status, 200);
-    let day1 = qsBefore.body.questions?.find((q: { dayNumber: number; block?: string | null }) =>
-      q.dayNumber === 1
-      && (q.block === 'Точки осмысления'
+    type Q = {
+      id: number;
+      dayNumber?: number;
+      block?: string | null;
+      questionKind?: string | null;
+      status?: string;
+    };
+    // after_blocks / practices_vote остаются открытыми до снятия админом — для лока берём state_check / точки
+    const isAutoLockTouchpoint = (q: Q) => {
+      const kind = String(q.questionKind || '').toLowerCase();
+      if (kind === 'after_blocks' || kind === 'practices_vote') return false;
+      return q.block === 'Точки осмысления'
         || q.block === 'Проверка состояния'
         || q.block === 'Итоги дня'
-        || q.block === 'checkin'),
+        || q.block === 'checkin'
+        || kind === 'state_check'
+        || kind === 'day_summary';
+    };
+
+    const qsBefore = await request(app).get('/api/questions').set(headers);
+    assert.equal(qsBefore.status, 200);
+    let day1 = (qsBefore.body.questions as Q[] | undefined)?.find(q =>
+      q.dayNumber === 1 && isAutoLockTouchpoint(q),
     );
     if (!day1) {
       const adminQs = await request(app).get('/api/admin/questions').set(adminAuth);
       assert.equal(adminQs.status, 200);
-      day1 = adminQs.body.questions?.find((q: { dayNumber: number; status?: string }) =>
-        q.dayNumber === 1 && (q.status === 'published' || !q.status),
+      day1 = (adminQs.body.questions as Q[] | undefined)?.find(q =>
+        q.dayNumber === 1
+        && (q.status === 'published' || !q.status)
+        && isAutoLockTouchpoint(q),
       );
     }
-    assert.ok(day1, 'expected day-1 touchpoint before day bump');
+    assert.ok(day1, 'expected day-1 auto-locking touchpoint before day bump');
 
     try {
       const bump = await request(app)
