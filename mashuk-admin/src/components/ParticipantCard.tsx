@@ -382,7 +382,13 @@ export function ParticipantCardModal({
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => {
               const text = prompt('Текст пуша');
               if (!text?.trim()) return;
-              act(() => adminFetch(`/participants/${p.id}/push`, { method: 'POST', body: JSON.stringify({ text: text.trim() }) }), 'Пуш отправлен');
+              act(async () => {
+                const res = await adminFetch(`/participants/${p.id}/push`, {
+                  method: 'POST',
+                  body: JSON.stringify({ text: text.trim() }),
+                }) as { deliveryStatusHint?: string; deliveryStatus?: string };
+                return res.deliveryStatusHint || res.deliveryStatus || 'Пуш отправлен';
+              }, 'Пуш отправлен');
             }}>Отправить пуш</button>
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF')}>Выгрузить всё</button>
             {p.isBlocked

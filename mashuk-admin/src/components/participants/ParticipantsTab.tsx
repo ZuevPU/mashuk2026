@@ -185,9 +185,13 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
       ? `/participants/${pushModal.ids[0]}/push`
       : '/participants/bulk-push';
     act(async () => {
-      await adminFetch(path, { method: 'POST', body: JSON.stringify(body) });
+      const res = await adminFetch(path, { method: 'POST', body: JSON.stringify(body) }) as {
+        deliveryStatusHint?: string;
+        deliveryStatus?: string;
+      };
       setPushModal(null);
       setPushText('');
+      return res.deliveryStatusHint || res.deliveryStatus || 'Пуш отправлен';
     }, 'Пуш отправлен');
   };
 

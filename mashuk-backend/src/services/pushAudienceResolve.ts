@@ -1,6 +1,7 @@
 import { and, eq, gte, inArray, isNotNull, isNull, or } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { directions, participants } from '../db/schema.js';
+import { resolveActiveShiftId } from './shiftService.js';
 
 export type AudienceType = 'all' | 'direction' | 'group' | 'ids' | 'rule';
 
@@ -23,21 +24,38 @@ export type AudiencePayload = {
   rule?: AudienceRule;
 };
 
+export type ResolvePushAudienceOptions = {
+  /** Смена кампании; иначе активная смена */
+  shiftId?: number | null;
+};
+
 const onboarded = and(
   isNotNull(participants.onboardingCompletedAt),
   isNull(participants.selfDeletedAt),
 );
 
+/** Базовый фильтр broadcast: онбординг + смена + не заблокирован */
+export async function broadcastAudienceWhere(shiftId?: number | null) {
+  const sid = shiftId ?? await resolveActiveShiftId();
+  return and(
+    onboarded,
+    eq(participants.shiftId, sid),
+    eq(participants.isBlocked, false),
+  );
+}
+
 export async function resolvePushAudience(
   audienceType: string,
   payload: AudiencePayload | null | undefined,
+  options?: ResolvePushAudienceOptions,
 ): Promise<number[]> {
   const p = payload ?? {};
+  const base = await broadcastAudienceWhere(options?.shiftId);
 
   if (audienceType === 'ids' && Array.isArray(p.participantIds) && p.participantIds.length) {
     const ids = p.participantIds.map(Number).filter(n => !Number.isNaN(n));
     const rows = await db.select({ id: participants.id }).from(participants)
-      .where(and(inArray(participants.id, ids), onboarded));
+      .where(and(inArray(participants.id, ids), base));
     return rows.map(r => r.id);
   }
 
@@ -47,23 +65,33 @@ export async function resolvePushAudience(
       ? or(eq(participants.directionId, p.directionId), eq(participants.direction, dir.name))
       : eq(participants.directionId, p.directionId);
     const rows = await db.select({ id: participants.id }).from(participants)
-      .where(and(cond, onboarded));
+      .where(and(cond, base));
     return rows.map(r => r.id);
   }
 
   if (audienceType === 'group' && p.groupId) {
     const rows = await db.select({ id: participants.id }).from(participants)
-      .where(and(eq(participants.groupId, p.groupId), onboarded));
+      .where(and(eq(participants.groupId, p.groupId), base));
     return rows.map(r => r.id);
   }
 
   if (audienceType === 'rule' && p.rule?.conditions?.length) {
-    const rows = await db.select().from(participants).where(onboarded);
+    const rows = await db.select().from(participants).where(base);
     return rows.filter(row => matchRule(row, p.rule!)).map(r => r.id);
   }
 
-  const rows = await db.select({ id: participants.id }).from(participants).where(onboarded);
+  const rows = await db.select({ id: participants.id }).from(participants).where(base);
   return rows.map(r => r.id);
+}
+
+/** ID участников активной (или заданной) смены для авто-слотов / «всем». */
+export async function resolveBroadcastParticipantIds(shiftId?: number | null): Promise<number[]> {
+  return resolvePushAudience('all', {}, { shiftId });
+}
+
+/** Участники, которым ещё не слали данный trigger сегодня (per-participant idempotency). */
+export function filterUnsentParticipantIds(allIds: number[], alreadySent: Set<number>): number[] {
+  return allIds.filter(id => !alreadySent.has(id));
 }
 
 function matchRule(
@@ -99,7 +127,7 @@ export function formatAudienceLabel(audienceType: string, payload: AudiencePaylo
   const p = payload ?? {};
   switch (audienceType) {
     case 'all':
-      return 'Все';
+      return 'Все (активная смена)';
     case 'direction':
       return p.directionId ? `Направление #${p.directionId}` : 'Направление';
     case 'group':
@@ -115,7 +143,8 @@ export function formatAudienceLabel(audienceType: string, payload: AudiencePaylo
 
 /** Activity filter helper for rule extension */
 export async function participantIdsActiveSince(since: Date): Promise<Set<number>> {
+  const base = await broadcastAudienceWhere();
   const rows = await db.select({ id: participants.id }).from(participants)
-    .where(and(onboarded, gte(participants.lastActiveAt, since)));
+    .where(and(base, gte(participants.lastActiveAt, since)));
   return new Set(rows.map(r => r.id));
 }

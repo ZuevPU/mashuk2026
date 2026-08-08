@@ -23,6 +23,10 @@ export function areVkNotificationsEnabledInLaunchParams(): boolean {
   }
 }
 
+function hasLaunchParams(): boolean {
+  return !!readLaunchParamsRaw();
+}
+
 type AllowNotificationsResult = { result?: boolean };
 
 /** Запросить разрешение на push мини-приложения; повторный запрос возможен после отказа. */
@@ -38,11 +42,23 @@ export async function requestVkPushPermission(): Promise<boolean> {
     return true;
   }
 
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'granted' || stored === '1') return true;
-  } catch {
-    // ignore
+  // Launch params есть и явно говорят «выкл» — не доверяем устаревшему localStorage=granted.
+  if (hasLaunchParams()) {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored === 'granted' || stored === '1') {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  } else {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored === 'granted' || stored === '1') return true;
+    } catch {
+      // ignore
+    }
   }
 
   try {

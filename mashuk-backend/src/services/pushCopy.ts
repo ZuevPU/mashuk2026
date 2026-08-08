@@ -1,6 +1,6 @@
 /**
  * Тексты transactional / auto push для участников.
- * Держим коротко (лимит VK notifications.send — 254 символа).
+ * Держим коротко (лимит VK notifications.sendMessage — 254 символа).
  */
 
 export function qTitle(title: string | null | undefined, fallback = 'без названия'): string {

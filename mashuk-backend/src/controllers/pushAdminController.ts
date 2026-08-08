@@ -19,6 +19,7 @@ import {
   refreshNotificationStats, sendTestCampaignToParticipant, describeDeliveryStatus,
 } from '../services/pushService.js';
 import { pushNotificationCreateSchema, pushNotificationUpdateSchema } from '../validation/adminSchemas.js';
+import { resolveAdminShiftId } from '../services/shiftService.js';
 
 function rowToApi(row: typeof adminPushNotifications.$inferSelect) {
   const payload = (row.audiencePayload ?? {}) as AudiencePayload;
@@ -116,7 +117,8 @@ export const createPushNotification = async (req: AdminRequest, res: Response): 
     }
   }
 
-  const [row] = await db.insert(adminPushNotifications).values(values).returning();
+  const shiftId = await resolveAdminShiftId(req);
+  const [row] = await db.insert(adminPushNotifications).values({ ...values, shiftId }).returning();
   res.json({ notification: rowToApi(row) });
 };
 

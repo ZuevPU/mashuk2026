@@ -26,8 +26,8 @@ describe('pushCategoryOf', () => {
     assert.equal(pushCategoryOf('touchpoint_open_42'), 'touchpoints');
   });
 
-  it('maps question_publish to tasks', () => {
-    assert.equal(pushCategoryOf('question_publish'), 'tasks');
+  it('maps question_publish to touchpoints (opt-out «точки»)', () => {
+    assert.equal(pushCategoryOf('question_publish'), 'touchpoints');
   });
 
   it('maps transactional triggers', () => {

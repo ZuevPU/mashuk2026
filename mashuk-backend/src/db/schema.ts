@@ -263,7 +263,7 @@ export const participantPushDeliveries = pgTable('participant_push_deliveries', 
   icon: varchar('icon', { length: 32 }),
   imageUrl: text('image_url'),
   visibleUntil: timestamp('visible_until'),
-  vkDeliveryStatus: varchar('vk_delivery_status', { length: 64 }),
+  vkDeliveryStatus: varchar('vk_delivery_status', { length: 255 }),
   openedAt: timestamp('opened_at'),
   dismissedAt: timestamp('dismissed_at'),
   createdAt: timestamp('created_at').defaultNow(),
@@ -775,7 +775,7 @@ export const pushLog = pgTable('push_log', {
   participantId: integer('participant_id'), // if specific user
   text: text('text').notNull(),
   sentAt: timestamp('sent_at'),
-  deliveryStatus: varchar('delivery_status', { length: 50 }),
+  deliveryStatus: varchar('delivery_status', { length: 255 }),
   notificationId: integer('notification_id'),
   deliveryId: integer('delivery_id'),
 }, (table) => [

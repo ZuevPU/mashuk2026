@@ -53,6 +53,22 @@ async function ensureDayExperimentsTripleSchema(pool: ReturnType<typeof createPo
   await pool.query(sql);
 }
 
+/** Widen push delivery status columns if still varchar(50)/(64). */
+async function ensurePushDeliveryStatusLen(pool: ReturnType<typeof createPool>): Promise<void> {
+  const { rows } = await pool.query<{ character_maximum_length: number | null }>(
+    `SELECT character_maximum_length FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'push_log' AND column_name = 'delivery_status'
+     LIMIT 1`,
+  );
+  const len = rows[0]?.character_maximum_length;
+  if (len != null && len >= 255) return;
+
+  const sqlPath = path.join(__dirname, '../../drizzle/0051_push_delivery_status_len.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  console.warn('Repair: applying 0051_push_delivery_status_len.sql');
+  await pool.query(sql);
+}
+
 export async function runMigrations(): Promise<void> {
   const pool = createPool(process.env.DATABASE_URL!);
   const db = drizzle(pool);
@@ -64,6 +80,7 @@ export async function runMigrations(): Promise<void> {
     await ensureBacklogFeaturesSchema(pool);
     await ensureTaskQrScansSchema(pool);
     await ensureDayExperimentsTripleSchema(pool);
+    await ensurePushDeliveryStatusLen(pool);
     await pool.end();
   }
 }

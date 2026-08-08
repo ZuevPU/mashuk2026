@@ -123,7 +123,18 @@ export function deliveryStatusShort(status: string | null | undefined): string {
   if (status === 'sent_community') return '✓ Личное сообщение VK';
   if (status.startsWith('skipped_opt_out')) return 'Отключено участником';
   if (status.startsWith('skipped_no_vk')) return 'Нет VK ID';
-  if (status.startsWith('skipped_no_token')) return 'Не настроены ключи VK';
+  if (status.startsWith('skipped_no_token') || status.startsWith('skipped_no_service')) {
+    return 'Не настроены ключи VK';
+  }
+  if (status.includes(';')) {
+    if (/(^|;\s*)sent_community/.test(status)) return '✓ Личное сообщение VK';
+    if (/(^|;\s*)sent_mini/.test(status)) return '✓ Доставлено в приложение';
+    if (/code_2|code_3|rate|лимит/i.test(status)) return 'Лимит VK → ошибка ЛС';
+    return 'Ошибка mini → ЛС';
+  }
+  if (/code_2|за последний час/i.test(status)) return 'Лимит VK (час)';
+  if (/code_3|сутк/i.test(status)) return 'Лимит VK (сутки)';
   if (status.startsWith('error:')) return 'Ошибка доставки';
-  return status;
+  if (status.startsWith('batch:')) return `Рассылка (${status.slice(6)})`;
+  return status.length > 40 ? `${status.slice(0, 39)}…` : status;
 }

@@ -1,6 +1,6 @@
-import { and, eq, gte, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq, gte } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { answers, participants, pushLog, questions } from '../db/schema.js';
+import { answers, pushLog, questions } from '../db/schema.js';
 import { getForumSettings, resolveEffectiveCurrentDay } from './helpers.js';
 import { getQuestionAccess } from './questionEligibility.js';
 import { pushCopy } from './pushCopy.js';
@@ -9,6 +9,7 @@ import { getMoscowParts } from './timePhase.js';
 import { loadPublishedTouchpointQuestions } from './touchpointProgress.js';
 import { TOUCHPOINT_SLOTS } from './touchpointTemplates.js';
 import { resolveActiveShiftId } from './shiftService.js';
+import { resolveBroadcastParticipantIds } from './pushAudienceResolve.js';
 
 const RETRY_MS = 30 * 60 * 1000;
 const OPEN_WINDOW_MS = 3 * 60 * 1000;
@@ -82,8 +83,7 @@ export async function runTouchpointPushPlanner(now = new Date()): Promise<string
   const dayTouch = touchQs.filter(q => q.dayNumber === currentDay);
   if (dayTouch.length === 0) return [];
 
-  const allP = await db.select({ id: participants.id }).from(participants)
-    .where(and(isNotNull(participants.onboardingCompletedAt), isNull(participants.selfDeletedAt)));
+  const audienceIds = await resolveBroadcastParticipantIds(shiftId);
 
   const fired: string[] = [];
 
@@ -97,31 +97,28 @@ export async function runTouchpointPushPlanner(now = new Date()): Promise<string
     const inRetry = isRetryWindow(q, now);
     if (!inOpen && !inRetry) continue;
 
-    for (const p of allP) {
+    for (const participantId of audienceIds) {
       const [ans] = await db.select({ id: answers.id }).from(answers)
-        .where(and(eq(answers.participantId, p.id), eq(answers.questionId, q.id))).limit(1);
+        .where(and(eq(answers.participantId, participantId), eq(answers.questionId, q.id))).limit(1);
       const answered = !!ans;
       if (!isQuestionOpenForParticipant(q, currentDay, now, answered)) continue;
 
       if (inOpen) {
-        if (await sentTriggerSince(openTrigger, p.id, dayStart)) continue;
+        if (await sentTriggerSince(openTrigger, participantId, dayStart)) continue;
         await sendPushNotification(
-          [p.id],
+          [participantId],
           pushCopy.touchpointOpen(label),
           openTrigger,
         );
-        fired.push(`${openTrigger}:${p.id}`);
+        fired.push(`${openTrigger}:${participantId}`);
       } else if (inRetry) {
-        if (await sentTriggerSince(openTrigger, p.id, dayStart)) {
-          // only retry if we notified open OR window was missed — allow retry without open if publish was in past
-        }
-        if (await sentTriggerSince(retryTrigger, p.id, dayStart)) continue;
+        if (await sentTriggerSince(retryTrigger, participantId, dayStart)) continue;
         await sendPushNotification(
-          [p.id],
+          [participantId],
           pushCopy.touchpointReminder(label),
           retryTrigger,
         );
-        fired.push(`${retryTrigger}:${p.id}`);
+        fired.push(`${retryTrigger}:${participantId}`);
       }
     }
   }

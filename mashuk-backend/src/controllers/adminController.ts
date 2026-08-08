@@ -251,13 +251,18 @@ export const pushParticipant = async (req: AdminRequest, res: Response): Promise
   if (!text) { res.status(400).json({ error: 'text required' }); return; }
   const [p] = await db.select().from(participants).where(eq(participants.id, id)).limit(1);
   if (!p) { res.status(404).json({ error: 'Not found' }); return; }
-  await sendPushNotification([id], text, `admin_manual_${Date.now()}`);
+  const { describeDeliveryStatus } = await import('../services/pushDeliveryStatus.js');
+  const deliveryStatus = await sendPushNotification([id], text, `admin_manual_${Date.now()}`) ?? 'unknown';
   const { logAdminAction } = await import('../services/adminActionsLog.js');
   await logAdminAction({
     req, actionType: 'participant_push', section: 'participants', objectId: String(id),
-    newValue: { text: text.slice(0, 200) },
+    newValue: { text: text.slice(0, 200), deliveryStatus },
   });
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    deliveryStatus,
+    deliveryStatusHint: describeDeliveryStatus(deliveryStatus),
+  });
 };
 
 export const bulkPushParticipants = async (req: AdminRequest, res: Response): Promise<void> => {
@@ -267,16 +272,31 @@ export const bulkPushParticipants = async (req: AdminRequest, res: Response): Pr
     : [];
   if (!text) { res.status(400).json({ error: 'text required' }); return; }
   if (ids.length === 0) { res.status(400).json({ error: 'participantIds required' }); return; }
+  const { describeDeliveryStatus } = await import('../services/pushDeliveryStatus.js');
   const chunk = 100;
+  let lastStatus: string | undefined;
   for (let i = 0; i < ids.length; i += chunk) {
-    await sendPushNotification(ids.slice(i, i + chunk), text, `admin_bulk_${Date.now()}_${i}`);
+    const slice = ids.slice(i, i + chunk);
+    const status = await sendPushNotification(slice, text, `admin_bulk_${Date.now()}_${i}`);
+    if (slice.length === 1 && status) lastStatus = status;
   }
   const { logAdminAction } = await import('../services/adminActionsLog.js');
   await logAdminAction({
     req, actionType: 'participants_bulk_push', section: 'participants',
     newValue: { count: ids.length, text: text.slice(0, 200) },
   });
-  res.json({ ok: true, count: ids.length });
+  const deliveryStatus = ids.length === 1
+    ? (lastStatus ?? 'unknown')
+    : `batch:${ids.length}`;
+  const deliveryStatusHint = ids.length === 1
+    ? describeDeliveryStatus(deliveryStatus)
+    : `Рассылка запущена для ${ids.length} участников (активная доставка в журнал пушей)`;
+  res.json({
+    ok: true,
+    count: ids.length,
+    deliveryStatus,
+    deliveryStatusHint,
+  });
 };
 
 export const adjustParticipantPoints = async (req: AdminRequest, res: Response): Promise<void> => {

@@ -1,12 +1,17 @@
-import { and, eq, gte, isNotNull, isNull, lte, asc } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, lte, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  answers, events, forumSettings, participants, pushLog, pushQueue, pushTemplates, questions,
+  answers, events, forumSettings, pushLog, pushQueue, pushTemplates, questions,
 } from '../db/schema.js';
 import { getMoscowParts } from './timePhase.js';
 import { pushCopy } from './pushCopy.js';
 import { notifyAllParticipants, sendPushNotification } from './pushService.js';
 import { runTouchpointPushPlanner } from './touchpointPushPlanner.js';
+import {
+  filterUnsentParticipantIds,
+  resolveBroadcastParticipantIds,
+} from './pushAudienceResolve.js';
+import { resolveActiveShiftId } from './shiftService.js';
 
 /** Слоты авто-push по ТЗ (минуты от полуночи МСК) */
 export const PUSH_SLOTS: { minutes: number; key: string; text: string; retryText: string }[] = [
@@ -26,14 +31,18 @@ export function matchRetrySlot(totalMinutes: number): typeof PUSH_SLOTS[0] | nul
   return PUSH_SLOTS.find(s => s.retryText && s.minutes + 30 === totalMinutes) ?? null;
 }
 
-async function alreadySentToday(triggerType: string, since: Date): Promise<boolean> {
-  const rows = await db.select({ id: pushLog.id }).from(pushLog)
+/** Участники, уже получившие trigger сегодня (для per-participant idempotency). */
+export async function participantIdsSentTriggerToday(
+  triggerType: string,
+  since: Date,
+): Promise<Set<number>> {
+  const rows = await db.select({ participantId: pushLog.participantId }).from(pushLog)
     .where(and(
       eq(pushLog.triggerType, triggerType),
       gte(pushLog.sentAt, since),
-    ))
-    .limit(1);
-  return rows.length > 0;
+      isNotNull(pushLog.participantId),
+    ));
+  return new Set(rows.map(r => r.participantId!).filter((id): id is number => id != null));
 }
 
 function startOfMoscowDay(now: Date): Date {
@@ -77,6 +86,20 @@ async function processPushQueue(now: Date): Promise<number> {
   }
 }
 
+async function sendSlotToUnsent(
+  trigger: string,
+  text: string,
+  dayStart: Date,
+  audienceIds?: number[],
+): Promise<boolean> {
+  const allIds = audienceIds ?? await resolveBroadcastParticipantIds();
+  const already = await participantIdsSentTriggerToday(trigger, dayStart);
+  const need = filterUnsentParticipantIds(allIds, already);
+  if (need.length === 0) return false;
+  await sendPushNotification(need, text, trigger);
+  return true;
+}
+
 export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: string[]; events: number; queue: number; delayed: number }> {
   const { totalMinutes } = getMoscowParts(now);
   const dayStart = startOfMoscowDay(now);
@@ -91,6 +114,7 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
   } catch {
     // migration pending
   }
+  void adminScheduled;
 
   try {
     const { runProgramEventBeforeTriggers } = await import('./pushTriggerRunner.js');
@@ -109,15 +133,16 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
   const slot = matchPushSlot(totalMinutes);
   const [forumRowEarly] = await db.select().from(forumSettings).limit(1);
   const nightEnabled = forumRowEarly?.pushNightSlotEnabled === true;
+  const shiftId = await resolveActiveShiftId();
+  const audienceIds = await resolveBroadcastParticipantIds(shiftId);
 
   if (slot) {
     if (slot.key === 'slot_2300' && !nightEnabled) {
       // optional night slot
     } else {
       const trigger = `auto_${slot.key}`;
-      if (!(await alreadySentToday(trigger, dayStart))) {
-        const text = await resolveSlotText(slot.key, slot.text);
-        await notifyAllParticipants(text, trigger);
+      const text = await resolveSlotText(slot.key, slot.text);
+      if (await sendSlotToUnsent(trigger, text, dayStart, audienceIds)) {
         fired.push(trigger);
       }
     }
@@ -133,26 +158,28 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
   const retry = matchRetrySlot(totalMinutes);
   if (retry) {
     const trigger = `auto_retry_${retry.key}`;
-    if (!(await alreadySentToday(trigger, dayStart))) {
-      const [settings] = await db.select().from(forumSettings).limit(1);
-      const currentDay = settings?.currentDay ?? 1;
-      const dayQs = await db.select().from(questions)
-        .where(and(eq(questions.status, 'published'), eq(questions.dayNumber, currentDay)));
-      if (dayQs.length > 0) {
-        const allP = await db.select({ id: participants.id }).from(participants)
-          .where(and(isNotNull(participants.onboardingCompletedAt), isNull(participants.selfDeletedAt)));
-        const needRemind: number[] = [];
-        for (const p of allP) {
-          const ansQ = await db.select({ questionId: answers.questionId }).from(answers)
-            .where(eq(answers.participantId, p.id));
-          const qAnswered = new Set(ansQ.map(a => a.questionId));
-          if (dayQs.some(q => !qAnswered.has(q.id))) needRemind.push(p.id);
-        }
-        if (needRemind.length > 0 && retry.retryText) {
-          const text = await resolveSlotText(`${retry.key}_retry`, retry.retryText);
-          await sendPushNotification(needRemind, text, trigger);
-          fired.push(trigger);
-        }
+    const [settings] = await db.select().from(forumSettings).limit(1);
+    const currentDay = settings?.currentDay ?? 1;
+    const dayQs = await db.select().from(questions)
+      .where(and(
+        eq(questions.status, 'published'),
+        eq(questions.dayNumber, currentDay),
+        eq(questions.shiftId, shiftId),
+      ));
+    if (dayQs.length > 0) {
+      const already = await participantIdsSentTriggerToday(trigger, dayStart);
+      const candidates = filterUnsentParticipantIds(audienceIds, already);
+      const needRemind: number[] = [];
+      for (const pid of candidates) {
+        const ansQ = await db.select({ questionId: answers.questionId }).from(answers)
+          .where(eq(answers.participantId, pid));
+        const qAnswered = new Set(ansQ.map(a => a.questionId));
+        if (dayQs.some(q => !qAnswered.has(q.id))) needRemind.push(pid);
+      }
+      if (needRemind.length > 0 && retry.retryText) {
+        const text = await resolveSlotText(`${retry.key}_retry`, retry.retryText);
+        await sendPushNotification(needRemind, text, trigger);
+        fired.push(trigger);
       }
     }
   }
@@ -166,6 +193,7 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
     .where(and(
       eq(events.isPublished, true),
       eq(events.pushReminder, true),
+      eq(events.shiftId, shiftId),
       isNotNull(events.startTime),
       gte(events.startTime, in10),
       lte(events.startTime, in15),
@@ -183,13 +211,11 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
   for (const ev of upcoming) {
     if (!shouldRemindEvent(ev)) continue;
     const trigger = `event_reminder_${ev.id}_${getMoscowParts(now).dateKey}`;
-    if (await alreadySentToday(trigger, dayStart)) continue;
-    await notifyAllParticipants(
-      pushCopy.eventSoon(ev.title, ev.place),
-      trigger,
-    );
-    eventCount += 1;
-    fired.push(trigger);
+    const text = pushCopy.eventSoon(ev.title, ev.place);
+    if (await sendSlotToUnsent(trigger, text, dayStart, audienceIds)) {
+      eventCount += 1;
+      fired.push(trigger);
+    }
   }
 
   let delayed = 0;

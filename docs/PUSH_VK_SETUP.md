@@ -2,17 +2,19 @@
 
 Бэкенд отправляет уведомления **двумя каналами** (см. `mashuk-backend/src/services/pushService.ts`):
 
-1. **Мини-приложение** — `notifications.send` + `VK_SERVICE_TOKEN`
+1. **Мини-приложение** — `notifications.sendMessage` + `VK_SERVICE_TOKEN`
 2. **Fallback** — ЛС сообщества — `messages.send` + `VK_COMMUNITY_TOKEN`
 
 Если mini-app не доставил (`error`, `skipped_no_token`, нет `vk_id`), пробуется сообщение от группы.
+
+> Важно: метод называется именно `notifications.sendMessage`. Старый/ошибочный `notifications.send` даёт `Unknown method passed`.
 
 ## Соответствие полей VK и переменных env
 
 | В кабинете VK | Переменная на backend | Назначение |
 |---------------|----------------------|------------|
 | **Защищённый ключ** приложения | `VK_APP_SECRET` | Подпись launch params, авторизация участников |
-| **Сервисный ключ** приложения | `VK_SERVICE_TOKEN` | Push мини-app (`notifications.send`) |
+| **Сервисный ключ** приложения | `VK_SERVICE_TOKEN` | Push мини-app (`notifications.sendMessage`) |
 | Ключ API **сообщества** (право messages) | `VK_COMMUNITY_TOKEN` | ЛС от группы (`messages.send`) |
 | ID сообщества (число без минуса) | `VK_GROUP_ID` | Справочно для настройки; отправка ЛС идёт по community token |
 
@@ -45,6 +47,19 @@ https://vk.ru/app54662212
 5. URL мини-app (HTTPS) → деплой `mashuk-frontend`; `VITE_API_URL` → backend.
 6. Участник должен **разрешить уведомления** мини-app: онбординг (`Registration.tsx`) или кнопка «Разрешить уведомления VK» в профиле (`VKWebAppAllowNotifications`).
 
+### Ответ `notifications.sendMessage`
+
+Метод возвращает массив по пользователям. При `status: false` смотрите `error.code`:
+
+| code | Значение |
+|------|----------|
+| 1 | Уведомления приложения отключены у пользователя |
+| 2 | Превышен лимит уведомлений за последний час |
+| 3 | Превышен лимит уведомлений за последние сутки |
+| 4 | Приложение не установлено / пользователь неактивен |
+
+Лимиты VK жёсткие (~1 mini-push в сутки на пользователя). При ошибке лимита бэкенд пробует ЛС сообщества.
+
 ## A2. Сообщество (fallback)
 
 1. Сообщество → Управление → **Работа с API** → ключ с правами **messages**.
@@ -59,6 +74,8 @@ https://vk.ru/app54662212
 При пустых **обоих** `VK_SERVICE_TOKEN` и `VK_COMMUNITY_TOKEN` в production в логах при старте:  
 `WARN: VK_SERVICE_TOKEN and VK_COMMUNITY_TOKEN are both empty — push delivery will log skipped_no_token`.
 
+Аудитория авто-рассылок и кампаний «всем» ограничена **активной сменой**; заблокированные участники не получают push.
+
 ## A4. Типичные `delivery_status`
 
 | Статус | Значение |
@@ -70,7 +87,7 @@ https://vk.ru/app54662212
 | `skipped_opt_out` | Отключено в профиле участника |
 | `error: ...` | Ответ VK API (см. расшифровку в админке: `deliveryStatusHint`) |
 
-Расшифровка для оператора: `describeDeliveryStatus()` в `pushService` / `pushDeliveryStatus.ts`.  
+Расшифровка для оператора: `describeDeliveryStatus()` в `pushDeliveryStatus.ts`.  
 При ошибках доставки backend пишет в лог `[push] deliver vkId=... status=...` (без токенов).
 
 ## A5. Проверка после деплоя (чеклист организатора)
