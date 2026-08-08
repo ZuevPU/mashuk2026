@@ -81,10 +81,10 @@ export function buildEmotionDistribution(
   total: number,
 ): { id: string; label: string; count: number; pct: number }[] {
   const known = new Set<string>(CHECKIN_EMOTION_IDS);
-  const rows = CHECKIN_EMOTION_IDS.map(id => {
+  const rows: { id: string; label: string; count: number; pct: number }[] = CHECKIN_EMOTION_IDS.map(id => {
     const count = counts.get(id) || 0;
     return {
-      id,
+      id: id as string,
       label: CHECKIN_EMOTION_LABELS[id],
       count,
       pct: total ? Math.round((count / total) * 1000) / 10 : 0,
