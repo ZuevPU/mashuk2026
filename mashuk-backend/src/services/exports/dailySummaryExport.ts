@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, ne, sql } from 'drizzle-orm';
 import type { Response } from 'express';
 import { db } from '../../db/index.js';
 import { participantDayState, participants } from '../../db/schema.js';

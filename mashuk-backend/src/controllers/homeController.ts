@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { eq, and, lte, or, isNull, asc } from 'drizzle-orm';
+import { eq, and, lte, or, isNull, asc, ne, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   dayFocus, questions, answers, tasks, taskSubmissions, piggybank, events, scheduleDays,

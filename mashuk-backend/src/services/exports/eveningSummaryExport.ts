@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { Response } from 'express';
 import { db } from '../../db/index.js';
 import { participantDayState, participants } from '../../db/schema.js';

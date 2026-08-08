@@ -1,4 +1,4 @@
-import { eq, desc, and, isNull, like, or, inArray, lte } from 'drizzle-orm';
+import { eq, desc, and, isNull, like, or, inArray, lte, ne, sql } from 'drizzle-orm';
 import type { Response } from 'express';
 import { db } from '../../db/index.js';
 import {
@@ -593,7 +593,10 @@ export async function writeExchangeFullExport(res: Response): Promise<void> {
 }
 
 export async function writeActivityExport(res: Response): Promise<void> {
-  const allP = await db.select().from(participants).where(isNull(participants.selfDeletedAt));
+  const allP = await db.select().from(participants).where(and(
+    isNull(participants.selfDeletedAt),
+    ne(sql`LOWER(${participants.direction})`, 'организатор форума'),
+  ));
   const ids = allP.map(p => p.id);
   const shiftId = await resolveActiveShiftId();
   const now = new Date();

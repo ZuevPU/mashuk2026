@@ -2,7 +2,7 @@ import type { Response } from 'express';
 import fs from 'fs';
 import { createWriteStream } from 'fs';
 import PDFDocument from 'pdfkit';
-import { and, count, eq, inArray, isNull } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import {
   participants, taskSubmissions, userMedals,
