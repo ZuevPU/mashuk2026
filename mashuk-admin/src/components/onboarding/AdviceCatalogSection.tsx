@@ -56,6 +56,7 @@ export function AdviceCatalogSection({
   const [statusFilter, setStatusFilter] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<AdviceFormState>(() => emptyAdviceForm());
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -76,6 +77,7 @@ export function AdviceCatalogSection({
       ]);
       setExperiments(filteredRes.experiments || []);
       setTotalInDb((allRes.experiments || []).length);
+      setSelectedIds(new Set());
     } finally {
       setLoading(false);
     }
@@ -84,6 +86,26 @@ export function AdviceCatalogSection({
   useEffect(() => {
     load().catch(() => setLoading(false));
   }, [load]);
+
+  const allVisibleSelected = experiments.length > 0
+    && experiments.every(e => selectedIds.has(e.id));
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectedIds(new Set(experiments.map(e => e.id)));
+  };
 
   const missingCells = TOTAL_CELLS - totalInDb;
 
@@ -115,6 +137,19 @@ export function AdviceCatalogSection({
     await adminFetch(`/day-experiments/${id}`, { method: 'DELETE' });
     await load();
   }, 'Удалено');
+
+  const deleteSelected = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    if (!confirmDelete(`Удалить выбранные советы (${ids.length})?`)) return;
+    act(async () => {
+      for (const id of ids) {
+        await adminFetch(`/day-experiments/${id}`, { method: 'DELETE' });
+      }
+      setSelectedIds(new Set());
+      await load();
+    }, `Удалено: ${ids.length}`);
+  };
 
   const downloadTemplate = async () => {
     const token = getAdminToken();
@@ -189,6 +224,11 @@ export function AdviceCatalogSection({
             <option value="published">Опубликован</option>
           </select>
           <button type="button" className="adm-btn adm-btn-primary" onClick={openNew}>+ Добавить совет</button>
+          {selectedIds.size > 0 && (
+            <button type="button" className="adm-btn adm-btn-danger" onClick={deleteSelected}>
+              Удалить выбранные ({selectedIds.size})
+            </button>
+          )}
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => importRef.current?.click()}>
             Импорт из CSV
           </button>
@@ -220,9 +260,34 @@ export function AdviceCatalogSection({
         ) : experiments.length === 0 ? (
           <p className="adm-muted">Советов не найдено — добавьте первый или измените фильтры.</p>
         ) : (
+          <>
+          {selectedIds.size > 0 && (
+            <div className="adm-forum-toolbar" style={{ marginBottom: 10, gap: 8 }}>
+              <span style={{ fontWeight: 700 }}>Выбрано: {selectedIds.size}</span>
+              <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={deleteSelected}>
+                Удалить
+              </button>
+              <button
+                type="button"
+                className="adm-btn adm-btn-ghost adm-btn-sm"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                Снять выбор
+              </button>
+            </div>
+          )}
           <table className="adm-table">
             <thead>
               <tr>
+                <th style={{ width: 36 }}>
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={toggleSelectAll}
+                    aria-label="Выбрать все"
+                    title="Выбрать все на экране"
+                  />
+                </th>
                 <th>Роль</th>
                 <th>День</th>
                 <th>Совет дня №1</th>
@@ -235,6 +300,14 @@ export function AdviceCatalogSection({
             <tbody>
               {experiments.map(e => (
                 <tr key={e.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(e.id)}
+                      onChange={() => toggleSelect(e.id)}
+                      aria-label={`Выбрать совет ${roleName(e.roleKey)} день ${e.dayNumber}`}
+                    />
+                  </td>
                   <td>{roleName(e.roleKey)}</td>
                   <td>{e.dayNumber}</td>
                   <td style={{ fontSize: 12, maxWidth: 160, color: '#555' }}>
@@ -281,6 +354,7 @@ export function AdviceCatalogSection({
               ))}
             </tbody>
           </table>
+          </>
         )}
       </div>
     </>
