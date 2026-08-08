@@ -1422,12 +1422,20 @@ type KindAnswerRow = {
   day: number;
   answer: string;
   eventTitle?: string | null;
+  parentEventTitle?: string | null;
   emotion?: string | null;
   emotionZone?: string | null;
   energy?: number | null;
   timePoint?: string | null;
   filledAt?: string | null;
 };
+
+function afterBlocksPath(a: KindAnswerRow): string {
+  const parent = (a.parentEventTitle || '').trim();
+  const topic = (a.eventTitle || '').trim();
+  if (parent && topic && parent !== topic) return `${parent} → ${topic}`;
+  return topic || parent || '—';
+}
 
 type KindQuestionStat = {
   key: string;
@@ -1583,7 +1591,7 @@ export function AfterBlocksView({
                     <th>Участник</th>
                     <th>Направление</th>
                     <th>Группа</th>
-                    <th>Блок</th>
+                    <th>Событие / подтема</th>
                     <th>Ответ</th>
                   </tr>
                 </thead>
@@ -1597,7 +1605,7 @@ export function AfterBlocksView({
                       </td>
                       <td>{a.direction || '—'}</td>
                       <td>{a.group || '—'}</td>
-                      <td>{a.eventTitle || '—'}</td>
+                      <td>{afterBlocksPath(a)}</td>
                       <td style={{ whiteSpace: 'pre-wrap', maxWidth: 420 }}>{a.answer || '—'}</td>
                     </tr>
                   ))}
@@ -2063,7 +2071,7 @@ export function DirectionView({
           )}
           <div style={{ maxHeight: 200, overflow: 'auto', marginTop: 8 }}>
             <table className="adm-table">
-              <thead><tr><th>Участник</th><th>Группа</th><th>Блок</th><th>Ответ</th></tr></thead>
+              <thead><tr><th>Участник</th><th>Группа</th><th>Событие / подтема</th><th>Ответ</th></tr></thead>
               <tbody>
                 {q.answers.map((a, idx) => (
                   <tr key={`ab-${q.key}-${a.participantId}-${idx}`}>
@@ -2073,7 +2081,7 @@ export function DirectionView({
                       </button>
                     </td>
                     <td>{a.group || '—'}</td>
-                    <td>{a.eventTitle || '—'}</td>
+                    <td>{afterBlocksPath(a)}</td>
                     <td style={{ whiteSpace: 'pre-wrap', maxWidth: 320 }}>{a.answer || '—'}</td>
                   </tr>
                 ))}

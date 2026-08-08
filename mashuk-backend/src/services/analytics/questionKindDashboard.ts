@@ -33,6 +33,8 @@ export type KindAnswerRow = {
   answer: string;
   eventTitle: string | null;
   eventId: number | null;
+  parentEventTitle: string | null;
+  parentEventId: number | null;
   emotion: string | null;
   emotionZone: string | null;
   energy: number | null;
@@ -107,19 +109,50 @@ function extractAnswerText(data: unknown): string {
   return '';
 }
 
-function parseAfterBlocks(data: unknown): { text: string; eventTitle: string | null; eventId: number | null } {
+function parseAfterBlocks(data: unknown): {
+  text: string;
+  eventTitle: string | null;
+  eventId: number | null;
+  parentEventTitle: string | null;
+  parentEventId: number | null;
+  pathLabel: string | null;
+} {
   const text = extractAnswerText(data);
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    return { text, eventTitle: null, eventId: null };
+    return {
+      text,
+      eventTitle: null,
+      eventId: null,
+      parentEventTitle: null,
+      parentEventId: null,
+      pathLabel: null,
+    };
   }
   const o = data as Record<string, unknown>;
   const eventTitle = typeof o.eventTitle === 'string' ? o.eventTitle : null;
+  const parentEventTitle = typeof o.parentEventTitle === 'string' ? o.parentEventTitle : null;
   const eventId = typeof o.eventId === 'number' ? o.eventId : (o.eventId != null ? Number(o.eventId) : null);
+  const parentEventId = typeof o.parentEventId === 'number'
+    ? o.parentEventId
+    : (o.parentEventId != null ? Number(o.parentEventId) : null);
+  const pathLabel = parentEventTitle && eventTitle && parentEventTitle !== eventTitle
+    ? `${parentEventTitle} → ${eventTitle}`
+    : (eventTitle || parentEventTitle);
   return {
     text,
     eventTitle,
     eventId: eventId != null && Number.isFinite(eventId) ? eventId : null,
+    parentEventTitle,
+    parentEventId: parentEventId != null && Number.isFinite(parentEventId) ? parentEventId : null,
+    pathLabel,
   };
+}
+
+function afterBlocksPathLabel(r: Pick<KindAnswerRow, 'parentEventTitle' | 'eventTitle'>): string | null {
+  const parent = r.parentEventTitle?.trim() || '';
+  const topic = r.eventTitle?.trim() || '';
+  if (parent && topic && parent !== topic) return `${parent} → ${topic}`;
+  return topic || parent || null;
 }
 
 function buildDistribution(
@@ -188,7 +221,7 @@ export async function collectKindAnswerRows(
 
     if (mode === 'after_blocks') {
       const parsed = parseAfterBlocks(r.a.answerData);
-      if (!parsed.text && !parsed.eventTitle) continue;
+      if (!parsed.text && !parsed.pathLabel) continue;
       rows.push({
         answerId: r.a.id,
         participantId: r.p.id,
@@ -201,6 +234,8 @@ export async function collectKindAnswerRows(
         answer: parsed.text,
         eventTitle: parsed.eventTitle,
         eventId: parsed.eventId,
+        parentEventTitle: parsed.parentEventTitle,
+        parentEventId: parsed.parentEventId,
         emotion: null,
         emotionZone: null,
         energy: null,
@@ -232,6 +267,8 @@ export async function collectKindAnswerRows(
       answer: typeof payload.reason === 'string' ? payload.reason : extractAnswerText(r.a.answerData),
       eventTitle: null,
       eventId: null,
+      parentEventTitle: null,
+      parentEventId: null,
       emotion: payload.emotion ?? null,
       emotionZone: typeof payload.emotionZone === 'string' ? payload.emotionZone : null,
       energy: Number.isFinite(energy) ? energy : null,
@@ -309,7 +346,7 @@ export async function buildKindDashboard(
     const counts = new Map<string, number>();
     if (mode === 'after_blocks') {
       for (const r of qRows) {
-        const label = r.eventTitle || 'Без блока';
+        const label = afterBlocksPathLabel(r) || 'Без блока';
         counts.set(label, (counts.get(label) || 0) + 1);
       }
     } else {
@@ -382,7 +419,7 @@ export async function buildKindDashboard(
   if (mode === 'after_blocks') {
     const byEvent = new Map<string, number>();
     for (const r of rows) {
-      const label = r.eventTitle || 'Без блока';
+      const label = afterBlocksPathLabel(r) || 'Без блока';
       byEvent.set(label, (byEvent.get(label) || 0) + 1);
     }
     return {

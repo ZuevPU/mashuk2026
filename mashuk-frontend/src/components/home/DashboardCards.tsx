@@ -167,6 +167,8 @@ export const PracticesHomeCard: React.FC<{
     title: string;
     resultsPublished: boolean;
     answered: boolean;
+    likesPerParticipant?: number;
+    preamble?: string;
     practices: Array<{
       id: string;
       title: string;
@@ -176,58 +178,38 @@ export const PracticesHomeCard: React.FC<{
   };
 }> = ({ section }) => {
   const routeNavigator = useRouteNavigator();
-  const practices = section.practices.slice(0, 8);
-  if (practices.length === 0) return null;
+  const count = section.practices.length;
+  if (count === 0) return null;
+
+  const openVote = () => routeNavigator.push(`/questions?q=${section.questionId}`);
+  const cta = section.resultsPublished
+    ? 'Смотреть результаты'
+    : section.answered
+      ? 'Открыть практики'
+      : 'Голосовать';
+  const status = section.resultsPublished
+    ? 'Результаты опубликованы'
+    : section.answered
+      ? 'Ваш голос уже учтён'
+      : `${count} ${count === 1 ? 'практика' : count < 5 ? 'практики' : 'практик'} · можно поддержать`;
 
   return (
-    <div className="m-card">
-      <div className="m-now-t">Практики участников</div>
-      <div className="m-tmi-s" style={{ marginTop: 4, marginBottom: 10 }}>
-        {section.resultsPublished
-          ? 'Результаты голосования'
-          : section.answered
-            ? 'Ваш голос учтён — можно посмотреть практики'
-            : 'Опубликованы · можно голосовать'}
+    <div className="m-card m-practices-teaser">
+      <div className="m-practices-teaser__eyebrow">Практики участников</div>
+      <div className="m-now-t" style={{ marginTop: 4 }}>
+        {section.title?.trim() || 'Практики участников'}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {practices.map(p => (
-          <div
-            key={p.id}
-            style={{
-              padding: '10px 12px',
-              borderRadius: 10,
-              background: '#F5F0E8',
-              border: '1px solid #E0DAD0',
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1714', lineHeight: 1.3 }}>{p.title}</div>
-            {(p.participantName || p.direction) && (
-              <div style={{ fontSize: 11, color: '#6B635A', marginTop: 3 }}>
-                {[p.participantName, p.direction].filter(Boolean).join(' · ')}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      {section.practices.length > practices.length && (
-        <div style={{ fontSize: 11, color: '#888', marginTop: 8 }}>
-          и ещё {section.practices.length - practices.length}
-        </div>
+      {section.preamble?.trim() ? (
+        <p className="m-practices-teaser__preamble">{section.preamble.trim()}</p>
+      ) : (
+        <p className="m-practices-teaser__preamble">
+          Участники делятся своими практиками. Откройте список, чтобы поддержать понравившиеся.
+        </p>
       )}
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => routeNavigator.push(`/questions?q=${section.questionId}`)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            routeNavigator.push(`/questions?q=${section.questionId}`);
-          }
-        }}
-        style={{ fontSize: 12, fontWeight: 700, color: 'var(--m-accent)', marginTop: 12, cursor: 'pointer' }}
-      >
-        {section.resultsPublished ? 'Смотреть результаты →' : section.answered ? 'Открыть →' : 'Голосовать →'}
-      </div>
+      <div className="m-practices-teaser__meta">{status}</div>
+      <button type="button" className="m-practices-teaser__cta" onClick={openVote}>
+        {cta}
+      </button>
     </div>
   );
 };

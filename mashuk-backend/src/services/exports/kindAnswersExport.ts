@@ -42,7 +42,7 @@ export async function writeKindAnswersExport(
     'Лист «По вопросам»: сводка охвата по каждому вопросу.',
     'Лист «По направлениям»: уникальные участники, ответы и % охвата от зарегистрированных.',
     mode === 'after_blocks'
-      ? 'Колонки включают выбранный блок программы и текст осмысления.'
+      ? 'Колонки включают событие программы, подтему и текст осмысления.'
       : 'Колонки включают эмоцию, зону, энергию, фазу и причину.',
     `Вопросов в срезе: ${questionMeta.length}.`,
     `Строк ответов: ${rows.length}.`,
@@ -63,12 +63,20 @@ export async function writeKindAnswersExport(
       'День',
       'ID вопроса',
       'Вопрос',
-      'ID блока',
-      'Блок программы',
+      'ID события',
+      'Событие программы',
+      'ID подтемы',
+      'Подтема',
+      'Путь',
       'Ответ',
       'Время',
     ]);
     for (const r of rows) {
+      const parent = (r.parentEventTitle || '').trim();
+      const topic = (r.eventTitle || '').trim();
+      const path = parent && topic && parent !== topic
+        ? `${parent} → ${topic}`
+        : (topic || parent);
       ws.addRow([
         r.answerId,
         r.participantId,
@@ -78,8 +86,11 @@ export async function writeKindAnswersExport(
         r.day,
         r.questionId,
         r.questionTitle,
+        r.parentEventId ?? '',
+        parent || (topic && !r.parentEventId ? topic : ''),
         r.eventId ?? '',
-        r.eventTitle ?? '',
+        parent && topic && parent !== topic ? topic : (parent ? '' : topic),
+        path,
         r.answer,
         r.filledAt ?? '',
       ]);

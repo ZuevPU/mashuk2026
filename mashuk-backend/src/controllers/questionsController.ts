@@ -22,6 +22,7 @@ import {
   collectLessonSlotThemes,
   lessonSlotIndexForQuestion,
 } from '../services/lessonSlotEvents.js';
+import { collectAfterBlocksTree } from '../services/afterBlocksEvents.js';
 import { formatQuestionTimeWindow, getReflectionTypeLabel } from '../services/reflectionTypeLabel.js';
 import { resolveAnswerConfirmation } from '../services/answerConfirmation.js';
 import {
@@ -222,6 +223,20 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       startTime: Date | null;
       endTime: Date | null;
     }[] = [];
+    let afterBlocksEvents: {
+      id: number;
+      title: string;
+      place: string | null;
+      startTime: Date | null;
+      endTime: Date | null;
+      children: {
+        id: number;
+        title: string;
+        place: string | null;
+        startTime: Date | null;
+        endTime: Date | null;
+      }[];
+    }[] = [];
     let lessonPickMeta: {
       programThemeCount: number;
       emptyReason: 'none' | 'none_in_program' | 'none_conducted_yet';
@@ -233,54 +248,79 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
 
     if ((isLessonRef || hasLinkedEvents || isAfterBlocks) && question.dayNumber) {
       const { resolveActiveShiftId } = await import('../services/shiftService.js');
-      const { collectLessonSlotThemes } = await import('../services/lessonSlotEvents.js');
       const shiftId = question.shiftId ?? await resolveActiveShiftId();
       const dayEv = await db.select().from(events).where(and(
         eq(events.dayNumber, question.dayNumber),
         eq(events.shiftId, shiftId),
       ));
       const published = dayEv.filter(e => e.isPublished !== false && e.dayPublished !== false);
-      const collected = collectLessonSlotThemes(question, published, settings, new Date());
-      
-      let items = collected.items;
-      if (hasLinkedEvents) {
-        // Если есть явный список блоков от админа, ограничиваем выбор ими.
-        // При этом учитываем, что админ мог выбрать родительский блок (контейнер).
-        const linkedIds = new Set(question.linkedEventIds);
-        
-        // Рекурсивно собираем всех потомков для выбранных блоков, чтобы найти темы
-        const allLinkedThemes = new Set<number>();
-        const byParent = new Map<number, number[]>();
-        dayEv.forEach(e => {
-          if (e.parentEventId) {
-            const list = byParent.get(e.parentEventId) || [];
-            list.push(e.id);
-            byParent.set(e.parentEventId, list);
-          }
-        });
 
-        const collectIds = (id: number) => {
-          allLinkedThemes.add(id);
-          (byParent.get(id) || []).forEach(collectIds);
+      if (isAfterBlocks) {
+        const tree = collectAfterBlocksTree(
+          published,
+          question.linkedEventIds,
+          settings,
+          new Date(),
+        );
+        afterBlocksEvents = tree.events;
+        // Flat leaves for older clients
+        dayEvents = tree.events.flatMap(ev => (
+          ev.children.length > 0
+            ? ev.children.map(c => ({
+              id: c.id,
+              title: c.title,
+              place: c.place,
+              startTime: c.startTime,
+              endTime: c.endTime,
+            }))
+            : [{
+              id: ev.id,
+              title: ev.title,
+              place: ev.place,
+              startTime: ev.startTime,
+              endTime: ev.endTime,
+            }]
+        ));
+        lessonPickMeta = {
+          programThemeCount: tree.programBlockCount,
+          emptyReason: afterBlocksEvents.length > 0
+            ? 'none'
+            : (tree.programBlockCount > 0 ? 'none_conducted_yet' : 'none_in_program'),
         };
-        question.linkedEventIds!.forEach(collectIds);
-
-        items = items.filter(e => allLinkedThemes.has(e.id));
+      } else {
+        const collected = collectLessonSlotThemes(question, published, settings, new Date());
+        let items = collected.items;
+        if (hasLinkedEvents) {
+          const allLinkedThemes = new Set<number>();
+          const byParent = new Map<number, number[]>();
+          dayEv.forEach(e => {
+            if (e.parentEventId) {
+              const list = byParent.get(e.parentEventId) || [];
+              list.push(e.id);
+              byParent.set(e.parentEventId, list);
+            }
+          });
+          const collectIds = (id: number) => {
+            allLinkedThemes.add(id);
+            (byParent.get(id) || []).forEach(collectIds);
+          };
+          question.linkedEventIds!.forEach(collectIds);
+          items = items.filter(e => allLinkedThemes.has(e.id));
+        }
+        dayEvents = items.map(e => ({
+          id: e.id,
+          title: e.title,
+          place: e.place ?? null,
+          startTime: e.startTime ?? null,
+          endTime: e.endTime ?? null,
+        }));
+        lessonPickMeta = {
+          programThemeCount: hasLinkedEvents ? question.linkedEventIds!.length : collected.programThemeCount,
+          emptyReason: dayEvents.length > 0
+            ? 'none'
+            : (collected.programThemeCount > 0 ? 'none_conducted_yet' : 'none_in_program'),
+        };
       }
-
-      dayEvents = items.map(e => ({
-        id: e.id,
-        title: e.title,
-        place: e.place ?? null,
-        startTime: e.startTime ?? null,
-        endTime: e.endTime ?? null,
-      }));
-      lessonPickMeta = {
-        programThemeCount: hasLinkedEvents ? question.linkedEventIds!.length : collected.programThemeCount,
-        emptyReason: dayEvents.length > 0
-          ? 'none'
-          : (collected.programThemeCount > 0 ? 'none_conducted_yet' : 'none_in_program'),
-      };
     }
     const isPracticesVote = question.questionKind === 'practices_vote'
       || question.answerType === 'practices_vote'
@@ -300,6 +340,7 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       },
       options,
       dayEvents,
+      afterBlocksEvents,
       lessonPickMeta,
       myAnswer: existingAnswer ? {
         answerData: existingAnswer.answerData,
@@ -415,12 +456,16 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
       const payload = answerData as {
         eventId?: unknown;
         eventTitle?: unknown;
+        parentEventId?: unknown;
+        parentEventTitle?: unknown;
         text?: unknown;
       };
       const reflectionText = typeof payload.text === 'string' ? payload.text.trim() : '';
       if (reflectionText.length < 20) {
         res.status(400).json({
-          error: 'Напишите осмысленный ответ по выбранному уроку (хотя бы пару предложений)',
+          error: isAfterBlocks
+            ? 'Напишите осмысленный ответ (хотя бы пару предложений)'
+            : 'Напишите осмысленный ответ по выбранному уроку (хотя бы пару предложений)',
         });
         return;
       }
@@ -433,58 +478,120 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
           eq(events.shiftId, shiftId),
         ));
         const published = dayEv.filter(e => e.isPublished !== false && e.dayPublished !== false);
-        const collected = collectLessonSlotThemes(question, published, settings, now);
-        
-        let allowed = collected.items;
-        if (hasLinkedEvents) {
-          const linkedIds = new Set(question.linkedEventIds);
-          
-          // Рекурсивно собираем всех потомков для выбранных блоков
-          const allLinkedThemes = new Set<number>();
-          const byParent = new Map<number, number[]>();
-          dayEv.forEach(e => {
-            if (e.parentEventId) {
-              const list = byParent.get(e.parentEventId) || [];
-              list.push(e.id);
-              byParent.set(e.parentEventId, list);
-            }
-          });
 
-          const collectIds = (id: number) => {
-            allLinkedThemes.add(id);
-            (byParent.get(id) || []).forEach(collectIds);
-          };
-          question.linkedEventIds!.forEach(collectIds);
-
-          allowed = allowed.filter(e => allLinkedThemes.has(e.id));
-        }
-
-        if (collected.programThemeCount > 0 && allowed.length === 0 && !isLessonRef && !isAfterBlocks) {
-           // Если вопрос жестко привязан к блокам, и они еще не прошли
-           res.status(400).json({
-             error: 'Уроки, к которым привязан этот вопрос, ещё не начались',
-           });
-           return;
-        }
-
-        if (allowed.length > 0) {
-          const eventId = Number(payload.eventId);
-          const picked = allowed.find(e => e.id === eventId);
-          if (!picked) {
+        if (isAfterBlocks) {
+          const tree = collectAfterBlocksTree(published, question.linkedEventIds, settings, now);
+          if (tree.programBlockCount > 0 && tree.events.length === 0) {
             res.status(400).json({
-              error: 'Выберите урок из предложенного списка проведённых тем',
+              error: 'События программы, к которым привязан вопрос, ещё не начались',
             });
             return;
           }
-          normalizedAnswer = {
-            ...answerData,
-            eventId: picked.id,
-            eventTitle: picked.title,
-            text: reflectionText,
-            slotIndex,
-          };
+          if (tree.allowedLeafIds.length > 0) {
+            const eventId = Number(payload.eventId);
+            const parentEventIdRaw = payload.parentEventId;
+            const parentEventId = parentEventIdRaw == null || parentEventIdRaw === ''
+              ? null
+              : Number(parentEventIdRaw);
+
+            const parentNode = parentEventId != null
+              ? tree.events.find(e => e.id === parentEventId)
+              : tree.events.find(e => (
+                e.id === eventId
+                || e.children.some(c => c.id === eventId)
+              ));
+
+            if (!parentNode) {
+              res.status(400).json({
+                error: 'Выберите событие программы, где вы были',
+              });
+              return;
+            }
+
+            const leaf = parentNode.children.length > 0
+              ? parentNode.children.find(c => c.id === eventId)
+              : (parentNode.id === eventId
+                ? {
+                  id: parentNode.id,
+                  title: parentNode.title,
+                  place: parentNode.place,
+                  startTime: parentNode.startTime,
+                  endTime: parentNode.endTime,
+                }
+                : undefined);
+
+            if (!leaf || !tree.allowedLeafIds.includes(leaf.id)) {
+              res.status(400).json({
+                error: 'Выберите подтему из списка для этого события',
+              });
+              return;
+            }
+
+            normalizedAnswer = {
+              parentEventId: parentNode.id,
+              parentEventTitle: parentNode.title,
+              eventId: leaf.id,
+              eventTitle: leaf.title,
+              text: reflectionText,
+              slotIndex,
+            };
+          } else {
+            normalizedAnswer = {
+              parentEventId: null,
+              parentEventTitle: null,
+              eventId: null,
+              eventTitle: null,
+              text: reflectionText,
+              slotIndex,
+            };
+          }
         } else {
-          normalizedAnswer = { ...answerData, text: reflectionText, slotIndex };
+          const collected = collectLessonSlotThemes(question, published, settings, now);
+          let allowed = collected.items;
+          if (hasLinkedEvents) {
+            const allLinkedThemes = new Set<number>();
+            const byParent = new Map<number, number[]>();
+            dayEv.forEach(e => {
+              if (e.parentEventId) {
+                const list = byParent.get(e.parentEventId) || [];
+                list.push(e.id);
+                byParent.set(e.parentEventId, list);
+              }
+            });
+            const collectIds = (id: number) => {
+              allLinkedThemes.add(id);
+              (byParent.get(id) || []).forEach(collectIds);
+            };
+            question.linkedEventIds!.forEach(collectIds);
+            allowed = allowed.filter(e => allLinkedThemes.has(e.id));
+          }
+
+          if (collected.programThemeCount > 0 && allowed.length === 0 && !isLessonRef) {
+            res.status(400).json({
+              error: 'Уроки, к которым привязан этот вопрос, ещё не начались',
+            });
+            return;
+          }
+
+          if (allowed.length > 0) {
+            const eventId = Number(payload.eventId);
+            const picked = allowed.find(e => e.id === eventId);
+            if (!picked) {
+              res.status(400).json({
+                error: 'Выберите урок из предложенного списка проведённых тем',
+              });
+              return;
+            }
+            normalizedAnswer = {
+              ...answerData,
+              eventId: picked.id,
+              eventTitle: picked.title,
+              text: reflectionText,
+              slotIndex,
+            };
+          } else {
+            normalizedAnswer = { ...answerData, text: reflectionText, slotIndex };
+          }
         }
       } else {
         normalizedAnswer = { ...answerData, text: reflectionText, slotIndex };

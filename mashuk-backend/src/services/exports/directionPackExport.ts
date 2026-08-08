@@ -124,10 +124,15 @@ export async function writeDirectionPackExport(req: AdminRequest, res: Response)
   }
 
   const ab = wb.addWorksheet('After blocks');
-  ab.addRow(['Вопрос', 'Участник', 'Группа', 'Блок', 'Ответ']);
+  ab.addRow(['Вопрос', 'Участник', 'Группа', 'Событие / подтема', 'Ответ']);
   for (const q of data.afterBlocks?.questions ?? []) {
     for (const a of q.answers ?? []) {
-      ab.addRow([q.label, a.name, a.group, a.eventTitle ?? '', a.answer ?? '']);
+      const parent = String((a as { parentEventTitle?: string | null }).parentEventTitle || '').trim();
+      const topic = String(a.eventTitle || '').trim();
+      const path = parent && topic && parent !== topic
+        ? `${parent} → ${topic}`
+        : (topic || parent);
+      ab.addRow([q.label, a.name, a.group, path, a.answer ?? '']);
     }
   }
 

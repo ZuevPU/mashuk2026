@@ -173,7 +173,12 @@ export function participantAnswerSummary(data: unknown, type?: string | null): s
   }
 
   if (typeof o.text === 'string' && o.text.trim()) {
-    const prefix = o.eventTitle ? `${o.eventTitle}: ` : '';
+    const parent = typeof o.parentEventTitle === 'string' ? o.parentEventTitle.trim() : '';
+    const topic = typeof o.eventTitle === 'string' ? o.eventTitle.trim() : '';
+    const where = parent && topic && parent !== topic
+      ? `${parent} → ${topic}`
+      : (topic || parent);
+    const prefix = where ? `${where}: ` : '';
     return (prefix + o.text.trim()).trim();
   }
 

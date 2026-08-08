@@ -35,6 +35,10 @@ type LessonPickEvent = {
   endTime?: string | null;
 };
 
+type AfterBlocksEventNode = LessonPickEvent & {
+  children: LessonPickEvent[];
+};
+
 type LessonPickMeta = {
   programThemeCount?: number;
   emptyReason?: 'none' | 'none_in_program' | 'none_conducted_yet';
@@ -49,6 +53,7 @@ interface QuestionAnswerFormProps {
     timePoint?: string;
     block?: string;
     questionKind?: string | null;
+    reflectionKind?: string | null;
     answerType?: string | null;
     requiresLessonPick?: boolean;
     allowRetry?: boolean;
@@ -57,6 +62,7 @@ interface QuestionAnswerFormProps {
   };
   options: { id: number; label: string; value: string; parentOptionId?: number | null }[];
   dayEvents?: LessonPickEvent[];
+  afterBlocksEvents?: AfterBlocksEventNode[];
   lessonPickMeta?: LessonPickMeta | null;
   myAnswer?: { preview?: string; createdAt?: string | null; answerData?: unknown } | null;
   onSubmit: (answerData: unknown) => Promise<void>;
@@ -73,7 +79,12 @@ function formatStoredAnswer(
   if (typeof data === 'object') {
     const o = data as Record<string, unknown>;
     if (typeof o.text === 'string' && o.text.trim()) {
-      return o.eventTitle ? `${o.eventTitle}\n\n${o.text.trim()}` : o.text.trim();
+      const parent = typeof o.parentEventTitle === 'string' ? o.parentEventTitle.trim() : '';
+      const topic = typeof o.eventTitle === 'string' ? o.eventTitle.trim() : '';
+      const where = parent && topic && parent !== topic
+        ? `${parent} · ${topic}`
+        : (topic || parent);
+      return where ? `${where}\n\n${o.text.trim()}` : o.text.trim();
     }
     if (o.choice === '__other__' && typeof o.otherText === 'string') return o.otherText;
     if (typeof o.choice === 'string') return o.choice;
@@ -227,6 +238,224 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
 
 const MIN_LESSON_REFLECTION_CHARS = 20;
 
+function formatLessonTime(ev: { startTime?: string | null }) {
+  if (!ev.startTime) return null;
+  return new Date(ev.startTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
+const PickCard: React.FC<{
+  title: string;
+  meta?: string | null;
+  selected: boolean;
+  onClick: () => void;
+}> = ({ title, meta, selected, onClick }) => (
+  <div
+    onClick={onClick}
+    style={{
+      padding: 10, marginBottom: 6, borderRadius: 10, cursor: 'pointer',
+      border: selected ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
+      background: selected ? '#D8F3DC' : '#fff',
+    }}
+  >
+    <div style={{ fontWeight: 700, fontSize: 13 }}>{title}</div>
+    {meta && <div style={{ fontSize: 11, color: '#666' }}>{meta}</div>}
+  </div>
+);
+
+/** После блоков: событие программы → подтема → текст */
+const AfterBlocksForm: React.FC<{
+  question: QuestionAnswerFormProps['question'];
+  events: AfterBlocksEventNode[];
+  lessonPickMeta?: LessonPickMeta | null;
+  onSubmit: (data: unknown) => Promise<void>;
+}> = ({ question, events, lessonPickMeta, onSubmit }) => {
+  const [parentId, setParentId] = useState<number | null>(null);
+  const [topicId, setTopicId] = useState<number | null>(null);
+  const [text, setText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [step, setStep] = useState<'event' | 'topic' | 'text'>('event');
+
+  const parent = events.find(e => e.id === parentId) || null;
+  const children = parent?.children || [];
+  const topicPickNeeded = children.length > 1;
+  const topic = children.length > 0
+    ? children.find(c => c.id === topicId) || null
+    : parent;
+  const emptyReason = lessonPickMeta?.emptyReason;
+  const waiting = events.length === 0 && emptyReason === 'none_conducted_yet';
+  const textOk = text.trim().length >= MIN_LESSON_REFLECTION_CHARS;
+  const stepIndex = step === 'event' ? 1 : step === 'topic' ? 2 : (topicPickNeeded ? 3 : 2);
+  const totalSteps = topicPickNeeded ? 3 : 2;
+
+  const goAfterEventPick = (ev: AfterBlocksEventNode) => {
+    if (ev.children.length === 0) {
+      setTopicId(ev.id);
+      setStep('text');
+      return;
+    }
+    if (ev.children.length === 1) {
+      setTopicId(ev.children[0].id);
+      setStep('text');
+      return;
+    }
+    setStep('topic');
+  };
+
+  const handleSubmit = async () => {
+    if (!parent || !topic || !textOk) return;
+    setSaving(true);
+    try {
+      await onSubmit({
+        parentEventId: parent.id,
+        parentEventTitle: parent.title,
+        eventId: topic.id,
+        eventTitle: topic.title,
+        text: text.trim(),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const metaLine = (ev: LessonPickEvent) => (
+    [ev.place, formatLessonTime(ev)].filter(Boolean).join(' · ') || null
+  );
+
+  return (
+    <Div>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{question.title}</div>
+      {question.text && <div style={{ fontSize: 11, color: '#666', marginBottom: 12 }}>{question.text}</div>}
+      <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
+        Шаг {stepIndex} из {totalSteps}
+      </div>
+
+      {step === 'event' && (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+            Где вы были?
+          </div>
+          <div style={{ fontSize: 11, color: '#666', marginBottom: 10, lineHeight: 1.4 }}>
+            Выберите событие программы — параллельный блок, в котором вы участвовали.
+          </div>
+          {events.length === 0 && (
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 8, lineHeight: 1.4 }}>
+              {waiting
+                ? 'События ещё не начались — список появится после старта блоков по расписанию.'
+                : 'В программе дня пока нет связанных событий для этого вопроса.'}
+            </div>
+          )}
+          {events.map(ev => (
+            <PickCard
+              key={ev.id}
+              title={ev.title}
+              meta={[
+                metaLine(ev),
+                ev.children.length ? `${ev.children.length} подтем` : null,
+              ].filter(Boolean).join(' · ') || null}
+              selected={parentId === ev.id}
+              onClick={() => {
+                setParentId(ev.id);
+                setTopicId(null);
+              }}
+            />
+          ))}
+          <Button
+            size="l"
+            stretched
+            disabled={!parentId || waiting}
+            onClick={() => {
+              const next = events.find(e => e.id === parentId);
+              if (!next) return;
+              goAfterEventPick(next);
+            }}
+            style={{ marginTop: 8 }}
+          >
+            {waiting ? 'Пока недоступно' : 'Далее'}
+          </Button>
+        </>
+      )}
+
+      {step === 'topic' && parent && (
+        <>
+          <div style={{ fontSize: 12, marginBottom: 8, color: '#2D6A4F' }}>
+            Событие: <b>{parent.title}</b>
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+            Какая подтема?
+          </div>
+          <div style={{ fontSize: 11, color: '#666', marginBottom: 10, lineHeight: 1.4 }}>
+            Выберите конкретный урок, практику или тему внутри блока.
+          </div>
+          {children.map(ev => (
+            <PickCard
+              key={ev.id}
+              title={ev.title}
+              meta={metaLine(ev)}
+              selected={topicId === ev.id}
+              onClick={() => setTopicId(ev.id)}
+            />
+          ))}
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <Button size="l" mode="secondary" onClick={() => setStep('event')}>Назад</Button>
+            <Button
+              size="l"
+              stretched
+              disabled={topicId == null}
+              onClick={() => {
+                if (topicId == null) return;
+                setStep('text');
+              }}
+            >
+              Далее
+            </Button>
+          </div>
+        </>
+      )}
+
+      {step === 'text' && (
+        <>
+          {(parent || topic) && (
+            <div style={{ fontSize: 12, marginBottom: 8, color: '#2D6A4F', lineHeight: 1.4 }}>
+              {parent && topic && parent.id !== topic.id
+                ? <>Событие: <b>{parent.title}</b><br />Подтема: <b>{topic.title}</b></>
+                : <>Событие: <b>{(topic || parent)?.title}</b></>}
+            </div>
+          )}
+          <FormItem top="Что вынесли из этого блока?">
+            <Textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder="Своими словами: какая мысль запомнилась, что попробуете на практике…"
+            />
+          </FormItem>
+          <div style={{ fontSize: 11, color: textOk ? '#888' : '#B8621A', marginBottom: 4 }}>
+            {text.trim().length < MIN_LESSON_REFLECTION_CHARS
+              ? `Ещё минимум ${MIN_LESSON_REFLECTION_CHARS - text.trim().length} символов`
+              : 'Можно отправлять'}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <Button
+              size="l"
+              mode="secondary"
+              onClick={() => setStep(topicPickNeeded ? 'topic' : 'event')}
+            >
+              Назад
+            </Button>
+            <Button
+              size="l"
+              stretched
+              disabled={saving || !textOk || !parent || !topic}
+              onClick={handleSubmit}
+            >
+              Отправить
+            </Button>
+          </div>
+        </>
+      )}
+    </Div>
+  );
+};
+
 const LessonReflectionForm: React.FC<{
   question: QuestionAnswerFormProps['question'];
   dayEvents: LessonPickEvent[];
@@ -262,11 +491,6 @@ const LessonReflectionForm: React.FC<{
     }
   };
 
-  const formatLessonTime = (ev: LessonPickEvent) => {
-    if (!ev.startTime) return null;
-    return new Date(ev.startTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  };
-
   return (
     <Div>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{question.title}</div>
@@ -289,22 +513,13 @@ const LessonReflectionForm: React.FC<{
             </div>
           )}
           {dayEvents.map(ev => (
-            <div
+            <PickCard
               key={ev.id}
+              title={ev.title}
+              meta={[ev.place, formatLessonTime(ev)].filter(Boolean).join(' · ') || null}
+              selected={eventId === ev.id}
               onClick={() => setEventId(ev.id)}
-              style={{
-                padding: 10, marginBottom: 6, borderRadius: 10, cursor: 'pointer',
-                border: eventId === ev.id ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
-                background: eventId === ev.id ? '#D8F3DC' : '#fff',
-              }}
-            >
-              <div style={{ fontWeight: 700, fontSize: 13 }}>{ev.title}</div>
-              {(ev.place || ev.startTime) && (
-                <div style={{ fontSize: 11, color: '#666' }}>
-                  {[ev.place, formatLessonTime(ev)].filter(Boolean).join(' · ')}
-                </div>
-              )}
-            </div>
+            />
           ))}
           <Button
             size="l"
@@ -358,7 +573,13 @@ const LessonReflectionForm: React.FC<{
 };
 
 export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
-  question, options, dayEvents = [], lessonPickMeta = null, myAnswer, onSubmit,
+  question,
+  options,
+  dayEvents = [],
+  afterBlocksEvents = [],
+  lessonPickMeta = null,
+  myAnswer,
+  onSubmit,
 }) => {
   const [text, setText] = useState('');
   const [choice, setChoice] = useState('');
@@ -434,6 +655,23 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
           {body}
         </div>
       </Div>
+    );
+  }
+
+  const isAfterBlocks = question.questionKind === 'after_blocks'
+    || question.reflectionKind === 'after_blocks';
+
+  if (isAfterBlocks && question.type === 'open') {
+    const tree = afterBlocksEvents.length > 0
+      ? afterBlocksEvents
+      : dayEvents.map(e => ({ ...e, children: [] as LessonPickEvent[] }));
+    return (
+      <AfterBlocksForm
+        question={question}
+        events={tree}
+        lessonPickMeta={lessonPickMeta}
+        onSubmit={onSubmit}
+      />
     );
   }
 

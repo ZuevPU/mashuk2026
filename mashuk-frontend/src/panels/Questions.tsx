@@ -231,6 +231,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const [activeQuestion, setActiveQuestion] = useState<any>(null);
   const [questionOptions, setQuestionOptions] = useState<any[]>([]);
   const [dayEvents, setDayEvents] = useState<any[]>([]);
+  const [afterBlocksEvents, setAfterBlocksEvents] = useState<any[]>([]);
   const [lessonPickMeta, setLessonPickMeta] = useState<{
     programThemeCount?: number;
     emptyReason?: 'none' | 'none_in_program' | 'none_conducted_yet';
@@ -284,6 +285,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
       setActiveQuestion(detail.question);
       setQuestionOptions(detail.options || []);
       setDayEvents(detail.dayEvents || []);
+      setAfterBlocksEvents(detail.afterBlocksEvents || []);
       setLessonPickMeta(detail.lessonPickMeta ?? null);
       setMyAnswer(detail.myAnswer ?? null);
     } catch (err) {
@@ -421,6 +423,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                 question={activeQuestion}
                 options={questionOptions}
                 dayEvents={dayEvents}
+                afterBlocksEvents={afterBlocksEvents}
                 lessonPickMeta={lessonPickMeta}
                 myAnswer={myAnswer}
                 onSubmit={submitAnswer}
@@ -444,7 +447,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
     } else {
       setModal(null);
     }
-  }, [activeQuestion, replyTo, replyParentId, questionOptions, myAnswer, setModal, loadAll, orgThreadId, orgComposeOpen, dayEvents, lessonPickMeta, activePanel, id, showEveningFlow]);
+  }, [activeQuestion, replyTo, replyParentId, questionOptions, myAnswer, setModal, loadAll, orgThreadId, orgComposeOpen, dayEvents, afterBlocksEvents, lessonPickMeta, activePanel, id, showEveningFlow]);
 
   useEffect(() => {
     return () => setModal(null);

@@ -434,41 +434,100 @@ export function QuestionForm({
             </label>
           </div>
 
-          {(draft.questionKind === 'after_blocks' || draft.reflectionKind === 'after_blocks') && (
-            <div className="adm-field">
-              <span className="adm-label">Связать с блоками программы</span>
-              <p className="adm-muted" style={{ fontSize: 12, marginTop: 0 }}>
-                Выберите блоки программы из списка, после которых будет показан этот вопрос.
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 200, overflowY: 'auto', padding: 10, background: '#f9f9f9', borderRadius: 8, border: '1px solid #eee' }}>
-                {programEvents
-                  .filter(ev => draft.dayNumbers.includes(ev.dayNumber))
-                  .sort((a, b) => (a.dayNumber - b.dayNumber) || (a.startTime || '').localeCompare(b.startTime || '') || a.id - b.id)
-                  .map(ev => {
+          {(draft.questionKind === 'after_blocks' || draft.reflectionKind === 'after_blocks') && (() => {
+            const dayEvs = programEvents
+              .filter(ev => draft.dayNumbers.includes(ev.dayNumber)
+                && String(ev.blockType || '').toLowerCase() !== 'break')
+              .sort((a, b) => (a.dayNumber - b.dayNumber)
+                || (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+                || (a.startTime || '').localeCompare(b.startTime || '')
+                || a.id - b.id);
+            const byParent = new Map<number, typeof dayEvs>();
+            for (const ev of dayEvs) {
+              if (ev.parentEventId) {
+                const list = byParent.get(ev.parentEventId) || [];
+                list.push(ev);
+                byParent.set(ev.parentEventId, list);
+              }
+            }
+            const leafThemes = (rootId: number): typeof dayEvs => {
+              const walk = (id: number): typeof dayEvs => {
+                const kids = byParent.get(id) || [];
+                if (!kids.length) {
+                  const self = dayEvs.find(e => e.id === id);
+                  return self && self.id !== rootId ? [self] : [];
+                }
+                return kids.flatMap(k => {
+                  const nested = walk(k.id);
+                  return nested.length ? nested : [k];
+                });
+              };
+              return walk(rootId);
+            };
+            const roots = dayEvs.filter(ev => !ev.parentEventId);
+            const toggleLinked = (id: number, checked: boolean) => {
+              const next = checked
+                ? draft.linkedEventIds.filter(x => x !== id)
+                : [...draft.linkedEventIds, id];
+              onChange({ linkedEventIds: next });
+            };
+            return (
+              <div className="adm-field">
+                <span className="adm-label">Связать с событиями программы</span>
+                <p className="adm-muted" style={{ fontSize: 12, marginTop: 0 }}>
+                  Отметьте параллельные блоки (уроки, практики и т.п.). Участник сначала выберет событие,
+                  затем подтему внутри него и напишет ответ. Подтемы показаны справочно.
+                </p>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  maxHeight: 280,
+                  overflowY: 'auto',
+                  padding: 10,
+                  background: '#f9f9f9',
+                  borderRadius: 8,
+                  border: '1px solid #eee',
+                }}>
+                  {roots.map(ev => {
                     const checked = draft.linkedEventIds.includes(ev.id);
+                    const kids = leafThemes(ev.id);
                     return (
-                      <label key={ev.id} className="adm-forum-check" style={{ display: 'flex', gap: 6, minWidth: '45%', fontSize: 12 }}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => {
-                            const next = checked
-                              ? draft.linkedEventIds.filter(id => id !== ev.id)
-                              : [...draft.linkedEventIds, ev.id];
-                            onChange({ linkedEventIds: next });
-                          }}
-                        />
-                        <span style={{ color: '#888', marginRight: 4 }}>D{ev.dayNumber}</span>
-                        {ev.title}
-                      </label>
+                      <div key={ev.id} style={{ borderBottom: '1px solid #eee', paddingBottom: 6 }}>
+                        <label className="adm-forum-check" style={{ display: 'flex', gap: 6, fontSize: 13, fontWeight: 600 }}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleLinked(ev.id, checked)}
+                          />
+                          <span style={{ color: '#888', marginRight: 4 }}>D{ev.dayNumber}</span>
+                          {ev.title}
+                        </label>
+                        {kids.length > 0 && (
+                          <div style={{ marginLeft: 28, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {kids.map(child => (
+                              <div key={child.id} style={{ fontSize: 12, color: '#555', padding: '2px 0' }}>
+                                · {child.title}
+                                <span className="adm-muted" style={{ fontSize: 11, marginLeft: 6 }}>подтема</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
-                {programEvents.filter(ev => draft.dayNumbers.includes(ev.dayNumber)).length === 0 && (
-                  <p className="adm-muted" style={{ fontSize: 12 }}>Нет событий в выбранные дни.</p>
+                  {roots.length === 0 && (
+                    <p className="adm-muted" style={{ fontSize: 12 }}>Нет событий в выбранные дни.</p>
+                  )}
+                </div>
+                {draft.linkedEventIds.length > 0 && (
+                  <p className="adm-muted" style={{ fontSize: 12, marginBottom: 0 }}>
+                    Выбрано событий: {draft.linkedEventIds.length}
+                  </p>
                 )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {(draft.questionKind === 'day_summary'
             || draft.reflectionKind === 'evening_summary'
