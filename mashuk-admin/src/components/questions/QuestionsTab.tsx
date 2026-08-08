@@ -101,9 +101,15 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
       adminFetch('/participants/groups').catch(() => ({ groups: [] })),
       adminFetch('/shifts').catch(() => ({ shifts: [] })),
       adminFetch('/events').catch(() => ({ events: [] })),
-      adminFetch('/participants?limit=500&includeHidden=false').catch(() => ({ participants: [] })),
+      adminFetch('/participants?limit=2000').catch(() => ({ participants: [] })),
     ]);
-    setParticipants(partRes.participants || []);
+    const list = Array.isArray(partRes.participants) ? partRes.participants : [];
+    setParticipants(list.map((p: any) => ({
+      id: p.id,
+      firstName: p.firstName,
+      lastName: p.lastName,
+      direction: p.direction || null,
+    })));
     setDirections(dirRes.directions || []);
     setGroups(grpRes.groups || []);
     setAllEvents(evRes.events || []);
@@ -173,6 +179,21 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
     return () => { cancelled = true; };
   }, [view, questions, editingId, adminFetch]);
 
+  const reloadParticipants = useCallback(async () => {
+    try {
+      const partRes = await adminFetch('/participants?limit=2000');
+      const list = Array.isArray(partRes.participants) ? partRes.participants : [];
+      setParticipants(list.map((p: any) => ({
+        id: p.id,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        direction: p.direction || null,
+      })));
+    } catch {
+      /* keep previous list */
+    }
+  }, [adminFetch]);
+
   const openCreate = async () => {
     const meta = await loadMeta();
     const day = dayFilter ? Number(dayFilter) : meta.cd;
@@ -192,12 +213,19 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
     setFormTab('main');
     setShowPreview(false);
     setView('form');
+    void reloadParticipants();
     const detail = await adminFetch(`/questions/${q.id}`);
     setDraft(draftFromQuestion(detail.question, detail.options || []));
     setAnswerCount(detail.question?.answerCount ?? q.answerCount ?? 0);
     const ver = await adminFetch(`/questions/${q.id}/versions`);
     setVersions(ver.versions || []);
   };
+
+  useEffect(() => {
+    if (view === 'form' && draft.questionKind === 'practices_vote') {
+      void reloadParticipants();
+    }
+  }, [view, draft.questionKind, reloadParticipants]);
 
   const persistOptions = async (questionId: number, options: QuestionDraft['options']) => {
     const existing = (await adminFetch(`/questions/${questionId}/options`)).options || [];

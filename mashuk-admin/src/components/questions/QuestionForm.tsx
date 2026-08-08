@@ -207,6 +207,9 @@ export function QuestionForm({
                   })}
                 />
               </label>
+              <p className="adm-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
+                В колонке «Участник» сразу список ({participants.length}): первый пункт — «ФИО вручную».
+              </p>
               <div style={{ overflowX: 'auto' }}>
                 <table className="adm-table">
                   <thead>
@@ -221,10 +224,12 @@ export function QuestionForm({
                   </thead>
                   <tbody>
                     {draft.practicesConfig.practices.map((row, idx) => {
-                      const isManual = row.source === 'manual' || idx === 0;
+                      const selectValue = row.source === 'manual'
+                        ? '__manual__'
+                        : (row.participantId != null ? String(row.participantId) : '__manual__');
                       return (
                         <tr key={row.id}>
-                          <td>{idx + 1}{idx === 0 ? ' · иное' : ''}</td>
+                          <td>{idx + 1}</td>
                           <td>
                             <input
                               className="adm-input"
@@ -251,23 +256,26 @@ export function QuestionForm({
                             />
                           </td>
                           <td>
-                            {isManual ? (
-                              <input
-                                className="adm-input"
-                                value={row.participantName}
-                                placeholder="ФИО вручную"
-                                onChange={e => {
-                                  const practices = draft.practicesConfig.practices.map((p, i) =>
-                                    i === idx ? { ...p, source: 'manual' as const, participantId: null, participantName: e.target.value } : p);
-                                  onChange({ practicesConfig: { ...draft.practicesConfig, practices } });
-                                }}
-                              />
-                            ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 200 }}>
                               <select
                                 className="adm-input"
-                                value={row.participantId ?? ''}
+                                value={selectValue}
                                 onChange={e => {
-                                  const pid = e.target.value ? Number(e.target.value) : null;
+                                  const val = e.target.value;
+                                  if (val === '__manual__') {
+                                    const practices = draft.practicesConfig.practices.map((pr, i) =>
+                                      i === idx
+                                        ? {
+                                          ...pr,
+                                          source: 'manual' as const,
+                                          participantId: null,
+                                          participantName: pr.source === 'manual' ? pr.participantName : '',
+                                        }
+                                        : pr);
+                                    onChange({ practicesConfig: { ...draft.practicesConfig, practices } });
+                                    return;
+                                  }
+                                  const pid = val ? Number(val) : null;
                                   const p = participants.find(x => x.id === pid);
                                   const name = p ? `${p.lastName || ''} ${p.firstName || ''}`.trim() : '';
                                   const practices = draft.practicesConfig.practices.map((pr, i) =>
@@ -277,30 +285,57 @@ export function QuestionForm({
                                         source: 'participant' as const,
                                         participantId: pid,
                                         participantName: name,
-                                        direction: p?.direction || pr.direction,
+                                        direction: p?.direction || '',
                                       }
                                       : pr);
                                   onChange({ practicesConfig: { ...draft.practicesConfig, practices } });
                                 }}
                               >
-                                <option value="">— выбрать —</option>
+                                <option value="__manual__">ФИО вручную</option>
                                 {participants.map(p => (
                                   <option key={p.id} value={p.id}>
                                     {`${p.lastName || ''} ${p.firstName || ''}`.trim() || `#${p.id}`}
+                                    {p.direction ? ` · ${p.direction}` : ''}
                                   </option>
                                 ))}
                               </select>
-                            )}
+                              {participants.length === 0 && (
+                                <span className="adm-muted" style={{ fontSize: 11 }}>
+                                  Список участников пуст — проверьте смену или обновите страницу
+                                </span>
+                              )}
+                              {(row.source === 'manual' || selectValue === '__manual__') && (
+                                <input
+                                  className="adm-input"
+                                  value={row.participantName}
+                                  placeholder="Введите ФИО"
+                                  onChange={e => {
+                                    const practices = draft.practicesConfig.practices.map((p, i) =>
+                                      i === idx
+                                        ? {
+                                          ...p,
+                                          source: 'manual' as const,
+                                          participantId: null,
+                                          participantName: e.target.value,
+                                        }
+                                        : p);
+                                    onChange({ practicesConfig: { ...draft.practicesConfig, practices } });
+                                  }}
+                                />
+                              )}
+                            </div>
                           </td>
                           <td>
                             <input
                               className="adm-input"
                               value={row.direction}
                               placeholder="Направление"
-                              readOnly={!isManual && !!row.participantId}
-                              title={!isManual && !!row.participantId ? 'Подтягивается из профиля участника' : undefined}
+                              readOnly={row.source === 'participant' && !!row.participantId}
+                              title={row.source === 'participant' && row.participantId
+                                ? 'Подтягивается из профиля участника'
+                                : undefined}
                               onChange={e => {
-                                if (!isManual && row.participantId) return;
+                                if (row.source === 'participant' && row.participantId) return;
                                 const practices = draft.practicesConfig.practices.map((p, i) =>
                                   i === idx ? { ...p, direction: e.target.value } : p);
                                 onChange({ practicesConfig: { ...draft.practicesConfig, practices } });
@@ -308,7 +343,7 @@ export function QuestionForm({
                             />
                           </td>
                           <td>
-                            {idx > 0 && (
+                            {draft.practicesConfig.practices.length > 1 && (
                               <button
                                 type="button"
                                 className="adm-btn adm-btn-danger adm-btn-sm"
@@ -336,7 +371,7 @@ export function QuestionForm({
                     ...draft.practicesConfig,
                     practices: [
                       ...draft.practicesConfig.practices,
-                      { ...emptyPracticeRow(), source: 'participant', sortOrder: draft.practicesConfig.practices.length },
+                      { ...emptyPracticeRow(), source: 'manual', sortOrder: draft.practicesConfig.practices.length },
                     ],
                   },
                 })}

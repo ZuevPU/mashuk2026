@@ -73,37 +73,50 @@ export function PracticesVoteForm({ config, initialLikedIds = [], onSubmit }: Pr
       {config.resultsPublished ? (
         <>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>Результаты голосования</div>
-          {sorted.map(p => (
-            <div
-              key={p.id}
-              style={{
-                marginBottom: 10,
-                padding: 12,
-                borderRadius: 12,
-                border: '1px solid #E0DAD0',
-                background: '#fff',
-              }}
-            >
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{p.title}</div>
-              {(p.participantName || p.direction) && (
-                <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
-                  {[p.participantName, p.direction].filter(Boolean).join(' · ')}
-                </div>
-              )}
-              <div style={{ fontSize: 13, marginTop: 8 }}>
-                {p.resultPlace ? <>Место: <strong>{p.resultPlace}</strong></> : null}
-                {p.resultPlace && p.resultTime ? ' · ' : null}
-                {p.resultTime ? <>Время: <strong>{p.resultTime}</strong></> : null}
-                {!p.resultPlace && !p.resultTime ? <span style={{ color: '#888' }}>Место и время уточняются</span> : null}
-              </div>
+          {sorted.length === 0 ? (
+            <div style={{ fontSize: 13, color: '#888' }}>Практики пока не опубликованы</div>
+          ) : (
+            <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid #E0DAD0', background: '#fff' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#F5F0E8', textAlign: 'left' }}>
+                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Практика</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Участник</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Место</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 700 }}>Время</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map(p => (
+                    <tr key={p.id} style={{ borderTop: '1px solid #EDE7DC' }}>
+                      <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
+                        <div style={{ fontWeight: 700 }}>{p.title}</div>
+                        {p.direction ? <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>{p.direction}</div> : null}
+                      </td>
+                      <td style={{ padding: '10px 12px', verticalAlign: 'top', color: '#444' }}>
+                        {p.participantName || '—'}
+                      </td>
+                      <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
+                        {p.resultPlace || <span style={{ color: '#888' }}>уточняется</span>}
+                      </td>
+                      <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
+                        {p.resultTime || <span style={{ color: '#888' }}>уточняется</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
+          )}
         </>
       ) : (
         <>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>
             Осталось лайков: {remaining} из {quota}
           </div>
+          {sorted.length === 0 && (
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 10 }}>Список практик пока пуст</div>
+          )}
           {sorted.map(p => {
             const isOpen = !!expanded[p.id];
             const isLiked = liked.includes(p.id);
