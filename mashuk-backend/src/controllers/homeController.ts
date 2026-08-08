@@ -7,11 +7,13 @@ import {
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
   getForumSettings, formatTime, getMoscowPhase, isEveningWrapWindow,
-  getTouchpointAccess, getForumOperationalDateKey, resolveEffectiveCurrentDay,
+  getForumOperationalDateKey, resolveEffectiveCurrentDay,
   resolveLiveProgramDay, stateCheckTimePointOrder,
+  lateAnswerPolicyForQuestion,
 } from '../services/helpers.js';
 import {
   getEventLiveStatus,
+  isKeyProgramBlock,
   resolveEventInterval,
 } from '../services/eventSchedule.js';
 import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
@@ -20,7 +22,7 @@ import {
   isTouchpointQuestionForForumDay,
 } from '../services/touchpointProgress.js';
 import { questionMatchesDay } from '../services/questionAdminHelpers.js';
-import { resolveQuestionDayForAccess } from '../services/questionEligibility.js';
+import { getQuestionAccess } from '../services/questionEligibility.js';
 import { getLevelProgress, totalRatingScore } from '../services/pointsService.js';
 import { loadDayContext } from './dayStateController.js';
 import { resolveHomeActiveCard } from '../services/homeActiveCard.js';
@@ -53,7 +55,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
 
     const answeredIds = new Set(participantAnswers.map(a => a.questionId));
 
-    const enrichMissed = (q: typeof publishedQuestions[0], access: ReturnType<typeof getTouchpointAccess>) => ({
+    const enrichMissed = (q: typeof publishedQuestions[0], access: ReturnType<typeof getQuestionAccess>) => ({
       id: q.id,
       title: q.title,
       closeTime: q.closeTime,
@@ -66,14 +68,16 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const missed = publishedQuestions
       .filter(q => !answeredIds.has(q.id))
       .map(q => {
-        const accessDay = resolveQuestionDayForAccess(q, currentDay);
-        const access = getTouchpointAccess(accessDay, currentDay, q.closeTime, now, q.publishTime);
+        const access = getQuestionAccess(q, currentDay, now);
         return enrichMissed(q, access);
       })
       .filter(q => q.access === 'open' || q.access === 'overdue' || q.access === 'locked');
 
     const activeMissed = missed.filter(q => q.access === 'open' || q.access === 'overdue');
-    const lockedMissed = missed.filter(q => q.access === 'locked');
+    // Просроченные проверки состояния не показываем — окно закрыто
+    const lockedMissed = missed.filter(q => (
+      q.access === 'locked' && lateAnswerPolicyForQuestion(q) !== 'hard_close'
+    ));
 
     const availableTasks = await db.select().from(tasks)
       .where(and(
@@ -98,8 +102,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         if (answeredIds.has(q.id) || q.block !== 'Проверка состояния') return false;
         if (!questionMatchesDay(q, currentDay)) return false;
         if ((q.timePoint || '') !== tp) return false;
-        const accessDay = resolveQuestionDayForAccess(q, currentDay);
-        const access = getTouchpointAccess(accessDay, currentDay, q.closeTime, now, q.publishTime);
+        const access = getQuestionAccess(q, currentDay, now);
         return access === 'open' || access === 'overdue';
       });
       if (priorityQuestion) break;
@@ -107,8 +110,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const pointB = publishedQuestions.find(q => {
       if (answeredIds.has(q.id)) return false;
       if (!(q.block === 'Точка Б' || q.dayNumber === 8)) return false;
-      const accessDay = resolveQuestionDayForAccess(q, currentDay);
-      const access = getTouchpointAccess(accessDay, currentDay, q.closeTime, now, q.publishTime);
+      const access = getQuestionAccess(q, currentDay, now);
       return access === 'open' || access === 'overdue';
     });
 
@@ -155,9 +157,9 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     }).filter(x => x.start);
 
     const schedule: { kind: string; title: string; time: string; place?: string | null }[] = [];
-    // All overlapping «сейчас» blocks — not only the first by startTime
+    // Оранжевым «Сейчас» — только ключевые блоки (не параллельные сессии и не темы внутри)
     const nowEvents = enrichedEvents
-      .filter(x => x.status === 'now')
+      .filter(x => x.status === 'now' && isKeyProgramBlock(x.event))
       .sort((a, b) => a.start!.getTime() - b.start!.getTime());
     for (const nowEvent of nowEvents) {
       schedule.push({
@@ -343,8 +345,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       counts: {
         availableQuestions: publishedQuestions.filter(q => {
           if (answeredIds.has(q.id)) return false;
-          const accessDay = resolveQuestionDayForAccess(q, currentDay);
-          const access = getTouchpointAccess(accessDay, currentDay, q.closeTime, now, q.publishTime);
+          const access = getQuestionAccess(q, currentDay, now);
           return access === 'open' || access === 'overdue';
         }).length,
         availableTasks: activeTasks.length,

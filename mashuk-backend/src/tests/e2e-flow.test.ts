@@ -98,7 +98,12 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
       .get('/api/auth/onboarding-meta')
       .set('X-Test-Vk-Id', String(E2E_VK_ID));
     assert.equal(meta.status, 200);
-    assert.equal(meta.body.goalQuestions?.[0], customGoal);
+    assert.equal(
+      typeof meta.body.goalQuestions?.[0] === 'string'
+        ? meta.body.goalQuestions[0]
+        : meta.body.goalQuestions?.[0]?.text,
+      customGoal,
+    );
 
     await request(app)
       .patch('/api/admin/forum-settings')

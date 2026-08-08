@@ -203,11 +203,62 @@ export function resolveLiveProgramDay(
 }
 
 /**
- * Точка осмысления:
+ * Как долго можно отвечать после closeTime:
+ * - hard_close — сразу закрыть (проверка состояния)
+ * - until_midnight — до 00:00 МСК дня окна (осмысление блоков)
+ * - until_day_rollover — до смены форумного дня (~02:00 МСК), как раньше
+ */
+export type LateAnswerPolicy = 'hard_close' | 'until_midnight' | 'until_day_rollover';
+
+export function lateAnswerPolicyForQuestion(q: {
+  type?: string | null;
+  block?: string | null;
+  title?: string | null;
+  reflectionKind?: string | null;
+  questionKind?: string | null;
+}): LateAnswerPolicy {
+  const block = (q.block || '').trim().toLowerCase();
+  const title = (q.title || '').toLowerCase();
+  const kind = String(q.reflectionKind || q.questionKind || '').toLowerCase();
+
+  if (
+    q.type === 'checkin'
+    || kind === 'state_check'
+    || block === 'проверка состояния'
+    || block.includes('проверк')
+  ) {
+    return 'hard_close';
+  }
+
+  if (
+    kind === 'after_event'
+    || kind === 'after_blocks'
+    || block === 'точки осмысления'
+    || block.includes('точки осмысления')
+    || title.includes('осмысление')
+  ) {
+    return 'until_midnight';
+  }
+
+  return 'until_day_rollover';
+}
+
+/** 00:00 МСК следующего календарного дня после даты closeTime (или сам closeTime, если он уже полночь). */
+export function moscowAnswerDeadline(closeTime: Date): Date {
+  const p = getMoscowParts(closeTime);
+  if (p.totalMinutes === 0) {
+    return new Date(closeTime.getTime());
+  }
+  const [y, m, d] = p.dateKey.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1, 0, 0, 0) - MSK_OFFSET_MS);
+}
+
+/**
+ * Точка осмысления / проверка состояния:
  * - dayNumber < effectiveCurrentDay → locked (день закончился / прошёл)
  * - dayNumber > effectiveCurrentDay → soon
  * - publishTime > now → soon (ещё не открылось)
- * - closeTime < now на текущем дне → overdue (можно до смены дня)
+ * - closeTime < now → overdue или locked в зависимости от LateAnswerPolicy
  */
 export function getTouchpointAccess(
   questionDay: number | null | undefined,
@@ -215,12 +266,19 @@ export function getTouchpointAccess(
   closeTime: Date | null | undefined,
   now = new Date(),
   publishTime?: Date | null,
+  latePolicy: LateAnswerPolicy = 'until_day_rollover',
 ): 'open' | 'overdue' | 'locked' | 'soon' {
   const qDay = questionDay ?? currentDay;
   if (qDay < currentDay) return 'locked';
   if (qDay > currentDay) return 'soon';
   if (publishTime && publishTime > now) return 'soon';
-  if (closeTime && closeTime < now) return 'overdue';
+  if (closeTime && closeTime < now) {
+    if (latePolicy === 'hard_close') return 'locked';
+    if (latePolicy === 'until_midnight') {
+      return now >= moscowAnswerDeadline(closeTime) ? 'locked' : 'overdue';
+    }
+    return 'overdue';
+  }
   return 'open';
 }
 

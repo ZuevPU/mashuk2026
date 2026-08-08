@@ -422,9 +422,9 @@ export const ProfilePanel: React.FC<{
                     {actionStyle.startRole.essence}
                   </div>
                 )}
-                {(p.user.workplace || p.user.position) && (
+                {(p.user.workplace || p.user.position || p.user.region) && (
                   <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
-                    {[p.user.position, p.user.workplace].filter(Boolean).join(' · ')}
+                    {[p.user.position, p.user.workplace, p.user.region].filter(Boolean).join(' · ')}
                   </div>
                 )}
               </div>

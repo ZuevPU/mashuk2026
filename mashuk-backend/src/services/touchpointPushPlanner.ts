@@ -1,7 +1,8 @@
 import { and, eq, gte, isNotNull, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { answers, participants, pushLog, questions } from '../db/schema.js';
-import { getForumSettings, getTouchpointAccess, resolveEffectiveCurrentDay } from './helpers.js';
+import { getForumSettings, resolveEffectiveCurrentDay } from './helpers.js';
+import { getQuestionAccess } from './questionEligibility.js';
 import { pushCopy } from './pushCopy.js';
 import { sendPushNotification } from './pushService.js';
 import { getMoscowParts } from './timePhase.js';
@@ -63,7 +64,7 @@ function isQuestionOpenForParticipant(
   answered: boolean,
 ): boolean {
   if (answered) return false;
-  const access = getTouchpointAccess(q.dayNumber, currentDay, q.closeTime, now, q.publishTime);
+  const access = getQuestionAccess(q, currentDay, now);
   return access === 'open' || access === 'overdue';
 }
 

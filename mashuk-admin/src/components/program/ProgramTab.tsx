@@ -335,7 +335,7 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
 
       <AdminAccordion title="Тематические теги" summary={`${tags.length} тегов`}>
         <p className="adm-forum-hint">
-          Совпадают с интересами из онбординга — от них строится блок «Рекомендуем тебе».
+          Совпадают с интересами из регистрации — от них строится блок «Рекомендуем тебе».
           {setTab && (
             <>
               {' '}

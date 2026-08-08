@@ -1,14 +1,27 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Panel, PanelHeader, Group, FormItem, CustomSelect, Button, Div, Cell,
-  Snackbar, Input, Textarea, Checkbox, Progress,
+  Snackbar, Input, Textarea, Checkbox, Radio, Progress,
 } from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { apiGet, apiPost } from '../api/client';
 import {
-  GOAL_QUESTIONS, INTEREST_GROUPS, DIAGNOSTIC_QUESTIONS, ROLE_CATALOG, scoreRoleClient, RoleKey,
+  GOAL_QUESTIONS,
+  INTEREST_GROUPS,
+  DIAGNOSTIC_QUESTIONS,
+  ROLE_CATALOG,
+  scoreRoleClient,
+  coerceGoalQuestions,
+  parseMultiGoalAnswer,
+  joinMultiGoalAnswer,
+  type GoalQuestion,
+  type RoleKey,
 } from '../data/onboarding';
+import {
+  REGION_OTHER_VALUE,
+  REGION_SELECT_OPTIONS,
+} from '../data/regions';
 
 type ApiRole = {
   roleKey: string;
@@ -46,7 +59,9 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   const [age, setAge] = useState('');
   const [workplace, setWorkplace] = useState('');
   const [position, setPosition] = useState('');
-  const [region, setRegion] = useState('');
+  const [regionSelect, setRegionSelect] = useState<string>('');
+  const [regionOther, setRegionOther] = useState('');
+  const region = regionSelect === REGION_OTHER_VALUE ? regionOther.trim() : regionSelect;
   const [consentPd, setConsentPd] = useState(false);
   const [consentAnalytics, setConsentAnalytics] = useState(false);
   const [consentPdMeta, setConsentPdMeta] = useState<{ version: number; title: string; body: string } | null>(null);
@@ -60,9 +75,12 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
     () => DIAGNOSTIC_QUESTIONS.map(() => null),
   );
   const [diagIndex, setDiagIndex] = useState(0);
+  const [diagIntro, setDiagIntro] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [goalQuestions, setGoalQuestions] = useState<string[]>([...GOAL_QUESTIONS]);
+  const [goalQuestions, setGoalQuestions] = useState<GoalQuestion[]>(() => (
+    GOAL_QUESTIONS.map(q => ({ ...q, options: [...q.options] }))
+  ));
   const [interestGroups, setInterestGroups] = useState<Array<{ title: string; tags: string[] }>>(
     INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] })),
   );
@@ -140,7 +158,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
     apiGet<{
       groupAssignMode?: string;
       groups?: { id: number; name: string; seatsLeft: number | null }[];
-      goalQuestions?: string[];
+      goalQuestions?: unknown;
       interestGroups?: Array<{ title: string; tags: string[] }>;
       interestMin?: number;
       interestMax?: number;
@@ -153,9 +171,10 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
       .then(data => {
         setGroupAssignMode((data.groupAssignMode as 'list' | 'auto') || 'list');
         setGroups(data.groups || []);
-        if (data.goalQuestions?.length) {
-          setGoalQuestions(data.goalQuestions);
-          setGoalAnswers(data.goalQuestions.map(() => ''));
+        if (Array.isArray(data.goalQuestions) && data.goalQuestions.length) {
+          const gq = coerceGoalQuestions(data.goalQuestions);
+          setGoalQuestions(gq);
+          setGoalAnswers(gq.map(() => ''));
         }
         if (data.interestGroups?.length) {
           setInterestGroups(data.interestGroups.map(g => ({ title: g.title, tags: [...g.tags] })));
@@ -185,7 +204,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
 
   const canGoStep1 = Boolean(
     directionId && age && Number(age) >= 14 && Number(age) <= 100
-    && workplace.trim() && position.trim() && region.trim() && consentPd && consentAnalytics
+    && workplace.trim() && position.trim() && region && consentPd && consentAnalytics
     && (groupAssignMode !== 'list' || groups.length === 0 || groupId),
   );
   const canGoStep2 = goalQuestions.every((_, i) => (goalAnswers[i] || '').trim().length > 0);
@@ -212,7 +231,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         directionId,
         workplace: workplace.trim(),
         position: position.trim(),
-        region: region.trim(),
+        region,
         consentPd: true,
         consentAnalytics: true,
         consentPdVersion: consentPdMeta?.version,
@@ -227,7 +246,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
       onRegistered?.();
       routeNavigator.replace('/');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка онбординга');
+      setError(e instanceof Error ? e.message : 'Ошибка регистрации');
     } finally {
       setLoading(false);
     }
@@ -235,7 +254,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
 
   return (
     <Panel id={id}>
-      <PanelHeader>Онбординг</PanelHeader>
+      <PanelHeader>Регистрация</PanelHeader>
       <Group>
         <Div>
           <Progress value={progressValue} />
@@ -271,8 +290,27 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
               <Input value={position} onChange={e => setPosition(e.target.value)} placeholder="Учитель истории…" />
             </FormItem>
             <FormItem top="Регион *">
-              <Input value={region} onChange={e => setRegion(e.target.value)} placeholder="Карачаево-Черкесская Республика" />
+              <CustomSelect
+                placeholder="Выберите регион"
+                searchable
+                options={REGION_SELECT_OPTIONS}
+                value={regionSelect || undefined}
+                onChange={e => {
+                  const v = String(e.target.value || '');
+                  setRegionSelect(v);
+                  if (v !== REGION_OTHER_VALUE) setRegionOther('');
+                }}
+              />
             </FormItem>
+            {regionSelect === REGION_OTHER_VALUE && (
+              <FormItem top="Укажите регион / страну *">
+                <Input
+                  value={regionOther}
+                  onChange={e => setRegionOther(e.target.value)}
+                  placeholder="Например: Казахстан"
+                />
+              </FormItem>
+            )}
             {groupAssignMode === 'list' && groups.length > 0 && (
               <FormItem top="Группа *">
                 <CustomSelect
@@ -316,19 +354,61 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 Эти же вопросы мы зададим на последний день, чтобы ты увидел, как изменился за смену.
               </p>
             </Div>
-            {goalQuestions.map((q, i) => (
-              <FormItem key={i} top={`${i + 1}. ${q.trim() || 'Вопрос'}`} topMultiline>
-                <Textarea
-                  value={goalAnswers[i]}
-                  onChange={e => {
-                    const next = [...goalAnswers];
-                    next[i] = e.target.value;
-                    setGoalAnswers(next);
-                  }}
-                  placeholder="Ответь свободно, 1–2 предложения"
-                />
-              </FormItem>
-            ))}
+            {goalQuestions.map((q, i) => {
+              const title = `${i + 1}. ${q.text.trim() || 'Вопрос'}`;
+              const setAnswer = (value: string) => {
+                const next = [...goalAnswers];
+                next[i] = value;
+                setGoalAnswers(next);
+              };
+              if (q.type === 'choice') {
+                return (
+                  <FormItem key={i} top={title} topMultiline>
+                    {q.options.map(opt => (
+                      <Radio
+                        key={opt}
+                        checked={goalAnswers[i] === opt}
+                        onChange={() => setAnswer(opt)}
+                        style={{ marginBottom: 6 }}
+                      >
+                        {opt}
+                      </Radio>
+                    ))}
+                  </FormItem>
+                );
+              }
+              if (q.type === 'multi') {
+                const selected = parseMultiGoalAnswer(goalAnswers[i] || '');
+                return (
+                  <FormItem key={i} top={`${title} (можно несколько)`} topMultiline>
+                    {q.options.map(opt => (
+                      <Checkbox
+                        key={opt}
+                        checked={selected.includes(opt)}
+                        onChange={() => {
+                          const nextSel = selected.includes(opt)
+                            ? selected.filter(v => v !== opt)
+                            : [...selected, opt];
+                          setAnswer(joinMultiGoalAnswer(nextSel));
+                        }}
+                        style={{ marginBottom: 6 }}
+                      >
+                        {opt}
+                      </Checkbox>
+                    ))}
+                  </FormItem>
+                );
+              }
+              return (
+                <FormItem key={i} top={title} topMultiline>
+                  <Textarea
+                    value={goalAnswers[i]}
+                    onChange={e => setAnswer(e.target.value)}
+                    placeholder="Ответь свободно, 1–2 предложения"
+                  />
+                </FormItem>
+              );
+            })}
             <Button size="l" stretched disabled={!canGoStep2} onClick={() => setStep(3)}>
               Дальше → Интересы
             </Button>
@@ -381,7 +461,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 ? `✓ Выбрано ${interests.length}${interestMax > interestMin ? ` (макс. ${interestMax})` : ''}`
                 : `Выбрано ${interests.length} — нужно минимум ${interestMin}`}
             </Div>
-            <Button size="l" stretched disabled={!canGoStep3} onClick={() => { setDiagIndex(0); setStep(4); }}>
+            <Button size="l" stretched disabled={!canGoStep3} onClick={() => { setDiagIndex(0); setDiagIntro(true); setStep(4); }}>
               Дальше → Диагностика роли
             </Button>
             <Button size="l" stretched mode="secondary" style={{ marginTop: 8 }} onClick={() => setStep(2)}>
@@ -390,7 +470,27 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
           </>
         )}
 
-        {step === 4 && (
+        {step === 4 && diagIntro && (
+          <>
+            <Div>
+              <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>Диагностика роли</h2>
+              <p style={{ margin: 0, fontSize: 14, color: '#444', lineHeight: 1.55 }}>
+                У каждого человека есть свой привычный способ действовать в обучении и совместной работе.
+                Мы условно называем его «ролью». Диагностика поможет определить, какая роль сейчас
+                проявляется у тебя сильнее всего. Это не оценка и не ярлык, а отправная точка, с которой
+                можно начать исследование себя или попробовать новые способы действия на программе.
+              </p>
+            </Div>
+            <Button size="l" stretched onClick={() => setDiagIntro(false)}>
+              Начать диагностику →
+            </Button>
+            <Button size="l" stretched mode="secondary" style={{ marginTop: 8 }} onClick={() => setStep(3)}>
+              ← Назад
+            </Button>
+          </>
+        )}
+
+        {step === 4 && !diagIntro && (
           <>
             <Div>
               <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>Диагностика роли</h2>
@@ -454,7 +554,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
               style={{ marginTop: 8 }}
               onClick={() => {
                 if (diagIndex > 0) setDiagIndex(diagIndex - 1);
-                else setStep(3);
+                else setDiagIntro(true);
               }}
             >
               ← Назад
@@ -532,7 +632,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
             <Button size="l" stretched onClick={() => setStep('confirm')}>
               Дальше
             </Button>
-            <Button size="l" stretched mode="secondary" style={{ marginTop: 8 }} onClick={() => { setDiagIndex(0); setStep(4); }}>
+            <Button size="l" stretched mode="secondary" style={{ marginTop: 8 }} onClick={() => { setDiagIndex(0); setDiagIntro(true); setStep(4); }}>
               ← Пересмотреть диагностику
             </Button>
           </>
@@ -552,6 +652,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
               <div><b>Направление:</b> {directions.find(d => d.id === directionId)?.name || '—'}</div>
               <div><b>Место работы:</b> {workplace}</div>
               <div><b>Должность:</b> {position}</div>
+              <div><b>Регион:</b> {region}</div>
               {groupAssignMode === 'list' && (
                 <div><b>Группа:</b> {groups.find(g => g.id === groupId)?.name || 'авто'}</div>
               )}

@@ -93,7 +93,7 @@ function renderShiftSummaryPdf(
   y += 20;
   const lines = [
     `Участников: ${data.participantsTotal}`,
-    `Онбординг завершён: ${data.onboarded}`,
+    `Регистрация завершена: ${data.onboarded}`,
     `Были активны: ${data.active}`,
     `Медалей выдано: ${data.medalsIssued}`,
     `Заданий одобрено: ${data.tasksApproved}`,

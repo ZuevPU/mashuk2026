@@ -4,8 +4,16 @@ export type InterestGroup = { title: string; tags: string[] };
 
 export type DiagQuestion = { text: string; options: string[] };
 
+export type GoalAnswerType = 'open' | 'choice' | 'multi';
+
+export type GoalQuestion = {
+  text: string;
+  type: GoalAnswerType;
+  options: string[];
+};
+
 export type RoleDiagnosticsConfig = {
-  goalQuestions: string[];
+  goalQuestions: GoalQuestion[];
   interestGroups: InterestGroup[];
   interestMin?: number;
   interestMax?: number;

@@ -158,7 +158,7 @@ export function RecommendationTagsTab({ adminFetch, act, reloadKey }: AdminTabPr
 
   return (
     <div className="adm-forum">
-      <AdminPageHero title={`Управление тегами · ${total} тегов`} hint="Единый реестр тегов для рекомендаций и онбординга." />
+      <AdminPageHero title={`Управление тегами · ${total} тегов`} hint="Единый реестр тегов для рекомендаций и регистрации." />
 
       {form && (
         <div className="card adm-forum-block">

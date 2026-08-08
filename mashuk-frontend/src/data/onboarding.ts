@@ -1,10 +1,58 @@
-export const GOAL_QUESTIONS = [
+export type GoalAnswerType = 'open' | 'choice' | 'multi';
+
+export type GoalQuestion = {
+  text: string;
+  type: GoalAnswerType;
+  options: string[];
+};
+
+/** Separator for multi-select goal answers (must match backend GOAL_MULTI_SEP). */
+export const GOAL_MULTI_SEP = ' · ';
+
+export const GOAL_QUESTIONS: GoalQuestion[] = [
   'С какой целью ты приехал на Машук?',
   'Что ты хочешь получить от программы?',
   'Какой запрос ты хочешь принести своему направлению?',
   'Что для тебя было бы главным результатом этих 8 дней?',
   'Что ты ожидаешь от других участников?',
-] as const;
+].map((text) => ({ text, type: 'open' as const, options: [] }));
+
+export function coerceGoalQuestions(raw: unknown): GoalQuestion[] {
+  if (!Array.isArray(raw) || raw.length < 1) {
+    return GOAL_QUESTIONS.map(q => ({ ...q, options: [...q.options] }));
+  }
+  return raw.slice(0, 12).map((item) => {
+    if (typeof item === 'string') {
+      return { text: item, type: 'open' as const, options: [] };
+    }
+    if (!item || typeof item !== 'object') {
+      return { text: '', type: 'open' as const, options: [] };
+    }
+    const obj = item as { text?: unknown; type?: unknown; options?: unknown };
+    const typeRaw = String(obj.type ?? 'open');
+    const type: GoalAnswerType = (typeRaw === 'choice' || typeRaw === 'multi') ? typeRaw : 'open';
+    const options = Array.isArray(obj.options)
+      ? obj.options.map(o => String(o ?? '').trim()).filter(Boolean)
+      : [];
+    const effectiveType: GoalAnswerType = (
+      type !== 'open' && options.length >= 2 ? type : 'open'
+    );
+    return {
+      text: String(obj.text ?? ''),
+      type: effectiveType,
+      options: effectiveType === 'open' ? [] : options,
+    };
+  });
+}
+
+export function parseMultiGoalAnswer(answer: string): string[] {
+  if (!answer) return [];
+  return answer.split(GOAL_MULTI_SEP).map(s => s.trim()).filter(Boolean);
+}
+
+export function joinMultiGoalAnswer(selected: string[]): string {
+  return selected.join(GOAL_MULTI_SEP);
+}
 
 export const INTEREST_GROUPS = [
   {

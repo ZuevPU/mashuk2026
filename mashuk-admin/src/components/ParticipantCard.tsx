@@ -46,6 +46,10 @@ type CardData = {
 
     workplace?: string | null;
 
+    region?: string | null;
+
+    position?: string | null;
+
     goals?: unknown;
 
     createdAt?: string;
@@ -486,6 +490,8 @@ export function ParticipantCardModal({
               </div>
 
               {p.workplace && <div className="adm-field-row">Место работы: {p.workplace}</div>}
+              {p.position && <div className="adm-field-row">Должность: {p.position}</div>}
+              {p.region && <div className="adm-field-row">Регион: {p.region}</div>}
 
               {p.interests != null && (
                 <div className="adm-field-row">

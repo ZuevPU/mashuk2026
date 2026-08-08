@@ -6,12 +6,15 @@ import {
   normalizeOnboardingConfig,
   normalizeGoalQuestions,
   getDefaultOnboardingConfig,
+  validateGoalAnswers,
+  GOAL_MULTI_SEP,
 } from '../services/roleService.js';
 
 describe('normalizeOnboardingConfig', () => {
   it('returns defaults for empty input', () => {
     const cfg = normalizeOnboardingConfig(null);
     assert.equal(cfg.goalQuestions.length, 5);
+    assert.equal(cfg.goalQuestions[0].type, 'open');
     assert.equal(cfg.questions.length, 8);
     assert.equal(cfg.optionToRole.length, 8);
     assert.equal(cfg.optionToRole[0].length, 6);
@@ -20,12 +23,13 @@ describe('normalizeOnboardingConfig', () => {
     assert.ok(cfg.interestGroups.length > 0);
   });
 
-  it('preserves custom goal question text', () => {
+  it('preserves custom goal question text from legacy strings', () => {
     const custom = 'Кастомный вопрос цели 1';
     const cfg = normalizeOnboardingConfig({
       goalQuestions: [custom, 'q2', 'q3', 'q4', 'q5'],
     });
-    assert.equal(cfg.goalQuestions[0], custom);
+    assert.equal(cfg.goalQuestions[0].text, custom);
+    assert.equal(cfg.goalQuestions[0].type, 'open');
   });
 
   it('accepts custom goal question count', () => {
@@ -33,7 +37,21 @@ describe('normalizeOnboardingConfig', () => {
       goalQuestions: ['a', 'b', 'c'],
     });
     assert.equal(cfg.goalQuestions.length, 3);
-    assert.deepEqual(cfg.goalQuestions, ['a', 'b', 'c']);
+    assert.deepEqual(cfg.goalQuestions.map(q => q.text), ['a', 'b', 'c']);
+  });
+
+  it('preserves choice/multi goal questions', () => {
+    const cfg = normalizeOnboardingConfig({
+      goalQuestions: [
+        { text: 'Выбери цель', type: 'choice', options: ['A', 'B'] },
+        { text: 'Несколько', type: 'multi', options: ['X', 'Y', 'Z'] },
+      ],
+    });
+    assert.equal(cfg.goalQuestions.length, 2);
+    assert.equal(cfg.goalQuestions[0].type, 'choice');
+    assert.deepEqual(cfg.goalQuestions[0].options, ['A', 'B']);
+    assert.equal(cfg.goalQuestions[1].type, 'multi');
+    assert.deepEqual(cfg.goalQuestions[1].options, ['X', 'Y', 'Z']);
   });
 
   it('preserves interest pick limits', () => {
@@ -78,6 +96,23 @@ describe('normalizeGoalQuestions', () => {
   it('keeps custom length', () => {
     assert.equal(normalizeGoalQuestions(['only one']).length, 1);
     assert.equal(normalizeGoalQuestions(['a', 'b', 'c', 'd', 'e', 'f', 'g']).length, 7);
+  });
+});
+
+describe('validateGoalAnswers', () => {
+  it('accepts open answers', () => {
+    const qs = normalizeGoalQuestions(['q1', 'q2']);
+    assert.equal(validateGoalAnswers(qs, ['a', 'b']), null);
+  });
+
+  it('validates choice and multi', () => {
+    const qs = normalizeGoalQuestions([
+      { text: 'one', type: 'choice', options: ['A', 'B'] },
+      { text: 'many', type: 'multi', options: ['X', 'Y', 'Z'] },
+    ]);
+    assert.equal(validateGoalAnswers(qs, ['A', `X${GOAL_MULTI_SEP}Z`]), null);
+    assert.match(validateGoalAnswers(qs, ['C', 'X']) || '', /вариант/);
+    assert.match(validateGoalAnswers(qs, ['A', 'X · W']) || '', /Некорректный/);
   });
 });
 

@@ -4,6 +4,7 @@ import {
   cloneDiagQuestions,
   DEFAULT_DIAG_MATRIX,
   DEFAULT_DIAG_QUESTIONS,
+  coerceGoalQuestions,
   DEFAULT_GOAL_QUESTIONS,
   DEFAULT_INTEREST_GROUPS,
 } from './constants';
@@ -16,6 +17,7 @@ import { RoleDiagnosticEditor } from './RoleDiagnosticEditor';
 import {
   ONBOARDING_STEPS,
   type AdminRole,
+  type GoalQuestion,
   type OnboardingStep,
   type RoleDiagnosticsConfig,
 } from './types';
@@ -28,7 +30,9 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
   const [step, setStep] = useState<OnboardingStep>('goals');
   const [loading, setLoading] = useState(true);
 
-  const [goalQuestions, setGoalQuestions] = useState<string[]>([...DEFAULT_GOAL_QUESTIONS]);
+  const [goalQuestions, setGoalQuestions] = useState<GoalQuestion[]>(() => (
+    DEFAULT_GOAL_QUESTIONS.map(q => ({ ...q, options: [...q.options] }))
+  ));
   const [interestGroups, setInterestGroups] = useState(
     () => DEFAULT_INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] })),
   );
@@ -96,9 +100,7 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
       setRoles(rolesRes.roles || []);
 
       const cfg = fs.settings?.roleDiagnosticsConfig || {};
-      const gq = Array.isArray(cfg.goalQuestions) && cfg.goalQuestions.length >= 1
-        ? cfg.goalQuestions.map((q: string) => String(q ?? ''))
-        : [...DEFAULT_GOAL_QUESTIONS];
+      const gq = coerceGoalQuestions(cfg.goalQuestions);
       const legacyDiag = Array.isArray(cfg.questions)
         && cfg.questions.length === 6
         && cfg.questions.every((q: { options?: unknown }) => Array.isArray(q?.options) && q.options.length === 4);
@@ -159,7 +161,7 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
       setSavedConfigJson(snapshotConfig(currentConfig));
     }, msg);
 
-  const saveAllConfig = () => saveConfig('Весь онбординг (config) сохранён');
+  const saveAllConfig = () => saveConfig('Вся регистрация (config) сохранена');
 
   const openAdviceForRole = (roleKey: string) => {
     setAdviceRoleFilter(roleKey);
@@ -175,13 +177,13 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
   };
 
   if (loading) {
-    return <p className="adm-muted">Загрузка конструктора онбординга…</p>;
+    return <p className="adm-muted">Загрузка конструктора регистрации…</p>;
   }
 
   return (
     <div className="adm-forum adm-onboarding">
       <div className="adm-forum-hero card">
-        <h2 className="adm-forum-hero-title">Конструктор онбординга</h2>
+        <h2 className="adm-forum-hero-title">Конструктор регистрации</h2>
         <p className="adm-forum-hint">
           Порядок для участника: регистрация → цели (Точка А) → интересы → диагностика роли → дальше приложение.
         </p>

@@ -4,7 +4,14 @@ import { z } from 'zod';
 import { db } from '../db/index.js';
 import { participants, directions, pedagogicalRoles, participantGroups } from '../db/schema.js';
 import { VkAuthRequest } from '../middlewares/vkAuth.js';
-import { scorePedagogicalRole, getRoleMeta, normalizeOnboardingConfig, interestTagsFromConfig } from '../services/roleService.js';
+import {
+  scorePedagogicalRole,
+  getRoleMeta,
+  normalizeOnboardingConfig,
+  interestTagsFromConfig,
+  validateGoalAnswers,
+} from '../services/roleService.js';
+import { normalizeRegion } from '../data/regions.js';
 import { getActiveConsentVersions } from './consentsController.js';
 import { generateQrToken } from '../services/qrService.js';
 import { awardPoints } from '../services/pointsService.js';
@@ -133,10 +140,9 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
 
     const data = parsed.data;
     const onboardingConfig = await getForumOnboardingConfig();
-    if (data.goalAnswers.length !== onboardingConfig.goalQuestions.length) {
-      res.status(400).json({
-        error: `Нужно ответить на ${onboardingConfig.goalQuestions.length} вопрос(а/ов) целеполагания`,
-      });
+    const goalErr = validateGoalAnswers(onboardingConfig.goalQuestions, data.goalAnswers);
+    if (goalErr) {
+      res.status(400).json({ error: goalErr });
       return;
     }
     if (
@@ -231,6 +237,12 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       return;
     }
 
+    const region = normalizeRegion(data.region);
+    if (!region || region === '__other__') {
+      res.status(400).json({ error: 'Укажите регион или свой вариант в поле «Иное»' });
+      return;
+    }
+
     const values = {
       vkId: vkUserId,
       shiftId,
@@ -239,7 +251,7 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       age: data.age,
       workplace: data.workplace,
       position: data.position,
-      region: data.region,
+      region,
       consentPd: true,
       consentAnalytics: true,
       consentPdVersion: data.consentPdVersion ?? consentVersions.pd,

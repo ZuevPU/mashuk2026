@@ -2,9 +2,8 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { questions } from '../db/schema.js';
 import { TOUCHPOINT_SLOTS, type TouchpointSlot } from './touchpointTemplates.js';
-import { getTouchpointAccess } from './helpers.js';
 import { questionMatchesDay } from './questionAdminHelpers.js';
-import { resolveQuestionDayForAccess } from './questionEligibility.js';
+import { getQuestionAccess } from './questionEligibility.js';
 
 export const TOUCHPOINT_BLOCKS = new Set(['Проверка состояния', 'Точки осмысления', 'Итоги дня']);
 
@@ -77,8 +76,7 @@ export function findTouchpointQuestionForSlot(
   if (opts?.currentDay != null) {
     const now = opts.now ?? new Date();
     const open = matched.filter(q => {
-      const accessDay = resolveQuestionDayForAccess(q, opts.currentDay!);
-      const access = getTouchpointAccess(accessDay, opts.currentDay!, q.closeTime, now, q.publishTime);
+      const access = getQuestionAccess(q, opts.currentDay!, now);
       return access === 'open' || access === 'overdue';
     });
     if (open[0]) return open[0];
@@ -128,8 +126,7 @@ export function buildTouchpointItemsForDay(
     }
     const done = matched.some(q => answeredIds.has(q.id));
     const q = findTouchpointQuestionForSlot(dayQs, slot, { answeredIds, currentDay, now })!;
-    const accessDay = resolveQuestionDayForAccess(q, currentDay);
-    const access = getTouchpointAccess(accessDay, currentDay, q.closeTime, now, q.publishTime);
+    const access = getQuestionAccess(q, currentDay, now);
     let state: TouchpointItem['state'] = 'pending';
     if (done) state = 'done';
     else if (access === 'locked') state = 'locked';

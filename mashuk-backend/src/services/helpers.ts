@@ -50,6 +50,8 @@ export {
   getMoscowParts,
   isEveningWrapWindow,
   getTouchpointAccess,
+  lateAnswerPolicyForQuestion,
+  moscowAnswerDeadline,
   resolveEffectiveCurrentDay,
   resolveLiveScheduleDay,
   resolveLiveScheduleDateKey,
@@ -61,3 +63,4 @@ export {
   isSameMoscowCalendarDay,
   getForumOperationalDateKey,
 } from './timePhase.js';
+export type { LateAnswerPolicy } from './timePhase.js';

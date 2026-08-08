@@ -5,6 +5,14 @@ export type EventLiveStatus = 'past' | 'now' | 'future';
 /** Default block length when end time is missing (avoids perpetual «сейчас»). */
 export const DEFAULT_EVENT_DURATION_MS = 90 * 60 * 1000;
 
+/** Admin «Ключевой блок» — только такие подсвечиваем оранжевым «Сейчас». */
+export function isKeyProgramBlock(e: {
+  isKeyBlock?: boolean | null;
+  blockType?: string | null;
+}): boolean {
+  return e.isKeyBlock === true || e.blockType === 'key_block';
+}
+
 const CLOCK_RE = /(\d{1,2})[:.](\d{2})/g;
 
 export function parseClockPair(timeSlot: string | null | undefined): {

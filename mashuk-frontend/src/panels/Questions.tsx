@@ -5,6 +5,7 @@ import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { useAppModal } from '../App';
 import { QuestionAnswerForm } from '../components/questions/QuestionAnswerForm';
 import { EveningDaySummaryFlow } from '../components/questions/EveningDaySummaryFlow';
+import { PriorityAction } from '../components/home/DashboardCards';
 import { EmptyState } from '../components/EmptyState';
 import { AnswerSuccessOverlay, type SubmitSuccessPayload, type AnswerConfirmationConfig } from '../components/questions/AnswerSuccessOverlay';
 import { RosmolCareServiceCard } from '../components/org/RosmolCareServiceCard';
@@ -230,13 +231,19 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const [activeQuestion, setActiveQuestion] = useState<any>(null);
   const [questionOptions, setQuestionOptions] = useState<any[]>([]);
   const [dayEvents, setDayEvents] = useState<any[]>([]);
-  const [myAnswer, setMyAnswer] = useState<{ preview?: string; createdAt?: string | null } | null>(null);
+  const [myAnswer, setMyAnswer] = useState<{
+    preview?: string;
+    createdAt?: string | null;
+    answerData?: unknown;
+  } | null>(null);
   const [replyTo, setReplyTo] = useState<number | null>(null);
   const [replyParentId, setReplyParentId] = useState<number | null>(null);
   const [successPayload, setSuccessPayload] = useState<SubmitSuccessPayload | null>(null);
   const [orgThreadId, setOrgThreadId] = useState<number | null>(null);
   const [orgComposeOpen, setOrgComposeOpen] = useState(false);
   const [myParticipantId, setMyParticipantId] = useState<number | null>(null);
+  const [eveningCard, setEveningCard] = useState<{ title: string; subtitle: string } | null>(null);
+  const [showEveningFlow, setShowEveningFlow] = useState(false);
 
   const loadAll = useCallback(() => {
     setLoading(true);
@@ -245,14 +252,18 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
       apiGet<any>('/questions'),
       apiGet<any>('/exchange'),
       apiGet<any>('/org/threads').catch(() => ({ threads: [] })),
+      apiGet<any>('/home').catch(() => null),
     ])
-      .then(([q, ex, org]) => {
+      .then(([q, ex, org, home]) => {
         setQuestions(q.questions || []);
         if (q.answerConfirm) setAnswerConfirmDefaults(q.answerConfirm);
         setExchange(ex.questions || []);
         if (typeof ex.myParticipantId === 'number') setMyParticipantId(ex.myParticipantId);
         setMyQuestions((ex.questions || []).filter((item: any) => item.isMine));
         setOrgThreads(org.threads || []);
+        const card = home?.eveningCard;
+        const showCard = !!card && (home?.timeSlot === 'evening' || home?.eveningWrap);
+        setEveningCard(showCard ? card : null);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Не удалось загрузить'))
       .finally(() => {
@@ -342,15 +353,42 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
       );
       return;
     }
-    if (activeQuestion) {
+    if (showEveningFlow) {
+      setModal(
+        <ModalRoot activeModal="evening" onClose={() => setShowEveningFlow(false)}>
+          <ModalPage id="evening" settlingHeight={100} onClose={() => setShowEveningFlow(false)}>
+            <ModalPageHeader>Итоговая анкета</ModalPageHeader>
+            <EveningDaySummaryFlow
+              onClose={() => setShowEveningFlow(false)}
+              onSubmitted={() => {
+                setShowEveningFlow(false);
+                setEveningCard(null);
+                showSubmitSuccess({
+                  confirm: {
+                    ...DEFAULT_CONFIRM,
+                    titleTemplate: 'Итоговая анкета сохранена',
+                  },
+                  xpAwarded: 15,
+                  track: 'path',
+                });
+                loadAll();
+              }}
+            />
+          </ModalPage>
+        </ModalRoot>,
+      );
+    } else if (activeQuestion) {
       const isEveningSummary = isEveningDaySummaryQuestion(activeQuestion);
+      const viewingOwnAnswer = !!myAnswer;
       setModal(
         <ModalRoot activeModal="answer" onClose={() => setActiveQuestion(null)}>
           <ModalPage id="answer" settlingHeight={100} onClose={() => setActiveQuestion(null)}>
             <ModalPageHeader>
-              {isEveningSummary ? 'Итоговая анкета' : activeQuestion.title}
+              {viewingOwnAnswer
+                ? 'Мой ответ'
+                : (isEveningSummary ? 'Итоговая анкета' : activeQuestion.title)}
             </ModalPageHeader>
-            {isEveningSummary ? (
+            {isEveningSummary && !viewingOwnAnswer ? (
               <EveningDaySummaryFlow
                 onClose={() => setActiveQuestion(null)}
                 onSubmitted={() => {
@@ -393,15 +431,18 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
     } else {
       setModal(null);
     }
-  }, [activeQuestion, replyTo, replyParentId, questionOptions, myAnswer, setModal, loadAll, orgThreadId, orgComposeOpen, dayEvents, activePanel, id]);
+  }, [activeQuestion, replyTo, replyParentId, questionOptions, myAnswer, setModal, loadAll, orgThreadId, orgComposeOpen, dayEvents, activePanel, id, showEveningFlow]);
 
   useEffect(() => {
     return () => setModal(null);
   }, [setModal]);
 
-  const unanswered = questions.filter(q =>
-    q.status === 'active' || q.status === 'overdue',
-  );
+  const unanswered = questions.filter(q => {
+    if (!(q.status === 'active' || q.status === 'overdue')) return false;
+    // Плашка итоговой анкеты уже сверху — не дублируем stub-вопрос в списке
+    if (eveningCard && isEveningDaySummaryQuestion(q)) return false;
+    return true;
+  });
   const canAnswer = (status: string) => status === 'active' || status === 'overdue';
   const answeredToday = questions.filter(q => q.status === 'done' && q.answeredToday);
   const answeredEarlier = questions.filter(q => q.status === 'done' && !q.answeredToday);
@@ -436,8 +477,17 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
           </>
         ) : tab === 'reflect' ? (
           <>
-            <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-              Вопросы для размышления и фиксации своих находок. Каждый ответ — ещё один шаг в вашем Пути
+            {eveningCard && !showEveningFlow && (
+              <PriorityAction
+                tag={eveningCard.title || '✦ Завершение дня'}
+                title="Итоговая анкета"
+                subtitle={eveningCard.subtitle}
+                buttonText="Заполнить →"
+                onClick={() => setShowEveningFlow(true)}
+              />
+            )}
+            <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8, lineHeight: 1.45 }}>
+              Вопросы для размышления и фиксации своих находок. Отвеченные можно открыть и перечитать в блоках ниже.
             </div>
             {unanswered.length > 0 && (
               <>
@@ -490,6 +540,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                     {q.answerPreview && (
                       <div style={{ fontSize: 12, color: '#555', marginTop: 6, lineHeight: 1.4 }}>{q.answerPreview}</div>
                     )}
+                    <div className="rq-btn" style={{ marginTop: 8 }}>Смотреть ответ</div>
                   </div>
                 ))}
               </>
@@ -506,9 +557,13 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                   >
                     <div className="rq-tag">{q.reflectionLabel || q.block || q.type}</div>
                     <div className="rq-q">{q.title}</div>
+                    {q.dayNumber != null && (
+                      <div className="rq-from">День {q.dayNumber}</div>
+                    )}
                     {q.answerPreview && (
                       <div style={{ fontSize: 12, color: '#555', marginTop: 6, lineHeight: 1.4 }}>{q.answerPreview}</div>
                     )}
+                    <div className="rq-btn" style={{ marginTop: 8 }}>Смотреть ответ</div>
                   </div>
                 ))}
               </>

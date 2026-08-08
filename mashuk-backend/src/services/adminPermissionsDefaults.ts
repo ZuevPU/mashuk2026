@@ -244,7 +244,7 @@ export function buildDefaultPermissionRows(): RoleSectionRow[] {
 export const SECTION_LABELS: Record<AdminSection, string> = {
   participants: 'Участники',
   directions: 'Направления',
-  onboarding: 'Онбординг',
+  onboarding: 'Регистрация',
   forum: 'Форум',
   events: 'Программа',
   knowledge: 'База знаний',

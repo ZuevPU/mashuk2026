@@ -5,14 +5,27 @@ import {
   questions, questionOptions, answers, exchangeQuestions, exchangeAnswers, participants, events,
 } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
-import { countWords, getForumSettings, getTouchpointAccess, resolveEffectiveCurrentDay, toTouchpointUiStatus, isSameMoscowCalendarDay, getMoscowParts, getForumOperationalDateKey } from '../services/helpers.js';
+import {
+  countWords,
+  getForumSettings,
+  resolveEffectiveCurrentDay,
+  toTouchpointUiStatus,
+  isSameMoscowCalendarDay,
+  getMoscowParts,
+  getForumOperationalDateKey,
+  lateAnswerPolicyForQuestion,
+} from '../services/helpers.js';
 import { awardPoints, pointsActionForQuestion } from '../services/pointsService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { emotionIdToZone, EMOTION_ZONE_LABELS } from '../services/emotionZones.js';
 import { filterEventsForLessonSlot, lessonSlotIndexForQuestion } from '../services/lessonSlotEvents.js';
 import { formatQuestionTimeWindow, getReflectionTypeLabel } from '../services/reflectionTypeLabel.js';
 import { resolveAnswerConfirmation } from '../services/answerConfirmation.js';
-import { questionVisibleToParticipant, resolveQuestionDayForAccess } from '../services/questionEligibility.js';
+import {
+  getQuestionAccess,
+  questionAudienceAllowsParticipant,
+  questionVisibleToParticipant,
+} from '../services/questionEligibility.js';
 import { evaluateMedalsForParticipantDetailed } from '../services/medalEvaluator.js';
 import { sendPushNotification } from '../services/pushService.js';
 import { participantAnswerSummary } from '../services/participantAnswerFormat.js';
@@ -77,18 +90,22 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
       ));
 
     const me = req.participant!;
-    const visible = list.filter(q =>
-      questionVisibleToParticipant(q, me, currentDay));
-
     const userAnswers = await db.select().from(answers)
       .where(eq(answers.participantId, me.id));
     const answeredIds = new Set(userAnswers.map(a => a.questionId));
     const answerByQuestion = new Map(userAnswers.map(a => [a.questionId, a]));
 
+    // Текущий день + уже отвеченные (в т.ч. прошлых дней) — чтобы можно было перечитать свои ответы
+    const visible = list.filter(q => {
+      if (answeredIds.has(q.id)) {
+        return questionAudienceAllowsParticipant(q, me);
+      }
+      return questionVisibleToParticipant(q, me, currentDay);
+    });
+
     const result = visible
       .map(q => {
-      const dayForAccess = resolveQuestionDayForAccess(q, currentDay);
-      let access = getTouchpointAccess(dayForAccess, currentDay, q.closeTime, now, q.publishTime);
+      let access = getQuestionAccess(q, currentDay, now);
       const opKey = getForumOperationalDateKey(now);
       if (q.publishTime) {
         const pubKey = getMoscowParts(q.publishTime).dateKey;
@@ -102,12 +119,14 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
       const preview = answered && userAnswer
         ? participantAnswerSummary(userAnswer.answerData, q.type)
         : '';
+      const latePolicy = lateAnswerPolicyForQuestion(q);
       return {
         ...q,
         subtitle: q.subtitle ?? null,
         sortOrder: q.sortOrder ?? 0,
         status,
         access,
+        latePolicy,
         answered,
         answeredAt,
         answeredToday: answered && answeredAt ? isSameMoscowCalendarDay(answeredAt, now) : false,
@@ -120,6 +139,8 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
       .filter(q => {
         if (q.answered) return true;
         if (q.access === 'soon') return false;
+        // Проверка состояния после окна — скрываем, чтобы нельзя было ответить
+        if (q.access === 'locked' && q.latePolicy === 'hard_close') return false;
         return true;
       })
       .sort((a, b) => (b.sortOrder ?? 0) - (a.sortOrder ?? 0) || a.id - b.id);
@@ -144,13 +165,25 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       res.status(403).json({ error: 'Question not available' });
       return;
     }
-    if (question.isHidden) {
+    const [existingAnswer] = await db.select().from(answers)
+      .where(and(
+        eq(answers.participantId, req.participant!.id),
+        eq(answers.questionId, id),
+      )).limit(1);
+    const hasOwnAnswer = !!existingAnswer;
+    if (question.isHidden && !hasOwnAnswer) {
       res.status(403).json({ error: 'Question not available' });
       return;
     }
     const settings = await getForumSettings();
     const currentDay = resolveEffectiveCurrentDay(settings, new Date());
-    if (!questionVisibleToParticipant(question, req.participant!, currentDay)) {
+    // Свой ответ можно открыть даже если день вопроса уже прошёл
+    if (hasOwnAnswer) {
+      if (!questionAudienceAllowsParticipant(question, req.participant!)) {
+        res.status(403).json({ error: 'Question not available' });
+        return;
+      }
+    } else if (!questionVisibleToParticipant(question, req.participant!, currentDay)) {
       res.status(403).json({ error: 'Question not available' });
       return;
     }
@@ -167,11 +200,6 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
         startTime: e.startTime ?? null,
       }));
     }
-    const [existingAnswer] = await db.select().from(answers)
-      .where(and(
-        eq(answers.participantId, req.participant!.id),
-        eq(answers.questionId, id),
-      )).limit(1);
     res.json({
       question: {
         ...question,
@@ -209,12 +237,16 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
     const now = new Date();
     const settings = await getForumSettings();
     const currentDay = resolveEffectiveCurrentDay(settings, now);
-    const dayForAccess = resolveQuestionDayForAccess(question, currentDay);
-    const access = getTouchpointAccess(dayForAccess, currentDay, question.closeTime, now, question.publishTime);
+    const access = getQuestionAccess(question, currentDay, now);
+    const latePolicy = lateAnswerPolicyForQuestion(question);
     if (access === 'locked' || access === 'soon') {
       res.status(400).json({
         error: access === 'locked'
-          ? 'Точка заморожена — день закончился'
+          ? (latePolicy === 'hard_close'
+            ? 'Время ответа на проверку состояния закончилось'
+            : latePolicy === 'until_midnight'
+              ? 'Время ответа закончилось (можно было до 00:00)'
+              : 'Точка заморожена — день закончился')
           : 'Question not yet available',
         access,
       });
@@ -224,7 +256,7 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
       res.status(403).json({ error: 'Question not available' });
       return;
     }
-    // overdue — ещё можно заполнить в текущем дне форума
+    // overdue — ещё можно (осмысление до 00:00; прочие — до смены дня форума)
     if (question.publishTime && question.publishTime > now) {
       res.status(400).json({ error: 'Question not yet published', access: 'soon' });
       return;

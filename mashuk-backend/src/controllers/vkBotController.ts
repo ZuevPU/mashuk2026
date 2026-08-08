@@ -85,7 +85,7 @@ export async function vkBotCallback(req: Request, res: Response): Promise<void> 
   try {
     const participant = await findParticipantByVk(vkId);
     if (!participant) {
-      await safeReply(vkId, 'Не нашли вашу регистрацию на текущей смене. Откройте мини-приложение форума и завершите онбординг.');
+      await safeReply(vkId, 'Не нашли вашу регистрацию на текущей смене. Откройте мини-приложение форума и завершите регистрацию.');
       return;
     }
 

@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Textarea, Button, Checkbox, Radio, Slider, Div, FormItem } from '@vkontakte/vkui';
-import { GOAL_QUESTIONS, ROLE_CATALOG } from '../../data/onboarding';
+import {
+  GOAL_QUESTIONS,
+  ROLE_CATALOG,
+  coerceGoalQuestions,
+  parseMultiGoalAnswer,
+  joinMultiGoalAnswer,
+  type GoalQuestion,
+} from '../../data/onboarding';
 import { apiGet } from '../../api/client';
 import { isPointBQuestion } from '../../utils/eveningSummaryQuestion';
 
@@ -31,12 +38,48 @@ interface QuestionAnswerFormProps {
   };
   options: { id: number; label: string; value: string; parentOptionId?: number | null }[];
   dayEvents?: { id: number; title: string; place?: string | null; startTime?: string | null }[];
-  myAnswer?: { preview?: string; createdAt?: string | null } | null;
+  myAnswer?: { preview?: string; createdAt?: string | null; answerData?: unknown } | null;
   onSubmit: (answerData: unknown) => Promise<void>;
 }
 
+function formatStoredAnswer(
+  myAnswer: { preview?: string; answerData?: unknown } | null | undefined,
+  questionType?: string,
+): string {
+  if (myAnswer?.preview?.trim()) return myAnswer.preview.trim();
+  const data = myAnswer?.answerData;
+  if (data == null) return '';
+  if (typeof data === 'string') return data.trim();
+  if (typeof data === 'object') {
+    const o = data as Record<string, unknown>;
+    if (typeof o.text === 'string' && o.text.trim()) {
+      return o.eventTitle ? `${o.eventTitle}\n\n${o.text.trim()}` : o.text.trim();
+    }
+    if (typeof o.choice === 'string') return o.choice;
+    if (Array.isArray(o.choices)) return o.choices.map(String).join(', ');
+    if (o.emotion != null || o.energy != null) {
+      const emo = CHECKIN_EMOTIONS.find(e => e.id === o.emotion);
+      const parts = [
+        emo ? `${emo.icon} ${emo.label}` : (o.emotion ? String(o.emotion) : null),
+        o.energy != null ? `энергия ${o.energy}/10` : null,
+        typeof o.reason === 'string' && o.reason.trim() ? o.reason.trim() : null,
+      ].filter(Boolean);
+      if (parts.length) return parts.join('\n');
+    }
+    if (Array.isArray(o.answers)) return o.answers.map(String).filter(Boolean).join('\n');
+    try {
+      return JSON.stringify(data, null, 2);
+    } catch {
+      return String(questionType || 'Ответ сохранён');
+    }
+  }
+  return String(data);
+}
+
 const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ onSubmit }) => {
-  const [goalQuestions, setGoalQuestions] = useState<string[]>([...GOAL_QUESTIONS]);
+  const [goalQuestions, setGoalQuestions] = useState<GoalQuestion[]>(() => (
+    GOAL_QUESTIONS.map(q => ({ ...q, options: [...q.options] }))
+  ));
   const [answers, setAnswers] = useState<string[]>(GOAL_QUESTIONS.map(() => ''));
   const [strongRole, setStrongRole] = useState('');
   const [growthRole, setGrowthRole] = useState('');
@@ -46,17 +89,18 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
   const [step, setStep] = useState(0);
 
   useEffect(() => {
-    apiGet<{ goalQuestions?: string[] }>('/auth/onboarding-meta')
+    apiGet<{ goalQuestions?: unknown }>('/auth/onboarding-meta')
       .then(data => {
-        if (data.goalQuestions?.length) {
-          setGoalQuestions(data.goalQuestions);
-          setAnswers(data.goalQuestions.map(() => ''));
+        if (Array.isArray(data.goalQuestions) && data.goalQuestions.length) {
+          const gq = coerceGoalQuestions(data.goalQuestions);
+          setGoalQuestions(gq);
+          setAnswers(gq.map(() => ''));
         }
       })
       .catch(() => undefined);
   }, []);
 
-  const canNextAnswers = true;
+  const canNextAnswers = goalQuestions.every((_, i) => (answers[i] || '').trim().length > 0);
   const canSubmit = !!strongRole && !!growthRole && growthWhy.trim().length > 0;
 
   const handleSubmit = async () => {
@@ -87,19 +131,61 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
 
       {step === 0 && (
         <>
-          {goalQuestions.map((q, i) => (
-            <FormItem key={i} top={`${i + 1}. ${q}`} topMultiline>
-              <Textarea
-                value={answers[i]}
-                onChange={e => {
-                  const next = [...answers];
-                  next[i] = e.target.value;
-                  setAnswers(next);
-                }}
-                placeholder="Ответ на выходе…"
-              />
-            </FormItem>
-          ))}
+          {goalQuestions.map((q, i) => {
+            const title = `${i + 1}. ${q.text.trim() || 'Вопрос'}`;
+            const setAnswer = (value: string) => {
+              const next = [...answers];
+              next[i] = value;
+              setAnswers(next);
+            };
+            if (q.type === 'choice') {
+              return (
+                <FormItem key={i} top={title} topMultiline>
+                  {q.options.map(opt => (
+                    <Radio
+                      key={opt}
+                      checked={answers[i] === opt}
+                      onChange={() => setAnswer(opt)}
+                      style={{ marginBottom: 6 }}
+                    >
+                      {opt}
+                    </Radio>
+                  ))}
+                </FormItem>
+              );
+            }
+            if (q.type === 'multi') {
+              const selected = parseMultiGoalAnswer(answers[i] || '');
+              return (
+                <FormItem key={i} top={`${title} (можно несколько)`} topMultiline>
+                  {q.options.map(opt => (
+                    <Checkbox
+                      key={opt}
+                      checked={selected.includes(opt)}
+                      onChange={() => {
+                        const nextSel = selected.includes(opt)
+                          ? selected.filter(v => v !== opt)
+                          : [...selected, opt];
+                        setAnswer(joinMultiGoalAnswer(nextSel));
+                      }}
+                      style={{ marginBottom: 6 }}
+                    >
+                      {opt}
+                    </Checkbox>
+                  ))}
+                </FormItem>
+              );
+            }
+            return (
+              <FormItem key={i} top={title} topMultiline>
+                <Textarea
+                  value={answers[i]}
+                  onChange={e => setAnswer(e.target.value)}
+                  placeholder="Ответ на выходе…"
+                />
+              </FormItem>
+            );
+          })}
           <Button size="l" stretched disabled={!canNextAnswers} onClick={() => setStep(1)}>Далее</Button>
         </>
       )}
@@ -202,10 +288,10 @@ const LessonReflectionForm: React.FC<{
 
       {step === 0 && (
         <>
-          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>На каком уроке / блоке ты был(а)?</div>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Какую тему ты осмысляешь?</div>
           {dayEvents.length === 0 && (
             <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
-              Событий дня в расписании пока нет — опишите блок текстом на следующем шаге.
+              Тем в расписании пока нет — опишите тему текстом на следующем шаге.
             </div>
           )}
           {dayEvents.map(ev => (
@@ -243,7 +329,7 @@ const LessonReflectionForm: React.FC<{
         <>
           {selected && (
             <div style={{ fontSize: 12, marginBottom: 8, color: '#2D6A4F' }}>
-              Урок: <b>{selected.title}</b>
+              Тема: <b>{selected.title}</b>
             </div>
           )}
           <Textarea value={text} onChange={e => setText(e.target.value)} placeholder="Что зафиксировал(а)?" />
@@ -273,22 +359,40 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
   const [dependentText, setDependentText] = useState('');
   const [saving, setSaving] = useState(false);
 
-  if (isPointBQuestion(question)) {
+  if (isPointBQuestion(question) && !myAnswer) {
     return <PointBForm onSubmit={onSubmit} />;
   }
 
-  const readOnly = !!myAnswer?.preview && !question.allowRetry;
+  const hasStoredAnswer = !!(myAnswer && (myAnswer.preview || myAnswer.answerData != null || myAnswer.createdAt));
+  const readOnly = hasStoredAnswer && !question.allowRetry;
 
-  if (readOnly) {
+  if (readOnly || (hasStoredAnswer && isPointBQuestion(question))) {
     const when = myAnswer?.createdAt
       ? new Date(myAnswer.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
       : null;
+    const body = formatStoredAnswer(myAnswer, question.type) || 'Ответ сохранён';
     return (
       <Div>
-        <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-          Ваш ответ сохранён{when ? ` · ${when}` : ''}
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{question.title}</div>
+        {question.text && (
+          <div style={{ fontSize: 11, color: '#666', marginBottom: 10, lineHeight: 1.4 }}>{question.text}</div>
+        )}
+        <div style={{ fontSize: 12, color: '#2F855A', marginBottom: 8, fontWeight: 600 }}>
+          Ваш ответ{when ? ` · ${when}` : ''}
         </div>
-        <div style={{ fontSize: 14, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{myAnswer!.preview}</div>
+        <div
+          style={{
+            fontSize: 14,
+            lineHeight: 1.5,
+            whiteSpace: 'pre-wrap',
+            padding: 12,
+            borderRadius: 12,
+            background: '#F7F5F0',
+            border: '1px solid #E8E2D6',
+          }}
+        >
+          {body}
+        </div>
       </Div>
     );
   }

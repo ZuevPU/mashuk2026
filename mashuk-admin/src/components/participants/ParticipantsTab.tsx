@@ -23,6 +23,7 @@ type ParticipantRow = {
   lastName: string;
   direction?: string;
   groupName?: string | null;
+  region?: string | null;
   pedagogicalRole?: string | null;
   pathPoints?: number;
   experiencePoints?: number;
@@ -350,6 +351,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
             <th>ФИО</th>
             <th>Направление</th>
             <th>Группа</th>
+            <th>Регион</th>
             <th>Роль</th>
             <th>Путь</th>
             <th>Опыт</th>
@@ -361,7 +363,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
         <tbody>
           {participants.length === 0 && (
             <tr>
-              <td colSpan={showIdColumn ? 13 : 12} className="adm-muted" style={{ padding: 24, textAlign: 'center' }}>
+              <td colSpan={showIdColumn ? 14 : 13} className="adm-muted" style={{ padding: 24, textAlign: 'center' }}>
                 {isHiddenList ? 'Никто не удалял профиль' : 'Участники не найдены'}
               </td>
             </tr>
@@ -403,6 +405,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
                 </select>
               </td>
               <td>{p.groupName || '—'}</td>
+              <td>{p.region || '—'}</td>
               <td onClick={e => e.stopPropagation()}>
                 <select
                   className="adm-input adm-input-narrow"

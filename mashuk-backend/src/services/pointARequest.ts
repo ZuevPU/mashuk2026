@@ -26,10 +26,14 @@ function isCriteriaQuestion(q: string): boolean {
  * Matches by question text; falls back to the first two configured questions.
  */
 export function buildPointARequestItems(
-  questions: string[] | null | undefined,
+  questions: Array<string | { text?: string | null }> | null | undefined,
   answers: string[] | null | undefined,
 ): PointARequestItem[] {
-  const qs = Array.isArray(questions) ? questions.map(q => String(q ?? '').trim()) : [];
+  const qs = Array.isArray(questions)
+    ? questions.map((q) => (
+      typeof q === 'string' ? q.trim() : String(q?.text ?? '').trim()
+    ))
+    : [];
   const as = Array.isArray(answers) ? answers.map(a => String(a ?? '').trim()) : [];
   const pairs = qs.map((question, i) => ({
     question: question || POINT_A_REQUEST_CANONICAL[i] || `Вопрос ${i + 1}`,

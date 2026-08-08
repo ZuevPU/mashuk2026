@@ -67,6 +67,7 @@ export const getProfile = async (req: ParticipantRequest, res: Response): Promis
         age: p.age,
         workplace: p.workplace,
         position: p.position,
+        region: p.region,
         groupId: p.groupId,
         groupName: p.groupName,
         shiftLabel: bundle.shiftLabel,

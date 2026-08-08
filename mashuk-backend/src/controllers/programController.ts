@@ -11,6 +11,7 @@ import { isPublishedStatus } from '../services/publishStatus.js';
 import { getForumDayDateLabel } from '../services/timePhase.js';
 import {
   getEventLiveStatus,
+  isKeyProgramBlock,
   calendarDateKeyFromTimestamp,
   forumDayDateKey,
   recommendationSubtitle,
@@ -333,7 +334,9 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
 
     const mapEvent = (e: typeof eventsList[0]) => {
       const { start, end } = resolveEventInterval(e, scheduleContext);
-      const status = getEventLiveStatus(day, liveScheduleDay, start, end, now);
+      const live = getEventLiveStatus(day, liveScheduleDay, start, end, now);
+      // Оранжевым «Сейчас» только ключевые блоки; темы/сессии внутри не подсвечиваем
+      const status = live === 'now' && !isKeyProgramBlock(e) ? 'future' : live;
       const childMapped = sortEvents(childByParent.get(e.id) || []).map(mapNestedChild);
       const speakers = mapSpeakers(e.speakerIds);
       const speakerLine = speakers

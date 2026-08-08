@@ -1,6 +1,20 @@
 import { answerText } from './exports/exportCommon.js';
 import { EVENING_SCALE_KEYS, EVENING_SCALE_LABELS } from './touchpointTemplates.js';
 
+const EMOTION_LABELS: Record<string, string> = {
+  joy: 'Радость',
+  calm: 'Спокойствие',
+  interest: 'Интерес',
+  inspiration: 'Вдохновение',
+  confidence: 'Уверенность',
+  tired: 'Усталость',
+  anxiety: 'Тревога',
+  irritation: 'Раздражение',
+  sadness: 'Грусть',
+  surprise: 'Удивление',
+  focus: 'Сосредоточенность',
+};
+
 const EVENING_BOOL_LABELS: Record<string, string> = {
   tripYes: 'Выезд',
   practiceYes: 'Практика',
@@ -126,8 +140,9 @@ export function participantAnswerSummary(data: unknown, type?: string | null): s
     const parts: string[] = [];
     const zone = o.emotionZoneLabel ? String(o.emotionZoneLabel) : '';
     const emo = o.emotion ? String(o.emotion) : '';
+    const emoLabel = EMOTION_LABELS[emo] || emo;
     if (zone) parts.push(zone);
-    else if (emo) parts.push(emo);
+    else if (emoLabel) parts.push(emoLabel);
     if (o.energy != null && o.energy !== '') parts.push(`энергия ${o.energy}/10`);
     if (typeof o.reason === 'string' && o.reason.trim()) parts.push(o.reason.trim());
     if (parts.length) return parts.join(' · ');

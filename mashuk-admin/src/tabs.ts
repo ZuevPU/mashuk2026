@@ -31,7 +31,7 @@ export const TAB_LABELS: Record<Tab, string> = {
   rating: 'Рейтинг',
   participants: 'Участники',
   directions: 'Направления',
-  onboarding: 'Онбординг',
+  onboarding: 'Регистрация',
   events: 'Программа',
   speakers: 'Спикеры',
   knowledge: 'База знаний',

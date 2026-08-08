@@ -1,7 +1,15 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
-import { getMoscowPhase, getTouchpointAccess, resolveEffectiveCurrentDay, getPreferredStateCheckPhase, stateCheckTimePointOrder } from '../services/timePhase.js';
+import {
+  getMoscowPhase,
+  getTouchpointAccess,
+  lateAnswerPolicyForQuestion,
+  moscowAnswerDeadline,
+  resolveEffectiveCurrentDay,
+  getPreferredStateCheckPhase,
+  stateCheckTimePointOrder,
+} from '../services/timePhase.js';
 import { normalizePiggybankTag, normalizePiggybankSource } from '../services/piggybankDict.js';
 
 describe('reflectionDepth v1', () => {
@@ -51,6 +59,41 @@ describe('touchpoint access', () => {
   it('marks soon when publishTime in future', () => {
     const future = new Date(Date.now() + 3600000);
     assert.equal(getTouchpointAccess(3, 3, null, new Date(), future), 'soon');
+  });
+
+  it('hard-closes state checks after closeTime', () => {
+    const past = new Date(Date.now() - 3600000);
+    assert.equal(
+      getTouchpointAccess(3, 3, past, new Date(), null, 'hard_close'),
+      'locked',
+    );
+  });
+
+  it('keeps block reflections overdue until Moscow midnight', () => {
+    // close 12:00 MSK (= 09:00 UTC) on 2026-08-12
+    const close = new Date(Date.UTC(2026, 7, 12, 9, 0, 0));
+    const beforeMidnight = new Date(Date.UTC(2026, 7, 12, 20, 30, 0)); // 23:30 MSK
+    const afterMidnight = new Date(Date.UTC(2026, 7, 12, 21, 0, 0)); // 00:00 MSK next day
+    assert.equal(
+      getTouchpointAccess(3, 3, close, beforeMidnight, null, 'until_midnight'),
+      'overdue',
+    );
+    assert.equal(
+      getTouchpointAccess(3, 3, close, afterMidnight, null, 'until_midnight'),
+      'locked',
+    );
+    assert.ok(moscowAnswerDeadline(close).getTime() === afterMidnight.getTime());
+  });
+
+  it('classifies late policies by block/type', () => {
+    assert.equal(
+      lateAnswerPolicyForQuestion({ type: 'checkin', block: 'Проверка состояния' }),
+      'hard_close',
+    );
+    assert.equal(
+      lateAnswerPolicyForQuestion({ type: 'open', block: 'Точки осмысления', title: 'Осмысление урока' }),
+      'until_midnight',
+    );
   });
 });
 

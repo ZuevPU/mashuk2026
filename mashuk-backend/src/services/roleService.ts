@@ -27,8 +27,20 @@ export type RoleDiagnosticsConfig = {
   questions?: Array<{ text: string; options: string[] }>;
 };
 
+export const GOAL_ANSWER_TYPES = ['open', 'choice', 'multi'] as const;
+export type GoalAnswerType = (typeof GOAL_ANSWER_TYPES)[number];
+
+/** Separator for multi-select goal answers stored as a single string. */
+export const GOAL_MULTI_SEP = ' · ';
+
+export type GoalQuestion = {
+  text: string;
+  type: GoalAnswerType;
+  options: string[];
+};
+
 export type OnboardingConfig = {
-  goalQuestions: string[];
+  goalQuestions: GoalQuestion[];
   interestGroups: Array<{ title: string; tags: string[] }>;
   /** How many interest tags the participant must pick (inclusive). */
   interestMin: number;
@@ -41,6 +53,8 @@ export const DEFAULT_INTEREST_MIN = 5;
 export const DEFAULT_INTEREST_MAX = 8;
 export const MIN_GOAL_QUESTIONS = 1;
 export const MAX_GOAL_QUESTIONS = 12;
+export const MIN_GOAL_OPTIONS = 2;
+export const MAX_GOAL_OPTIONS = 12;
 
 export function normalizeOptionToRole(
   raw: unknown,
@@ -183,13 +197,13 @@ export const DIAGNOSTIC_QUESTIONS: Array<{ text: string; options: string[] }> = 
   options: [...q.options],
 }));
 
-export const GOAL_QUESTIONS = [
+export const GOAL_QUESTIONS: GoalQuestion[] = [
   'С какой целью ты приехал на Машук?',
   'Что ты хочешь получить от программы?',
   'Какой запрос ты хочешь принести своему направлению?',
   'Что для тебя было бы главным результатом этих 8 дней?',
   'Что ты ожидаешь от других участников?',
-] as const;
+].map((text) => ({ text, type: 'open' as const, options: [] }));
 
 export const INTEREST_GROUPS: Array<{ title: string; tags: string[] }> = [
   {
@@ -237,13 +251,87 @@ export const INTEREST_GROUPS: Array<{ title: string; tags: string[] }> = [
   },
 ];
 
-export function normalizeGoalQuestions(raw: unknown): string[] {
-  const defaults = GOAL_QUESTIONS.map(q => q);
+export function goalQuestionTexts(questions: GoalQuestion[] | string[] | null | undefined): string[] {
+  if (!Array.isArray(questions)) return [];
+  return questions.map((q, i) => {
+    if (typeof q === 'string') return q.trim() || `Вопрос ${i + 1}`;
+    return String(q?.text ?? '').trim() || `Вопрос ${i + 1}`;
+  });
+}
+
+function normalizeGoalAnswerType(raw: unknown): GoalAnswerType {
+  const t = String(raw ?? '').trim();
+  return (GOAL_ANSWER_TYPES as readonly string[]).includes(t) ? (t as GoalAnswerType) : 'open';
+}
+
+export function normalizeGoalQuestions(raw: unknown): GoalQuestion[] {
+  const defaults = GOAL_QUESTIONS.map(q => ({ text: q.text, type: q.type, options: [...q.options] }));
   if (!Array.isArray(raw) || raw.length < MIN_GOAL_QUESTIONS) return defaults;
-  const sliced = raw.slice(0, MAX_GOAL_QUESTIONS);
-  const out = sliced.map((q) => String(q ?? '').trim().slice(0, 2000));
-  // Keep empty placeholders (admin fills texts later); need at least one slot
+  const out: GoalQuestion[] = [];
+  for (const item of raw.slice(0, MAX_GOAL_QUESTIONS)) {
+    if (typeof item === 'string') {
+      out.push({ text: item.trim().slice(0, 2000), type: 'open', options: [] });
+      continue;
+    }
+    if (!item || typeof item !== 'object') {
+      out.push({ text: '', type: 'open', options: [] });
+      continue;
+    }
+    const obj = item as { text?: unknown; type?: unknown; options?: unknown };
+    const text = String(obj.text ?? '').trim().slice(0, 2000);
+    const type = normalizeGoalAnswerType(obj.type);
+    let options: string[] = [];
+    if (Array.isArray(obj.options)) {
+      options = obj.options
+        .map(o => String(o ?? '').trim().slice(0, 500))
+        .filter(o => o.length > 0)
+        .slice(0, MAX_GOAL_OPTIONS);
+    }
+    out.push({
+      text,
+      type,
+      options: type === 'open' ? [] : options,
+    });
+  }
   return out.length >= MIN_GOAL_QUESTIONS ? out : defaults;
+}
+
+/** Returns error message or null if answers match the configured questions. */
+export function validateGoalAnswers(
+  questions: GoalQuestion[],
+  answers: string[],
+): string | null {
+  if (answers.length !== questions.length) {
+    return `Нужно ответить на ${questions.length} вопрос(а/ов) целеполагания`;
+  }
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    const answer = String(answers[i] ?? '').trim();
+    if (!answer) {
+      return `Ответьте на вопрос ${i + 1}`;
+    }
+    if (answer.length > 2000) {
+      return `Ответ на вопрос ${i + 1} слишком длинный`;
+    }
+    const effectiveType: GoalAnswerType = (
+      q.type !== 'open' && q.options.length >= MIN_GOAL_OPTIONS ? q.type : 'open'
+    );
+    if (effectiveType === 'choice') {
+      if (!q.options.includes(answer)) {
+        return `Выберите один из вариантов для вопроса ${i + 1}`;
+      }
+    } else if (effectiveType === 'multi') {
+      const parts = answer.split(GOAL_MULTI_SEP).map(s => s.trim()).filter(Boolean);
+      if (parts.length === 0) {
+        return `Выберите хотя бы один вариант для вопроса ${i + 1}`;
+      }
+      const allowed = new Set(q.options);
+      if (new Set(parts).size !== parts.length || !parts.every(p => allowed.has(p))) {
+        return `Некорректный выбор вариантов для вопроса ${i + 1}`;
+      }
+    }
+  }
+  return null;
 }
 
 export function normalizeInterestPickLimits(raw: unknown): { interestMin: number; interestMax: number } {

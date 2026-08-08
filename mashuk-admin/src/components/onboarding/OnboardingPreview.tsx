@@ -1,10 +1,16 @@
-import type { AdminRole, DiagQuestion, InterestGroup } from './types';
+import type { AdminRole, DiagQuestion, GoalQuestion, InterestGroup } from './types';
 
 type Props = {
-  goalQuestions: string[];
+  goalQuestions: GoalQuestion[];
   interestGroups: InterestGroup[];
   diagQuestions: DiagQuestion[];
   roles: AdminRole[];
+};
+
+const TYPE_LABEL: Record<GoalQuestion['type'], string> = {
+  open: 'свободный ответ',
+  choice: 'один вариант',
+  multi: 'несколько вариантов',
 };
 
 export function OnboardingPreview({ goalQuestions, interestGroups, diagQuestions, roles }: Props) {
@@ -13,14 +19,24 @@ export function OnboardingPreview({ goalQuestions, interestGroups, diagQuestions
     <div className="adm-forum-block card adm-onboarding-preview">
       <h3>Превью для дирекции</h3>
       <p className="adm-forum-hint">
-        Упрощённый вид текстов — как их увидит участник (без VK и без отправки ответов).
+        Упрощённый вид этапов — как их увидит участник (без VK и без отправки ответов).
       </p>
 
       <section className="card adm-forum-nested-card">
         <h4>Регистрация → Цели</h4>
         <ol className="adm-onboarding-preview-list">
           {goalQuestions.map((q, i) => (
-            <li key={i}><strong>Вопрос {i + 1}.</strong> {q}</li>
+            <li key={i}>
+              <strong>Вопрос {i + 1}.</strong> {q.text || '—'}
+              <span className="adm-muted"> ({TYPE_LABEL[q.type]})</span>
+              {(q.type === 'choice' || q.type === 'multi') && q.options.length > 0 && (
+                <ul>
+                  {q.options.filter(o => o.trim()).map((o, oi) => (
+                    <li key={oi}>{o}</li>
+                  ))}
+                </ul>
+              )}
+            </li>
           ))}
         </ol>
       </section>

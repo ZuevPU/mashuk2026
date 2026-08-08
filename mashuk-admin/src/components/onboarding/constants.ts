@@ -1,5 +1,7 @@
 /** Defaults synced with mashuk-backend navDiagnosticsDefaults (8×6). */
 
+import type { GoalQuestion } from './types';
+
 export const DEFAULT_DIAG_MATRIX: string[][] = [
   ['meaning_researcher', 'content_packer', 'practice_realizer', 'process_navigator', 'communication_guide', 'environment_keeper'],
   ['content_packer', 'practice_realizer', 'process_navigator', 'communication_guide', 'environment_keeper', 'meaning_researcher'],
@@ -11,13 +13,38 @@ export const DEFAULT_DIAG_MATRIX: string[][] = [
   ['process_navigator', 'environment_keeper', 'content_packer', 'communication_guide', 'practice_realizer', 'meaning_researcher'],
 ];
 
-export const DEFAULT_GOAL_QUESTIONS = [
+export const DEFAULT_GOAL_QUESTIONS: GoalQuestion[] = [
   'С какой целью ты приехал на Машук?',
   'Что ты хочешь получить от программы?',
   'Какой запрос ты хочешь принести своему направлению?',
   'Что для тебя было бы главным результатом этих 8 дней?',
   'Что ты ожидаешь от других участников?',
-];
+].map((text) => ({ text, type: 'open' as const, options: [] }));
+
+export function coerceGoalQuestions(raw: unknown): GoalQuestion[] {
+  if (!Array.isArray(raw) || raw.length < 1) {
+    return DEFAULT_GOAL_QUESTIONS.map(q => ({ ...q, options: [...q.options] }));
+  }
+  return raw.slice(0, 12).map((item) => {
+    if (typeof item === 'string') {
+      return { text: item, type: 'open' as const, options: [] };
+    }
+    if (!item || typeof item !== 'object') {
+      return { text: '', type: 'open' as const, options: [] };
+    }
+    const obj = item as { text?: unknown; type?: unknown; options?: unknown };
+    const typeRaw = String(obj.type ?? 'open');
+    const type = (typeRaw === 'choice' || typeRaw === 'multi') ? typeRaw : 'open';
+    const options = Array.isArray(obj.options)
+      ? obj.options.map(o => String(o ?? ''))
+      : [];
+    return {
+      text: String(obj.text ?? ''),
+      type,
+      options: type === 'open' ? [] : options,
+    };
+  });
+}
 
 export const DEFAULT_DIAG_QUESTIONS: Array<{ text: string; options: string[] }> = [
   {

@@ -90,7 +90,7 @@ export const forumSettings = pgTable('forum_settings', {
   recommendationTemplates: jsonb('recommendation_templates'),
   programRecEmptyNoMatchText: text('program_rec_empty_no_match_text'),
   programRecEmptyNoEventsText: text('program_rec_empty_no_events_text'),
-  /** Онбординг: goalQuestions, interestGroups, interestMin/Max, questions, optionToRole */
+  /** Онбординг: goalQuestions[{text,type,options}], interestGroups, interestMin/Max, questions, optionToRole */
   roleDiagnosticsConfig: jsonb('role_diagnostics_config'),
   leaderboardScopes: jsonb('leaderboard_scopes').default({
     total: true,
