@@ -377,7 +377,13 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
     || question.type === 'practices_vote'
     || !!question.practicesConfig;
 
-  if (isPracticesVote && question.practicesConfig) {
+  if (isPracticesVote) {
+    const cfg = question.practicesConfig || {
+      preamble: question.text || '',
+      likesPerParticipant: 3,
+      resultsPublished: false,
+      practices: [],
+    };
     const initialLiked = Array.isArray((myAnswer?.answerData as { likedPracticeIds?: string[] } | undefined)?.likedPracticeIds)
       ? (myAnswer!.answerData as { likedPracticeIds: string[] }).likedPracticeIds
       : [];
@@ -385,7 +391,7 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
       <Div>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{question.title}</div>
         <PracticesVoteForm
-          config={question.practicesConfig}
+          config={cfg}
           initialLikedIds={initialLiked}
           onSubmit={onSubmit}
         />

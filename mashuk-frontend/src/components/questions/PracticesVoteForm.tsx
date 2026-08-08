@@ -115,7 +115,9 @@ export function PracticesVoteForm({ config, initialLikedIds = [], onSubmit }: Pr
             Осталось лайков: {remaining} из {quota}
           </div>
           {sorted.length === 0 && (
-            <div style={{ fontSize: 13, color: '#888', marginBottom: 10 }}>Список практик пока пуст</div>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 10 }}>
+              Список практик пока пуст. Администратор ещё не добавил строки для голосования.
+            </div>
           )}
           {sorted.map(p => {
             const isOpen = !!expanded[p.id];

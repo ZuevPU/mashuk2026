@@ -245,7 +245,13 @@ export const crudQuestions = {
     const [{ count: answerCount }] = await db.select({ count: count() }).from(answers).where(eq(answers.questionId, id));
     const newTitle = enriched.title != null ? String(enriched.title) : before.title;
     const newText = enriched.text != null ? String(enriched.text) : before.text;
-    const textChanging = newText !== before.text || newTitle !== before.title;
+    const isPracticesVote = (enriched.questionKind ?? before.questionKind) === 'practices_vote'
+      || (enriched.answerType ?? before.answerType) === 'practices_vote'
+      || (enriched.type ?? before.type) === 'practices_vote';
+    // For practices vote, `text` mirrors preamble — do not version solely on preamble edits.
+    const textChanging = isPracticesVote
+      ? newTitle !== before.title
+      : (newText !== before.text || newTitle !== before.title);
 
     if (answerCount > 0 && textChanging) {
       await db.update(questions).set({ status: 'archived' }).where(eq(questions.id, id));
@@ -275,8 +281,14 @@ export const crudQuestions = {
         isHidden: enriched.isHidden !== undefined ? Boolean(enriched.isHidden) : before.isHidden,
         sortOrder: enriched.sortOrder !== undefined ? Number(enriched.sortOrder) : before.sortOrder,
         allowRetry: enriched.allowRetry !== undefined ? Boolean(enriched.allowRetry) : before.allowRetry,
+        allowOther: enriched.allowOther !== undefined ? Boolean(enriched.allowOther) : before.allowOther,
         pushOnPublish: enriched.pushOnPublish !== undefined ? Boolean(enriched.pushOnPublish) : before.pushOnPublish,
         pushTemplate: enriched.pushTemplate !== undefined ? (enriched.pushTemplate as string | null) : before.pushTemplate,
+        linkedEventIds: (enriched.linkedEventIds as number[] | undefined) ?? before.linkedEventIds,
+        practicesConfig: enriched.practicesConfig !== undefined ? enriched.practicesConfig : before.practicesConfig,
+        showWhen: (enriched.showWhen !== undefined
+          ? enriched.showWhen
+          : before.showWhen) as { questionId: number; optionValues: string[] } | null,
         parentQuestionId: id,
       };
       const [created] = await db.insert(questions).values(copyFields).returning();

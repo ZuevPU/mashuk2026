@@ -27,6 +27,7 @@ type Props = {
   onSaveDraft: () => void;
   onPublish: () => void;
   onUnpublish?: () => void;
+  onViewPracticesResults?: () => void;
   onCancel: () => void;
   showPreview: boolean;
   onTogglePreview: () => void;
@@ -57,6 +58,7 @@ export function QuestionForm({
   onSaveDraft,
   onPublish,
   onUnpublish,
+  onViewPracticesResults,
   onCancel,
   showPreview,
   onTogglePreview,
@@ -177,7 +179,24 @@ export function QuestionForm({
 
           {draft.questionKind === 'practices_vote' && (
             <div className="adm-forum-block" style={{ marginBottom: 16 }}>
-              <h4 style={{ margin: '0 0 8px' }}>Голосование за практики</h4>
+              <div className="adm-forum-toolbar" style={{ marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+                <h4 style={{ margin: 0 }}>Голосование за практики</h4>
+                {currentQuestionId && onViewPracticesResults && (
+                  <button
+                    type="button"
+                    className="adm-btn adm-btn-primary adm-btn-sm"
+                    style={{ marginLeft: 'auto' }}
+                    onClick={onViewPracticesResults}
+                  >
+                    Результаты голосования
+                  </button>
+                )}
+              </div>
+              {!currentQuestionId && (
+                <p className="adm-muted" style={{ fontSize: 12, marginTop: 0 }}>
+                  Сначала сохраните черновик — затем откроется кнопка «Результаты голосования».
+                </p>
+              )}
               <label className="adm-field">
                 <span className="adm-label">Приамбула (что это и зачем)</span>
                 <textarea

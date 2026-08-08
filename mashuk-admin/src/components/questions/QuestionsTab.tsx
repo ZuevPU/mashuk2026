@@ -254,6 +254,14 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
       alert('Укажите заголовок вопроса.');
       return;
     }
+    const isPractices = draft.questionKind === 'practices_vote' || draft.answerType === 'practices_vote';
+    if (isPractices) {
+      const titled = draft.practicesConfig.practices.filter(p => p.title.trim());
+      if (titled.length === 0) {
+        alert('Добавьте хотя бы одну практику с названием — иначе участникам не за что голосовать.');
+        return;
+      }
+    }
     act(async () => {
       const body = bodyFromDraft(draft, publish);
       let qid = editingId;
@@ -469,6 +477,11 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
               setDraft(d => ({ ...d, status: 'draft' }));
               await loadQuestions();
             }, 'Снято с публикации');
+          }}
+          onViewPracticesResults={() => {
+            if (!editingId) return;
+            setPracticesResultsId(editingId);
+            setPracticesResultsTitle(draft.title || 'Практики');
           }}
           onCancel={() => { setView('list'); setEditingId(null); }}
           showPreview={showPreview}

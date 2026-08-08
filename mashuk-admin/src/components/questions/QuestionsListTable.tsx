@@ -83,19 +83,30 @@ function QuestionRows({
                   </button>
                 )
               ) : (
-                <RowActionsMenu
-                  actions={[
-                    { label: 'Редактировать', onClick: () => onEdit(q) },
-                    { label: 'Дублировать', onClick: () => onDuplicate(q.id) },
-                    { label: 'Просмотр ответов', onClick: () => onViewAnswers(q) },
-                    ...(isPractices && onViewPracticesResults
-                      ? [{ label: 'Результаты голосования', onClick: () => onViewPracticesResults(q) }]
-                      : []),
-                    { label: 'Скопировать на другой день', onClick: () => onCopyToDay(q.id) },
-                    { label: q.isHidden ? 'Показать' : 'Скрыть', onClick: () => onHide(q.id) },
-                    { label: 'Удалить', onClick: () => onDelete(q.id), danger: true },
-                  ]}
-                />
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {isPractices && onViewPracticesResults && (
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-primary adm-btn-sm"
+                      onClick={() => onViewPracticesResults(q)}
+                    >
+                      Результаты
+                    </button>
+                  )}
+                  <RowActionsMenu
+                    actions={[
+                      { label: 'Редактировать', onClick: () => onEdit(q) },
+                      { label: 'Дублировать', onClick: () => onDuplicate(q.id) },
+                      { label: 'Просмотр ответов', onClick: () => onViewAnswers(q) },
+                      ...(isPractices && onViewPracticesResults
+                        ? [{ label: 'Результаты голосования', onClick: () => onViewPracticesResults(q) }]
+                        : []),
+                      { label: 'Скопировать на другой день', onClick: () => onCopyToDay(q.id) },
+                      { label: q.isHidden ? 'Показать' : 'Скрыть', onClick: () => onHide(q.id) },
+                      { label: 'Удалить', onClick: () => onDelete(q.id), danger: true },
+                    ]}
+                  />
+                </div>
               )}
             </td>
           </tr>

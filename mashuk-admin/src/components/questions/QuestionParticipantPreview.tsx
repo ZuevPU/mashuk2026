@@ -14,7 +14,9 @@ export function QuestionParticipantPreview({ draft }: { draft: QuestionDraft }) 
     : (draft.text.trim() || draft.title);
   const quota = Math.max(1, draft.practicesConfig.likesPerParticipant || 1);
   const remaining = Math.max(0, quota - liked.length);
-  const practices = draft.practicesConfig.practices.filter(p => p.title.trim());
+  const practices = draft.practicesConfig.practices
+    .filter(p => p.title.trim() || p.description.trim() || p.participantName.trim())
+    .map(p => ({ ...p, title: p.title.trim() || 'Без названия' }));
 
   return (
     <ParticipantPreviewFrame>
@@ -34,6 +36,11 @@ export function QuestionParticipantPreview({ draft }: { draft: QuestionDraft }) 
               lineHeight: 1.45,
             }}>
               {draft.practicesConfig.preamble}
+            </div>
+          )}
+          {practices.length === 0 && (
+            <div style={{ fontSize: 12, color: '#B8621A', marginBottom: 8, lineHeight: 1.4 }}>
+              Нет практик с названием. Заполните таблицу ниже — тогда появятся карточки и лайки.
             </div>
           )}
           {draft.practicesConfig.resultsPublished ? (
