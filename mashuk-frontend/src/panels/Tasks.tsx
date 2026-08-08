@@ -115,6 +115,73 @@ function repeatableProgressLabel(task: {
   return null;
 }
 
+function TaskDescriptionClamp({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [clamped, setClamped] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      if (expanded) return;
+      setClamped(el.scrollHeight > el.clientHeight + 1);
+    };
+    measure();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [text, expanded]);
+
+  return (
+    <div className="tasks-desc-wrap">
+      <div
+        ref={ref}
+        className={`tasks-desc${expanded ? ' tasks-desc--open' : ''}`}
+      >
+        {text}
+      </div>
+      {(clamped || expanded) && (
+        <button
+          type="button"
+          className="tasks-desc-toggle"
+          onClick={() => setExpanded(v => !v)}
+        >
+          {expanded ? 'Скрыть' : 'Развернуть'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function TaskDetailHeader({ task }: { task: any }) {
+  const tone = task?.category ? categoryTone(task.category) : null;
+  const progress = repeatableProgressLabel(task || {});
+  return (
+    <div className="tasks-detail-head">
+      <div className="tasks-detail-title-row">
+        <strong className="tasks-detail-title">{task?.title || 'Задание'}</strong>
+        {task?.status && (
+          <span className={`tasks-status-pill tasks-status-pill--${task.status}`}>
+            {STATUS_LABEL[task.status] || task.status}
+          </span>
+        )}
+      </div>
+      <div className="tasks-detail-badges">
+        {task?.category && (
+          <span className="tasks-cat-badge" data-tone={tone || 'sand'}>{task.category}</span>
+        )}
+        <span className="tasks-meta-pill">+{task?.points ?? 0} XP</span>
+        <span className="tasks-meta-pill">{taskConfirmLabel(task || {})}</span>
+        {progress && <span className="tasks-meta-pill">{progress}</span>}
+      </div>
+      {task?.description && (
+        <div className="tasks-detail-desc">{task.description}</div>
+      )}
+    </div>
+  );
+}
+
 const TaskSubmitModal = ({
   taskId,
   meta,
@@ -327,137 +394,141 @@ const TaskSubmitModal = ({
   };
 
   return (
-    <ModalPage id="task-submit" onClose={onClose}>
-      <ModalPageHeader>Отправка задания</ModalPageHeader>
+    <ModalPage id="task-submit" settlingHeight={100} onClose={onClose}>
+      <ModalPageHeader>Выполнение задания</ModalPageHeader>
       <Group>
-        <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
-          {taskConfirmLabel(meta || {})}
-        </div>
-        {isAuto && (
-          <div style={{ fontSize: 13, marginBottom: 8 }}>Нажмите «Отправить» — задание подтвердится автоматически.</div>
-        )}
-        {isQr && (
-          <div style={{ fontSize: 13, marginBottom: 8 }}>
-            {effectiveQr
-              ? 'QR распознан — начисляем баллы…'
-              : 'Отсканируйте QR задания камерой VK или откройте ссылку с площадки.'}
-            <Button
-              size="m"
-              mode="secondary"
-              stretched
-              style={{ marginTop: 8 }}
-              onClick={async () => {
-                const raw = await openCodeReader();
-                if (!raw) {
-                  setSnackbar('Сканирование отменено');
-                  return;
-                }
-                const token = extractTaskQrToken(raw);
-                if (!token) {
-                  setSnackbar('Не удалось прочитать QR');
-                  return;
-                }
-                setScannedQr(token);
-                setSnackbar('QR задания распознан');
-              }}
+        <TaskDetailHeader task={meta} />
+
+        <div className="tasks-answer-block">
+          <div className="tasks-answer-block-title">Ваш ответ</div>
+          {isAuto && (
+            <div style={{ fontSize: 13, marginBottom: 8 }}>
+              Нажмите «Подтвердить» — задание подтвердится автоматически.
+            </div>
+          )}
+          {isQr && (
+            <div style={{ fontSize: 13, marginBottom: 8 }}>
+              {effectiveQr
+                ? 'QR распознан — начисляем баллы…'
+                : 'Отсканируйте QR задания камерой VK или откройте ссылку с площадки.'}
+              <Button
+                size="m"
+                mode="secondary"
+                stretched
+                style={{ marginTop: 8 }}
+                onClick={async () => {
+                  const raw = await openCodeReader();
+                  if (!raw) {
+                    setSnackbar('Сканирование отменено');
+                    return;
+                  }
+                  const token = extractTaskQrToken(raw);
+                  if (!token) {
+                    setSnackbar('Не удалось прочитать QR');
+                    return;
+                  }
+                  setScannedQr(token);
+                  setSnackbar('QR задания распознан');
+                }}
+              >
+                Сканировать QR (VK)
+              </Button>
+            </div>
+          )}
+          {isChoice && answerOptions.map(opt => (
+            <Radio
+              key={opt.value}
+              checked={selectedChoice === opt.value}
+              onChange={() => setSelectedChoice(opt.value)}
+              style={{ marginBottom: 6 }}
             >
-              Сканировать QR (VK)
-            </Button>
-          </div>
-        )}
-        {isChoice && answerOptions.map(opt => (
-          <Radio
-            key={opt.value}
-            checked={selectedChoice === opt.value}
-            onChange={() => setSelectedChoice(opt.value)}
-            style={{ marginBottom: 6 }}
-          >
-            {opt.label}
-          </Radio>
-        ))}
-        {isMulti && answerOptions.map(opt => (
-          <Checkbox
-            key={opt.value}
-            checked={selectedMulti.includes(opt.value)}
-            onChange={() => setSelectedMulti(prev => (
-              prev.includes(opt.value) ? prev.filter(v => v !== opt.value) : [...prev, opt.value]
-            ))}
-            style={{ marginBottom: 6 }}
-          >
-            {opt.label}
-          </Checkbox>
-        ))}
-        {needsFreeText && (
-          <Textarea
-            value={answerText}
-            onChange={e => setAnswerText(e.target.value)}
-            placeholder={answerType === 'text_and_photo' ? 'Комментарий (необязательно)...' : 'Ваш ответ...'}
-          />
-        )}
-        {needsPhoto && (
-          <Button mode="secondary" onClick={handlePhoto} style={{ marginTop: 8 }}>
-            {photoUrl ? '📷 Фото прикреплено' : '📷 Прикрепить фото'}
-          </Button>
-        )}
-        {needsPostUrl && (
-          <Input
-            value={postUrl}
-            onChange={e => setPostUrl(e.target.value)}
-            placeholder="https://vk.com/wall..."
-            style={{ marginTop: 8 }}
-          />
-        )}
-        {needsTeam && (
-          <div style={{ marginTop: 8 }}>
-            <Input
-              value={teamSearch}
-              onChange={e => setTeamSearch(e.target.value)}
-              placeholder="Поиск по ФИО..."
+              {opt.label}
+            </Radio>
+          ))}
+          {isMulti && answerOptions.map(opt => (
+            <Checkbox
+              key={opt.value}
+              checked={selectedMulti.includes(opt.value)}
+              onChange={() => setSelectedMulti(prev => (
+                prev.includes(opt.value) ? prev.filter(v => v !== opt.value) : [...prev, opt.value]
+              ))}
+              style={{ marginBottom: 6 }}
+            >
+              {opt.label}
+            </Checkbox>
+          ))}
+          {needsFreeText && (
+            <Textarea
+              value={answerText}
+              onChange={e => setAnswerText(e.target.value)}
+              placeholder={answerType === 'text_and_photo' ? 'Комментарий (необязательно)...' : 'Ваш ответ...'}
             />
-            {teamResults.length > 0 && (
-              <div style={{ marginTop: 6, background: '#fff', borderRadius: 10, border: '1px solid #E0DAD0' }}>
-                {teamResults.map(p => (
-                  <div
-                    key={p.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => addTeammate(p)}
-                    style={{ padding: '8px 12px', fontSize: 12, borderBottom: '1px solid #F5F0E8', cursor: 'pointer' }}
-                  >
-                    {p.firstName} {p.lastName} · #{p.id}
-                  </div>
+          )}
+          {needsPhoto && (
+            <Button mode="secondary" onClick={handlePhoto} style={{ marginTop: 8 }}>
+              {photoUrl ? '📷 Фото прикреплено' : '📷 Прикрепить фото'}
+            </Button>
+          )}
+          {needsPostUrl && (
+            <Input
+              value={postUrl}
+              onChange={e => setPostUrl(e.target.value)}
+              placeholder="https://vk.com/wall..."
+              style={{ marginTop: 8 }}
+            />
+          )}
+          {needsTeam && (
+            <div style={{ marginTop: 8 }}>
+              <Input
+                value={teamSearch}
+                onChange={e => setTeamSearch(e.target.value)}
+                placeholder="Поиск по ФИО..."
+              />
+              {teamResults.length > 0 && (
+                <div style={{ marginTop: 6, background: '#fff', borderRadius: 10, border: '1px solid #E0DAD0' }}>
+                  {teamResults.map(p => (
+                    <div
+                      key={p.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => addTeammate(p)}
+                      style={{ padding: '8px 12px', fontSize: 12, borderBottom: '1px solid #F5F0E8', cursor: 'pointer' }}
+                    >
+                      {p.firstName} {p.lastName} · #{p.id}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {selectedTeam.map(p => (
+                  <span key={p.id} style={{ fontSize: 11, background: '#FFF0E6', padding: '4px 8px', borderRadius: 8 }}>
+                    {p.firstName} {p.lastName}
+                    <button type="button" style={{ marginLeft: 6, border: 'none', background: 'none', cursor: 'pointer' }} onClick={() => setSelectedTeam(prev => prev.filter(x => x.id !== p.id))}>×</button>
+                  </span>
                 ))}
               </div>
-            )}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-              {selectedTeam.map(p => (
-                <span key={p.id} style={{ fontSize: 11, background: '#FFF0E6', padding: '4px 8px', borderRadius: 8 }}>
-                  {p.firstName} {p.lastName}
-                  <button type="button" style={{ marginLeft: 6, border: 'none', background: 'none', cursor: 'pointer' }} onClick={() => setSelectedTeam(prev => prev.filter(x => x.id !== p.id))}>×</button>
-                </span>
-              ))}
             </div>
-          </div>
-        )}
-        {formError && (
-          <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 10, background: '#FDECEC', color: '#C53030', fontSize: 13 }}>
-            {formError}
-          </div>
-        )}
-        <Button
-          size="l"
-          stretched
-          onClick={() => void handleSubmit()}
-          style={{ marginTop: 12 }}
-          loading={submitting}
-          disabled={submitting || (isChoice && !selectedChoice) || (isMulti && selectedMulti.length === 0) || (answerType === 'text' && !answerText.trim()) || (needsPhoto && !photoUrl) || (isQr && !effectiveQr)}
-        >
-          {submitting
-            ? 'Отправляем…'
-            : isAuto || (isQr && effectiveQr)
-              ? 'Подтвердить'
-              : 'Отправить на проверку'}
-        </Button>
+          )}
+          {formError && (
+            <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 10, background: '#FDECEC', color: '#C53030', fontSize: 13 }}>
+              {formError}
+            </div>
+          )}
+          <Button
+            size="l"
+            stretched
+            onClick={() => void handleSubmit()}
+            style={{ marginTop: 12 }}
+            loading={submitting}
+            disabled={submitting || (isChoice && !selectedChoice) || (isMulti && selectedMulti.length === 0) || (answerType === 'text' && !answerText.trim()) || (needsPhoto && !photoUrl) || (isQr && !effectiveQr)}
+          >
+            {submitting
+              ? 'Отправляем…'
+              : isAuto || (isQr && effectiveQr)
+                ? 'Подтвердить'
+                : 'Отправить на проверку'}
+          </Button>
+        </div>
       </Group>
     </ModalPage>
   );
@@ -676,7 +747,7 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
-                  <strong>{t.title}</strong>
+                  <strong className="tasks-card-title">{t.title}</strong>
                   <span className={`tasks-status-pill tasks-status-pill--${t.status === 'unknown'}`}>
                     {STATUS_LABEL[t.status] || t.status}
                   </span>
@@ -684,7 +755,7 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
                 {t.category && (
                   <span className="tasks-cat-badge" data-tone={tone || 'sand'}>{t.category}</span>
                 )}
-                {t.description && <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>{t.description}</div>}
+                {t.description && <TaskDescriptionClamp text={t.description} />}
                 <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
                   +{t.points ?? 0} · {taskConfirmLabel(t)}
                   {repeatableProgressLabel(t) ? ` · ${repeatableProgressLabel(t)}` : ''}

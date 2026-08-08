@@ -1777,15 +1777,97 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 46px;
-  height: 46px;
-  margin: -8px auto 0;
+  width: 36px;
+  height: 36px;
+  margin: -2px auto 0;
   border-radius: 50%;
   background: var(--m-accent, #FF5500);
   color: #fff;
-  box-shadow: 0 4px 12px rgba(255, 85, 0, 0.35);
+  box-shadow: 0 3px 8px rgba(255, 85, 0, 0.3);
 }
-.tab-item-inner--fab svg { color: #fff; }
+.tab-item-inner--fab svg {
+  color: #fff;
+  width: 20px;
+  height: 20px;
+}
+
+.tasks-card-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tasks-desc-wrap { margin-top: 6px; }
+.tasks-desc {
+  font-size: 13px;
+  color: #555;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+.tasks-desc--open {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+.tasks-desc-toggle {
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--m-accent, #B8621A);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tasks-detail-head {
+  padding: 4px 0 14px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #EEE6DA;
+}
+.tasks-detail-title-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+}
+.tasks-detail-title {
+  font-size: 17px;
+  line-height: 1.3;
+}
+.tasks-detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.tasks-meta-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #F5F0E8;
+  color: #666;
+}
+.tasks-detail-desc {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #444;
+  white-space: pre-wrap;
+}
+.tasks-answer-block {
+  padding-top: 4px;
+}
+.tasks-answer-block-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #333;
+}
 
 /* Leaderboard (Profile) */
 .m-results-grid {
