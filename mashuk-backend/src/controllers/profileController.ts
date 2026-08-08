@@ -1,8 +1,8 @@
 import { Response } from 'express';
-import { eq, desc, and, or, isNull, lte, sql } from 'drizzle-orm';
+import { eq, desc, and, or, isNull, isNotNull, lte, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  piggybank, answers, taskSubmissions, tasks, questions, participants, directions,
+  piggybank, answers, taskSubmissions, tasks, questions, participants, directions, pointsLog,
 } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { getRoleMeta } from '../services/roleService.js';
@@ -185,13 +185,43 @@ export const listPiggybank = async (req: ParticipantRequest, res: Response): Pro
     const day = req.query.day as string | undefined;
     const q = req.query.q as string | undefined;
 
-    const entries = await db.select().from(piggybank)
+    // Активные (не скрытые) + снятые модератором в архив (deletedAt) — их показываем с пометкой
+    const rows = await db.select({
+      e: piggybank,
+      logPoints: pointsLog.points,
+      logRevokedAt: pointsLog.revokedAt,
+    })
+      .from(piggybank)
+      .leftJoin(pointsLog, eq(piggybank.pointsLogId, pointsLog.id))
       .where(and(
         eq(piggybank.participantId, req.participant!.id),
-        isNull(piggybank.deletedAt),
-        or(eq(piggybank.isHidden, false), isNull(piggybank.isHidden)),
+        or(
+          isNotNull(piggybank.deletedAt),
+          and(
+            isNull(piggybank.deletedAt),
+            or(eq(piggybank.isHidden, false), isNull(piggybank.isHidden)),
+          ),
+        ),
       ))
       .orderBy(desc(piggybank.createdAt));
+
+    const entries = rows.map(({ e, logPoints, logRevokedAt }) => {
+      const removed = e.deletedAt != null;
+      const absPoints = typeof logPoints === 'number' ? Math.abs(logPoints) : 0;
+      const pointsDelta = removed
+        ? (absPoints > 0 ? -absPoints : 0)
+        : (logRevokedAt ? 0 : absPoints);
+      return {
+        ...e,
+        removed,
+        pointsDelta,
+        pointsLabel: pointsDelta < 0
+          ? `${pointsDelta}`
+          : pointsDelta > 0
+            ? `+${pointsDelta}`
+            : null,
+      };
+    });
 
     const filtered = filterPiggybankEntries(entries, {
       tag,

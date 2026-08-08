@@ -171,15 +171,15 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
 
   const deleteEntry = (id: number) => {
     if (!confirmDelete(
-      'Удалить запись в архив? У участника снимутся начисленные за неё баллы. Цифровой след сохранится во вкладке «Удалённые копилки».',
+      'Отправить запись в архив и снять баллы? У участника запись останется с красной пометкой и минус-баллами (не пропадёт из копилки). В админке — вкладка «Удалённые копилки».',
     )) return;
     act(async () => {
       const res = await adminFetch(`/piggybank-entries/${id}`, { method: 'DELETE' });
       setOpenEntry(null);
       await load();
       return res?.pointsRevoked
-        ? 'Запись в архиве, баллы сняты'
-        : 'Запись в архиве (баллы не найдены или уже сняты)';
+        ? 'В архиве, баллы сняты — у участника запись с красной пометкой'
+        : 'В архиве (баллы не найдены или уже сняты)';
     });
   };
 
@@ -373,7 +373,7 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
                               label: e.isHidden ? 'Показать' : 'Скрыть',
                               onClick: () => patchEntry(e.id, { isHidden: !e.isHidden }),
                             },
-                            { label: 'Удалить (архив + снять баллы)', onClick: () => deleteEntry(e.id), danger: true },
+                            { label: 'В архив (−баллы, у участника красным)', onClick: () => deleteEntry(e.id), danger: true },
                           ]}
                       />
                     </td>

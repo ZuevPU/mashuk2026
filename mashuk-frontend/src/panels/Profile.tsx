@@ -1399,14 +1399,33 @@ export const ProfilePanel: React.FC<{
               const tags: string[] = Array.isArray(entry.tags) && entry.tags.length
                 ? entry.tags
                 : (entry.tag ? [entry.tag] : []);
+              const removed = !!(entry.removed || entry.deletedAt);
+              const pointsLabel = entry.pointsLabel
+                ?? (typeof entry.pointsDelta === 'number' && entry.pointsDelta !== 0
+                  ? (entry.pointsDelta > 0 ? `+${entry.pointsDelta}` : String(entry.pointsDelta))
+                  : null);
               return (
-              <div key={entry.id} className="m-card" style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 10, color: '#888', fontWeight: 600 }}>
-                  {tags.map((t: string) => `#${t}`).join(' ')}
-                  {entry.source ? ` · ${entry.source}` : ' · без источника'}
-                  {entry.forumDay ? ` · Д${entry.forumDay}` : ''}
+              <div
+                key={entry.id}
+                className={`m-card${removed ? ' m-card--piggy-removed' : ''}`}
+                style={{ marginBottom: 8 }}
+              >
+                <div style={{ fontSize: 10, color: removed ? '#b42318' : '#888', fontWeight: 600, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span>
+                    {tags.map((t: string) => `#${t}`).join(' ')}
+                    {entry.source ? ` · ${entry.source}` : ' · без источника'}
+                    {entry.forumDay ? ` · Д${entry.forumDay}` : ''}
+                  </span>
+                  {removed && <span className="piggy-removed-badge">Снято модератором</span>}
+                  {pointsLabel && (
+                    <span className={removed ? 'piggy-points-minus' : 'piggy-points-plus'}>
+                      {pointsLabel} б.
+                    </span>
+                  )}
                 </div>
-                <div style={{ fontSize: 12, marginTop: 4 }}>{entry.text}</div>
+                <div style={{ fontSize: 12, marginTop: 4, color: removed ? '#7a2e2e' : undefined }}>
+                  {entry.text}
+                </div>
               </div>
             );})}
             {piggybank.length === 0 && (

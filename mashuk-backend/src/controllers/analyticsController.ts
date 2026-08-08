@@ -10,6 +10,8 @@ import { buildPulseDashboard } from '../services/analytics/pulseDashboard.js';
 import { buildPortraitDashboard, buildDeparturePortrait } from '../services/analytics/portraitDashboard.js';
 import { buildProgramDashboard } from '../services/analytics/programDashboard.js';
 import { buildEveningDashboard } from '../services/analytics/eveningDashboard.js';
+import { buildAfterBlocksDashboard } from '../services/analytics/afterBlocksDashboard.js';
+import { buildStateCheckDashboard } from '../services/analytics/stateCheckDashboard.js';
 import { buildActivityDashboard } from '../services/analytics/activityDashboard.js';
 import { buildPiggybankDashboard } from '../services/analytics/piggybankDashboard.js';
 import { buildSemanticDashboard, buildClubsDashboard } from '../services/analytics/semanticDashboard.js';
@@ -30,6 +32,16 @@ export async function getPulseDashboardHandler(req: AdminRequest, res: Response)
 export async function getEveningDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
   const filters = await resolveAnalyticsFilters(req);
   res.json(await buildEveningDashboard(filters, req));
+}
+
+export async function getAfterBlocksDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
+  const filters = await resolveAnalyticsFilters(req);
+  res.json(await buildAfterBlocksDashboard(filters, req));
+}
+
+export async function getStateCheckDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
+  const filters = await resolveAnalyticsFilters(req);
+  res.json(await buildStateCheckDashboard(filters, req));
 }
 
 export async function getPortraitDashboardHandler(req: AdminRequest, res: Response): Promise<void> {

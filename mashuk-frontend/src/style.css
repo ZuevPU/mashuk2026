@@ -574,6 +574,33 @@ body {
   border-top: 1px solid #F0EBE3;
 }
 
+/* Запись копилки, снятая модератором: остаётся у участника с красной подсветкой */
+.m-card--piggy-removed {
+  background: linear-gradient(180deg, #fff5f5 0%, #fdecec 100%);
+  border: 1px solid #f3b4b4;
+  box-shadow: none;
+}
+.piggy-removed-badge {
+  font-size: 10px;
+  font-weight: 800;
+  color: #c53030;
+  background: rgba(197, 48, 48, 0.1);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+.piggy-points-minus {
+  font-size: 11px;
+  font-weight: 800;
+  color: #c53030;
+  margin-left: auto;
+}
+.piggy-points-plus {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--m-accent);
+  margin-left: auto;
+}
+
 .m-card .m-tmi-t,
 .m-card .m-now-t,
 .m-card .rq-q,

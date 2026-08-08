@@ -146,6 +146,16 @@ export const exportEveningSummaryHandler = async (req: AdminRequest, res: Respon
   });
 };
 
+export const exportAfterBlocksHandler = async (req: AdminRequest, res: Response) => {
+  const { writeAfterBlocksExport } = await import('../services/exports/kindAnswersExport.js');
+  await writeAfterBlocksExport(req, res);
+};
+
+export const exportStateChecksHandler = async (req: AdminRequest, res: Response) => {
+  const { writeStateChecksExport } = await import('../services/exports/kindAnswersExport.js');
+  await writeStateChecksExport(req, res);
+};
+
 export const exportRolesExperimentsHandler = async (_req: AdminRequest, res: Response) => {
   await writeRolesExperimentsExport(res);
 };

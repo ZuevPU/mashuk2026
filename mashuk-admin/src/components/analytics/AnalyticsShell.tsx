@@ -4,6 +4,7 @@ import { useInsights, type DashboardId } from '../insights/InsightsContext';
 import type { AnalyticsTabProps } from './AnalyticsTab';
 import {
   ActivityView,
+  AfterBlocksView,
   ClubsView,
   DepartureView,
   EveningView,
@@ -13,6 +14,7 @@ import {
   ProgramView,
   PulseView,
   SemanticView,
+  StateChecksView,
 } from './analyticsDashboardViews';
 import { CHART_HELP_RU, formatForumDay } from './chartRu';
 import { DashCard, DashScreenTitle, RoleMatrixGrid } from './dashboardUi';
@@ -43,6 +45,8 @@ function xlsxExportPath(dash: DashboardId): string | null {
   if (dash === 'roles') return '/exports/roles-experiments';
   if (dash === 'overview') return '/exports/participants';
   if (dash === 'evening') return '/exports/evening-summary';
+  if (dash === 'after-blocks') return '/exports/after-blocks';
+  if (dash === 'state-checks') return '/exports/state-checks';
   // pulse / activity / program / departure use slice CTAs only
   return null;
 }
@@ -51,7 +55,7 @@ function csvExportPath(dash: DashboardId): string | null {
   if (dash === 'piggybank') return '/exports/piggybank?format=csv';
   if (dash === 'departure') return '/exports/point-a-b-summary';
   if (dash === 'activity') return '/exports/rating/shift';
-  if (dash === 'roles' || dash === 'evening') return null;
+  if (dash === 'roles' || dash === 'evening' || dash === 'after-blocks' || dash === 'state-checks') return null;
   if (dash === 'clubs') return '/exports/piggybank?format=csv';
   return '/exports/reflections?format=csv';
 }
@@ -83,6 +87,24 @@ function sliceExportCtas(
         label: 'Скачать полностью данные по Итоговой анкете вечера',
         path: `/exports/evening-summary${qs({ day })}`,
         file: `evening_summary_d${day}.xlsx`,
+      },
+    ];
+  }
+  if (dash === 'after-blocks') {
+    return [
+      {
+        label: 'Скачать полностью данные «После блоков»',
+        path: `/exports/after-blocks${qs({ day, direction: direction || undefined, group: group || undefined })}`,
+        file: `after_blocks_d${day}.xlsx`,
+      },
+    ];
+  }
+  if (dash === 'state-checks') {
+    return [
+      {
+        label: 'Скачать полностью данные «Проверка состояния»',
+        path: `/exports/state-checks${qs({ day, direction: direction || undefined, group: group || undefined })}`,
+        file: `state_checks_d${day}.xlsx`,
       },
     ];
   }
@@ -442,6 +464,8 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
         <div ref={chartRef} className={showEarlyWarning ? 'adm-insights-dimmed' : undefined}>
           {dash === 'pulse' && <PulseView data={data} />}
           {dash === 'evening' && <EveningView data={data} onOpenCard={onOpenCard} />}
+          {dash === 'after-blocks' && <AfterBlocksView data={data} onOpenCard={onOpenCard} />}
+          {dash === 'state-checks' && <StateChecksView data={data} onOpenCard={onOpenCard} />}
           {dash === 'portrait' && <PortraitView data={data} onOpenCard={onOpenCard} />}
           {dash === 'program' && <ProgramView data={data} />}
           {dash === 'activity' && <ActivityView data={data} onOpenRating={() => setTab('rating')} />}
