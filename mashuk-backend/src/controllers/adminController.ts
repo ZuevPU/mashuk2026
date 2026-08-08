@@ -1807,6 +1807,18 @@ export const seedTouchpointsTemplate = async (req: AdminRequest, res: Response):
     for (const slot of TOUCHPOINT_SLOTS) {
       if (existing.some(q => q.title === slot.title) && !overwrite) continue;
       const { publishTime, closeTime } = windowsForDay(startDate, day, slot);
+      const questionKind = slot.block === 'Итоги дня'
+        ? 'day_summary'
+        : slot.block === 'Проверка состояния' || slot.type === 'checkin'
+          ? 'state_check'
+          : slot.block === 'Точки осмысления'
+            ? 'after_blocks'
+            : null;
+      const reflectionKind = questionKind === 'day_summary'
+        ? 'evening_summary'
+        : questionKind === 'state_check'
+          ? 'state_check'
+          : null;
       await db.insert(questions).values({
         shiftId,
         title: slot.title,
@@ -1819,6 +1831,8 @@ export const seedTouchpointsTemplate = async (req: AdminRequest, res: Response):
         points: slot.points,
         dayNumber: day,
         timePoint: slot.timePoint,
+        ...(questionKind ? { questionKind } : {}),
+        ...(reflectionKind ? { reflectionKind } : {}),
       });
       created++;
     }

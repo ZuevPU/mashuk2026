@@ -6,6 +6,7 @@ import {
 import { matchesAgeCategory, matchesActivity } from '../analytics/cohortFilters.js';
 import {
   DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
+  isEveningOpenForConfig,
   resolveEveningConfigForDay,
   type EveningField,
 } from '../eveningQuestionnaireConfig.js';
@@ -49,6 +50,8 @@ export type EveningExportDiagnostics = {
   shiftId: number | null;
   day: number | null;
   shiftFilterRelaxed: boolean;
+  eveningOpenNow: boolean | null;
+  eveningForceUnpublished: boolean | null;
   notes: string[];
 };
 
@@ -90,13 +93,7 @@ export function isEveningSummaryQuestion(q: {
   return kind === 'day_summary'
     || kind === 'evening_summary'
     || block.includes('итог')
-    || block.includes('вечер')
     || title.includes('итоговая анкета');
-}
-
-function isOrganizer(directionName: string | null | undefined, directionStored: string | null | undefined): boolean {
-  const s = `${directionName || ''} ${directionStored || ''}`.toLowerCase();
-  return s.includes('организатор');
 }
 
 /** Поля анкеты из конфига админки + шкалы + ключи из реальных ответов. */
@@ -161,8 +158,8 @@ export function formatEveningFieldValue(
 type RawCandidate = EveningExportRow & { shiftId: number | null };
 
 /**
- * Собирает итоговые анкеты: evening_ratings, answers «Итоги дня», при необходимости черновики.
- * Если фильтр смены обнуляет выборку, автоматически ослабляется (как в аналитике админки).
+ * Собирает итоговые анкеты текущей смены: evening_ratings, answers «Итоги дня», черновики.
+ * Организаторы тоже включаются. Чужие смены не подмешиваются.
  */
 export async function collectEveningExportRows(
   filters: EveningExportFilters = {},
@@ -179,6 +176,13 @@ export async function collectEveningExportRows(
     : null;
   const includeDrafts = filters.includeDrafts !== false;
 
+  const dayForStatus = filters.day != null && filters.day > 0
+    ? filters.day
+    : (settings.currentDay ?? 1);
+  const eveningCfg = resolveEveningConfigForDay(settings as never, dayForStatus);
+  const eveningForceUnpublished = !!eveningCfg.forceUnpublished;
+  const eveningOpenNow = isEveningOpenForConfig(eveningCfg);
+
   const notes: string[] = [];
   const diagnostics: EveningExportDiagnostics = {
     totalDayStates: 0,
@@ -191,12 +195,28 @@ export async function collectEveningExportRows(
     shiftId: requestedShiftId,
     day: filters.day ?? null,
     shiftFilterRelaxed: false,
+    eveningOpenNow,
+    eveningForceUnpublished,
     notes,
   };
+
+  if (eveningForceUnpublished) {
+    notes.push(
+      `Итоговая анкета на день ${dayForStatus} снята с публикации (forceUnpublished) — участники не могут отправить новые ответы.`,
+    );
+  } else if (!eveningOpenNow) {
+    notes.push(
+      `Итоговая анкета на день ${dayForStatus} сейчас закрыта по расписанию (откроется с ${eveningCfg.opensAtMsk || '21:00'} МСК, либо опубликуйте вручную).`,
+    );
+  }
 
   const baseConds = [isNull(participants.selfDeletedAt)];
   if (filters.participantId != null && !Number.isNaN(filters.participantId)) {
     baseConds.push(eq(participants.id, filters.participantId));
+  }
+  // Жёсткий фильтр смены с самого начала — не тащим чужие тестовые анкеты
+  if (requestedShiftId != null) {
+    baseConds.push(eq(participants.shiftId, requestedShiftId));
   }
 
   const stateRows = await db.select({
@@ -214,7 +234,6 @@ export async function collectEveningExportRows(
   const byKey = new Map<string, RawCandidate>();
 
   for (const r of stateRows) {
-    if (isOrganizer(r.dirName, r.p.direction)) continue;
     const ratings = asEveningRatings(r.s.eveningRatings);
     if (ratings) {
       diagnostics.withRatings += 1;
@@ -274,6 +293,9 @@ export async function collectEveningExportRows(
   if (filters.day != null && filters.day > 0) {
     questionConds.push(eq(questions.dayNumber, filters.day));
   }
+  if (requestedShiftId != null) {
+    questionConds.push(eq(questions.shiftId, requestedShiftId));
+  }
 
   const answerRows = await db.select({
     a: answers,
@@ -289,7 +311,6 @@ export async function collectEveningExportRows(
 
   for (const r of answerRows) {
     if (!isEveningSummaryQuestion(r.q)) continue;
-    if (isOrganizer(r.dirName, r.p.direction)) continue;
     let ratings = asEveningRatings(r.a.answerData);
     if (!ratings && typeof r.a.answerData === 'string' && r.a.answerData.trim()) {
       ratings = { freeNote: r.a.answerData.trim(), mainThesis: r.a.answerData.trim() };
@@ -300,7 +321,6 @@ export async function collectEveningExportRows(
     diagnostics.answerRowsMatched += 1;
     const key = `${r.p.id}:${dayNumber}`;
     if (byKey.has(key) && byKey.get(key)!.source === 'evening_ratings') continue;
-    // ratings приоритетнее draft/answers-text
     if (byKey.has(key) && byKey.get(key)!.source === 'answers') continue;
     byKey.set(key, {
       participantId: r.p.id,
@@ -319,24 +339,7 @@ export async function collectEveningExportRows(
   }
 
   let candidates = [...byKey.values()];
-
-  // Смена: сначала жёстко, если пусто — ослабляем (частая причина пустого файла)
-  if (requestedShiftId != null) {
-    const onShift = candidates.filter(r =>
-      r.shiftId === requestedShiftId || r.shiftId == null,
-    );
-    diagnostics.afterShiftFilter = onShift.length;
-    if (onShift.length > 0) {
-      candidates = onShift;
-    } else if (candidates.length > 0) {
-      diagnostics.shiftFilterRelaxed = true;
-      notes.push(
-        `Фильтр смены #${requestedShiftId} дал 0 строк, показаны анкеты всех смен (${candidates.length}).`,
-      );
-    }
-  } else {
-    diagnostics.afterShiftFilter = candidates.length;
-  }
+  diagnostics.afterShiftFilter = candidates.length;
 
   if (filters.day != null && filters.day > 0) {
     const onDay = candidates.filter(r => r.dayNumber === filters.day);
@@ -344,9 +347,8 @@ export async function collectEveningExportRows(
     if (onDay.length > 0) {
       candidates = onDay;
     } else if (candidates.length > 0) {
-      // день пустой — не режем в ноль, покажем все дни с пометкой
       notes.push(
-        `За день ${filters.day} анкет нет, в файле все найденные дни (${candidates.length} строк).`,
+        `За день ${filters.day} анкет на этой смене нет; в файле все дни смены (${candidates.length} строк).`,
       );
       diagnostics.shiftFilterRelaxed = true;
     } else {
@@ -388,23 +390,20 @@ export async function collectEveningExportRows(
   const daysInData = [...new Set(rows.map(r => r.dayNumber))].sort((a, b) => a - b);
   const daysForFields = daysInData.length
     ? daysInData
-    : (filters.day != null && filters.day > 0 ? [filters.day] : [1, 2, 3, 4, 5, 6, 7]);
+    : (filters.day != null && filters.day > 0 ? [filters.day] : [dayForStatus]);
   const ratingKeys = [...new Set(rows.flatMap(r => Object.keys(r.ratings)))];
   const fields = resolveEveningQuestionFields(settings, daysForFields, ratingKeys);
 
   let emptyReason: string | null = null;
   if (rows.length === 0) {
     emptyReason = [
-      'Нет данных итоговой анкеты.',
-      `В БД day_state: ${diagnostics.totalDayStates}, с evening_ratings: ${diagnostics.withRatings}, только черновик: ${diagnostics.withDraftOnly}, answers: ${diagnostics.answerRowsMatched}.`,
-      requestedShiftId != null ? `Смена админки #${requestedShiftId}.` : '',
-      filters.day != null && filters.day > 0 ? `Запрошен день ${filters.day}.` : '',
-      filters.direction ? `Направление: ${filters.direction}.` : '',
-      filters.group ? `Группа: ${filters.group}.` : '',
-      'Проверьте, что участники нажали «Отправить» в итоговой анкете вечера (не только черновик).',
+      'Нет заполненных итоговых анкет на выбранной смене.',
+      `Day state: ${diagnostics.totalDayStates}, сдано (evening_ratings): ${diagnostics.withRatings}, черновики: ${diagnostics.withDraftOnly}, answers «Итоги дня»: ${diagnostics.answerRowsMatched}.`,
+      requestedShiftId != null ? `Смена #${requestedShiftId}.` : '',
+      eveningForceUnpublished
+        ? 'Анкета снята с публикации — сначала опубликуйте её в настройках «Итоговая анкета», затем участники смогут заполнить.'
+        : 'Проверьте, что участники нажали «Отправить» в итоговой анкете на главной (не путать с вечерней проверкой состояния).',
     ].filter(Boolean).join(' ');
-  } else if (notes.length) {
-    emptyReason = null;
   }
 
   return { rows, fields, settings, emptyReason, diagnostics };

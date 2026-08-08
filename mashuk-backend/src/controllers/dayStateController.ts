@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db/index.js';
 import { participantDayState, dayExperiments, pedagogicalRoles, questions, answers } from '../db/schema.js';
@@ -163,31 +163,47 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
       });
     }
 
-    // Отметить точку 7 «Итоги дня» выполненным, если есть
-    const [summaryQ] = await db.select().from(questions)
-      .where(and(
-        eq(questions.dayNumber, dayNumber),
+    // Отметить точку 7 «Итоги дня» выполненным, если есть вопрос-маркер
+    const summaryConds = [
+      eq(questions.dayNumber, dayNumber),
+      eq(questions.status, 'published'),
+      or(
         eq(questions.block, 'Итоги дня'),
-        eq(questions.status, 'published'),
-      )).limit(1);
+        eq(questions.questionKind, 'day_summary'),
+        eq(questions.reflectionKind, 'evening_summary'),
+      )!,
+    ];
+    const participantShiftId = req.participant!.shiftId;
+    if (participantShiftId != null) {
+      summaryConds.push(eq(questions.shiftId, participantShiftId));
+    }
+    const [summaryQ] = await db.select().from(questions)
+      .where(and(...summaryConds)).limit(1);
     if (summaryQ) {
       const [existing] = await db.select().from(answers)
         .where(and(
           eq(answers.participantId, req.participant!.id),
           eq(answers.questionId, summaryQ.id),
         )).limit(1);
+      const eveningPoints = 15;
+      const wordCount = String(ratings.mainThesis || ratings.freeNote || '')
+        .split(/\s+/).filter(Boolean).length;
       if (!existing) {
-        const eveningPoints = 15;
         await db.insert(answers).values({
           participantId: req.participant!.id,
           questionId: summaryQ.id,
           answerData: ratings,
           questionTextSnapshot: summaryQ.text,
           pointsAwarded: eveningPoints,
-          wordCount: String(ratings.mainThesis || ratings.freeNote || '').split(/\s+/).filter(Boolean).length,
+          wordCount,
         });
         // Single Path award: evening questionnaire covers touchpoint 7 (avoid question_answer + evening_complete).
         await awardPoints(req.participant!.id, 'evening_complete', eveningPoints, dayNumber);
+      } else {
+        await db.update(answers).set({
+          answerData: ratings,
+          wordCount,
+        }).where(eq(answers.id, existing.id));
       }
     }
 

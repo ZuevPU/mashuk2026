@@ -118,7 +118,9 @@ export async function writeEveningSummaryExport(
   diag.addRow(['Итого строк в файле', rows.length]);
   diag.addRow(['Смена админки', diagnostics.shiftId ?? 'не задана']);
   diag.addRow(['Запрошенный день', diagnostics.day ?? 'все']);
-  diag.addRow(['Фильтр смены/дня ослаблен', diagnostics.shiftFilterRelaxed ? 'да' : 'нет']);
+  diag.addRow(['Анкета открыта сейчас', diagnostics.eveningOpenNow == null ? '—' : (diagnostics.eveningOpenNow ? 'да' : 'нет')]);
+  diag.addRow(['Анкета снята с публикации', diagnostics.eveningForceUnpublished == null ? '—' : (diagnostics.eveningForceUnpublished ? 'да' : 'нет')]);
+  diag.addRow(['Ослаблен только фильтр дня', diagnostics.shiftFilterRelaxed ? 'да' : 'нет']);
   for (const note of diagnostics.notes) {
     diag.addRow(['Примечание', note]);
   }
@@ -126,7 +128,7 @@ export async function writeEveningSummaryExport(
   if (rows.length === 0) {
     diag.addRow([
       'Подсказка',
-      'Если «С evening_ratings» = 0, участники ещё не нажали «Отправить» в анкете. Черновики тоже выгружаются (статус «черновик»).',
+      'Выгрузка показывает только участников выбранной смены, кто сдал итоговую анкету на главной. Вечерняя проверка состояния сюда не входит. Если анкета снята с публикации — сначала опубликуйте её.',
     ]);
   }
 
