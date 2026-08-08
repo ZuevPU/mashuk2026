@@ -946,6 +946,7 @@ export const getAdminEveningQuestionnaire = async (req: AdminRequest, res: Respo
     defaultConfig: DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
     opensAtMsk,
     forcePublished: !!config.forcePublished,
+    forceUnpublished: !!config.forceUnpublished,
     isOpenNow: isEveningOpenForConfig(config),
   });
 };
@@ -961,6 +962,7 @@ export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
 
   const bodyConfig = req.body.config as EveningQuestionnaireConfig | undefined;
   const forcePublishedRaw = req.body.forcePublished;
+  const forceUnpublishedRaw = req.body.forceUnpublished;
   const opensAtRaw = req.body.opensAtMsk;
 
   const byDay = {
@@ -990,16 +992,34 @@ export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
     next = { ...next, opensAtMsk: existing.opensAtMsk };
   }
 
-  if (forcePublishedRaw === true || forcePublishedRaw === false) {
-    if (forcePublishedRaw) next = { ...next, forcePublished: true };
-    else {
-      const { forcePublished: _f, ...rest } = next;
-      next = rest;
+  const hasForcePub = forcePublishedRaw === true || forcePublishedRaw === false;
+  const hasForceUnpub = forceUnpublishedRaw === true || forceUnpublishedRaw === false;
+
+  if (hasForcePub || hasForceUnpub) {
+    // Explicit publish controls from admin toolbar — mutually exclusive.
+    let forcePublished = hasForcePub ? forcePublishedRaw === true : !!existing.forcePublished;
+    let forceUnpublished = hasForceUnpub ? forceUnpublishedRaw === true : !!existing.forceUnpublished;
+    if (forcePublishedRaw === true) forceUnpublished = false;
+    if (forceUnpublishedRaw === true) forcePublished = false;
+    if (forcePublishedRaw === false && forceUnpublishedRaw === false) {
+      forcePublished = false;
+      forceUnpublished = false;
     }
-  } else if (bodyConfig?.forcePublished) {
-    next = { ...next, forcePublished: true };
-  } else if (existing.forcePublished) {
-    next = { ...next, forcePublished: true };
+    const { forcePublished: _fp, forceUnpublished: _fu, ...rest } = next;
+    next = {
+      ...rest,
+      ...(forcePublished ? { forcePublished: true } : {}),
+      ...(forceUnpublished ? { forceUnpublished: true } : {}),
+    };
+  } else {
+    if (bodyConfig?.forcePublished) next = { ...next, forcePublished: true };
+    else if (existing.forcePublished) next = { ...next, forcePublished: true };
+    if (bodyConfig?.forceUnpublished) {
+      const { forcePublished: _fp, ...rest } = { ...next, forceUnpublished: true as const };
+      next = rest;
+    } else if (existing.forceUnpublished && !next.forcePublished) {
+      next = { ...next, forceUnpublished: true };
+    }
   }
 
   if (!next.steps?.length) {
@@ -1018,6 +1038,7 @@ export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
     config: resolved,
     opensAtMsk: getEveningOpensAtMsk(resolved),
     forcePublished: !!resolved.forcePublished,
+    forceUnpublished: !!resolved.forceUnpublished,
     isOpenNow: isEveningOpenForConfig(resolved),
   });
 };

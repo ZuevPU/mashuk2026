@@ -59,10 +59,28 @@ describe('eveningQuestionnaireConfig', () => {
     assert.equal(getEveningOpensAtMsk({ steps: [], opensAtMsk: '9:05' }), '09:05');
   });
 
+  it('forceUnpublished hides even after schedule or forcePublished', () => {
+    const at2130 = new Date('2026-07-01T18:30:00.000Z'); // 21:30 MSK
+    assert.equal(
+      isEveningOpenForConfig({ steps: [], opensAtMsk: '21:00', forceUnpublished: true }, at2130),
+      false,
+    );
+    assert.equal(
+      isEveningOpenForConfig({
+        steps: [],
+        opensAtMsk: '22:00',
+        forcePublished: true,
+        forceUnpublished: true,
+      }, at2130),
+      false,
+    );
+  });
+
   it('preserves publish meta when stripping Point B / normalizing experiment', () => {
     const cfg = {
       opensAtMsk: '21:00',
       forcePublished: true,
+      forceUnpublished: true,
       steps: [{
         id: 'open',
         title: 'Выводы',
@@ -76,10 +94,12 @@ describe('eveningQuestionnaireConfig', () => {
     const stripped = stripPointBFromEveningConfig(cfg);
     assert.equal(stripped.opensAtMsk, '21:00');
     assert.equal(stripped.forcePublished, true);
+    assert.equal(stripped.forceUnpublished, true);
     assert.equal(stripped.steps[0].fields.some(f => f.type === 'point_b_cta'), false);
     const norm = normalizeExperimentStep(stripped);
     assert.equal(norm.opensAtMsk, '21:00');
     assert.equal(norm.forcePublished, true);
+    assert.equal(norm.forceUnpublished, true);
   });
 
   it('strips point_b_cta from saved configs for days 1–7', () => {

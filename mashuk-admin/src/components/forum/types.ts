@@ -31,6 +31,8 @@ export type EveningQuestionnaireConfig = {
   opensAtMsk?: string;
   /** Организатор открыл анкету вручную раньше времени */
   forcePublished?: boolean;
+  /** Организатор снял анкету с публикации (скрыта даже после opensAtMsk) */
+  forceUnpublished?: boolean;
 };
 
 export type ProfileProgressWeights = {

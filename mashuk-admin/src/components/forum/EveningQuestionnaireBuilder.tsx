@@ -23,10 +23,25 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
   const [config, setConfig] = useState<EveningQuestionnaireConfig>(EMPTY_CONFIG);
   const [opensAtMsk, setOpensAtMsk] = useState('22:00');
   const [forcePublished, setForcePublished] = useState(false);
+  const [forceUnpublished, setForceUnpublished] = useState(false);
   const [isOpenNow, setIsOpenNow] = useState(false);
   const [copyFromDay, setCopyFromDay] = useState(1);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const applyPublishState = (res: {
+    opensAtMsk?: string;
+    forcePublished?: boolean;
+    forceUnpublished?: boolean;
+    isOpenNow?: boolean;
+    config?: EveningQuestionnaireConfig;
+  }) => {
+    setOpensAtMsk(res.opensAtMsk || opensAtMsk);
+    setForcePublished(!!res.forcePublished);
+    setForceUnpublished(!!res.forceUnpublished);
+    setIsOpenNow(!!res.isOpenNow);
+    if (res.config?.steps) setConfig(JSON.parse(JSON.stringify(res.config)));
+  };
 
   const loadDay = async (d: number) => {
     setLoading(true);
@@ -39,6 +54,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
       else setConfig(JSON.parse(JSON.stringify(EMPTY_CONFIG)));
       setOpensAtMsk(ev.opensAtMsk || c?.opensAtMsk || '22:00');
       setForcePublished(!!ev.forcePublished || !!c?.forcePublished);
+      setForceUnpublished(!!ev.forceUnpublished || !!c?.forceUnpublished);
       setIsOpenNow(!!ev.isOpenNow);
     } finally {
       setLoading(false);
@@ -149,33 +165,48 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
       const res = await adminFetch(`/evening-questionnaire?day=${day}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          config: { ...config, opensAtMsk, forcePublished: forcePublished || undefined },
+          config: {
+            ...config,
+            opensAtMsk,
+            forcePublished: forcePublished || undefined,
+            forceUnpublished: forceUnpublished || undefined,
+          },
           opensAtMsk,
           forcePublished,
+          forceUnpublished,
         }),
       });
-      setOpensAtMsk(res.opensAtMsk || opensAtMsk);
-      setForcePublished(!!res.forcePublished);
-      setIsOpenNow(!!res.isOpenNow);
-      if (res.config?.steps) setConfig(JSON.parse(JSON.stringify(res.config)));
+      applyPublishState(res);
     }, `Анкета дня ${day} сохранена`);
   };
 
-  const setPublished = (published: boolean) => {
+  /** publish | schedule | unpublish */
+  const setPublishMode = (mode: 'publish' | 'schedule' | 'unpublish') => {
+    const forcePublishedNext = mode === 'publish';
+    const forceUnpublishedNext = mode === 'unpublish';
+    const msg =
+      mode === 'publish'
+        ? `Анкета дня ${day} опубликована сейчас`
+        : mode === 'unpublish'
+          ? `Анкета дня ${day} снята с публикации`
+          : `Анкета дня ${day}: публикация по времени ${opensAtMsk} МСК`;
     act(async () => {
       const res = await adminFetch(`/evening-questionnaire?day=${day}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          config: { ...config, opensAtMsk, forcePublished: published || undefined },
+          config: {
+            ...config,
+            opensAtMsk,
+            forcePublished: forcePublishedNext || undefined,
+            forceUnpublished: forceUnpublishedNext || undefined,
+          },
           opensAtMsk,
-          forcePublished: published,
+          forcePublished: forcePublishedNext,
+          forceUnpublished: forceUnpublishedNext,
         }),
       });
-      setOpensAtMsk(res.opensAtMsk || opensAtMsk);
-      setForcePublished(!!res.forcePublished);
-      setIsOpenNow(!!res.isOpenNow);
-      if (res.config?.steps) setConfig(JSON.parse(JSON.stringify(res.config)));
-    }, published ? `Анкета дня ${day} опубликована` : `Ручная публикация дня ${day} снята`);
+      applyPublishState(res);
+    }, msg);
   };
 
   const conditionParentsInStep = (step: EveningStep, fieldKey: string) =>
@@ -213,21 +244,38 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
           />
         </label>
         <span className="adm-muted" style={{ fontSize: 12 }}>
-          {forcePublished
-            ? 'Сейчас открыта вручную (можно заполнять до авто-времени и после).'
-            : isOpenNow
-              ? `Сейчас открыта по расписанию (≥ ${opensAtMsk} МСК).`
-              : `На главной появится автоматически в ${opensAtMsk} МСК.`}
+          {forceUnpublished
+            ? 'Снята с публикации — участники не видят анкету.'
+            : forcePublished
+              ? 'Открыта вручную («Опубликовать сейчас»).'
+              : isOpenNow
+                ? `Сейчас открыта по расписанию (≥ ${opensAtMsk} МСК).`
+                : `Появится автоматически в ${opensAtMsk} МСК.`}
         </span>
-        {forcePublished ? (
-          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setPublished(false)}>
-            Снять ручную публикацию
-          </button>
-        ) : (
-          <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={() => setPublished(true)}>
-            Опубликовать сейчас
-          </button>
-        )}
+        <button
+          type="button"
+          className="adm-btn adm-btn-secondary adm-btn-sm"
+          onClick={() => setPublishMode('schedule')}
+          title="Сохранить время и убрать ручные флаги публикации"
+        >
+          Опубликовать во время
+        </button>
+        <button
+          type="button"
+          className="adm-btn adm-btn-primary adm-btn-sm"
+          onClick={() => setPublishMode('publish')}
+          disabled={forcePublished && isOpenNow}
+        >
+          Опубликовать сейчас
+        </button>
+        <button
+          type="button"
+          className="adm-btn adm-btn-danger adm-btn-sm"
+          onClick={() => setPublishMode('unpublish')}
+          disabled={forceUnpublished}
+        >
+          Снять с публикации
+        </button>
       </div>
 
       <div className="adm-forum-toolbar">

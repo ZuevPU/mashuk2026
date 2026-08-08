@@ -36,16 +36,19 @@ export type EveningQuestionnaireConfig = {
   opensAtMsk?: string;
   /** Admin forced the questionnaire open for this day (before opensAtMsk). */
   forcePublished?: boolean;
+  /** Admin hid the questionnaire — overrides schedule and forcePublished. */
+  forceUnpublished?: boolean;
 };
 
 export const DEFAULT_EVENING_OPENS_AT_MSK = '22:00';
 
 function eveningPublishMeta(
   config: EveningQuestionnaireConfig,
-): Pick<EveningQuestionnaireConfig, 'opensAtMsk' | 'forcePublished'> {
-  const meta: Pick<EveningQuestionnaireConfig, 'opensAtMsk' | 'forcePublished'> = {};
+): Pick<EveningQuestionnaireConfig, 'opensAtMsk' | 'forcePublished' | 'forceUnpublished'> {
+  const meta: Pick<EveningQuestionnaireConfig, 'opensAtMsk' | 'forcePublished' | 'forceUnpublished'> = {};
   if (config.opensAtMsk?.trim()) meta.opensAtMsk = config.opensAtMsk.trim();
   if (config.forcePublished) meta.forcePublished = true;
+  if (config.forceUnpublished) meta.forceUnpublished = true;
   return meta;
 }
 
@@ -71,12 +74,13 @@ function opensAtToMinutes(hhmm: string): number {
 
 /**
  * Evening questionnaire window: from opensAtMsk (or forcePublished) until 01:00 MSK.
- * Matches previous hardcoded 22:00–01:00 behaviour, with configurable start.
+ * forceUnpublished always wins (admin hide). Matches previous 22:00–01:00 behaviour.
  */
 export function isEveningOpenForConfig(
   config: EveningQuestionnaireConfig | null | undefined,
   now = new Date(),
 ): boolean {
+  if (config?.forceUnpublished) return false;
   if (config?.forcePublished) return true;
   const { totalMinutes } = getMoscowParts(now);
   const openMinutes = opensAtToMinutes(getEveningOpensAtMsk(config));

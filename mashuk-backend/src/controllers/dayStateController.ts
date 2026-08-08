@@ -137,8 +137,8 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
     const opensAt = getEveningOpensAtMsk(eveningConfig);
     if (!isEveningOpenForConfig(eveningConfig) && process.env.NODE_ENV !== 'test') {
       res.status(400).json({
-        error: eveningConfig.forcePublished
-          ? 'Итоговая анкета сейчас недоступна'
+        error: eveningConfig.forceUnpublished
+          ? 'Итоговая анкета снята с публикации'
           : `Итоговая анкета доступна с ${opensAt} МСК (или после публикации организатором)`,
       });
       return;
@@ -293,6 +293,7 @@ export async function loadDayContext(
       open: eveningOpen,
       opensAt,
       forcePublished: !!config.forcePublished,
+      forceUnpublished: !!config.forceUnpublished,
       completed: eveningDone,
       askTomorrowRole,
       config,
