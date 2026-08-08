@@ -49,9 +49,16 @@ interface HomeData {
   eveningCard?: { title: string; subtitle: string } | null;
   roleOfDay: { roleKey: string; name: string; quadrant?: string; essence?: string } | null;
   experiment: {
+    id?: number;
     title: string;
     body?: string;
     hint?: string;
+    title2?: string;
+    body2?: string;
+    hint2?: string;
+    title3?: string;
+    body3?: string;
+    hint3?: string;
     status: string;
     roleName?: string;
   } | null;

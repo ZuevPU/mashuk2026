@@ -38,6 +38,21 @@ async function ensureTaskQrScansSchema(pool: ReturnType<typeof createPool>): Pro
   await pool.query(sql);
 }
 
+/** Idempotent repair if 0050 was skipped (title2/body2/hint2/title3…). */
+async function ensureDayExperimentsTripleSchema(pool: ReturnType<typeof createPool>): Promise<void> {
+  const { rows } = await pool.query<{ ok: number }>(
+    `SELECT 1 AS ok FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'day_experiments' AND column_name = 'title2'
+     LIMIT 1`,
+  );
+  if (rows.length > 0) return;
+
+  const sqlPath = path.join(__dirname, '../../drizzle/0050_day_experiments_triple.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  console.warn('Repair: applying 0050_day_experiments_triple.sql (title2 missing)');
+  await pool.query(sql);
+}
+
 export async function runMigrations(): Promise<void> {
   const pool = createPool(process.env.DATABASE_URL!);
   const db = drizzle(pool);
@@ -48,6 +63,7 @@ export async function runMigrations(): Promise<void> {
   } finally {
     await ensureBacklogFeaturesSchema(pool);
     await ensureTaskQrScansSchema(pool);
+    await ensureDayExperimentsTripleSchema(pool);
     await pool.end();
   }
 }

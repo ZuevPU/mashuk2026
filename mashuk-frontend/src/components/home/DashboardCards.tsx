@@ -215,7 +215,7 @@ export const StatsRow: React.FC<{
 };
 
 export interface ExperimentItem {
-  id: number;
+  id?: number;
   title: string;
   body?: string | null;
   hint?: string | null;
