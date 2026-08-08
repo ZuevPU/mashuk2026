@@ -1,6 +1,9 @@
-import { TOUCHPOINT_SLOTS } from './touchpointTemplates.js';
-import { forumDayDateKey, mskInstant, resolveEventInterval, type EventTimeFields } from './eventSchedule.js';
 import type { questions } from '../db/schema.js';
+import {
+  resolveEventInterval,
+  type EventTimeFields,
+  type ForumScheduleSettings,
+} from './eventSchedule.js';
 
 export type LessonPickEvent = EventTimeFields & {
   id: number;
@@ -12,6 +15,16 @@ export type LessonPickEvent = EventTimeFields & {
   sortOrder?: number | null;
 };
 
+export type LessonPickItem = {
+  id: number;
+  title: string;
+  place?: string | null;
+  startTime?: Date | null;
+  endTime?: Date | null;
+};
+
+type LessonKind = 'important' | 'open' | 'any';
+
 function lessonSlotIndex(q: { title?: string | null }): 4 | 5 | null {
   const t = (q.title || '').toLowerCase();
   if (t.includes('слот 2') || t.includes('(слот 2)')) return 5;
@@ -19,37 +32,60 @@ function lessonSlotIndex(q: { title?: string | null }): 4 | 5 | null {
   return null;
 }
 
-function slotWindowMinutes(slotIndex: 4 | 5): { openMin: number; closeMin: number } {
-  const slot = TOUCHPOINT_SLOTS.find(s => s.index === slotIndex);
-  if (!slot) {
-    return slotIndex === 4
-      ? { openMin: 16 * 60, closeMin: 18 * 60 }
-      : { openMin: 18 * 60 + 30, closeMin: 20 * 60 };
-  }
-  return { openMin: slot.openMin, closeMin: slot.closeMin };
-}
-
-function intervalsOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
-  return aStart < bEnd && bStart < aEnd;
+function lessonKindForSlot(slot: 4 | 5 | null): LessonKind {
+  if (slot === 5) return 'open';
+  if (slot === 4) return 'important';
+  return 'any';
 }
 
 function isBreak(e: { blockType?: string | null }): boolean {
   return (e.blockType || '').toLowerCase() === 'break';
 }
 
-function isLessonEvent(e: { title: string; blockType?: string | null }): boolean {
+/** Блок / тема из семейства уроков (не утренний круг, не мастерская направления). */
+export function isLessonEvent(e: { title: string; blockType?: string | null }): boolean {
   const t = e.title.toLowerCase();
   const bt = (e.blockType || '').toLowerCase();
-  // "Уроки о важном", "Темы уроков", "Открытые уроки" и т.п.
+  if (isBreak(e)) return false;
   return (
-    t.includes('урок') ||
-    bt.includes('урок') ||
-    bt.includes('lesson') ||
-    t.includes('важн') ||
-    bt.includes('important') ||
-    t.includes('тема') ||
-    bt.includes('topic')
+    t.includes('урок')
+    || t.includes('важн')
+    || bt.includes('урок')
+    || bt.includes('lesson')
+    || bt.includes('important')
+    || bt.includes('topic')
   );
+}
+
+/** «Уроки о важном» (слот 1). */
+export function isImportantLessonBlock(e: { title: string; blockType?: string | null }): boolean {
+  const t = e.title.toLowerCase();
+  const bt = (e.blockType || '').toLowerCase();
+  if (t.includes('открыт') || t.includes('наоборот')) return false;
+  return (
+    t.includes('важн')
+    || bt.includes('important')
+    || bt.includes('lesson_important')
+    || (t.includes('урок') && !t.includes('открыт'))
+  );
+}
+
+/** «Открытые уроки» / практики (слот 2). */
+export function isOpenLessonBlock(e: { title: string; blockType?: string | null }): boolean {
+  const t = e.title.toLowerCase();
+  const bt = (e.blockType || '').toLowerCase();
+  return (
+    t.includes('открыт')
+    || t.includes('наоборот')
+    || bt.includes('open')
+    || bt.includes('lesson_open')
+  );
+}
+
+function matchesKind(e: { title: string; blockType?: string | null }, kind: LessonKind): boolean {
+  if (kind === 'important') return isImportantLessonBlock(e);
+  if (kind === 'open') return isOpenLessonBlock(e);
+  return isLessonEvent(e);
 }
 
 function childrenOf(parentId: number, byParent: Map<number, LessonPickEvent[]>): LessonPickEvent[] {
@@ -68,25 +104,108 @@ export function lessonThemeLeaves(
   return kids.flatMap(k => lessonThemeLeaves(k, byParent));
 }
 
-function mapPick(e: LessonPickEvent, displayStart?: Date | null) {
+/**
+ * Урок уже начался / прошёл по расписанию дня.
+ * Без времени в программе — считаем доступным (legacy).
+ */
+export function isLessonAlreadyConducted(
+  theme: LessonPickEvent,
+  container: LessonPickEvent,
+  settings: ForumScheduleSettings | undefined,
+  now: Date,
+): boolean {
+  const fields: EventTimeFields = {
+    startTime: theme.startTime ?? container.startTime ?? null,
+    endTime: theme.endTime ?? container.endTime ?? null,
+    timeSlot: theme.timeSlot ?? container.timeSlot ?? null,
+    dayNumber: theme.dayNumber ?? container.dayNumber ?? null,
+    eventDate: theme.eventDate ?? container.eventDate ?? null,
+  };
+  const { start } = resolveEventInterval(fields, settings ?? {});
+  if (!start) return true;
+  return start.getTime() <= now.getTime();
+}
+
+function mapPick(
+  e: LessonPickEvent,
+  container: LessonPickEvent,
+  settings: ForumScheduleSettings | undefined,
+): LessonPickItem {
+  const { start, end } = resolveEventInterval(
+    {
+      startTime: e.startTime ?? container.startTime ?? null,
+      endTime: e.endTime ?? container.endTime ?? null,
+      timeSlot: e.timeSlot ?? container.timeSlot ?? null,
+      dayNumber: e.dayNumber ?? container.dayNumber ?? null,
+      eventDate: e.eventDate ?? container.eventDate ?? null,
+    },
+    settings ?? {},
+  );
   return {
     id: e.id,
     title: e.title,
-    place: e.place ?? null,
-    startTime: e.startTime ?? displayStart ?? null,
+    place: e.place ?? container.place ?? null,
+    startTime: start ?? e.startTime ?? container.startTime ?? null,
+    endTime: end ?? e.endTime ?? container.endTime ?? null,
   };
 }
 
 /**
- * Events for «Осмысление урока»: concrete themes (leaf sessions), not parent program slots.
- * Window match is done on events that have a time (usually the parent block);
- * if a matching event has children, those themes are returned instead.
+ * Контейнеры уроков на любом уровне дерева (не только top-level):
+ * «Уроки о важном» часто лежит внутри ключевого блока дня.
+ * Берём самый «внешний» matching-узел: если и родитель, и ребёнок match — предпочитаем родителя.
+ */
+function pickLessonContainers(
+  dayEvents: LessonPickEvent[],
+  kind: LessonKind,
+): LessonPickEvent[] {
+  const byId = new Map(dayEvents.map(e => [e.id, e]));
+  const matchFn = (e: LessonPickEvent) => matchesKind(e, kind);
+
+  let matched = dayEvents.filter(e => !isBreak(e) && matchFn(e));
+  if (matched.length === 0 && kind !== 'any') {
+    matched = dayEvents.filter(e => !isBreak(e) && isLessonEvent(e));
+  }
+  if (matched.length === 0) return [];
+
+  const matchedIds = new Set(matched.map(e => e.id));
+  return matched.filter(e => {
+    let pid = e.parentEventId ?? null;
+    while (pid != null) {
+      if (matchedIds.has(pid)) return false;
+      pid = byId.get(pid)?.parentEventId ?? null;
+    }
+    return true;
+  }).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id);
+}
+
+export type FilterLessonSlotResult = {
+  items: LessonPickItem[];
+  /** Сколько тем в программе слота всего (включая ещё не начавшиеся). */
+  programThemeCount: number;
+};
+
+/**
+ * События для «Осмысление урока»: темы уроков дня из программы.
+ * Слот 1 → «Уроки о важном», слот 2 → «Открытые уроки».
+ * В список попадают только уже начавшиеся / проведённые темы.
  */
 export function filterEventsForLessonSlot(
   question: typeof questions.$inferSelect,
   dayEvents: LessonPickEvent[],
-  settings: { startDate?: Date | null },
-): { id: number; title: string; place?: string | null; startTime?: Date | null }[] {
+  settings?: ForumScheduleSettings,
+  now = new Date(),
+): LessonPickItem[] {
+  return collectLessonSlotThemes(question, dayEvents, settings, now).items;
+}
+
+/** Полный результат с метаданными для UI. */
+export function collectLessonSlotThemes(
+  question: typeof questions.$inferSelect,
+  dayEvents: LessonPickEvent[],
+  settings?: ForumScheduleSettings,
+  now = new Date(),
+): FilterLessonSlotResult {
   const byParent = new Map<number, LessonPickEvent[]>();
   for (const e of dayEvents) {
     if (e.parentEventId != null) {
@@ -96,53 +215,33 @@ export function filterEventsForLessonSlot(
     }
   }
 
-  const idx = lessonSlotIndex(question);
-  if (!idx || !question.dayNumber) {
-    // No slot window — still prefer themes over parent containers
-    const roots = dayEvents.filter(e => e.parentEventId == null && !isBreak(e) && isLessonEvent(e));
-    const themes = roots.flatMap(r => lessonThemeLeaves(r, byParent));
-    const seen = new Set<number>();
-    return themes.filter(e => {
-      if (seen.has(e.id)) return false;
-      seen.add(e.id);
-      return true;
-    }).map(e => mapPick(e));
-  }
+  const kind = lessonKindForSlot(lessonSlotIndex(question));
+  const containers = pickLessonContainers(dayEvents, kind);
 
-  const { openMin, closeMin } = slotWindowMinutes(idx);
-  const dateKey = forumDayDateKey(settings.startDate ?? null, question.dayNumber);
-  if (!dateKey) {
-    const roots = dayEvents.filter(e => e.parentEventId == null && !isBreak(e) && isLessonEvent(e));
-    return roots.flatMap(r => lessonThemeLeaves(r, byParent)).map(e => mapPick(e));
-  }
-
-  const slotStart = mskInstant(dateKey, Math.floor(openMin / 60), openMin % 60).getTime();
-  const slotEnd = mskInstant(dateKey, Math.floor(closeMin / 60), closeMin % 60).getTime();
-
-  const overlapping = dayEvents.filter(e => {
-    if (isBreak(e)) return false;
-    if (!isLessonEvent(e)) return false;
-    const { start, end } = resolveEventInterval(e, settings);
-    if (!start) return false;
-    const evStart = start.getTime();
-    const evEnd = (end ?? new Date(start.getTime() + 90 * 60_000)).getTime();
-    return intervalsOverlap(evStart, evEnd, slotStart, slotEnd);
-  });
-
-  const out: { id: number; title: string; place?: string | null; startTime?: Date | null }[] = [];
+  const allThemes: { theme: LessonPickEvent; container: LessonPickEvent }[] = [];
   const seen = new Set<number>();
 
-  for (const e of overlapping) {
-    const { start } = resolveEventInterval(e, settings);
-    const themes = lessonThemeLeaves(e, byParent);
+  for (const container of containers) {
+    const themes = lessonThemeLeaves(container, byParent);
     for (const theme of themes) {
       if (seen.has(theme.id)) continue;
       seen.add(theme.id);
-      out.push(mapPick(theme, start));
+      allThemes.push({ theme, container });
     }
   }
 
-  return out;
+  const conducted = allThemes.filter(({ theme, container }) =>
+    isLessonAlreadyConducted(theme, container, settings, now));
+
+  const items = conducted
+    .map(({ theme, container }) => mapPick(theme, container, settings))
+    .sort((a, b) => {
+      const ta = a.startTime?.getTime() ?? 0;
+      const tb = b.startTime?.getTime() ?? 0;
+      return ta - tb || a.id - b.id;
+    });
+
+  return { items, programThemeCount: allThemes.length };
 }
 
 export function lessonSlotIndexForQuestion(q: { title?: string | null }): 4 | 5 | null {

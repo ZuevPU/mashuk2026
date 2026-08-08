@@ -18,7 +18,10 @@ import {
 import { awardPoints, pointsActionForQuestion } from '../services/pointsService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { emotionIdToZone, EMOTION_ZONE_LABELS } from '../services/emotionZones.js';
-import { filterEventsForLessonSlot, lessonSlotIndexForQuestion } from '../services/lessonSlotEvents.js';
+import {
+  collectLessonSlotThemes,
+  lessonSlotIndexForQuestion,
+} from '../services/lessonSlotEvents.js';
 import { formatQuestionTimeWindow, getReflectionTypeLabel } from '../services/reflectionTypeLabel.js';
 import { resolveAnswerConfirmation } from '../services/answerConfirmation.js';
 import {
@@ -203,16 +206,39 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
     }
     const options = await db.select().from(questionOptions).where(eq(questionOptions.questionId, id))
       .orderBy(asc(questionOptions.sortOrder));
-    let dayEvents: { id: number; title: string; place: string | null; startTime: Date | null }[] = [];
+    let dayEvents: {
+      id: number;
+      title: string;
+      place: string | null;
+      startTime: Date | null;
+      endTime: Date | null;
+    }[] = [];
+    let lessonPickMeta: {
+      programThemeCount: number;
+      emptyReason: 'none' | 'none_in_program' | 'none_conducted_yet';
+    } | null = null;
     if (isLessonReflectionQuestion(question) && question.dayNumber) {
-      const dayEv = await db.select().from(events).where(eq(events.dayNumber, question.dayNumber));
+      const { resolveActiveShiftId } = await import('../services/shiftService.js');
+      const shiftId = question.shiftId ?? await resolveActiveShiftId();
+      const dayEv = await db.select().from(events).where(and(
+        eq(events.dayNumber, question.dayNumber),
+        eq(events.shiftId, shiftId),
+      ));
       const published = dayEv.filter(e => e.isPublished !== false && e.dayPublished !== false);
-      dayEvents = filterEventsForLessonSlot(question, published, settings).map(e => ({
+      const collected = collectLessonSlotThemes(question, published, settings, new Date());
+      dayEvents = collected.items.map(e => ({
         id: e.id,
         title: e.title,
         place: e.place ?? null,
         startTime: e.startTime ?? null,
+        endTime: e.endTime ?? null,
       }));
+      lessonPickMeta = {
+        programThemeCount: collected.programThemeCount,
+        emptyReason: collected.items.length > 0
+          ? 'none'
+          : (collected.programThemeCount > 0 ? 'none_conducted_yet' : 'none_in_program'),
+      };
     }
     res.json({
       question: {
@@ -222,6 +248,7 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       },
       options,
       dayEvents,
+      lessonPickMeta,
       myAnswer: existingAnswer ? {
         answerData: existingAnswer.answerData,
         createdAt: existingAnswer.createdAt,
@@ -304,7 +331,56 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
     }
     if (isLessonReflectionQuestion(question) && answerData && typeof answerData === 'object') {
       const slotIndex = lessonSlotIndexForQuestion(question);
-      normalizedAnswer = { ...answerData, slotIndex };
+      const payload = answerData as {
+        eventId?: unknown;
+        eventTitle?: unknown;
+        text?: unknown;
+      };
+      const reflectionText = typeof payload.text === 'string' ? payload.text.trim() : '';
+      if (reflectionText.length < 20) {
+        res.status(400).json({
+          error: 'Напишите осмысленный ответ по выбранному уроку (хотя бы пару предложений)',
+        });
+        return;
+      }
+
+      if (question.dayNumber) {
+        const { resolveActiveShiftId } = await import('../services/shiftService.js');
+        const shiftId = question.shiftId ?? await resolveActiveShiftId();
+        const dayEv = await db.select().from(events).where(and(
+          eq(events.dayNumber, question.dayNumber),
+          eq(events.shiftId, shiftId),
+        ));
+        const published = dayEv.filter(e => e.isPublished !== false && e.dayPublished !== false);
+        const collected = collectLessonSlotThemes(question, published, settings, now);
+        if (collected.programThemeCount > 0 && collected.items.length === 0) {
+          res.status(400).json({
+            error: 'Уроки по программе ещё не начались — дождитесь проведения занятия',
+          });
+          return;
+        }
+        if (collected.items.length > 0) {
+          const eventId = Number(payload.eventId);
+          const picked = collected.items.find(e => e.id === eventId);
+          if (!picked) {
+            res.status(400).json({
+              error: 'Выберите урок из списка уже проведённых тем программы',
+            });
+            return;
+          }
+          normalizedAnswer = {
+            ...answerData,
+            eventId: picked.id,
+            eventTitle: picked.title,
+            text: reflectionText,
+            slotIndex,
+          };
+        } else {
+          normalizedAnswer = { ...answerData, text: reflectionText, slotIndex };
+        }
+      } else {
+        normalizedAnswer = { ...answerData, text: reflectionText, slotIndex };
+      }
     }
 
     let answer;

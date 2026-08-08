@@ -26,6 +26,19 @@ const CHECKIN_EMOTIONS = [
   { id: 'focus', label: 'Сосредоточенность', icon: '🎯' },
 ];
 
+type LessonPickEvent = {
+  id: number;
+  title: string;
+  place?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+};
+
+type LessonPickMeta = {
+  programThemeCount?: number;
+  emptyReason?: 'none' | 'none_in_program' | 'none_conducted_yet';
+};
+
 interface QuestionAnswerFormProps {
   question: {
     id: number;
@@ -39,7 +52,8 @@ interface QuestionAnswerFormProps {
     allowOther?: boolean;
   };
   options: { id: number; label: string; value: string; parentOptionId?: number | null }[];
-  dayEvents?: { id: number; title: string; place?: string | null; startTime?: string | null }[];
+  dayEvents?: LessonPickEvent[];
+  lessonPickMeta?: LessonPickMeta | null;
   myAnswer?: { preview?: string; createdAt?: string | null; answerData?: unknown } | null;
   onSubmit: (answerData: unknown) => Promise<void>;
 }
@@ -207,21 +221,31 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
   );
 };
 
+const MIN_LESSON_REFLECTION_CHARS = 20;
+
 const LessonReflectionForm: React.FC<{
   question: QuestionAnswerFormProps['question'];
-  dayEvents: { id: number; title: string; place?: string | null; startTime?: string | null }[];
+  dayEvents: LessonPickEvent[];
+  lessonPickMeta?: LessonPickMeta | null;
   onSubmit: (data: unknown) => Promise<void>;
-}> = ({ question, dayEvents, onSubmit }) => {
+}> = ({ question, dayEvents, lessonPickMeta, onSubmit }) => {
   const [eventId, setEventId] = useState<number | null>(null);
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState(0);
 
   const selected = dayEvents.find(e => e.id === eventId);
+  const mustPickLesson = dayEvents.length > 0;
+  const emptyReason = lessonPickMeta?.emptyReason;
+  const waitingForLessons = dayEvents.length === 0 && emptyReason === 'none_conducted_yet';
+  const canProceedFromPick = mustPickLesson
+    ? eventId != null
+    : !waitingForLessons;
+  const textOk = text.trim().length >= MIN_LESSON_REFLECTION_CHARS;
 
   const handleSubmit = async () => {
-    if (dayEvents.length > 0 && !eventId) return;
-    if (!text.trim()) return;
+    if (mustPickLesson && !eventId) return;
+    if (!textOk) return;
     setSaving(true);
     try {
       await onSubmit({
@@ -234,6 +258,11 @@ const LessonReflectionForm: React.FC<{
     }
   };
 
+  const formatLessonTime = (ev: LessonPickEvent) => {
+    if (!ev.startTime) return null;
+    return new Date(ev.startTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
     <Div>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{question.title}</div>
@@ -242,10 +271,17 @@ const LessonReflectionForm: React.FC<{
 
       {step === 0 && (
         <>
-          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Какую тему ты осмысляешь?</div>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+            Выберите урок из программы дня
+          </div>
+          <div style={{ fontSize: 11, color: '#666', marginBottom: 10, lineHeight: 1.4 }}>
+            Показаны темы, которые уже прошли по расписанию. Отметьте урок, о котором хотите написать осмысление.
+          </div>
           {dayEvents.length === 0 && (
-            <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
-              Тем в расписании пока нет — опишите тему текстом на следующем шаге.
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 8, lineHeight: 1.4 }}>
+              {emptyReason === 'none_conducted_yet'
+                ? 'Уроки по программе ещё не начались — список тем появится после проведения занятия.'
+                : 'В программе дня пока нет тем уроков для этого слота. Можно описать тему текстом на следующем шаге.'}
             </div>
           )}
           {dayEvents.map(ev => (
@@ -261,8 +297,7 @@ const LessonReflectionForm: React.FC<{
               <div style={{ fontWeight: 700, fontSize: 13 }}>{ev.title}</div>
               {(ev.place || ev.startTime) && (
                 <div style={{ fontSize: 11, color: '#666' }}>
-                  {[ev.place, ev.startTime ? new Date(ev.startTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : null]
-                    .filter(Boolean).join(' · ')}
+                  {[ev.place, formatLessonTime(ev)].filter(Boolean).join(' · ')}
                 </div>
               )}
             </div>
@@ -270,11 +305,14 @@ const LessonReflectionForm: React.FC<{
           <Button
             size="l"
             stretched
-            disabled={dayEvents.length > 0 && !eventId}
-            onClick={() => setStep(1)}
+            disabled={!canProceedFromPick}
+            onClick={() => {
+              if (!canProceedFromPick) return;
+              setStep(1);
+            }}
             style={{ marginTop: 8 }}
           >
-            Далее
+            {waitingForLessons ? 'Пока недоступно' : 'Далее'}
           </Button>
         </>
       )}
@@ -283,13 +321,29 @@ const LessonReflectionForm: React.FC<{
         <>
           {selected && (
             <div style={{ fontSize: 12, marginBottom: 8, color: '#2D6A4F' }}>
-              Тема: <b>{selected.title}</b>
+              Урок: <b>{selected.title}</b>
             </div>
           )}
-          <Textarea value={text} onChange={e => setText(e.target.value)} placeholder="Что зафиксировал(а)?" />
+          <FormItem top="Что вынесли из урока?">
+            <Textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder="Своими словами: какая мысль запомнилась, что попробуете на практике…"
+            />
+          </FormItem>
+          <div style={{ fontSize: 11, color: textOk ? '#888' : '#B8621A', marginBottom: 4 }}>
+            {text.trim().length < MIN_LESSON_REFLECTION_CHARS
+              ? `Ещё минимум ${MIN_LESSON_REFLECTION_CHARS - text.trim().length} символов`
+              : 'Можно отправлять'}
+          </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <Button size="l" mode="secondary" onClick={() => setStep(0)}>Назад</Button>
-            <Button size="l" stretched disabled={saving || !text.trim() || (dayEvents.length > 0 && !eventId)} onClick={handleSubmit}>
+            <Button
+              size="l"
+              stretched
+              disabled={saving || !textOk || (mustPickLesson && !eventId)}
+              onClick={handleSubmit}
+            >
               Отправить
             </Button>
           </div>
@@ -300,7 +354,7 @@ const LessonReflectionForm: React.FC<{
 };
 
 export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
-  question, options, dayEvents = [], myAnswer, onSubmit,
+  question, options, dayEvents = [], lessonPickMeta = null, myAnswer, onSubmit,
 }) => {
   const [text, setText] = useState('');
   const [choice, setChoice] = useState('');
@@ -356,7 +410,14 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
     || /осмысление урока/i.test(question.title || '');
 
   if (needsLesson && question.type === 'open') {
-    return <LessonReflectionForm question={question} dayEvents={dayEvents} onSubmit={onSubmit} />;
+    return (
+      <LessonReflectionForm
+        question={question}
+        dayEvents={dayEvents}
+        lessonPickMeta={lessonPickMeta}
+        onSubmit={onSubmit}
+      />
+    );
   }
 
   const handleSubmit = async () => {

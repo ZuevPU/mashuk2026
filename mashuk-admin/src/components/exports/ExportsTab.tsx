@@ -229,6 +229,50 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
               </td>
             </tr>
             <tr>
+              <td>Итоги дня (вопросы анкеты)</td>
+              <td className="adm-muted">Аналитик · 1 строка = участник × день; все вопросы вечерней анкеты в колонках</td>
+              <td>
+                <span className="adm-muted">D{forumDay}{direction ? ` · ${direction}` : ''}{group ? ` · ${group}` : ''}</span>
+              </td>
+              <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-primary"
+                  onClick={() =>
+                    downloadXlsx(
+                      `/exports/evening-summary${buildQuery({
+                        day: String(forumDay),
+                        direction: direction || undefined,
+                        group: group || undefined,
+                        ageCategory: ageCategory || undefined,
+                        activity: activity || undefined,
+                      })}`,
+                      `evening_summary_d${forumDay}.xlsx`,
+                    )
+                  }
+                >
+                  За день
+                </button>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-secondary"
+                  onClick={() =>
+                    downloadXlsx(
+                      `/exports/evening-summary${buildQuery({
+                        direction: direction || undefined,
+                        group: group || undefined,
+                        ageCategory: ageCategory || undefined,
+                        activity: activity || undefined,
+                      })}`,
+                      'evening_summary_shift.xlsx',
+                    )
+                  }
+                >
+                  Вся смена
+                </button>
+              </td>
+            </tr>
+            <tr>
               <td>По направлению / группе</td>
               <td className="adm-muted">Куратор · сводка по когорте</td>
               <td>

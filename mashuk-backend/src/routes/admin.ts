@@ -205,6 +205,7 @@ router.get('/exports/points-log', P('exports', 'export'), wrap(admin.exportPoint
 router.get('/exports/day', P('exports', 'export'), wrap(exportsCtrl.exportDayWorkbookHandler));
 router.get('/exports/day/stats', P('exports', 'export'), wrap(exportsCtrl.exportDayStatsHandler));
 router.get('/exports/daily-summary', P('exports', 'export'), wrap(exportsCtrl.exportDailySummaryHandler));
+router.get('/exports/evening-summary', P('exports', 'export'), wrap(exportsCtrl.exportEveningSummaryHandler));
 router.get('/exports/roles-experiments', P('exports', 'export'), wrap(exportsCtrl.exportRolesExperimentsHandler));
 router.get('/exports/reflections', P('exports', 'export'), wrap(exportsCtrl.exportReflectionsHandler));
 router.get('/exports/participant/:id/answers', P('exports', 'export'), wrap(exportsCtrl.exportParticipantAnswersHandler));

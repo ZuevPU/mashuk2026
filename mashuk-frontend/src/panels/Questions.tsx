@@ -231,6 +231,10 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const [activeQuestion, setActiveQuestion] = useState<any>(null);
   const [questionOptions, setQuestionOptions] = useState<any[]>([]);
   const [dayEvents, setDayEvents] = useState<any[]>([]);
+  const [lessonPickMeta, setLessonPickMeta] = useState<{
+    programThemeCount?: number;
+    emptyReason?: 'none' | 'none_in_program' | 'none_conducted_yet';
+  } | null>(null);
   const [myAnswer, setMyAnswer] = useState<{
     preview?: string;
     createdAt?: string | null;
@@ -280,6 +284,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
       setActiveQuestion(detail.question);
       setQuestionOptions(detail.options || []);
       setDayEvents(detail.dayEvents || []);
+      setLessonPickMeta(detail.lessonPickMeta ?? null);
       setMyAnswer(detail.myAnswer ?? null);
     } catch (err) {
       setSuccessPayload({
@@ -416,6 +421,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                 question={activeQuestion}
                 options={questionOptions}
                 dayEvents={dayEvents}
+                lessonPickMeta={lessonPickMeta}
                 myAnswer={myAnswer}
                 onSubmit={submitAnswer}
               />
@@ -438,7 +444,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
     } else {
       setModal(null);
     }
-  }, [activeQuestion, replyTo, replyParentId, questionOptions, myAnswer, setModal, loadAll, orgThreadId, orgComposeOpen, dayEvents, activePanel, id, showEveningFlow]);
+  }, [activeQuestion, replyTo, replyParentId, questionOptions, myAnswer, setModal, loadAll, orgThreadId, orgComposeOpen, dayEvents, lessonPickMeta, activePanel, id, showEveningFlow]);
 
   useEffect(() => {
     return () => setModal(null);

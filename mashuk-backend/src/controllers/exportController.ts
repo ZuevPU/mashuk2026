@@ -4,6 +4,7 @@ import { writeDayWorkbook } from '../services/exports/dayExport.js';
 import { computeDayExportStats } from '../services/exports/dayStats.js';
 import { writeParticipantsFullExport } from '../services/exports/participantsExport.js';
 import { writeDailySummaryExport } from '../services/exports/dailySummaryExport.js';
+import { writeEveningSummaryExport } from '../services/exports/eveningSummaryExport.js';
 import { writeRolesExperimentsExport } from '../services/exports/rolesExperimentsExport.js';
 import { writeReflectionsExport, writeParticipantAnswersExport } from '../services/exports/reflectionsExport.js';
 import {
@@ -119,6 +120,24 @@ export const exportDailySummaryHandler = async (req: AdminRequest, res: Response
     ageMax: req.query.ageMax ? Number(req.query.ageMax) : undefined,
     ageCategory: typeof req.query.ageCategory === 'string' ? req.query.ageCategory : undefined,
     activityQ: typeof req.query.activity === 'string' ? req.query.activity : undefined,
+  });
+};
+
+/** Отдельная аналитическая таблица по вопросам «Итоги дня». */
+export const exportEveningSummaryHandler = async (req: AdminRequest, res: Response) => {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
+  const dayRaw = req.query.day;
+  const day = dayRaw != null && dayRaw !== '' && String(dayRaw) !== 'all'
+    ? Number(dayRaw)
+    : null;
+  await writeEveningSummaryExport(res, {
+    day: day != null && Number.isFinite(day) && day > 0 ? day : null,
+    direction: typeof req.query.direction === 'string' ? req.query.direction : undefined,
+    group: typeof req.query.group === 'string' ? req.query.group : undefined,
+    ageCategory: typeof req.query.ageCategory === 'string' ? req.query.ageCategory : undefined,
+    activityQ: typeof req.query.activity === 'string' ? req.query.activity : undefined,
+    shiftId,
   });
 };
 
