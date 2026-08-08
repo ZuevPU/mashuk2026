@@ -116,6 +116,122 @@ export const MiniTasksCard: React.FC<{totalCount: number, hasNew?: boolean}> = (
   );
 };
 
+export const UnansweredAfterBlocksCard: React.FC<{
+  items: { id: number; title: string; overdue?: boolean }[];
+}> = ({ items }) => {
+  const routeNavigator = useRouteNavigator();
+  if (items.length === 0) return null;
+  const n = items.length;
+  const word = n === 1 ? 'неотвеченный вопрос' : n >= 2 && n <= 4 ? 'неотвеченных вопроса' : 'неотвеченных вопросов';
+  const targetId = items[0]?.id;
+
+  return (
+    <div
+      className="m-card miss"
+      role="button"
+      tabIndex={0}
+      onClick={() => { if (targetId) routeNavigator.push(`/questions?q=${targetId}`); }}
+      onKeyDown={(e) => {
+        if (targetId && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          routeNavigator.push(`/questions?q=${targetId}`);
+        }
+      }}
+      style={{
+        background: '#FFF0F0',
+        border: '1.5px solid rgba(229,62,62,.35)',
+        cursor: 'pointer',
+      }}
+    >
+      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#C53030', marginBottom: 6 }}>
+        Внимание
+      </div>
+      <div style={{ fontSize: 14, fontWeight: 800, color: '#9B2C2C', marginBottom: 6 }}>
+        У вас есть {n} {word}
+      </div>
+      <ul style={{ margin: '0 0 10px', paddingLeft: 18, fontSize: 12, color: '#742A2A', lineHeight: 1.45 }}>
+        {items.slice(0, 4).map(i => (
+          <li key={i.id}>{i.title}{i.overdue ? ' · ожидает ответа' : ''}</li>
+        ))}
+      </ul>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#E53E3E' }}>
+        Ответить →
+      </div>
+    </div>
+  );
+};
+
+export const PracticesHomeCard: React.FC<{
+  section: {
+    questionId: number;
+    title: string;
+    resultsPublished: boolean;
+    answered: boolean;
+    practices: Array<{
+      id: string;
+      title: string;
+      participantName?: string;
+      direction?: string;
+    }>;
+  };
+}> = ({ section }) => {
+  const routeNavigator = useRouteNavigator();
+  const practices = section.practices.slice(0, 8);
+  if (practices.length === 0) return null;
+
+  return (
+    <div className="m-card">
+      <div className="m-now-t">Практики участников</div>
+      <div className="m-tmi-s" style={{ marginTop: 4, marginBottom: 10 }}>
+        {section.resultsPublished
+          ? 'Результаты голосования'
+          : section.answered
+            ? 'Ваш голос учтён — можно посмотреть практики'
+            : 'Опубликованы · можно голосовать'}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {practices.map(p => (
+          <div
+            key={p.id}
+            style={{
+              padding: '10px 12px',
+              borderRadius: 10,
+              background: '#F5F0E8',
+              border: '1px solid #E0DAD0',
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1714', lineHeight: 1.3 }}>{p.title}</div>
+            {(p.participantName || p.direction) && (
+              <div style={{ fontSize: 11, color: '#6B635A', marginTop: 3 }}>
+                {[p.participantName, p.direction].filter(Boolean).join(' · ')}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {section.practices.length > practices.length && (
+        <div style={{ fontSize: 11, color: '#888', marginTop: 8 }}>
+          и ещё {section.practices.length - practices.length}
+        </div>
+      )}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => routeNavigator.push(`/questions?q=${section.questionId}`)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            routeNavigator.push(`/questions?q=${section.questionId}`);
+          }
+        }}
+        style={{ fontSize: 12, fontWeight: 700, color: 'var(--m-accent)', marginTop: 12, cursor: 'pointer' }}
+      >
+        {section.resultsPublished ? 'Смотреть результаты →' : section.answered ? 'Открыть →' : 'Голосовать →'}
+      </div>
+    </div>
+  );
+};
+
 export const MissedTouchpointsCard: React.FC<{
   items: { id: number; title: string; state: 'overdue' | 'locked' }[];
   ctaQuestionId?: number | null;
@@ -237,11 +353,11 @@ export const RoleOfDayCard: React.FC<{
   const [expOpen, setExpOpen] = React.useState(false);
   const toggleExp = () => setExpOpen(o => !o);
 
-  const items = [];
+  const items: Array<{ b?: string | null }> = [];
   if (experiment) {
-    if (experiment.title) items.push({ t: experiment.title, b: experiment.body, h: experiment.hint });
-    if (experiment.title2) items.push({ t: experiment.title2, b: experiment.body2, h: experiment.hint2 });
-    if (experiment.title3) items.push({ t: experiment.title3, b: experiment.body3, h: experiment.hint3 });
+    if (experiment.body?.trim()) items.push({ b: experiment.body });
+    if (experiment.body2?.trim()) items.push({ b: experiment.body2 });
+    if (experiment.body3?.trim()) items.push({ b: experiment.body3 });
   }
 
   return (
@@ -261,11 +377,8 @@ export const RoleOfDayCard: React.FC<{
           >
             <span className="m-role-exp-toggle-text">
               <span className="m-role-exp-toggle-title">
-                {items.length > 1 ? `Советы дня (${items.length})` : 'Эксперимент дня'} – попробуй сегодня…
+                {items.length > 1 ? `Советы дня (${items.length})` : 'Совет дня'}
               </span>
-              {!expOpen && (
-                <span className="m-role-exp-toggle-hint">разверни рекомендации дня</span>
-              )}
             </span>
             <span className="m-role-exp-chevron" aria-hidden>{expOpen ? '▾' : '▸'}</span>
           </button>
@@ -274,14 +387,8 @@ export const RoleOfDayCard: React.FC<{
               {items.map((it, i) => (
                 <div key={i} style={{ borderTop: i > 0 ? '1px dashed rgba(61,52,41,0.2)' : 'none', paddingTop: i > 0 ? 10 : 0, marginTop: i > 0 ? 10 : 0 }}>
                   {items.length > 1 && <div style={{ fontSize: 10, fontWeight: 800, color: '#B8621A', marginBottom: 4 }}>СОВЕТ №{i + 1}</div>}
-                  {it.t && (
-                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, lineHeight: 1.35 }}>{it.t}</div>
-                  )}
                   {it.b && (
-                    <p style={{ fontSize: 13, lineHeight: 1.45, margin: '0 0 8px', color: '#3D3429' }}>{it.b}</p>
-                  )}
-                  {it.h && (
-                    <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>{it.h}</div>
+                    <p style={{ fontSize: 13, lineHeight: 1.45, margin: 0, color: '#3D3429' }}>{it.b}</p>
                   )}
                 </div>
               ))}
@@ -298,10 +405,10 @@ export const ExperimentCard: React.FC<{
   onSaveFixation?: (item: { t: string, b?: string | null }) => void;
 }> = ({ experiment, onSaveFixation }) => {
   const [open, setOpen] = React.useState(false);
-  const items = [];
-  if (experiment.title) items.push({ t: experiment.title, b: experiment.body, h: experiment.hint });
-  if (experiment.title2) items.push({ t: experiment.title2, b: experiment.body2, h: experiment.hint2 });
-  if (experiment.title3) items.push({ t: experiment.title3, b: experiment.body3, h: experiment.hint3 });
+  const items: Array<{ t: string; b?: string | null }> = [];
+  if (experiment.body?.trim()) items.push({ t: experiment.body.trim(), b: experiment.body });
+  if (experiment.body2?.trim()) items.push({ t: experiment.body2.trim(), b: experiment.body2 });
+  if (experiment.body3?.trim()) items.push({ t: experiment.body3.trim(), b: experiment.body3 });
 
   return (
     <div className="m-card">
@@ -313,11 +420,8 @@ export const ExperimentCard: React.FC<{
       >
         <span className="m-role-exp-toggle-text">
           <span className="m-role-exp-toggle-title">
-            {items.length > 1 ? `Советы дня (${items.length})` : 'Эксперимент дня'} – попробуй сегодня…
+            {items.length > 1 ? `Советы дня (${items.length})` : 'Совет дня'}
           </span>
-          {!open && (
-            <span className="m-role-exp-toggle-hint">разверни рекомендации дня</span>
-          )}
         </span>
         <span className="m-role-exp-chevron" aria-hidden>{open ? '▾' : '▸'}</span>
       </button>
@@ -331,9 +435,7 @@ export const ExperimentCard: React.FC<{
           {items.map((it, i) => (
             <div key={i} style={{ borderTop: i > 0 ? '1px dashed rgba(61,52,41,0.1)' : 'none', paddingTop: i > 0 ? 12 : 0, marginTop: i > 0 ? 12 : 0 }}>
               {items.length > 1 && <div style={{ fontSize: 10, fontWeight: 800, color: '#B8621A', marginBottom: 4 }}>СОВЕТ №{i + 1}</div>}
-              {it.t && <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>{it.t}</div>}
               {it.b && <p style={{ fontSize: 13, lineHeight: 1.45, margin: '0 0 8px' }}>{it.b}</p>}
-              {it.h && <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>{it.h}</div>}
               {onSaveFixation && (
                 <Button size="s" mode="secondary" onClick={() => onSaveFixation(it)}>
                   Сохранить совет №{items.length > 1 ? i + 1 : ''} в копилку

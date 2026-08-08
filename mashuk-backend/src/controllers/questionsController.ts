@@ -339,7 +339,9 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
             ? 'Время ответа на проверку состояния закончилось'
             : latePolicy === 'until_midnight'
               ? 'Время ответа закончилось (можно было до 00:00)'
-              : 'Точка заморожена — день закончился')
+              : latePolicy === 'until_admin'
+                ? 'Вопрос больше недоступен'
+                : 'Точка заморожена — день закончился')
           : 'Question not yet available',
         access,
       });

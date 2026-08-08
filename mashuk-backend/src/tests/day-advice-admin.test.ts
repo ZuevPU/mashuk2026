@@ -8,30 +8,33 @@ import {
 } from '../services/dayAdviceAdminService.js';
 
 describe('dayAdviceAdminService', () => {
-  it('validates title length and day range', () => {
+  it('validates body required and day range', () => {
     const bad = validateAdvicePayload({
       dayNumber: 8,
       roleKey: 'meaning_researcher',
-      title: 'ok',
+      body: 'ok',
     });
     assert.equal(bad.ok, false);
 
-    const longTitle = validateAdvicePayload({
+    const noBody = validateAdvicePayload({
       dayNumber: 2,
       roleKey: 'meaning_researcher',
-      title: 'x'.repeat(61),
+      title: 'x',
     });
-    assert.equal(longTitle.ok, false);
+    assert.equal(noBody.ok, false);
 
     const ok = validateAdvicePayload({
       dayNumber: 1,
       roleKey: 'practice_realizer',
-      title: 'Совет',
-      body: 'Текст',
+      body: 'Текст совета без заголовка',
       status: 'published',
     });
     assert.equal(ok.ok, true);
-    if (ok.ok) assert.equal(ok.data.status, 'published');
+    if (ok.ok) {
+      assert.equal(ok.data.status, 'published');
+      assert.equal(ok.data.title, 'Текст совета без заголовка'.slice(0, 60));
+      assert.equal(ok.data.hint, null);
+    }
   });
 
   it('parses CSV header and filters list', () => {

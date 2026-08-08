@@ -9,6 +9,7 @@ import { QUICK_CAPTURE_ITEMS } from '../data/piggybank';
 import {
   PriorityAction, NextEventCard, TouchpointsCard, StatsRow,
   RoleOfDayCard, ExperimentCard, MissedTouchpointsCard,
+  UnansweredAfterBlocksCard, PracticesHomeCard,
 } from '../components/home/DashboardCards';
 import { PushBanner, type PushBannerItem } from '../components/home/PushBanner';
 import { EveningQuestionnaire, type EveningQuestionnaireProps } from '../components/home/EveningQuestionnaire';
@@ -70,6 +71,21 @@ interface HomeData {
     completed: boolean;
   } & EveningQuestionnaireProps['questionnaire'];
   missedQuestions: { id: number; title: string; closeTime: string; expired?: boolean; overdue?: boolean }[];
+  unansweredAfterBlocks?: { id: number; title: string; overdue?: boolean }[];
+  practicesSection?: {
+    questionId: number;
+    title: string;
+    resultsPublished: boolean;
+    answered: boolean;
+    likesPerParticipant?: number;
+    preamble?: string;
+    practices: Array<{
+      id: string;
+      title: string;
+      participantName?: string;
+      direction?: string;
+    }>;
+  } | null;
   counts: { availableQuestions: number; availableTasks: number; hasNewTasks: boolean };
   points: {
     path: number;
@@ -298,7 +314,7 @@ export const HomePanel: React.FC<{
             experiment={d.experiment}
             onSaveFixation={(it) => openQuickCapture(setModal, {
               initialTags: ['мысль'],
-              prefillText: [it.t, it.b].filter(Boolean).join('\n\n'),
+              prefillText: (it.b || it.t || '').trim(),
               ...piggyCaptureOpts(() => setSnackbar('Фиксация сохранена в копилку')),
             })}
           />
@@ -337,6 +353,10 @@ export const HomePanel: React.FC<{
           </div>
         )}
 
+        {d.practicesSection && (
+          <PracticesHomeCard section={d.practicesSection} />
+        )}
+
         {d.currentDay === 8 && (
           <div className="m-card" style={{ background: 'linear-gradient(135deg,#FFF3E0,#FFECB3)', border: '1px solid #FFE082' }}>
             <div style={{ fontSize: 13, fontWeight: 800 }}>День 8 · Отъезд</div>
@@ -345,6 +365,8 @@ export const HomePanel: React.FC<{
             </div>
           </div>
         )}
+
+        <UnansweredAfterBlocksCard items={d.unansweredAfterBlocks ?? []} />
 
         <MissedTouchpointsCard
           items={d.touchpoints.missedToday ?? []}

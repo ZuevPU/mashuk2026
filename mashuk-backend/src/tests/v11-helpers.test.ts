@@ -85,6 +85,19 @@ describe('touchpoint access', () => {
     assert.ok(moscowAnswerDeadline(close).getTime() === afterMidnight.getTime());
   });
 
+  it('keeps after_blocks answerable until admin removes (past day + past close)', () => {
+    const close = new Date(Date.UTC(2026, 7, 12, 9, 0, 0));
+    const nextDay = new Date(Date.UTC(2026, 7, 13, 12, 0, 0));
+    assert.equal(
+      getTouchpointAccess(3, 5, close, nextDay, null, 'until_admin'),
+      'overdue',
+    );
+    assert.equal(
+      getTouchpointAccess(3, 3, null, nextDay, null, 'until_admin'),
+      'open',
+    );
+  });
+
   it('classifies late policies by block/type', () => {
     assert.equal(
       lateAnswerPolicyForQuestion({ type: 'checkin', block: 'Проверка состояния' }),
@@ -93,6 +106,14 @@ describe('touchpoint access', () => {
     assert.equal(
       lateAnswerPolicyForQuestion({ type: 'open', block: 'Точки осмысления', title: 'Осмысление урока' }),
       'until_midnight',
+    );
+    assert.equal(
+      lateAnswerPolicyForQuestion({ questionKind: 'after_blocks', title: 'После блоков' }),
+      'until_admin',
+    );
+    assert.equal(
+      lateAnswerPolicyForQuestion({ questionKind: 'practices_vote' }),
+      'until_admin',
     );
   });
 });

@@ -205,10 +205,11 @@ export function resolveLiveProgramDay(
 /**
  * Как долго можно отвечать после closeTime:
  * - hard_close — сразу закрыть (проверка состояния)
- * - until_midnight — до 00:00 МСК дня окна (осмысление блоков)
+ * - until_midnight — до 00:00 МСК дня окна (точки осмысления)
  * - until_day_rollover — до смены форумного дня (~02:00 МСК), как раньше
+ * - until_admin — не закрывается само; убирает только админ (после блоков)
  */
-export type LateAnswerPolicy = 'hard_close' | 'until_midnight' | 'until_day_rollover';
+export type LateAnswerPolicy = 'hard_close' | 'until_midnight' | 'until_day_rollover' | 'until_admin';
 
 export function lateAnswerPolicyForQuestion(q: {
   type?: string | null;
@@ -230,9 +231,13 @@ export function lateAnswerPolicyForQuestion(q: {
     return 'hard_close';
   }
 
+  // «После блоков» / практики — висят, пока админ не снимет с публикации
+  if (kind === 'after_blocks' || kind === 'practices_vote') {
+    return 'until_admin';
+  }
+
   if (
     kind === 'after_event'
-    || kind === 'after_blocks'
     || block === 'точки осмысления'
     || block.includes('точки осмысления')
     || title.includes('осмысление')
@@ -269,9 +274,17 @@ export function getTouchpointAccess(
   latePolicy: LateAnswerPolicy = 'until_day_rollover',
 ): 'open' | 'overdue' | 'locked' | 'soon' {
   const qDay = questionDay ?? currentDay;
+  if (publishTime && publishTime > now) return 'soon';
+
+  // Админ закрывает вручную — день и closeTime не лочат ответ
+  if (latePolicy === 'until_admin') {
+    if (qDay > currentDay) return 'soon';
+    if (closeTime && closeTime < now) return 'overdue';
+    return 'open';
+  }
+
   if (qDay < currentDay) return 'locked';
   if (qDay > currentDay) return 'soon';
-  if (publishTime && publishTime > now) return 'soon';
   if (closeTime && closeTime < now) {
     if (latePolicy === 'hard_close') return 'locked';
     if (latePolicy === 'until_midnight') {

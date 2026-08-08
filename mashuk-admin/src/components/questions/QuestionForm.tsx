@@ -606,6 +606,11 @@ export function QuestionForm({
               <input type="datetime-local" className="adm-input" value={draft.closeTime} onChange={e => onChange({ closeTime: e.target.value })} />
             </label>
           </div>
+          {(draft.questionKind === 'after_blocks' || draft.questionKind === 'practices_vote') && (
+            <p className="adm-forum-hint" style={{ marginTop: 0 }}>
+              После времени закрытия вопрос не исчезает сам — остаётся у участников, пока вы не снимете его с публикации.
+            </p>
+          )}
 
           <fieldset className="adm-field">
             <legend className="adm-label">Аудитория</legend>

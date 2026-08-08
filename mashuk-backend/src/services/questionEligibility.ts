@@ -80,7 +80,18 @@ export function questionVisibleToParticipant(
   if (block === 'Точка Б' && currentDay >= dayNum) {
     return questionAudienceAllowsParticipant(q, participant);
   }
-  if (!questionMatchesDay(q, currentDay)) return false;
+  if (!questionMatchesDay(q, currentDay)) {
+    // «После блоков» / практики — доступны в следующие дни, пока админ не снимет
+    const kind = String(q.questionKind || q.reflectionKind || '').toLowerCase();
+    if (kind === 'after_blocks' || kind === 'practices_vote') {
+      const days = normalizeDayNumbers(q.dayNumbers ?? undefined, q.dayNumber ?? undefined);
+      const earliest = days.length ? Math.min(...days) : (q.dayNumber ?? 1);
+      if (currentDay >= earliest) {
+        return questionAudienceAllowsParticipant(q, participant);
+      }
+    }
+    return false;
+  }
   return questionAudienceAllowsParticipant(q, participant);
 }
 

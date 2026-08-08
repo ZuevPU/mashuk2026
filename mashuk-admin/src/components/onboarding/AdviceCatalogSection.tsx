@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
 import { getAdminApiBase, getAdminToken } from '../../admin/client';
-import { AdminPageHero } from '../admin/AdminPageHero';
 import { RowActionsMenu } from '../participants/RowActionsMenu';
 import {
   AdviceFormSection,
@@ -11,8 +10,6 @@ import {
 } from './AdviceFormSection';
 import { ROLE_OPTIONS, roleName } from './roleOptions';
 import type { DayExperiment } from './types';
-
-const TOTAL_CELLS = 6 * 7;
 
 function buildListQuery(params: {
   q: string;
@@ -47,7 +44,6 @@ export function AdviceCatalogSection({
   filterVersion = 0,
 }: Props) {
   const [experiments, setExperiments] = useState<DayExperiment[]>([]);
-  const [totalInDb, setTotalInDb] = useState(0);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'form'>('list');
   const [search, setSearch] = useState('');
@@ -71,12 +67,8 @@ export function AdviceCatalogSection({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [filteredRes, allRes] = await Promise.all([
-        adminFetch(`/day-experiments${listQuery}`),
-        adminFetch('/day-experiments'),
-      ]);
+      const filteredRes = await adminFetch(`/day-experiments${listQuery}`);
       setExperiments(filteredRes.experiments || []);
-      setTotalInDb((allRes.experiments || []).length);
       setSelectedIds(new Set());
     } finally {
       setLoading(false);
@@ -107,8 +99,6 @@ export function AdviceCatalogSection({
     setSelectedIds(new Set(experiments.map(e => e.id)));
   };
 
-  const missingCells = TOTAL_CELLS - totalInDb;
-
   const openNew = () => {
     setEditingId(null);
     setForm(emptyAdviceForm());
@@ -123,10 +113,19 @@ export function AdviceCatalogSection({
   };
 
   const submit = (status: 'draft' | 'published') => act(async () => {
-    if (!form.title.trim()) throw new Error('Укажите заголовок');
+    if (!form.body.trim()) throw new Error('Укажите текст совета');
     await adminFetch('/day-experiments', {
       method: 'POST',
-      body: JSON.stringify({ ...form, status }),
+      body: JSON.stringify({
+        ...form,
+        title: '',
+        hint: '',
+        title2: '',
+        hint2: '',
+        title3: '',
+        hint3: '',
+        status,
+      }),
     });
     setView('list');
     setEditingId(null);
@@ -194,10 +193,7 @@ export function AdviceCatalogSection({
 
   return (
     <>
-      <AdminPageHero
-        title={`Каталог советов · ${totalInDb} групп`}
-        hint={`Каждой паре (роль × день) — от 1 до 3 советов (${totalInDb}/${TOTAL_CELLS} ячеек). Участник на главной видит только опубликованные (дни 2–7).`}
-      >
+      <div className="card adm-forum-hero">
         <div className="adm-forum-toolbar adm-advice-toolbar">
           <input
             className="adm-input"
@@ -247,12 +243,7 @@ export function AdviceCatalogSection({
             Скачать шаблон CSV
           </button>
         </div>
-        {missingCells > 0 && (
-          <p className="adm-forum-hint" style={{ marginTop: 10 }}>
-            Не заполнено ячеек каталога (6 ролей × 7 дней): {missingCells} из {TOTAL_CELLS}.
-          </p>
-        )}
-      </AdminPageHero>
+      </div>
 
       <div className="card adm-forum-block">
         {loading ? (
@@ -310,29 +301,20 @@ export function AdviceCatalogSection({
                   </td>
                   <td>{roleName(e.roleKey)}</td>
                   <td>{e.dayNumber}</td>
-                  <td style={{ fontSize: 12, maxWidth: 160, color: '#555' }}>
-                    <strong>{e.title}</strong>
-                    <div>{(e.body || '').slice(0, 80)}{(e.body || '').length > 80 ? '…' : ''}</div>
+                  <td style={{ fontSize: 12, maxWidth: 180, color: '#555' }}>
+                    {(e.body || '').trim()
+                      ? `${(e.body || '').slice(0, 100)}${(e.body || '').length > 100 ? '…' : ''}`
+                      : <span className="adm-muted">—</span>}
                   </td>
-                  <td style={{ fontSize: 12, maxWidth: 160, color: '#555' }}>
-                    {e.title2 ? (
-                      <>
-                        <strong>{e.title2}</strong>
-                        <div>{(e.body2 || '').slice(0, 80)}{(e.body2 || '').length > 80 ? '…' : ''}</div>
-                      </>
-                    ) : (
-                      <span className="adm-muted">—</span>
-                    )}
+                  <td style={{ fontSize: 12, maxWidth: 180, color: '#555' }}>
+                    {(e.body2 || '').trim()
+                      ? `${(e.body2 || '').slice(0, 100)}${(e.body2 || '').length > 100 ? '…' : ''}`
+                      : <span className="adm-muted">—</span>}
                   </td>
-                  <td style={{ fontSize: 12, maxWidth: 160, color: '#555' }}>
-                    {e.title3 ? (
-                      <>
-                        <strong>{e.title3}</strong>
-                        <div>{(e.body3 || '').slice(0, 80)}{(e.body3 || '').length > 80 ? '…' : ''}</div>
-                      </>
-                    ) : (
-                      <span className="adm-muted">—</span>
-                    )}
+                  <td style={{ fontSize: 12, maxWidth: 180, color: '#555' }}>
+                    {(e.body3 || '').trim()
+                      ? `${(e.body3 || '').slice(0, 100)}${(e.body3 || '').length > 100 ? '…' : ''}`
+                      : <span className="adm-muted">—</span>}
                   </td>
                   <td>{statusLabel(e.status)}</td>
                   <td>

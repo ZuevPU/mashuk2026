@@ -22,7 +22,15 @@ import {
   isTouchpointQuestionForForumDay,
 } from '../services/touchpointProgress.js';
 import { questionMatchesDay } from '../services/questionAdminHelpers.js';
-import { getQuestionAccess } from '../services/questionEligibility.js';
+import {
+  getQuestionAccess,
+  questionAudienceAllowsParticipant,
+  questionVisibleToParticipant,
+} from '../services/questionEligibility.js';
+import {
+  normalizePracticesConfig,
+  practicesConfigForParticipant,
+} from '../services/practicesVoteConfig.js';
 import { getLevelProgress, totalRatingScore } from '../services/pointsService.js';
 import { loadDayContext } from './dayStateController.js';
 import { resolveHomeActiveCard } from '../services/homeActiveCard.js';
@@ -305,6 +313,69 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       delayedSurvey: delayedSurveyCard,
     });
 
+    const unansweredAfterBlocks = publishedQuestions
+      .filter(q => {
+        if (answeredIds.has(q.id)) return false;
+        const kind = String(q.questionKind || q.reflectionKind || '').toLowerCase();
+        if (kind !== 'after_blocks') return false;
+        if (!questionVisibleToParticipant(q, participant, currentDay)) return false;
+        const access = getQuestionAccess(q, currentDay, now);
+        return access === 'open' || access === 'overdue';
+      })
+      .map(q => ({
+        id: q.id,
+        title: q.title,
+        overdue: getQuestionAccess(q, currentDay, now) === 'overdue',
+      }))
+      .sort((a, b) => Number(b.overdue) - Number(a.overdue) || a.id - b.id);
+
+    const practicesVoteQuestions = publishedQuestions
+      .filter(q => {
+        const isPractices = q.questionKind === 'practices_vote'
+          || q.answerType === 'practices_vote'
+          || q.type === 'practices_vote';
+        if (!isPractices || q.isHidden) return false;
+        if (q.publishTime && q.publishTime > now) return false;
+        return questionAudienceAllowsParticipant(q, participant);
+      })
+      .sort((a, b) => (b.sortOrder ?? 0) - (a.sortOrder ?? 0) || b.id - a.id);
+
+    const practicesQuestion = practicesVoteQuestions[0] ?? null;
+    let practicesSection: {
+      questionId: number;
+      title: string;
+      resultsPublished: boolean;
+      likesPerParticipant: number;
+      preamble: string;
+      answered: boolean;
+      practices: Array<{
+        id: string;
+        title: string;
+        description: string;
+        participantName: string;
+        direction: string;
+        resultPlace?: string | null;
+        resultTime?: string | null;
+      }>;
+    } | null = null;
+
+    if (practicesQuestion) {
+      const cfg = practicesConfigForParticipant(
+        normalizePracticesConfig(practicesQuestion.practicesConfig),
+      );
+      if (cfg.practices.some(p => p.title.trim())) {
+        practicesSection = {
+          questionId: practicesQuestion.id,
+          title: practicesQuestion.title,
+          resultsPublished: cfg.resultsPublished,
+          likesPerParticipant: cfg.likesPerParticipant,
+          preamble: cfg.preamble,
+          answered: answeredIds.has(practicesQuestion.id),
+          practices: cfg.practices.filter(p => p.title.trim()),
+        };
+      }
+    }
+
     let activePushBanners: {
       id: number;
       pushTitle: string | null;
@@ -347,9 +418,12 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       experiment: currentDay === 8 ? null : dayContext.experiment,
       eveningQuestionnaire: dayContext.eveningQuestionnaire,
       missedQuestions: [...activeMissed, ...lockedMissed],
+      unansweredAfterBlocks,
+      practicesSection,
       counts: {
         availableQuestions: publishedQuestions.filter(q => {
           if (answeredIds.has(q.id)) return false;
+          if (!questionVisibleToParticipant(q, participant, currentDay)) return false;
           const access = getQuestionAccess(q, currentDay, now);
           return access === 'open' || access === 'overdue';
         }).length,

@@ -39,13 +39,13 @@ export function adviceFromExperiment(e: DayExperiment): AdviceFormState {
     roleKey: e.roleKey,
     title: e.title,
     body: e.body || '',
-    hint: e.hint || '',
+    hint: '',
     title2: e.title2 || '',
     body2: e.body2 || '',
-    hint2: e.hint2 || '',
+    hint2: '',
     title3: e.title3 || '',
     body3: e.body3 || '',
-    hint3: e.hint3 || '',
+    hint3: '',
     status: (e.status === 'published' ? 'published' : 'draft'),
   };
 }
@@ -69,11 +69,8 @@ export function AdviceFormSection({
 }: Props) {
   const [showPreview, setShowPreview] = useState(false);
 
-  const t1Left = 60 - form.title.length;
   const b1Left = 500 - form.body.length;
-  const t2Left = 60 - form.title2.length;
   const b2Left = 500 - form.body2.length;
-  const t3Left = 60 - form.title3.length;
   const b3Left = 500 - form.body3.length;
 
   const statusLabel = useMemo(
@@ -97,9 +94,9 @@ export function AdviceFormSection({
 
       {showPreview && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <AdviceParticipantPreview title={form.title} body={form.body} roleKey={form.roleKey} />
-          {form.title2 && <AdviceParticipantPreview title={form.title2} body={form.body2} roleKey={form.roleKey} />}
-          {form.title3 && <AdviceParticipantPreview title={form.title3} body={form.body3} roleKey={form.roleKey} />}
+          <AdviceParticipantPreview body={form.body} roleKey={form.roleKey} />
+          {form.body2.trim() && <AdviceParticipantPreview body={form.body2} roleKey={form.roleKey} />}
+          {form.body3.trim() && <AdviceParticipantPreview body={form.body3} roleKey={form.roleKey} />}
         </div>
       )}
 
@@ -135,33 +132,14 @@ export function AdviceFormSection({
       <div style={{ border: '1px solid #eee', padding: 12, borderRadius: 8, marginBottom: 16 }}>
         <h4 style={{ margin: '0 0 10px' }}>Совет дня №1 (основной)</h4>
         <label className="adm-field">
-          <span className="adm-label">Заголовок совета ({t1Left} симв.)</span>
-          <input
-            className="adm-input"
-            value={form.title}
-            maxLength={60}
-            onChange={e => onChange({ ...form, title: e.target.value })}
-            placeholder="До 60 символов"
-          />
-        </label>
-        <label className="adm-field">
           <span className="adm-label">Текст совета ({b1Left} симв.)</span>
           <textarea
             className="adm-input adm-textarea"
             rows={3}
             value={form.body}
             maxLength={500}
-            onChange={e => onChange({ ...form, body: e.target.value })}
+            onChange={e => onChange({ ...form, body: e.target.value, title: '', hint: '' })}
             placeholder="До 500 символов"
-          />
-        </label>
-        <label className="adm-field">
-          <span className="adm-label">Подсказка (hint)</span>
-          <input
-            className="adm-input"
-            value={form.hint}
-            onChange={e => onChange({ ...form, hint: e.target.value })}
-            placeholder="Дополнительная подсказка для участника"
           />
         </label>
       </div>
@@ -169,33 +147,14 @@ export function AdviceFormSection({
       <div style={{ border: '1px solid #eee', padding: 12, borderRadius: 8, marginBottom: 16 }}>
         <h4 style={{ margin: '0 0 10px' }}>Совет дня №2 (опционально)</h4>
         <label className="adm-field">
-          <span className="adm-label">Заголовок совета ({t2Left} симв.)</span>
-          <input
-            className="adm-input"
-            value={form.title2}
-            maxLength={60}
-            onChange={e => onChange({ ...form, title2: e.target.value })}
-            placeholder="До 60 символов"
-          />
-        </label>
-        <label className="adm-field">
           <span className="adm-label">Текст совета ({b2Left} симв.)</span>
           <textarea
             className="adm-input adm-textarea"
             rows={3}
             value={form.body2}
             maxLength={500}
-            onChange={e => onChange({ ...form, body2: e.target.value })}
+            onChange={e => onChange({ ...form, body2: e.target.value, title2: '', hint2: '' })}
             placeholder="До 500 символов"
-          />
-        </label>
-        <label className="adm-field">
-          <span className="adm-label">Подсказка (hint)</span>
-          <input
-            className="adm-input"
-            value={form.hint2}
-            onChange={e => onChange({ ...form, hint2: e.target.value })}
-            placeholder="Дополнительная подсказка для участника"
           />
         </label>
       </div>
@@ -203,33 +162,14 @@ export function AdviceFormSection({
       <div style={{ border: '1px solid #eee', padding: 12, borderRadius: 8, marginBottom: 16 }}>
         <h4 style={{ margin: '0 0 10px' }}>Совет дня №3 (опционально)</h4>
         <label className="adm-field">
-          <span className="adm-label">Заголовок совета ({t3Left} симв.)</span>
-          <input
-            className="adm-input"
-            value={form.title3}
-            maxLength={60}
-            onChange={e => onChange({ ...form, title3: e.target.value })}
-            placeholder="До 60 символов"
-          />
-        </label>
-        <label className="adm-field">
           <span className="adm-label">Текст совета ({b3Left} симв.)</span>
           <textarea
             className="adm-input adm-textarea"
             rows={3}
             value={form.body3}
             maxLength={500}
-            onChange={e => onChange({ ...form, body3: e.target.value })}
+            onChange={e => onChange({ ...form, body3: e.target.value, title3: '', hint3: '' })}
             placeholder="До 500 символов"
-          />
-        </label>
-        <label className="adm-field">
-          <span className="adm-label">Подсказка (hint)</span>
-          <input
-            className="adm-input"
-            value={form.hint3}
-            onChange={e => onChange({ ...form, hint3: e.target.value })}
-            placeholder="Дополнительная подсказка для участника"
           />
         </label>
       </div>
