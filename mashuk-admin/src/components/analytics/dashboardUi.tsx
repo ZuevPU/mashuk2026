@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
+import { useInsightsOptional } from '../insights/InsightsContext';
 import { ZONE_COLORS, ZONE_LABELS, ZONE_ORDER } from './chartRu';
 
 export const DASH_TAB_SHORT: Record<string, string> = {
   overview: 'Главный',
+  direction: 'Направление',
   pulse: 'Пульс',
   evening: 'Анкета вечера',
   'after-blocks': 'После блоков',
@@ -117,6 +119,8 @@ export function ZoneBars({
   zones: Record<string, number> | undefined | null;
   title?: string;
 }) {
+  const barsLayout = useInsightsOptional()?.barsLayout ?? 'horizontal';
+  const vertical = barsLayout === 'vertical';
   const data = ZONE_ORDER.map(key => ({
     key,
     label: ZONE_LABELS[key] ?? key,
@@ -125,25 +129,30 @@ export function ZoneBars({
   }));
   const hasAny = data.some(d => d.value > 0);
   return (
-    <div className="adm-dash-zone-bars">
+    <div className={`adm-dash-zone-bars${vertical ? ' is-vertical' : ''}`}>
       {title ? <div className="adm-dash-card-title">{title}</div> : null}
       {!hasAny ? (
         <p className="adm-muted" style={{ fontSize: 12, margin: 0 }}>Нет данных по зонам</p>
       ) : (
-        data.map(d => (
-          <div key={d.key} className="adm-dash-zone-row">
-            <span className="adm-dash-zone-label">{d.label}</span>
-            <div className="adm-dash-zone-track">
-              <div
-                className="adm-dash-zone-fill"
-                style={{ width: `${Math.min(100, Math.max(0, d.value))}%`, background: d.color }}
-              >
-                {d.value >= 8 ? `${Math.round(d.value)}%` : ''}
+        data.map(d => {
+          const pct = Math.min(100, Math.max(0, d.value));
+          return (
+            <div key={d.key} className="adm-dash-zone-row">
+              <span className="adm-dash-zone-label">{d.label}</span>
+              <div className="adm-dash-zone-track">
+                <div
+                  className="adm-dash-zone-fill"
+                  style={vertical
+                    ? { height: `${pct}%`, background: d.color }
+                    : { width: `${pct}%`, background: d.color }}
+                >
+                  {!vertical && d.value >= 8 ? `${Math.round(d.value)}%` : ''}
+                </div>
               </div>
+              <span className="adm-dash-zone-pct">{Math.round(d.value)}%</span>
             </div>
-            <span className="adm-dash-zone-pct">{Math.round(d.value)}%</span>
-          </div>
-        ))
+          );
+        })
       )}
     </div>
   );
@@ -154,19 +163,25 @@ export function SrcBars({
 }: {
   items: { label: string; count: number; pct?: number }[];
 }) {
+  const barsLayout = useInsightsOptional()?.barsLayout ?? 'horizontal';
+  const vertical = barsLayout === 'vertical';
   const max = Math.max(1, ...items.map(i => i.count));
   if (!items.length) {
     return <p className="adm-muted" style={{ fontSize: 12, margin: 0 }}>Нет данных</p>;
   }
   return (
-    <div className="adm-dash-src-bars">
+    <div className={`adm-dash-src-bars${vertical ? ' is-vertical' : ''}`}>
       {items.map(i => {
         const pct = i.pct != null ? i.pct : Math.round((i.count / max) * 100);
+        const barPct = Math.min(100, Math.max(0, pct));
         return (
-          <div key={i.label} className="adm-dash-src-row">
+          <div key={i.label} className="adm-dash-src-row" title={i.label}>
             <span className="adm-dash-src-label">{i.label}</span>
             <div className="adm-dash-src-track">
-              <div className="adm-dash-src-fill" style={{ width: `${Math.min(100, pct)}%` }} />
+              <div
+                className="adm-dash-src-fill"
+                style={vertical ? { height: `${barPct}%` } : { width: `${barPct}%` }}
+              />
             </div>
             <span className="adm-dash-src-pct">{i.count}</span>
           </div>

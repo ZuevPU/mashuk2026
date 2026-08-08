@@ -156,6 +156,11 @@ export const exportStateChecksHandler = async (req: AdminRequest, res: Response)
   await writeStateChecksExport(req, res);
 };
 
+export const exportDirectionPackHandler = async (req: AdminRequest, res: Response) => {
+  const { writeDirectionPackExport } = await import('../services/exports/directionPackExport.js');
+  await writeDirectionPackExport(req, res);
+};
+
 export const exportRolesExperimentsHandler = async (_req: AdminRequest, res: Response) => {
   await writeRolesExperimentsExport(res);
 };

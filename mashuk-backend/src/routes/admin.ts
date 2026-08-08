@@ -213,6 +213,7 @@ router.get('/exports/daily-summary', P('exports', 'export'), wrap(exportsCtrl.ex
 router.get('/exports/evening-summary', P('exports', 'export'), wrap(exportsCtrl.exportEveningSummaryHandler));
 router.get('/exports/after-blocks', P('exports', 'export'), wrap(exportsCtrl.exportAfterBlocksHandler));
 router.get('/exports/state-checks', P('exports', 'export'), wrap(exportsCtrl.exportStateChecksHandler));
+router.get('/exports/direction-pack', P('exports', 'export'), wrap(exportsCtrl.exportDirectionPackHandler));
 router.get('/exports/roles-experiments', P('exports', 'export'), wrap(exportsCtrl.exportRolesExperimentsHandler));
 router.get('/exports/reflections', P('exports', 'export'), wrap(exportsCtrl.exportReflectionsHandler));
 router.get('/exports/participant/:id/answers', P('exports', 'export'), wrap(exportsCtrl.exportParticipantAnswersHandler));
@@ -244,6 +245,7 @@ router.get('/analytics/dashboards/pulse', P('analytics', 'read'), wrap(analytics
 router.get('/analytics/dashboards/evening', P('analytics', 'read'), wrap(analyticsCtrl.getEveningDashboardHandler));
 router.get('/analytics/dashboards/after-blocks', P('analytics', 'read'), wrap(analyticsCtrl.getAfterBlocksDashboardHandler));
 router.get('/analytics/dashboards/state-checks', P('analytics', 'read'), wrap(analyticsCtrl.getStateCheckDashboardHandler));
+router.get('/analytics/dashboards/direction', P('analytics', 'read'), wrap(analyticsCtrl.getDirectionDashboardHandler));
 router.get('/analytics/dashboards/portrait', P('analytics', 'read'), wrap(analyticsCtrl.getPortraitDashboardHandler));
 router.get('/analytics/dashboards/program', P('analytics', 'read'), wrap(analyticsCtrl.getProgramDashboardHandler));
 router.get('/analytics/dashboards/activity', P('analytics', 'read'), wrap(analyticsCtrl.getActivityDashboardHandler));

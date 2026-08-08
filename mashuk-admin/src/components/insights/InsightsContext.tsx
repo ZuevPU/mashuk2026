@@ -11,6 +11,7 @@ import type { Tab } from '../../tabs';
 
 export type DashboardId =
   | 'pulse'
+  | 'direction'
   | 'evening'
   | 'after-blocks'
   | 'state-checks'
@@ -23,6 +24,9 @@ export type DashboardId =
   | 'departure'
   | 'overview'
   | 'roles';
+
+/** horizontal = полосы слева направо; vertical = классические столбцы снизу вверх */
+export type BarsLayout = 'horizontal' | 'vertical';
 
 export type InsightsMeta = {
   currentForumDay?: number;
@@ -59,6 +63,8 @@ type InsightsContextValue = {
   setAgeCategory: (v: string) => void;
   activity: string;
   setActivity: (v: string) => void;
+  barsLayout: BarsLayout;
+  setBarsLayout: (v: BarsLayout) => void;
   activeDashboardId: DashboardId;
   setActiveDashboardId: (id: DashboardId) => void;
   meta: InsightsMeta | null;
@@ -71,8 +77,18 @@ type InsightsContextValue = {
 };
 
 const STORAGE_KEY = 'mashuk_insights_filters';
+const BARS_LAYOUT_KEY = 'mashuk_insights_bars_layout';
 
 const InsightsContext = createContext<InsightsContextValue | null>(null);
+
+function readBarsLayout(): BarsLayout {
+  try {
+    const v = sessionStorage.getItem(BARS_LAYOUT_KEY);
+    return v === 'vertical' ? 'vertical' : 'horizontal';
+  } catch {
+    return 'horizontal';
+  }
+}
 
 function readStored(): {
   forumDay: string; direction: string; group: string; ageCategory: string; activity: string; dash: DashboardId;
@@ -117,6 +133,7 @@ export function InsightsProvider({
   const [group, setGroupState] = useState(stored.group);
   const [ageCategory, setAgeCategoryState] = useState(stored.ageCategory);
   const [activity, setActivityState] = useState(stored.activity);
+  const [barsLayout, setBarsLayoutState] = useState<BarsLayout>(() => readBarsLayout());
   const [activeDashboardId, setActiveDashboardIdState] = useState<DashboardId>(stored.dash);
   const [meta, setMeta] = useState<InsightsMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(true);
@@ -141,6 +158,10 @@ export function InsightsProvider({
   const setGroup = (v: string) => { setGroupState(v); persist({ group: v }); };
   const setAgeCategory = (v: string) => { setAgeCategoryState(v); persist({ ageCategory: v }); };
   const setActivity = (v: string) => { setActivityState(v); persist({ activity: v }); };
+  const setBarsLayout = (v: BarsLayout) => {
+    setBarsLayoutState(v);
+    try { sessionStorage.setItem(BARS_LAYOUT_KEY, v); } catch { /* ignore */ }
+  };
   const setActiveDashboardId = (id: DashboardId) => {
     setActiveDashboardIdState(id);
     persist({ dash: id });
@@ -181,6 +202,8 @@ export function InsightsProvider({
     setAgeCategory,
     activity,
     setActivity,
+    barsLayout,
+    setBarsLayout,
     activeDashboardId,
     setActiveDashboardId,
     meta,
@@ -191,7 +214,7 @@ export function InsightsProvider({
     adminFetch,
     analyticsDashboardAllowlist,
   }), [
-    forumDay, direction, group, ageCategory, activity, activeDashboardId, meta, metaLoading, reloadMeta,
+    forumDay, direction, group, ageCategory, activity, barsLayout, activeDashboardId, meta, metaLoading, reloadMeta,
     setTab, activeSection, adminFetch, analyticsDashboardAllowlist,
   ]);
 

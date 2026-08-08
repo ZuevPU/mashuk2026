@@ -179,26 +179,30 @@ export function resolveLiveScheduleDateKey(
 }
 
 /**
- * Day whose published events drive «Сейчас» on Home / Program.
- * Prefer the calendar/admin live day when it is published; otherwise fall back
- * to the admin day or the latest published day so a missing next-day publish
- * does not hide the currently running block.
+ * Day whose published events drive «Сейчас» / «Далее» on Home and the default
+ * day in Program.
+ *
+ * Target = effective forum day (max of admin currentDay and calendar).
+ * Among published days, pick the latest published day ≤ target.
+ * If the next day after target is already published, prefer it — so publishing
+ * day N+1 opens that day on Home/Program without leaving day 1 stuck.
  */
 export function resolveLiveProgramDay(
   settings: { currentDay?: number | null; totalDays?: number | null; startDate?: Date | null },
   publishedDays: number[],
   now = new Date(),
 ): number {
-  const live = resolveLiveScheduleDay(settings, now);
+  const target = resolveEffectiveCurrentDay(settings, now);
   const published = [...new Set(publishedDays.filter(d => Number.isInteger(d) && d > 0))].sort((a, b) => a - b);
-  if (!published.length) return live;
-  if (published.includes(live)) return live;
+  if (!published.length) return target;
 
-  const adminDay = settings.currentDay ?? 1;
-  if (published.includes(adminDay)) return adminDay;
+  const nextPublished = target + 1;
+  if (published.includes(nextPublished)) return nextPublished;
 
-  const earlier = published.filter(d => d <= live);
-  if (earlier.length) return earlier[earlier.length - 1];
+  const atOrBeforeTarget = published.filter(d => d <= target);
+  if (atOrBeforeTarget.length) return atOrBeforeTarget[atOrBeforeTarget.length - 1];
+
+  // All published days are after the target (early publish) — show earliest.
   return published[0];
 }
 

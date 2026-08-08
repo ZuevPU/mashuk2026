@@ -7,6 +7,7 @@ import {
   AfterBlocksView,
   ClubsView,
   DepartureView,
+  DirectionView,
   EveningView,
   OverviewView,
   PiggybankView,
@@ -18,6 +19,7 @@ import {
 } from './analyticsDashboardViews';
 import { CHART_HELP_RU, formatForumDay } from './chartRu';
 import { DashCard, DashScreenTitle, RoleMatrixGrid } from './dashboardUi';
+import { BarsLayoutToggle } from './orientableBars';
 import { roleName } from '../onboarding/roleOptions';
 
 type ViewMode = 'today' | 'day' | 'shift' | 'compare';
@@ -47,6 +49,7 @@ function xlsxExportPath(dash: DashboardId): string | null {
   if (dash === 'evening') return '/exports/evening-summary';
   if (dash === 'after-blocks') return '/exports/after-blocks';
   if (dash === 'state-checks') return '/exports/state-checks';
+  if (dash === 'direction') return '/exports/direction-pack';
   // pulse / activity / program / departure use slice CTAs only
   return null;
 }
@@ -55,7 +58,7 @@ function csvExportPath(dash: DashboardId): string | null {
   if (dash === 'piggybank') return '/exports/piggybank?format=csv';
   if (dash === 'departure') return '/exports/point-a-b-summary';
   if (dash === 'activity') return '/exports/rating/shift';
-  if (dash === 'roles' || dash === 'evening' || dash === 'after-blocks' || dash === 'state-checks') return null;
+  if (dash === 'roles' || dash === 'evening' || dash === 'after-blocks' || dash === 'state-checks' || dash === 'direction') return null;
   if (dash === 'clubs') return '/exports/piggybank?format=csv';
   return '/exports/reflections?format=csv';
 }
@@ -105,6 +108,16 @@ function sliceExportCtas(
         label: 'Скачать полностью данные «Проверка состояния»',
         path: `/exports/state-checks${qs({ day, direction: direction || undefined, group: group || undefined })}`,
         file: `state_checks_d${day}.xlsx`,
+      },
+    ];
+  }
+  if (dash === 'direction') {
+    if (!direction) return [];
+    return [
+      {
+        label: 'Скачать полный пакет направления',
+        path: `/exports/direction-pack${qs({ day, direction, group: group || undefined })}`,
+        file: `direction_d${day}.xlsx`,
       },
     ];
   }
@@ -204,6 +217,8 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
     group,
     ageCategory,
     activity,
+    barsLayout,
+    setBarsLayout,
     activeDashboardId,
     meta,
     setTab,
@@ -378,6 +393,7 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
               {cta.label}
             </button>
           ))}
+          <BarsLayoutToggle value={barsLayout} onChange={setBarsLayout} />
           <button type="button" className="adm-btn adm-btn-ghost" onClick={() => setChartHelpOpen(v => !v)}>
             {chartHelpOpen ? 'Скрыть подсказку' : 'Как читать диаграммы'}
           </button>
@@ -463,6 +479,7 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
       {!loading && data && dash !== 'roles' && (
         <div ref={chartRef} className={showEarlyWarning ? 'adm-insights-dimmed' : undefined}>
           {dash === 'pulse' && <PulseView data={data} />}
+          {dash === 'direction' && <DirectionView data={data} onOpenCard={onOpenCard} />}
           {dash === 'evening' && <EveningView data={data} onOpenCard={onOpenCard} />}
           {dash === 'after-blocks' && <AfterBlocksView data={data} onOpenCard={onOpenCard} />}
           {dash === 'state-checks' && <StateChecksView data={data} onOpenCard={onOpenCard} />}

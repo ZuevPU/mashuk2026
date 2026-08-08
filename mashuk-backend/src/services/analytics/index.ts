@@ -1,4 +1,7 @@
+import { count, eq } from 'drizzle-orm';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
+import { db } from '../../db/index.js';
+import { exchangeQuestions, orgThreads } from '../../db/schema.js';
 import { getForumSettings } from '../helpers.js';
 import { resolveAnalyticsFilters } from './analyticsQuery.js';
 import { listFilterOptions } from './cohort.js';
@@ -12,6 +15,22 @@ import { buildPiggybankDashboard } from './piggybankDashboard.js';
 import { buildSemanticDashboard, buildClubsDashboard } from './semanticDashboard.js';
 import { DASHBOARD_CATALOG, forumDayCalendarDate } from './dashboardCatalog.js';
 import { resolveAdminShiftId } from '../shiftService.js';
+
+async function loadCommunityQueueCounts() {
+  const [[pendingExchange], [orgWaiting], [activeExchange]] = await Promise.all([
+    db.select({ count: count() }).from(exchangeQuestions)
+      .where(eq(exchangeQuestions.moderationStatus, 'pending')),
+    db.select({ count: count() }).from(orgThreads)
+      .where(eq(orgThreads.status, 'waiting')),
+    db.select({ count: count() }).from(exchangeQuestions)
+      .where(eq(exchangeQuestions.moderationStatus, 'approved')),
+  ]);
+  return {
+    pendingExchange: Number(pendingExchange?.count ?? 0),
+    orgQuestionsWaiting: Number(orgWaiting?.count ?? 0),
+    activeExchange: Number(activeExchange?.count ?? 0),
+  };
+}
 
 export async function buildAnalyticsMeta(req: AdminRequest) {
   const settings = await getForumSettings();
@@ -42,17 +61,19 @@ export async function buildAnalyticsMeta(req: AdminRequest) {
 
 export async function composeLegacyDashboards(req: AdminRequest) {
   const filters = await resolveAnalyticsFilters(req);
-  const [pulse, portrait, program, activity, piggybank, semantic] = await Promise.all([
+  const [pulse, portrait, program, activity, piggybank, semantic, community] = await Promise.all([
     buildPulseDashboard(filters, req),
     buildPortraitDashboard(filters, req),
     buildProgramDashboard(filters, req),
     buildActivityDashboard(filters, req),
     buildPiggybankDashboard(filters, req),
     buildSemanticDashboard(filters, req),
+    loadCommunityQueueCounts(),
   ]);
   return {
     mode: filters.mode,
     day: filters.day,
+    community,
     pulse: {
       registered: pulse.activity.registered,
       activeToday: pulse.activity.activeToday,

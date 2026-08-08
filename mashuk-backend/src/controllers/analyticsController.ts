@@ -12,6 +12,7 @@ import { buildProgramDashboard } from '../services/analytics/programDashboard.js
 import { buildEveningDashboard } from '../services/analytics/eveningDashboard.js';
 import { buildAfterBlocksDashboard } from '../services/analytics/afterBlocksDashboard.js';
 import { buildStateCheckDashboard } from '../services/analytics/stateCheckDashboard.js';
+import { buildDirectionDashboard } from '../services/analytics/directionDashboard.js';
 import { buildActivityDashboard } from '../services/analytics/activityDashboard.js';
 import { buildPiggybankDashboard } from '../services/analytics/piggybankDashboard.js';
 import { buildSemanticDashboard, buildClubsDashboard } from '../services/analytics/semanticDashboard.js';
@@ -42,6 +43,11 @@ export async function getAfterBlocksDashboardHandler(req: AdminRequest, res: Res
 export async function getStateCheckDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
   const filters = await resolveAnalyticsFilters(req);
   res.json(await buildStateCheckDashboard(filters, req));
+}
+
+export async function getDirectionDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
+  const filters = await resolveAnalyticsFilters(req);
+  res.json(await buildDirectionDashboard(filters, req));
 }
 
 export async function getPortraitDashboardHandler(req: AdminRequest, res: Response): Promise<void> {

@@ -145,15 +145,36 @@ export const publishScheduleDay = async (req: AdminRequest, res: Response): Prom
   await db.update(events).set({ dayPublished: true, isPublished: true })
     .where(and(eq(events.dayNumber, dayNumber), eq(events.shiftId, shiftId)));
 
+  // Publishing a newer day advances "current day for participants" so Home
+  // schedule («Далее») and Program open on that day without a second click.
+  const { getShiftById, updateShift } = await import('../services/shiftService.js');
+  const shift = await getShiftById(shiftId);
+  let advancedCurrentDay: number | null = null;
+  if (shift && dayNumber > (shift.currentDay ?? 1)) {
+    await updateShift(shiftId, { currentDay: dayNumber });
+    advancedCurrentDay = dayNumber;
+  }
+
   const { clearCache } = await import('../services/cache.js');
   clearCache(`events_day_${shiftId}_${dayNumber}`);
+  clearCache('forumSettings');
 
   await logAdminAction({
     req, actionType: 'schedule_publish', section: 'events', objectId: dayNumber,
-    newValue: { version: nextVersion, events: dayEvents.length }, isCritical: true,
+    newValue: {
+      version: nextVersion,
+      events: dayEvents.length,
+      currentDayAdvancedTo: advancedCurrentDay,
+    },
+    isCritical: true,
   });
 
-  res.json({ ok: true, version: snap, eventsCount: dayEvents.length });
+  res.json({
+    ok: true,
+    version: snap,
+    eventsCount: dayEvents.length,
+    currentDay: advancedCurrentDay ?? shift?.currentDay ?? dayNumber,
+  });
 };
 
 export const listScheduleVersions = async (req: AdminRequest, res: Response): Promise<void> => {
