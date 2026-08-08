@@ -12,6 +12,9 @@ import {
 type Props = {
   tasks: AdminTask[];
   categoriesById: Map<number, string>;
+  selectedIds: Set<number>;
+  onToggleSelect: (id: number) => void;
+  onSelectAll: (ids: number[]) => void;
   onEdit: (t: AdminTask) => void;
   onDuplicate: (id: number) => void;
   onQr: (id: number) => void;
@@ -24,6 +27,9 @@ type Props = {
 export function TasksListTable({
   tasks,
   categoriesById,
+  selectedIds,
+  onToggleSelect,
+  onSelectAll,
   onEdit,
   onDuplicate,
   onQr,
@@ -36,11 +42,20 @@ export function TasksListTable({
     return <p className="adm-muted">Нет заданий в этой вкладке.</p>;
   }
 
+  const allSelected = tasks.length > 0 && tasks.every(t => selectedIds.has(t.id));
+
   return (
     <div className="adm-table-scroll">
       <table className="adm-table adm-table-compact">
         <thead>
           <tr>
+            <th>
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={() => onSelectAll(allSelected ? [] : tasks.map(t => t.id))}
+              />
+            </th>
             <th>№</th>
             <th>Название</th>
             <th>Кратко</th>
@@ -66,8 +81,16 @@ export function TasksListTable({
             const cat = t.categoryName || (t.categoryId ? categoriesById.get(t.categoryId) : null) || t.category || '—';
             const days = t.dayNumbers?.length ? t.dayNumbers.join(', ') : String(t.dayNumber ?? '—');
             const short = (t.shortDescription || t.description || '').slice(0, 60);
+            const isSelected = selectedIds.has(t.id);
             return (
-              <tr key={t.id}>
+              <tr key={t.id} className={isSelected ? 'adm-row-selected' : ''}>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleSelect(t.id)}
+                  />
+                </td>
                 <td>{t.id}</td>
                 <td>
                   <button type="button" className="adm-link-btn" onClick={() => onEdit(t)}>{t.title}</button>
@@ -96,7 +119,7 @@ export function TasksListTable({
                       { label: 'Дублировать', onClick: () => onDuplicate(t.id) },
                       { label: 'Скачать QR', onClick: () => onQr(t.id) },
                       { label: 'Проверка играпрактиком', onClick: () => onModerate(t) },
-                      { label: 'Скрыть', onClick: () => onHide(t.id) },
+                      { label: t.isHidden ? 'Показать' : 'Скрыть', onClick: () => onHide(t.id) },
                       { label: 'В архив', onClick: () => onArchive(t.id) },
                       { label: 'Удалить', onClick: () => onDelete(t.id), danger: true },
                     ]}

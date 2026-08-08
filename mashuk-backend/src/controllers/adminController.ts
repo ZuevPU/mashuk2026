@@ -1626,6 +1626,36 @@ export const crudTasks = {
     });
     res.json({ ok: true });
   },
+  bulkAction: async (req: AdminRequest, res: Response) => {
+    const { bulkTasksSchema } = await import('../validation/adminSchemas.js');
+    const parsed = bulkTasksSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
+    const { ids, action } = parsed.data;
+
+    if (action === 'delete') {
+      await db.delete(taskSubmissions).where(inArray(taskSubmissions.taskId, ids));
+      await db.delete(tasks).where(inArray(tasks.id, ids));
+    } else if (action === 'hide') {
+      await db.update(tasks).set({ isHidden: true }).where(inArray(tasks.id, ids));
+    } else if (action === 'unhide') {
+      await db.update(tasks).set({ isHidden: false }).where(inArray(tasks.id, ids));
+    } else if (action === 'publish') {
+      await db.update(tasks).set({ status: 'published', isHidden: false }).where(inArray(tasks.id, ids));
+    } else if (action === 'draft') {
+      await db.update(tasks).set({ status: 'draft' }).where(inArray(tasks.id, ids));
+    }
+
+    const { logAdminAction } = await import('../services/adminActionsLog.js');
+    await logAdminAction({
+      req,
+      actionType: 'tasks_bulk_action',
+      section: 'tasks',
+      objectId: ids.join(','),
+      newValue: { action, count: ids.length },
+    });
+
+    res.json({ ok: true });
+  },
 };
 
 export { crudQuestions, copyQuestionsSelected } from './questionAdminController.js';

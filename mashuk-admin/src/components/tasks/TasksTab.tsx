@@ -64,6 +64,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [draft, setDraft] = useState<TaskDraft>(() => emptyDraft(1));
   const [showPreview, setShowPreview] = useState(false);
   const [moderatingTask, setModeratingTask] = useState<AdminTask | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const listQuery = useMemo(
     () => buildListQuery({ tab, q: search, categoryId: categoryFilter, day: dayFilter, confirmationMethod: methodFilter }),
@@ -85,6 +86,33 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     () => new Map(categories.map(c => [c.id, c.name])),
     [categories],
   );
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = (ids: number[]) => {
+    setSelectedIds(new Set(ids));
+  };
+
+  const bulkAction = (action: 'publish' | 'hide' | 'unhide' | 'draft' | 'delete') => {
+    if (selectedIds.size === 0) return;
+    if (action === 'delete' && !confirmDelete()) return;
+
+    act(async () => {
+      await adminFetch('/tasks/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ ids: [...selectedIds], action }),
+      });
+      setSelectedIds(new Set());
+      await loadTasks();
+    }, 'Действие выполнено');
+  };
 
   const loadMeta = useCallback(async () => {
     const fs = (await adminFetch('/forum-settings')).settings;
@@ -121,6 +149,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
   useEffect(() => {
     load().catch(() => setLoading(false));
+    setSelectedIds(new Set());
   }, [load, reloadKey]);
 
   const openCreate = async () => {
@@ -167,11 +196,14 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       if (r.task) openEdit(r.task);
     }, 'Копия создана');
 
-  const hideTask = (id: number) =>
+  const hideTask = (id: number) => {
+    const t = tasks.find(x => x.id === id);
+    const nextHidden = !t?.isHidden;
     act(async () => {
-      await adminFetch(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify({ isHidden: true }) });
+      await adminFetch(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify({ isHidden: nextHidden }) });
       await loadTasks();
-    }, 'Скрыто');
+    }, nextHidden ? 'Скрыто' : 'Отображается');
+  };
 
   const archiveTask = (id: number) =>
     act(async () => {
@@ -315,6 +347,19 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             {showCategories ? 'Скрыть категории' : 'Категории'}
           </button>
         </div>
+
+        {selectedIds.size > 0 && (
+          <div className="adm-bulk-toolbar" style={{ marginTop: 12, padding: '8px 12px', background: '#F5F0E8', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>Выбрано: {selectedIds.size}</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('publish')}>Опубликовать</button>
+              <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('hide')}>Скрыть</button>
+              <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('unhide')}>Показать</button>
+              <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('draft')}>В черновики</button>
+              <button type="button" className="adm-btn btn-danger adm-btn-xs" onClick={() => bulkAction('delete')}>Удалить</button>
+            </div>
+          </div>
+        )}
       </AdminPageHero>
 
       {showCategories && (
@@ -331,6 +376,9 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         <TasksListTable
           tasks={tasks}
           categoriesById={categoriesById}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onSelectAll={selectAll}
           onEdit={openEdit}
           onDuplicate={duplicateTask}
           onQr={qrTask}

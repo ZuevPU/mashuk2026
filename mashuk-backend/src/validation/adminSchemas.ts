@@ -188,6 +188,16 @@ export const pushNotificationCreateSchema = z.object({
 
 export const pushNotificationUpdateSchema = pushNotificationCreateSchema.partial();
 
+export const bulkPushNotificationsSchema = z.object({
+  ids: z.array(z.coerce.number().int().positive()).min(1),
+  action: z.enum(['publish', 'hide', 'delete', 'unhide', 'draft']),
+}).strict();
+
+export const bulkTasksSchema = z.object({
+  ids: z.array(z.coerce.number().int().positive()).min(1),
+  action: z.enum(['publish', 'hide', 'delete', 'unhide', 'draft']),
+}).strict();
+
 export const pushTemplatePresetSchema = z.object({
   key: z.string().min(1).max(100),
   title: optionalString,

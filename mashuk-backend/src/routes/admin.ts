@@ -119,6 +119,7 @@ router.get('/schedule/versions', wrap(p0.listScheduleVersions));
 
 router.get('/auth/me', wrap(rights.getMyPermissions));
 router.get('/tasks', P('tasks', 'read'), wrap(admin.crudTasks.list));
+router.post('/tasks/bulk', P('tasks', 'update'), wrap(admin.crudTasks.bulkAction));
 router.post('/tasks', P('tasks', 'create'), wrap(admin.crudTasks.create));
 router.patch('/tasks/:id', P('tasks', 'update'), wrap(admin.crudTasks.update));
 router.post('/tasks/:id/duplicate', P('tasks', 'update'), wrap(admin.crudTasks.duplicate));
