@@ -4,6 +4,7 @@ import { ZONE_COLORS, ZONE_LABELS, ZONE_ORDER } from './chartRu';
 export const DASH_TAB_SHORT: Record<string, string> = {
   overview: 'Главный',
   pulse: 'Пульс',
+  evening: 'Анкета вечера',
   portrait: 'Портрет',
   program: 'Программа',
   activity: 'Рейтинг',

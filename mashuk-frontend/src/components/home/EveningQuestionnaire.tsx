@@ -145,10 +145,14 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
   );
   const showExperimentBlock = currentStep && isExperimentStep(currentStep) && !!experiment;
 
+  const fieldTop = (label: string) => (
+    <span className="evening-q__label">{label}</span>
+  );
+
   const renderField = (field: EveningField) => {
     if (field.type === 'scale_1_5') {
       return (
-        <FormItem key={field.key} top={field.label}>
+        <FormItem key={field.key} top={fieldTop(field.label)}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {[1, 2, 3, 4, 5].map(n => (
               <button
@@ -169,7 +173,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     }
     if (field.type === 'scale_1_10') {
       return (
-        <FormItem key={field.key} top={field.label}>
+        <FormItem key={field.key} top={fieldTop(field.label)}>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
               <button key={n} type="button" onClick={() => setField(field.key, n)}
@@ -184,7 +188,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     if (field.type === 'yes_no') {
       const val = !!form[field.key];
       return (
-        <FormItem key={field.key} top={field.label}>
+        <FormItem key={field.key} top={fieldTop(field.label)}>
           <div style={{ display: 'flex', gap: 8 }}>
             <Button mode={val ? 'primary' : 'secondary'} onClick={() => setField(field.key, true)}>Да</Button>
             <Button mode={!val ? 'primary' : 'secondary'} onClick={() => setField(field.key, false)}>Нет</Button>
@@ -198,7 +202,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
       const otherOn = !!field.allowOther && raw.length > 0 && !opts.includes(raw);
       const otherLabel = field.otherLabel || 'Свой вариант';
       return (
-        <FormItem key={field.key} top={field.label}>
+        <FormItem key={field.key} top={fieldTop(field.label)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {opts.map(opt => (
               <button
@@ -252,7 +256,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     if (field.type === 'text' || field.type === 'experiment_text') {
       if (field.type === 'experiment_text' && !experiment) return null;
       return (
-        <FormItem key={field.key} top={field.label}>
+        <FormItem key={field.key} top={fieldTop(field.label)}>
           <textarea
             value={String(form[field.key] || '')}
             onChange={e => setField(field.key, e.target.value)}
@@ -265,7 +269,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     if (field.type === 'role_select') {
       if (!questionnaire.askTomorrowRole || currentDay > 6) return null;
       return (
-        <FormItem key={field.key} top={field.label}>
+        <FormItem key={field.key} top={fieldTop(field.label)}>
           <CustomSelect
             options={(questionnaire.roles || []).map(r => ({ label: r.name, value: r.roleKey }))}
             value={tomorrowRole || undefined}
@@ -300,7 +304,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
   }
 
   return (
-    <div className="m-card">
+    <div className="m-card evening-q">
       <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>Итоговая анкета</div>
       <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
         {currentStep.title} · шаг {step + 1} из {steps.length} · можно закрыть и вернуться

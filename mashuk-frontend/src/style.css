@@ -496,6 +496,19 @@ body {
 }
 
 /* Evening questionnaire — experiment block */
+/* Итоговая анкета: длинные подписи вопросов переносятся целиком */
+.evening-q .vkuiFormItem__top,
+.evening-q .vkuiFormItem__top .evening-q__label,
+.evening-q .evening-q__label {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: unset !important;
+  max-width: 100%;
+  line-height: 1.35;
+  word-break: break-word;
+  display: block;
+}
+
 .evening-experiment-block {
   background: linear-gradient(135deg, #FFF8F0 0%, #fff 100%);
   border: 1.5px solid rgba(255, 85, 0, 0.25);

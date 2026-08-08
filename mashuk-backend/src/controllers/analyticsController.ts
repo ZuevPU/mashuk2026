@@ -9,6 +9,7 @@ import {
 import { buildPulseDashboard } from '../services/analytics/pulseDashboard.js';
 import { buildPortraitDashboard, buildDeparturePortrait } from '../services/analytics/portraitDashboard.js';
 import { buildProgramDashboard } from '../services/analytics/programDashboard.js';
+import { buildEveningDashboard } from '../services/analytics/eveningDashboard.js';
 import { buildActivityDashboard } from '../services/analytics/activityDashboard.js';
 import { buildPiggybankDashboard } from '../services/analytics/piggybankDashboard.js';
 import { buildSemanticDashboard, buildClubsDashboard } from '../services/analytics/semanticDashboard.js';
@@ -24,6 +25,11 @@ export async function getAnalyticsMetaHandler(req: AdminRequest, res: Response):
 export async function getPulseDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
   const filters = await resolveAnalyticsFilters(req);
   res.json(await buildPulseDashboard(filters, req));
+}
+
+export async function getEveningDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
+  const filters = await resolveAnalyticsFilters(req);
+  res.json(await buildEveningDashboard(filters, req));
 }
 
 export async function getPortraitDashboardHandler(req: AdminRequest, res: Response): Promise<void> {

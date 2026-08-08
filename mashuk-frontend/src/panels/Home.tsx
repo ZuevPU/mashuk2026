@@ -336,6 +336,18 @@ export const HomePanel: React.FC<{
           </div>
         )}
 
+        {showEveningCard && !showEvening && !hideEveningDup && (
+          <PriorityAction
+            tag="✦ Завершение дня"
+            title="Итоговая анкета"
+            subtitle={d.eveningCard!.subtitle}
+            buttonText="Заполнить →"
+            onClick={() => setShowEvening(true)}
+          />
+        )}
+
+        {eveningQuestionnaireBlock}
+
         {showQuick && (
           <div className="m-card">
             <div className="m-now-t">Копилка</div>
@@ -393,18 +405,6 @@ export const HomePanel: React.FC<{
             routeNavigator.push(`/questions?q=${item.id}`);
           }}
         />
-
-        {showEveningCard && !showEvening && !hideEveningDup && (
-          <PriorityAction
-            tag="✦ Завершение дня"
-            title="Итоговая анкета"
-            subtitle={d.eveningCard!.subtitle}
-            buttonText="Заполнить →"
-            onClick={() => setShowEvening(true)}
-          />
-        )}
-
-        {eveningQuestionnaireBlock}
 
         <StatsRow
           path={d.points.path}

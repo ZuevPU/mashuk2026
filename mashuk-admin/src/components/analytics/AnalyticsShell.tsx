@@ -6,6 +6,7 @@ import {
   ActivityView,
   ClubsView,
   DepartureView,
+  EveningView,
   OverviewView,
   PiggybankView,
   PortraitView,
@@ -41,6 +42,7 @@ function xlsxExportPath(dash: DashboardId): string | null {
   if (dash === 'clubs') return '/exports/piggybank';
   if (dash === 'roles') return '/exports/roles-experiments';
   if (dash === 'overview') return '/exports/participants';
+  if (dash === 'evening') return '/exports/evening-summary';
   // pulse / activity / program / departure use slice CTAs only
   return null;
 }
@@ -49,7 +51,7 @@ function csvExportPath(dash: DashboardId): string | null {
   if (dash === 'piggybank') return '/exports/piggybank?format=csv';
   if (dash === 'departure') return '/exports/point-a-b-summary';
   if (dash === 'activity') return '/exports/rating/shift';
-  if (dash === 'roles') return null;
+  if (dash === 'roles' || dash === 'evening') return null;
   if (dash === 'clubs') return '/exports/piggybank?format=csv';
   return '/exports/reflections?format=csv';
 }
@@ -72,6 +74,15 @@ function sliceExportCtas(
         label: 'Выгрузка дня (листы)',
         path: `/exports/day${qs({ day })}`,
         file: `day_${day}.xlsx`,
+      },
+    ];
+  }
+  if (dash === 'evening') {
+    return [
+      {
+        label: 'Скачать полностью данные по Итоговой анкете вечера',
+        path: `/exports/evening-summary${qs({ day })}`,
+        file: `evening_summary_d${day}.xlsx`,
       },
     ];
   }
@@ -430,6 +441,7 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
       {!loading && data && dash !== 'roles' && (
         <div ref={chartRef} className={showEarlyWarning ? 'adm-insights-dimmed' : undefined}>
           {dash === 'pulse' && <PulseView data={data} />}
+          {dash === 'evening' && <EveningView data={data} onOpenCard={onOpenCard} />}
           {dash === 'portrait' && <PortraitView data={data} onOpenCard={onOpenCard} />}
           {dash === 'program' && <ProgramView data={data} />}
           {dash === 'activity' && <ActivityView data={data} onOpenRating={() => setTab('rating')} />}

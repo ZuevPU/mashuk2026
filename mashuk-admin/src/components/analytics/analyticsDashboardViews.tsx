@@ -1186,6 +1186,208 @@ export function OverviewView({ data }: { data: any }) {
   );
 }
 
+type EveningAnswerRow = {
+  participantId: number;
+  name: string;
+  direction: string;
+  group: string;
+  day: number;
+  answer: string | number;
+  filledAt: string | null;
+};
+
+type EveningQuestionStat = {
+  key: string;
+  label: string;
+  type: string;
+  answered: number;
+  avg?: number | null;
+  distribution: { label: string; count: number; pct: number }[];
+  answers: EveningAnswerRow[];
+};
+
+export function EveningView({
+  data,
+  onOpenCard,
+}: {
+  data: any;
+  onOpenCard: AnalyticsTabProps['onOpenCard'];
+}) {
+  const { forumDay } = useInsights();
+  const submitted = data.activity?.submitted ?? 0;
+  const drafts = data.activity?.drafts ?? 0;
+  const cohortSize = data.activity?.cohortSize ?? 0;
+  const fillRatePct = data.activity?.fillRatePct;
+  const questions = (data.questions ?? []) as EveningQuestionStat[];
+  const notes = (data.diagnostics?.notes ?? []) as string[];
+  const byDirection = (data.byDirection ?? data.activity?.byDirection ?? []) as {
+    direction: string; submitted: number; registered: number; fillRatePct: number;
+  }[];
+  const directionChart = byDirection.map(r => ({
+    name: r.direction,
+    submitted: r.submitted,
+    registered: r.registered,
+  }));
+  const exportPath = typeof data.exportPath === 'string'
+    ? data.exportPath
+    : `/exports/evening-summary?day=${forumDay}`;
+
+  const downloadFull = async () => {
+    const { adminDownloadBinary } = await import('../../admin/client');
+    const dayMatch = exportPath.match(/[?&]day=(\d+)/);
+    const dayPart = dayMatch ? `d${dayMatch[1]}` : 'shift';
+    await adminDownloadBinary(exportPath, `evening_summary_${dayPart}.xlsx`);
+  };
+
+  return (
+    <div className="adm-dash-stack">
+      <DashScreenTitle
+        title="Итоговая анкета вечера"
+        hint="Сданные анкеты с главной: статистика по вопросам и полный список ответов. Черновики в KPI отдельно."
+      />
+      <DashGrid cols={4}>
+        <DashKpi
+          value={dashVal(submitted)}
+          label="сдано анкет"
+          sub={cohortSize ? `из ${cohortSize} зарегистрированных` : undefined}
+          accent="var(--m-accent)"
+        />
+        <DashKpi
+          value={fillRatePct != null ? `${fillRatePct}%` : '—'}
+          label="охват заполнения"
+          sub="доля сдавших от зарегистрированных"
+          accent="#22c55e"
+        />
+        <DashKpi
+          value={dashVal(drafts)}
+          label="черновики"
+          sub="начали, но не отправили"
+          accent="#f59e0b"
+        />
+        <DashKpi
+          value={dashVal(questions.length)}
+          label="вопросов с ответами"
+          sub={data.diagnostics?.eveningForceUnpublished
+            ? 'анкета снята с публикации'
+            : (data.diagnostics?.eveningOpenNow ? 'анкета открыта' : 'по расписанию / закрыта')}
+        />
+      </DashGrid>
+
+      {notes.length > 0 && (
+        <DashCard title="Примечания">
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
+            {notes.map(n => <li key={n}>{n}</li>)}
+          </ul>
+        </DashCard>
+      )}
+
+      {byDirection.length > 0 && (
+        <DashCard title="Заполнили по направлениям">
+          <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
+            Сколько участников из каждого направления сдали итоговую анкету вечера
+          </p>
+          <ResponsiveContainer width="100%" height={Math.max(220, directionChart.length * 36)}>
+            <BarChart data={directionChart} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" allowDecimals={false} />
+              <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
+              <Tooltip content={<ChartTooltipRu />} />
+              <Legend />
+              <Bar dataKey="submitted" name="Сдали анкету" fill="var(--m-accent)" />
+              <Bar dataKey="registered" name="Зарегистрировано" fill="#cbd5e1" />
+            </BarChart>
+          </ResponsiveContainer>
+          <table className="adm-table" style={{ marginTop: 12 }}>
+            <thead>
+              <tr>
+                <th>Направление</th>
+                <th>Сдали</th>
+                <th>Зарегистрировано</th>
+                <th>Охват</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byDirection.map(r => (
+                <tr key={r.direction}>
+                  <td>{r.direction}</td>
+                  <td>{r.submitted}</td>
+                  <td>{r.registered}</td>
+                  <td>{r.fillRatePct}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </DashCard>
+      )}
+
+      {!questions.length && (
+        <DashCard title="Нет сданных анкет">
+          <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>
+            Пока никто не нажал «Отправить» в итоговой анкете вечера на выбранном срезе.
+            Проверьте, что анкета опубликована.
+          </p>
+        </DashCard>
+      )}
+
+      {questions.map(q => (
+        <DashCard
+          key={q.key}
+          title={q.label}
+        >
+          <div className="adm-muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            Ответов: {q.answered}
+            {q.avg != null ? ` · средняя: ${q.avg}` : ''}
+            {q.type ? ` · тип: ${q.type}` : ''}
+          </div>
+          {q.distribution?.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <SrcBars items={q.distribution.map(d => ({ label: `${d.label} (${d.pct}%)`, count: d.count }))} />
+            </div>
+          )}
+          <div style={{ maxHeight: 280, overflow: 'auto' }}>
+            <table className="adm-table">
+              <thead>
+                <tr>
+                  <th>Участник</th>
+                  <th>Направление</th>
+                  <th>Группа</th>
+                  <th>День</th>
+                  <th>Ответ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {q.answers.map((a, idx) => (
+                  <tr key={`${q.key}-${a.participantId}-${a.day}-${idx}`}>
+                    <td>
+                      <button type="button" className="adm-link" onClick={() => onOpenCard(a.participantId)}>
+                        {a.name || `#${a.participantId}`}
+                      </button>
+                    </td>
+                    <td>{a.direction || '—'}</td>
+                    <td>{a.group || '—'}</td>
+                    <td>{a.day}</td>
+                    <td style={{ whiteSpace: 'pre-wrap', maxWidth: 420 }}>{String(a.answer)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DashCard>
+      ))}
+
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0 8px' }}>
+        <button
+          type="button"
+          className="adm-btn adm-btn-primary"
+          onClick={() => { void downloadFull(); }}
+        >
+          Скачать полностью данные по Итоговой анкете вечера (Excel)
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function DepartureView({ data, onOpenCard }: { data: any; onOpenCard: AnalyticsTabProps['onOpenCard'] }) {
   return (
     <div className="adm-dash-stack">

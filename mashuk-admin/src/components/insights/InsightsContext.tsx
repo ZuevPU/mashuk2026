@@ -11,6 +11,7 @@ import type { Tab } from '../../tabs';
 
 export type DashboardId =
   | 'pulse'
+  | 'evening'
   | 'portrait'
   | 'program'
   | 'activity'

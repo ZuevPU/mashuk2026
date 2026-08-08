@@ -11,14 +11,15 @@ export type DashboardCatalogEntry = {
 export const DASHBOARD_CATALOG: DashboardCatalogEntry[] = [
   { id: 'overview', label: '1. Главный дашборд', minForumDay: 1, availabilityTier: 'D1', path: '/analytics/dashboards', kind: 'api' },
   { id: 'pulse', label: '2. Пульс форума', minForumDay: 1, availabilityTier: 'D1', path: '/analytics/dashboards/pulse', kind: 'api' },
-  { id: 'portrait', label: '3. Портрет и движение', minForumDay: 1, availabilityTier: 'D1', path: '/analytics/dashboards/portrait', kind: 'api' },
-  { id: 'program', label: '4. Образовательная программа', minForumDay: 1, availabilityTier: 'D1', path: '/analytics/dashboards/program', kind: 'api' },
-  { id: 'activity', label: '5. Активность и рейтинг', minForumDay: 2, availabilityTier: 'D2', path: '/analytics/dashboards/activity', kind: 'api' },
-  { id: 'piggybank', label: '6. Копилка', minForumDay: 1, availabilityTier: 'D1', path: '/analytics/dashboards/piggybank', kind: 'api' },
-  { id: 'semantic', label: '7. Смысловая аналитика', minForumDay: 3, availabilityTier: 'D3-D4', path: '/analytics/dashboards/semantic', kind: 'api', requiresV2: true },
-  { id: 'clubs', label: '8. Материал для клубов', minForumDay: 3, availabilityTier: 'D3-D4', path: '/analytics/dashboards/clubs', kind: 'api' },
-  { id: 'departure', label: '9. Заезд → выезд', minForumDay: 3, availabilityTier: 'D3-D4', path: '/analytics/departure-portrait', kind: 'api' },
-  { id: 'roles', label: '10. Роли 2×3', minForumDay: 2, availabilityTier: 'D2', kind: 'static' },
+  { id: 'evening', label: '3. Итоговая анкета вечера', minForumDay: 1, availabilityTier: 'D1', path: '/analytics/dashboards/evening', kind: 'api' },
+  { id: 'portrait', label: '4. Портрет и движение', minForumDay: 1, availabilityTier: 'D1', path: '/analytics/dashboards/portrait', kind: 'api' },
+  { id: 'program', label: '5. Образовательная программа', minForumDay: 1, availabilityTier: 'D1', path: '/analytics/dashboards/program', kind: 'api' },
+  { id: 'activity', label: '6. Активность и рейтинг', minForumDay: 2, availabilityTier: 'D2', path: '/analytics/dashboards/activity', kind: 'api' },
+  { id: 'piggybank', label: '7. Копилка', minForumDay: 1, availabilityTier: 'D1', path: '/analytics/dashboards/piggybank', kind: 'api' },
+  { id: 'semantic', label: '8. Смысловая аналитика', minForumDay: 3, availabilityTier: 'D3-D4', path: '/analytics/dashboards/semantic', kind: 'api', requiresV2: true },
+  { id: 'clubs', label: '9. Материал для клубов', minForumDay: 3, availabilityTier: 'D3-D4', path: '/analytics/dashboards/clubs', kind: 'api' },
+  { id: 'departure', label: '10. Заезд → выезд', minForumDay: 3, availabilityTier: 'D3-D4', path: '/analytics/departure-portrait', kind: 'api' },
+  { id: 'roles', label: '11. Роли 2×3', minForumDay: 2, availabilityTier: 'D2', kind: 'static' },
 ];
 
 export function forumDayCalendarDate(startDate: Date | string | null | undefined, forumDay: number): string | null {

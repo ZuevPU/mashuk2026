@@ -239,6 +239,7 @@ router.get('/analytics/summary', wrap(admin.getAnalyticsSummary));
 router.get('/analytics/charts', wrap(admin.getAnalyticsCharts));
 router.get('/analytics/meta', P('analytics', 'read'), wrap(analyticsCtrl.getAnalyticsMetaHandler));
 router.get('/analytics/dashboards/pulse', P('analytics', 'read'), wrap(analyticsCtrl.getPulseDashboardHandler));
+router.get('/analytics/dashboards/evening', P('analytics', 'read'), wrap(analyticsCtrl.getEveningDashboardHandler));
 router.get('/analytics/dashboards/portrait', P('analytics', 'read'), wrap(analyticsCtrl.getPortraitDashboardHandler));
 router.get('/analytics/dashboards/program', P('analytics', 'read'), wrap(analyticsCtrl.getProgramDashboardHandler));
 router.get('/analytics/dashboards/activity', P('analytics', 'read'), wrap(analyticsCtrl.getActivityDashboardHandler));
