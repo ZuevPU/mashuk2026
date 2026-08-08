@@ -302,7 +302,10 @@ export const getParticipantActivity = async (req: AdminRequest, res: Response): 
     db.select({ a: eventAttendance, e: events }).from(eventAttendance)
       .leftJoin(events, eq(eventAttendance.eventId, events.id))
       .where(eq(eventAttendance.participantId, id)).orderBy(desc(eventAttendance.createdAt)).limit(40),
-    db.select().from(piggybank).where(eq(piggybank.participantId, id)).orderBy(desc(piggybank.createdAt)).limit(40),
+    db.select().from(piggybank).where(and(
+      eq(piggybank.participantId, id),
+      isNull(piggybank.deletedAt),
+    )).orderBy(desc(piggybank.createdAt)).limit(40),
   ]);
 
   type Item = { at: Date | null; kind: string; title: string; detail?: string };
@@ -537,7 +540,10 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
       .leftJoin(medals, eq(userMedals.medalId, medals.id))
       .where(eq(userMedals.participantId, id)),
     db.select().from(participantDayState).where(eq(participantDayState.participantId, id)),
-    db.select().from(piggybank).where(eq(piggybank.participantId, id)).orderBy(desc(piggybank.createdAt)).limit(100),
+    db.select().from(piggybank).where(and(
+      eq(piggybank.participantId, id),
+      isNull(piggybank.deletedAt),
+    )).orderBy(desc(piggybank.createdAt)).limit(100),
     db.select({
       forumDay: pointsLog.forumDay,
       points: pointsLog.points,

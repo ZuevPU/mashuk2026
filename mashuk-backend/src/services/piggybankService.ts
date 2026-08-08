@@ -1,5 +1,6 @@
+import { and, desc, eq, gte, inArray, isNull, lte } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { piggybank } from '../db/schema.js';
+import { piggybank, pointsLog } from '../db/schema.js';
 import { getForumSettings, resolveEffectiveCurrentDay } from './helpers.js';
 import {
   normalizePiggybankTags,
@@ -8,7 +9,14 @@ import {
   ORG_TAG,
   pointsActionForTags,
 } from './piggybankDict.js';
-import { awardPoints } from './pointsService.js';
+import { awardPoints, revokePointsLogEntry } from './pointsService.js';
+
+const PIGGY_ACTION_TYPES = [
+  'piggybank_idea',
+  'piggybank_thought',
+  'piggybank_question',
+  'piggybank_entry',
+] as const;
 
 export function filterPiggybankEntries<T extends { source?: string | null; text: string; forumDay?: number | null }>(
   entries: T[],
@@ -67,8 +75,110 @@ export async function createPiggybankEntry(input: {
     forumDay,
   }).returning();
 
-  await awardPoints(input.participantId, pointsActionForTags(tags), undefined, forumDay ?? undefined);
+  const awarded = await awardPoints(
+    input.participantId,
+    pointsActionForTags(tags),
+    undefined,
+    forumDay ?? undefined,
+  );
+  if (awarded?.logId) {
+    const [updated] = await db.update(piggybank)
+      .set({ pointsLogId: awarded.logId })
+      .where(eq(piggybank.id, entry.id))
+      .returning();
+    return updated ?? entry;
+  }
   return entry;
+}
+
+/** Find linked or nearest unrevoked piggybank points log for an entry. */
+export async function resolvePiggybankPointsLogId(
+  entry: typeof piggybank.$inferSelect,
+): Promise<number | null> {
+  if (entry.pointsLogId) {
+    const [row] = await db.select({ id: pointsLog.id, revokedAt: pointsLog.revokedAt })
+      .from(pointsLog)
+      .where(eq(pointsLog.id, entry.pointsLogId))
+      .limit(1);
+    if (row && !row.revokedAt) return row.id;
+    if (row?.revokedAt) return null;
+  }
+
+  const created = entry.createdAt ? new Date(entry.createdAt) : new Date();
+  const from = new Date(created.getTime() - 15 * 60_000);
+  const to = new Date(created.getTime() + 15 * 60_000);
+  const conditions = [
+    eq(pointsLog.participantId, entry.participantId),
+    isNull(pointsLog.revokedAt),
+    gte(pointsLog.points, 1),
+    gte(pointsLog.createdAt, from),
+    lte(pointsLog.createdAt, to),
+    inArray(pointsLog.actionType, [...PIGGY_ACTION_TYPES]),
+  ];
+  if (entry.forumDay != null) {
+    conditions.push(eq(pointsLog.forumDay, entry.forumDay));
+  }
+
+  const [hit] = await db.select({ id: pointsLog.id })
+    .from(pointsLog)
+    .where(and(...conditions))
+    .orderBy(desc(pointsLog.createdAt))
+    .limit(1);
+  return hit?.id ?? null;
+}
+
+export async function softDeletePiggybankEntry(
+  entryId: number,
+  reason = 'Удаление записи копилки администратором',
+): Promise<{
+  entry: typeof piggybank.$inferSelect;
+  pointsRevoked: boolean;
+  pointsLogId: number | null;
+  revokeError?: string;
+}> {
+  const [existing] = await db.select().from(piggybank)
+    .where(and(eq(piggybank.id, entryId), isNull(piggybank.deletedAt)))
+    .limit(1);
+  if (!existing) throw new Error('Not found');
+
+  const logId = await resolvePiggybankPointsLogId(existing);
+  let pointsRevoked = false;
+  let revokeError: string | undefined;
+  if (logId) {
+    const revoked = await revokePointsLogEntry(logId, existing.participantId, reason);
+    if (revoked.ok) pointsRevoked = true;
+    else revokeError = revoked.error;
+  }
+
+  const [updated] = await db.update(piggybank)
+    .set({
+      deletedAt: new Date(),
+      isHidden: true,
+      ...(logId && !existing.pointsLogId ? { pointsLogId: logId } : {}),
+    })
+    .where(eq(piggybank.id, entryId))
+    .returning();
+
+  return {
+    entry: updated!,
+    pointsRevoked,
+    pointsLogId: logId,
+    revokeError,
+  };
+}
+
+export async function restorePiggybankEntry(entryId: number): Promise<typeof piggybank.$inferSelect> {
+  const [existing] = await db.select().from(piggybank)
+    .where(eq(piggybank.id, entryId))
+    .limit(1);
+  if (!existing) throw new Error('Not found');
+  if (!existing.deletedAt) throw new Error('Not deleted');
+
+  const [updated] = await db.update(piggybank)
+    .set({ deletedAt: null, isHidden: false })
+    .where(eq(piggybank.id, entryId))
+    .returning();
+  return updated!;
 }
 
 export function inferSourceFromEventTitle(title: string | null | undefined): string {

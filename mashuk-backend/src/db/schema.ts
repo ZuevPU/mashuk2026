@@ -698,6 +698,8 @@ export const piggybank = pgTable('piggybank', {
   forumDay: smallint('forum_day'),
   isHidden: boolean('is_hidden').default(false),
   isViolation: boolean('is_violation').default(false),
+  /** Linked points_log row awarded on create; revoked on admin soft-delete. */
+  pointsLogId: integer('points_log_id'),
   deletedAt: timestamp('deleted_at'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [

@@ -379,6 +379,13 @@
       "when": 1833000000000,
       "tag": "0054_practices_vote",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1834000000000,
+      "tag": "0055_piggybank_points_log",
+      "breakpoints": true
     }
   ]
 }

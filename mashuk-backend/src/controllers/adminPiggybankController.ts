@@ -1,15 +1,21 @@
 import { Response } from 'express';
-import { and, count, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, ilike, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { directions, participantGroups, participants, piggybank } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { logAdminAction } from '../services/adminActionsLog.js';
 import { entryTags, formatTagsForExport } from '../services/piggybankDict.js';
 import { buildParticipantNameMatch } from '../services/participantsList.js';
+import {
+  restorePiggybankEntry,
+  softDeletePiggybankEntry,
+} from '../services/piggybankService.js';
 
 function parseListQuery(req: AdminRequest) {
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+  const onlyDeleted = req.query.onlyDeleted === 'true' || req.query.onlyDeleted === '1'
+    || req.query.list === 'deleted';
   return {
     page,
     limit,
@@ -27,11 +33,14 @@ function parseListQuery(req: AdminRequest) {
     tag: String(req.query.tag || '').trim(),
     source: String(req.query.source || '').trim(),
     shiftId: req.query.shiftId ? Number(req.query.shiftId) : undefined,
+    onlyDeleted,
   };
 }
 
 function buildWhere(params: ReturnType<typeof parseListQuery>) {
-  const conditions = [isNull(piggybank.deletedAt)];
+  const conditions = [
+    params.onlyDeleted ? isNotNull(piggybank.deletedAt) : isNull(piggybank.deletedAt),
+  ];
   if (params.q) conditions.push(ilike(piggybank.text, `%${params.q}%`));
   if (params.participantId && !Number.isNaN(params.participantId)) {
     conditions.push(eq(piggybank.participantId, params.participantId));
@@ -84,7 +93,7 @@ export async function listPiggybankEntries(req: AdminRequest, res: Response): Pr
     .leftJoin(directions, eq(participants.directionId, directions.id))
     .leftJoin(participantGroups, eq(participants.groupId, participantGroups.id))
     .where(whereClause)
-    .orderBy(desc(piggybank.createdAt))
+    .orderBy(desc(params.onlyDeleted ? piggybank.deletedAt : piggybank.createdAt))
     .limit(params.limit)
     .offset(params.offset);
 
@@ -99,6 +108,7 @@ export async function listPiggybankEntries(req: AdminRequest, res: Response): Pr
     entries: rows.map(r => ({
       id: r.e.id,
       createdAt: r.e.createdAt,
+      deletedAt: r.e.deletedAt,
       participantId: r.e.participantId,
       participantName: [r.p.firstName, r.p.lastName].filter(Boolean).join(' ') || r.p.vkId,
       directionName: r.dirName ?? null,
@@ -109,8 +119,10 @@ export async function listPiggybankEntries(req: AdminRequest, res: Response): Pr
       forumDay: r.e.forumDay,
       isHidden: r.e.isHidden,
       isViolation: r.e.isViolation,
+      pointsLogId: r.e.pointsLogId ?? null,
     })),
     totalCount: Number(totalRow?.count ?? 0),
+    onlyDeleted: params.onlyDeleted,
   });
 }
 
@@ -139,24 +151,65 @@ export async function patchPiggybankEntry(req: AdminRequest, res: Response): Pro
 
 export async function deletePiggybankEntry(req: AdminRequest, res: Response): Promise<void> {
   const id = Number(req.params.id);
-  const [existing] = await db.select().from(piggybank).where(and(eq(piggybank.id, id), isNull(piggybank.deletedAt))).limit(1);
-  if (!existing) {
-    res.status(404).json({ error: 'Not found' });
-    return;
+  try {
+    const result = await softDeletePiggybankEntry(id);
+    await logAdminAction({
+      req,
+      actionType: 'piggybank_delete',
+      section: 'piggybank',
+      objectId: id,
+      oldValue: {
+        text: result.entry.text,
+        participantId: result.entry.participantId,
+        pointsLogId: result.pointsLogId,
+      },
+      newValue: {
+        deletedAt: result.entry.deletedAt,
+        pointsRevoked: result.pointsRevoked,
+        revokeError: result.revokeError ?? null,
+      },
+      isCritical: true,
+    });
+    res.json({
+      entry: result.entry,
+      pointsRevoked: result.pointsRevoked,
+      pointsLogId: result.pointsLogId,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Error';
+    if (msg === 'Not found') {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    throw e;
   }
-  const [updated] = await db.update(piggybank)
-    .set({ deletedAt: new Date(), isHidden: true })
-    .where(eq(piggybank.id, id))
-    .returning();
-  await logAdminAction({
-    req,
-    actionType: 'piggybank_delete',
-    section: 'piggybank',
-    objectId: id,
-    oldValue: { text: existing.text, participantId: existing.participantId },
-    isCritical: true,
-  });
-  res.json({ entry: updated });
+}
+
+export async function restorePiggybankEntryAdmin(req: AdminRequest, res: Response): Promise<void> {
+  const id = Number(req.params.id);
+  try {
+    const entry = await restorePiggybankEntry(id);
+    await logAdminAction({
+      req,
+      actionType: 'piggybank_restore',
+      section: 'piggybank',
+      objectId: id,
+      newValue: { deletedAt: null, participantId: entry.participantId },
+      isCritical: true,
+    });
+    res.json({ entry, note: 'Запись восстановлена. Баллы повторно не начисляются.' });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Error';
+    if (msg === 'Not found') {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    if (msg === 'Not deleted') {
+      res.status(400).json({ error: 'Запись не удалена' });
+      return;
+    }
+    throw e;
+  }
 }
 
 export type PiggybankExportRow = {

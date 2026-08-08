@@ -395,7 +395,7 @@ export const exportPiggybankText = async (req: ParticipantRequest, res: Response
     const q = req.query.q as string | undefined;
 
     const entries = await db.select().from(piggybank)
-      .where(eq(piggybank.participantId, req.participant!.id))
+      .where(and(eq(piggybank.participantId, req.participant!.id), isNull(piggybank.deletedAt)))
       .orderBy(desc(piggybank.createdAt));
 
     const filtered = filterPiggybankEntries(entries, {

@@ -293,6 +293,7 @@ router.delete('/admin-users/:id', P('admins', 'delete'), wrap(ops.deleteAdminUse
 router.get('/piggybank-entries', P('piggybank', 'read'), wrap(piggyAdmin.listPiggybankEntries));
 router.get('/piggybank-entries/export', P('piggybank', 'export'), wrap(piggyAdmin.exportPiggybankEntries));
 router.patch('/piggybank-entries/:id', P('piggybank', 'update'), wrap(piggyAdmin.patchPiggybankEntry));
+router.post('/piggybank-entries/:id/restore', P('piggybank', 'delete'), wrap(piggyAdmin.restorePiggybankEntryAdmin));
 router.delete('/piggybank-entries/:id', P('piggybank', 'delete'), wrap(piggyAdmin.deletePiggybankEntry));
 
 router.get('/medals/rule-metrics', P('medals', 'read'), wrap(ops.listMedalRuleMetrics));

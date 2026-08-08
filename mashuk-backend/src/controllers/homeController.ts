@@ -92,7 +92,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const activeTasks = availableTasks.filter(t => !submittedTaskIds.has(t.id));
 
     const piggyRows = await db.select().from(piggybank)
-      .where(eq(piggybank.participantId, participant.id));
+      .where(and(eq(piggybank.participantId, participant.id), isNull(piggybank.deletedAt)));
     const piggybankCount = piggyRows.length;
 
     const stateCheckOrder = stateCheckTimePointOrder(now);

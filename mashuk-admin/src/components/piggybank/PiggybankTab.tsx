@@ -9,9 +9,12 @@ const PIGGY_TAGS = ['идея', 'мысль', 'вопрос', 'контакт', 
 const PIGGY_SOURCES = ['Направление', 'Урок о важном', 'Открытый урок', 'Клуб', 'Разговор с участником', 'Своя мысль'];
 const PAGE_SIZE = 100;
 
+type ListMode = 'active' | 'deleted';
+
 type Entry = {
   id: number;
   createdAt: string;
+  deletedAt?: string | null;
   participantId: number;
   participantName: string;
   directionName: string | null;
@@ -21,6 +24,7 @@ type Entry = {
   forumDay: number | null;
   isHidden: boolean | null;
   isViolation: boolean | null;
+  pointsLogId?: number | null;
 };
 
 export type PiggybankTabProps = AdminTabProps & {
@@ -44,6 +48,8 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
   const [loading, setLoading] = useState(true);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [totalCount, setTotalCount] = useState(0);
+  const [deletedTotal, setDeletedTotal] = useState(0);
+  const [listMode, setListMode] = useState<ListMode>('active');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [participantId, setParticipantId] = useState('');
@@ -60,6 +66,7 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
   const [openEntry, setOpenEntry] = useState<Entry | null>(null);
   const [participantOptions, setParticipantOptions] = useState<{ id: number; label: string }[]>([]);
   const [selectedParticipantLabel, setSelectedParticipantLabel] = useState('');
+  const isDeletedList = listMode === 'deleted';
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedParticipantQ(participantSearch.trim()), 300);
@@ -84,7 +91,8 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
     source,
     page,
     limit: PAGE_SIZE,
-  }), [search, participantId, debouncedParticipantQ, directionId, groupId, forumDay, tag, source, page]);
+    onlyDeleted: isDeletedList ? 'true' : undefined,
+  }), [search, participantId, debouncedParticipantQ, directionId, groupId, forumDay, tag, source, page, isDeletedList]);
 
   const loadMeta = useCallback(async () => {
     const [dirs, gr, fs] = await Promise.all([
@@ -103,10 +111,16 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
       const res = await adminFetch(`/piggybank-entries?${buildQuery(filters)}`);
       setEntries(res.entries || []);
       setTotalCount(res.totalCount ?? 0);
+      if (!isDeletedList) {
+        const del = await adminFetch('/piggybank-entries?onlyDeleted=true&limit=1&page=1');
+        setDeletedTotal(del.totalCount ?? 0);
+      } else {
+        setDeletedTotal(res.totalCount ?? 0);
+      }
     } finally {
       setLoading(false);
     }
-  }, [adminFetch, filters]);
+  }, [adminFetch, filters, isDeletedList]);
 
   useEffect(() => {
     loadMeta().catch(() => {});
@@ -118,7 +132,7 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
 
   useEffect(() => {
     setPage(1);
-  }, [search, participantId, debouncedParticipantQ, directionId, groupId, forumDay, tag, source]);
+  }, [search, participantId, debouncedParticipantQ, directionId, groupId, forumDay, tag, source, listMode]);
 
   useEffect(() => {
     if (participantSearch.trim().length < 2) {
@@ -156,12 +170,25 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
     }, 'Сохранено');
 
   const deleteEntry = (id: number) => {
-    if (!confirmDelete()) return;
+    if (!confirmDelete(
+      'Удалить запись в архив? У участника снимутся начисленные за неё баллы. Цифровой след сохранится во вкладке «Удалённые копилки».',
+    )) return;
     act(async () => {
-      await adminFetch(`/piggybank-entries/${id}`, { method: 'DELETE' });
+      const res = await adminFetch(`/piggybank-entries/${id}`, { method: 'DELETE' });
       setOpenEntry(null);
       await load();
-    }, 'Запись удалена');
+      return res?.pointsRevoked
+        ? 'Запись в архиве, баллы сняты'
+        : 'Запись в архиве (баллы не найдены или уже сняты)';
+    });
+  };
+
+  const restoreEntry = (id: number) => {
+    act(async () => {
+      await adminFetch(`/piggybank-entries/${id}/restore`, { method: 'POST', body: '{}' });
+      setOpenEntry(null);
+      await load();
+    }, 'Запись восстановлена (баллы не возвращаются автоматически)');
   };
 
   const exportXlsx = () => {
@@ -174,13 +201,32 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
   const listLabel = hasFilters || page > 1
     ? `${entries.length} в списке · ${totalCount} всего`
     : `${totalCount} всего`;
-  const heroHint = entries.length === PAGE_SIZE && totalCount > PAGE_SIZE
-    ? `Показано до ${PAGE_SIZE} на странице. Модерация записей участников.`
-    : 'Модерация записей участников. Удаление логируется в журнале.';
+  const heroHint = isDeletedList
+    ? 'Архив удалённых записей. Баллы за эти записи уже сняты. Можно восстановить текст в активный список (баллы не возвращаются автоматически).'
+    : 'Модерация записей участников. Удаление переносит в архив и снимает баллы.';
 
   return (
     <div className="adm-forum">
-      <AdminPageHero title={`Записи копилки · ${listLabel}`} hint={heroHint}>
+      <AdminPageHero
+        title={isDeletedList ? `Удалённые копилки · ${listLabel}` : `Записи копилки · ${listLabel}`}
+        hint={heroHint}
+      >
+        <div className="adm-seg" style={{ marginBottom: 10 }}>
+          <button
+            type="button"
+            className={listMode === 'active' ? 'on' : ''}
+            onClick={() => { setListMode('active'); setPage(1); setOpenEntry(null); }}
+          >
+            Копилка
+          </button>
+          <button
+            type="button"
+            className={listMode === 'deleted' ? 'on' : ''}
+            onClick={() => { setListMode('deleted'); setPage(1); setOpenEntry(null); }}
+          >
+            Удалённые копилки{deletedTotal > 0 ? ` (${deletedTotal})` : ''}
+          </button>
+        </div>
         <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
           <input
             className="adm-input"
@@ -284,7 +330,7 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
             <table className="adm-table">
               <thead>
                 <tr>
-                  <th>Дата</th>
+                  <th>{isDeletedList ? 'Удалено' : 'Дата'}</th>
                   <th>Участник</th>
                   <th>Направление</th>
                   <th>Текст</th>
@@ -295,9 +341,11 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
               </thead>
               <tbody>
                 {entries.map(e => (
-                  <tr key={e.id}>
+                  <tr key={e.id} style={isDeletedList ? { opacity: 0.85, background: '#f7f5f0' } : undefined}>
                     <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-                      {e.createdAt ? new Date(e.createdAt).toLocaleString('ru-RU') : '—'}
+                      {isDeletedList
+                        ? (e.deletedAt ? new Date(e.deletedAt).toLocaleString('ru-RU') : '—')
+                        : (e.createdAt ? new Date(e.createdAt).toLocaleString('ru-RU') : '—')}
                     </td>
                     <td>
                       <button type="button" className="adm-link-btn" onClick={() => onOpenCard(e.participantId, 'piggybank')}>
@@ -310,18 +358,23 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
                     <td>{e.source || '—'}</td>
                     <td>
                       <RowActionsMenu
-                        actions={[
-                          { label: 'Открыть', onClick: () => setOpenEntry(e) },
-                          {
-                            label: e.isViolation ? 'Снять нарушение' : 'Пометить как нарушение',
-                            onClick: () => patchEntry(e.id, { isViolation: !e.isViolation }),
-                          },
-                          {
-                            label: e.isHidden ? 'Показать' : 'Скрыть',
-                            onClick: () => patchEntry(e.id, { isHidden: !e.isHidden }),
-                          },
-                          { label: 'Удалить (лог)', onClick: () => deleteEntry(e.id), danger: true },
-                        ]}
+                        actions={isDeletedList
+                          ? [
+                            { label: 'Открыть', onClick: () => setOpenEntry(e) },
+                            { label: 'Восстановить в копилку', onClick: () => restoreEntry(e.id) },
+                          ]
+                          : [
+                            { label: 'Открыть', onClick: () => setOpenEntry(e) },
+                            {
+                              label: e.isViolation ? 'Снять нарушение' : 'Пометить как нарушение',
+                              onClick: () => patchEntry(e.id, { isViolation: !e.isViolation }),
+                            },
+                            {
+                              label: e.isHidden ? 'Показать' : 'Скрыть',
+                              onClick: () => patchEntry(e.id, { isHidden: !e.isHidden }),
+                            },
+                            { label: 'Удалить (архив + снять баллы)', onClick: () => deleteEntry(e.id), danger: true },
+                          ]}
                       />
                     </td>
                   </tr>
@@ -363,12 +416,27 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
             <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setOpenEntry(null)}>Закрыть</button>
           </div>
           <p style={{ fontSize: 12, color: '#666' }}>
-            {openEntry.participantName} · {openEntry.createdAt ? new Date(openEntry.createdAt).toLocaleString('ru-RU') : ''}
+            {openEntry.participantName} · создано{' '}
+            {openEntry.createdAt ? new Date(openEntry.createdAt).toLocaleString('ru-RU') : '—'}
+            {openEntry.deletedAt
+              ? ` · удалено ${new Date(openEntry.deletedAt).toLocaleString('ru-RU')}`
+              : ''}
           </p>
           <p style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>{openEntry.text}</p>
           <p className="adm-muted" style={{ fontSize: 11, marginTop: 8 }}>
             Теги: {(openEntry.tags || []).join(', ') || '—'} · Источник: {openEntry.source || '—'}
+            {openEntry.pointsLogId ? ` · points_log #${openEntry.pointsLogId}` : ''}
           </p>
+          {isDeletedList && (
+            <button
+              type="button"
+              className="adm-btn adm-btn-sm"
+              style={{ marginTop: 10 }}
+              onClick={() => restoreEntry(openEntry.id)}
+            >
+              Восстановить в копилку
+            </button>
+          )}
         </div>
       )}
     </div>

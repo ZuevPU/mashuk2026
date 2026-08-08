@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { piggybank } from '../../db/schema.js';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
@@ -27,7 +27,7 @@ export async function buildPiggybankDashboard(filters: AnalyticsFilters, req?: A
       entries: [],
     };
   }
-  const conditions = [inArray(piggybank.participantId, ids)];
+  const conditions = [inArray(piggybank.participantId, ids), isNull(piggybank.deletedAt)];
   if (filters.day) conditions.push(eq(piggybank.forumDay, filters.day));
   const rows = await db.select().from(piggybank).where(and(...conditions));
 
