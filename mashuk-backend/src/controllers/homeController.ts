@@ -141,7 +141,8 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         .orderBy(asc(events.startTime))
       : [];
 
-    const SOON_MIN_MS = 15 * 60_000;
+    // «Скоро» — ближайшие 30 минут (раньше отсекалось <15 мин, и событие пропадало из «Скоро»)
+    const SOON_MIN_MS = 0;
     const SOON_MAX_MS = 30 * 60_000;
     // Bind active program clocks to today's MSK date so «Сейчас» follows
     // the wall clock even when the published day lags the calendar day.
@@ -157,10 +158,14 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     }).filter(x => x.start);
 
     const schedule: { kind: string; title: string; time: string; place?: string | null }[] = [];
-    // Оранжевым «Сейчас» — только ключевые блоки (не параллельные сессии и не темы внутри)
-    const nowEvents = enrichedEvents
-      .filter(x => x.status === 'now' && isKeyProgramBlock(x.event))
+    // «Сейчас» — все текущие верхнеуровневые события (ужин, сессии и т.д.), не только key_block.
+    // Если идут и ключевые блоки, и обычные — сначала ключевые, затем остальные (лимит 4).
+    const liveNow = enrichedEvents
+      .filter(x => x.status === 'now')
       .sort((a, b) => a.start!.getTime() - b.start!.getTime());
+    const keyNow = liveNow.filter(x => isKeyProgramBlock(x.event));
+    const otherNow = liveNow.filter(x => !isKeyProgramBlock(x.event));
+    const nowEvents = [...keyNow, ...otherNow].slice(0, 4);
     for (const nowEvent of nowEvents) {
       schedule.push({
         kind: 'now',
