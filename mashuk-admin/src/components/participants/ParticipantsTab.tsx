@@ -21,6 +21,7 @@ type ParticipantRow = {
   vkId: number;
   firstName: string;
   lastName: string;
+  directionId?: number | null;
   direction?: string;
   groupName?: string | null;
   region?: string | null;
