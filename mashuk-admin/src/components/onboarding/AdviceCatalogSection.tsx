@@ -117,13 +117,11 @@ export function AdviceCatalogSection({
     await adminFetch('/day-experiments', {
       method: 'POST',
       body: JSON.stringify({
-        ...form,
-        title: '',
-        hint: '',
-        title2: '',
-        hint2: '',
-        title3: '',
-        hint3: '',
+        dayNumber: form.dayNumber,
+        roleKey: form.roleKey,
+        body: form.body.trim(),
+        body2: form.body2.trim() || null,
+        body3: form.body3.trim() || null,
         status,
       }),
     });

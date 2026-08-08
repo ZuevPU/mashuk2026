@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -90,14 +91,29 @@ function readBarsLayout(): BarsLayout {
   }
 }
 
-function readStored(): {
-  forumDay: string; direction: string; group: string; ageCategory: string; activity: string; dash: DashboardId;
-} {
+type StoredFilters = {
+  forumDay: string;
+  direction: string;
+  group: string;
+  ageCategory: string;
+  activity: string;
+  dash: DashboardId;
+};
+
+const DEFAULT_FILTERS: StoredFilters = {
+  forumDay: '1',
+  direction: '',
+  group: '',
+  ageCategory: '',
+  activity: '',
+  dash: 'overview',
+};
+
+/** null = no session prefs yet (auto-pick current forum day once meta loads). */
+function readStored(): StoredFilters | null {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return { forumDay: '1', direction: '', group: '', ageCategory: '', activity: '', dash: 'overview' };
-    }
+    if (!raw) return null;
     const p = JSON.parse(raw);
     return {
       forumDay: String(p.forumDay ?? '1'),
@@ -108,7 +124,7 @@ function readStored(): {
       dash: (p.dash as DashboardId) || 'overview',
     };
   } catch {
-    return { forumDay: '1', direction: '', group: '', ageCategory: '', activity: '', dash: 'overview' };
+    return null;
   }
 }
 
@@ -128,15 +144,18 @@ export function InsightsProvider({
   analyticsDashboardAllowlist?: string[] | null;
 }) {
   const stored = useMemo(() => readStored(), []);
-  const [forumDay, setForumDayState] = useState(stored.forumDay);
-  const [direction, setDirectionState] = useState(stored.direction);
-  const [group, setGroupState] = useState(stored.group);
-  const [ageCategory, setAgeCategoryState] = useState(stored.ageCategory);
-  const [activity, setActivityState] = useState(stored.activity);
+  const initial = stored ?? DEFAULT_FILTERS;
+  const [forumDay, setForumDayState] = useState(initial.forumDay);
+  const [direction, setDirectionState] = useState(initial.direction);
+  const [group, setGroupState] = useState(initial.group);
+  const [ageCategory, setAgeCategoryState] = useState(initial.ageCategory);
+  const [activity, setActivityState] = useState(initial.activity);
   const [barsLayout, setBarsLayoutState] = useState<BarsLayout>(() => readBarsLayout());
-  const [activeDashboardId, setActiveDashboardIdState] = useState<DashboardId>(stored.dash);
+  const [activeDashboardId, setActiveDashboardIdState] = useState<DashboardId>(initial.dash);
   const [meta, setMeta] = useState<InsightsMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(true);
+  /** Auto-jump to live forum day only when user has no saved filter yet. */
+  const pendingAutoForumDay = useRef(stored == null);
 
   const persist = useCallback((patch: Partial<{
     forumDay: string; direction: string; group: string; ageCategory: string; activity: string; dash: DashboardId;
@@ -153,7 +172,11 @@ export function InsightsProvider({
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }, [forumDay, direction, group, ageCategory, activity, activeDashboardId]);
 
-  const setForumDay = (d: string) => { setForumDayState(d); persist({ forumDay: d }); };
+  const setForumDay = (d: string) => {
+    pendingAutoForumDay.current = false;
+    setForumDayState(d);
+    persist({ forumDay: d });
+  };
   const setDirection = (v: string) => { setDirectionState(v); persist({ direction: v }); };
   const setGroup = (v: string) => { setGroupState(v); persist({ group: v }); };
   const setAgeCategory = (v: string) => { setAgeCategoryState(v); persist({ ageCategory: v }); };
@@ -186,10 +209,14 @@ export function InsightsProvider({
   }, [analyticsDashboardAllowlist, activeDashboardId]);
 
   useEffect(() => {
-    if (meta?.currentForumDay && forumDay === '1' && stored.forumDay === '1') {
-      setForumDayState(String(meta.currentForumDay));
-    }
-  }, [meta?.currentForumDay, forumDay, stored.forumDay]);
+    if (!pendingAutoForumDay.current) return;
+    const live = meta?.currentForumDay;
+    if (live == null || !Number.isFinite(live) || live < 1) return;
+    pendingAutoForumDay.current = false;
+    const d = String(live);
+    setForumDayState(d);
+    persist({ forumDay: d });
+  }, [meta?.currentForumDay, persist]);
 
   const value = useMemo(() => ({
     forumDay,

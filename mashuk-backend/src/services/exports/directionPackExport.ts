@@ -2,6 +2,11 @@ import type { Response } from 'express';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { resolveAnalyticsFilters } from '../analytics/analyticsQuery.js';
 import { buildDirectionDashboard } from '../analytics/directionDashboard.js';
+import {
+  emotionIdToLabel,
+  emotionIdToZone,
+  emotionZoneToLabel,
+} from '../emotionZones.js';
 import { addReadmeSheet } from './exportCommon.js';
 import { createWorkbook, sendWorkbook } from './workbook.js';
 
@@ -107,8 +112,11 @@ export async function writeDirectionPackExport(req: AdminRequest, res: Response)
         a.name,
         a.group,
         a.timePoint ?? '',
-        a.emotion ?? '',
-        a.emotionZone ?? '',
+        emotionIdToLabel(a.emotion) || a.emotion || '',
+        emotionZoneToLabel(a.emotionZone)
+          || emotionZoneToLabel(emotionIdToZone(a.emotion))
+          || a.emotionZone
+          || '',
         a.energy ?? '',
         a.answer ?? '',
       ]);

@@ -7,6 +7,11 @@ import type { AnalyticsFilters } from '../analytics/analyticsQuery.js';
 import { resolveAnalyticsFilters } from '../analytics/analyticsQuery.js';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { loadCohortParticipants } from '../analytics/cohort.js';
+import {
+  emotionIdToLabel,
+  emotionIdToZone,
+  emotionZoneToLabel,
+} from '../emotionZones.js';
 import { addReadmeSheet } from './exportCommon.js';
 import { createWorkbook, sendWorkbook } from './workbook.js';
 
@@ -123,8 +128,11 @@ export async function writeKindAnswersExport(
         r.questionId,
         r.questionTitle,
         r.timePoint ?? '',
-        r.emotion ?? '',
-        r.emotionZone ?? '',
+        emotionIdToLabel(r.emotion) || r.emotion || '',
+        emotionZoneToLabel(r.emotionZone)
+          || emotionZoneToLabel(emotionIdToZone(r.emotion))
+          || r.emotionZone
+          || '',
         r.energy ?? '',
         r.answer,
         r.filledAt ?? '',

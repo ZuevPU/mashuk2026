@@ -258,10 +258,11 @@ export const medalUpdateSchema = medalCreateSchema.partial();
 
 const adviceStatusEnum = z.enum(['draft', 'published']);
 
+/** title опционален: UI советов шлёт только body, title берётся из текста в validateAdvicePayload */
 export const dayAdviceUpsertSchema = z.object({
   dayNumber: z.coerce.number().int().min(1).max(7),
   roleKey: z.string().min(1),
-  title: z.string().min(1).max(60),
+  title: z.string().max(60).optional().nullable(),
   body: z.string().max(500).optional().nullable(),
   hint: z.string().optional().nullable(),
   title2: z.string().max(60).optional().nullable(),

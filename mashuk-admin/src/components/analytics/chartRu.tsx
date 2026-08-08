@@ -17,6 +17,35 @@ export const ZONE_LABELS: Record<string, string> = {
 
 export const ZONE_ORDER = ['risk', 'fatigue', 'neutral', 'engagement', 'lift'] as const;
 
+/** 11 эмоций проверки состояния (как у участника) */
+export const EMOTION_LABELS: Record<string, string> = {
+  joy: 'Радость',
+  calm: 'Спокойствие',
+  interest: 'Интерес',
+  inspiration: 'Вдохновение',
+  confidence: 'Уверенность',
+  tired: 'Усталость',
+  anxiety: 'Тревога',
+  irritation: 'Раздражение',
+  sadness: 'Грусть',
+  surprise: 'Удивление',
+  focus: 'Сосредоточенность',
+};
+
+export const EMOTION_ORDER = [
+  'joy',
+  'calm',
+  'interest',
+  'inspiration',
+  'confidence',
+  'tired',
+  'anxiety',
+  'irritation',
+  'sadness',
+  'surprise',
+  'focus',
+] as const;
+
 export const ZONE_COLORS: Record<string, string> = {
   risk: '#E53E3E',
   fatigue: '#DD6B20',
@@ -43,7 +72,14 @@ export const PHASE_LABELS: Record<string, string> = {
 };
 
 export function formatZoneName(key: string): string {
-  return ZONE_LABELS[key] ?? key;
+  if (!key) return '—';
+  return ZONE_LABELS[key] ?? ZONE_LABELS[key.toLowerCase()] ?? key;
+}
+
+export function formatEmotionName(key: string | null | undefined): string {
+  if (!key) return '—';
+  const k = key.trim().toLowerCase();
+  return EMOTION_LABELS[k] ?? key.trim();
 }
 
 export function formatTouchpointKey(key: string): string {
@@ -61,7 +97,8 @@ export function formatForumDay(day: number | string | undefined): string {
 export function formatChartLabel(label: unknown): string {
   if (label == null) return '';
   const s = String(label);
-  if (ZONE_LABELS[s]) return formatZoneName(s);
+  if (ZONE_LABELS[s] || ZONE_LABELS[s.toLowerCase()]) return formatZoneName(s);
+  if (EMOTION_LABELS[s] || EMOTION_LABELS[s.toLowerCase()]) return formatEmotionName(s);
   if (/^D\d+$/i.test(s)) return formatForumDay(s);
   return s;
 }
@@ -137,7 +174,8 @@ export function ChartTooltipRu({
 
 export const CHART_HELP_RU = `Диаграммы строятся по выбранным фильтрам (день форума, направление, группа).
 • Столбцы «5 зон» — доля ответов на проверки состояния в каждой эмоциональной зоне (на срезе сумма ≈ 100%).
+• «11 эмоций» — полный набор как у участника (Радость, Спокойствие, … Сосредоточенность).
 • Линии «Зоны по дням» — как меняется каждая зона от дня к дню.
 • «Динамика активности» — число ответов и закрытых точек осмысления по дням.
 • Наведите курсор на столбец или точку — всплывающая подсказка с цифрами.
-• «Скачать PNG» — картинка экрана; CSV/XLSX — таблицы для Excel.`;
+• Выгрузки Excel: эмоции и зоны на русском.`;

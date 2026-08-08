@@ -16,6 +16,7 @@ import {
   zonesToPercent,
   EMOTION_ZONE_LABELS,
 } from './zoneDistribution.js';
+import { buildEmotionDistribution } from '../emotionZones.js';
 import {
   activityByDaySeries,
   countEveningCompleted,
@@ -71,6 +72,7 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
     day: emptyZoneDistribution(),
     evening: emptyZoneDistribution(),
   };
+  const emotionCounts = new Map<string, number>();
   const reasons: string[] = [];
   const reasonByDay = new Map<number, string[]>();
   const pidToParticipant = new Map(cohort.map(p => [p.id, p]));
@@ -80,6 +82,10 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
     const phase = stateCheckPhaseForAnswer(a.createdAt);
     accumulateZoneFromAnswer(zonesByPhase[phase], a.answerData);
     const p = parseCheckinPayload(a.answerData);
+    if (p.emotion) {
+      const emo = String(p.emotion).trim().toLowerCase();
+      if (emo) emotionCounts.set(emo, (emotionCounts.get(emo) || 0) + 1);
+    }
     if (p.reason?.trim()) {
       reasons.push(p.reason.trim());
       const qDay = publishedQ.find(q => q.id === a.questionId)?.dayNumber ?? filters.day ?? currentDay;
@@ -229,7 +235,8 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
       byDirection,
       byGroup,
       compareZones,
-      note: 'Показываем распределение по 5 зонам, не среднее значение энергии.',
+      emotions: buildEmotionDistribution(emotionCounts, checkAns.length),
+      note: '5 зон эмоций и 11 эмоций проверки состояния (как у участника).',
     },
     stateReasons: {
       topTokens: topReasonTokens(reasons),

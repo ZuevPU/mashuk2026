@@ -28,7 +28,7 @@ export async function buildPiggybankDashboard(filters: AnalyticsFilters, req?: A
     };
   }
   const conditions = [inArray(piggybank.participantId, ids), isNull(piggybank.deletedAt)];
-  if (filters.day) conditions.push(eq(piggybank.forumDay, filters.day));
+  if (filters.day != null) conditions.push(eq(piggybank.forumDay, filters.day));
   const rows = await db.select().from(piggybank).where(and(...conditions));
 
   let entries = rows;

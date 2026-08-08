@@ -33,12 +33,13 @@ export function parseAnalyticsQuery(req: AdminRequest): AnalyticsFilters {
   const mode: AnalyticsViewMode =
     modeRaw === 'day' || modeRaw === 'shift' || modeRaw === 'compare' ? modeRaw : 'today';
 
-  const day = req.query.day != null && req.query.day !== '' ? Number(req.query.day) : null;
+  const dayRaw = req.query.day != null && req.query.day !== '' ? Number(req.query.day) : null;
+  const day = dayRaw != null && !Number.isNaN(dayRaw) && dayRaw >= 1 ? dayRaw : null;
   const compareDays = parseDays(req.query.days ?? req.query['days[]']);
 
   return {
     mode,
-    day: day && !Number.isNaN(day) ? day : null,
+    day,
     compareDays,
     direction: typeof req.query.direction === 'string' && req.query.direction.trim()
       ? req.query.direction.trim() : null,
@@ -72,7 +73,7 @@ export function resolveDayRange(filters: AnalyticsFilters, currentForumDay: numb
   if (filters.mode === 'compare' && filters.compareDays.length) {
     return filters.compareDays.slice(0, 3);
   }
-  if (filters.mode === 'day' && filters.day) return [filters.day];
+  if (filters.mode === 'day' && filters.day != null) return [filters.day];
   if (filters.mode === 'today') return [currentForumDay];
   return [1, 2, 3, 4, 5, 6, 7];
 }

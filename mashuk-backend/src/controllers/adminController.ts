@@ -32,6 +32,7 @@ import {
   importAdviceCsv,
   listDayAdviceFromDb,
   upsertDayAdvice,
+  validateAdvicePayload,
 } from '../services/dayAdviceAdminService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import {
@@ -432,28 +433,12 @@ export const crudDayExperiments = {
       res.status(400).json({ error: parsed.error });
       return;
     }
-    const {
-      dayNumber, roleKey, title, body, hint,
-      title2, body2, hint2, title3, body3, hint3, status,
-    } = parsed.data;
-    if (!(ROLE_KEYS as readonly string[]).includes(roleKey)) {
-      res.status(400).json({ error: 'Invalid roleKey' });
+    const validated = validateAdvicePayload(parsed.data);
+    if (!validated.ok) {
+      res.status(400).json({ error: validated.error });
       return;
     }
-    const { row, created } = await upsertDayAdvice({
-      dayNumber,
-      roleKey,
-      title,
-      body: body ?? null,
-      hint: hint ?? null,
-      title2: title2 ?? null,
-      body2: body2 ?? null,
-      hint2: hint2 ?? null,
-      title3: title3 ?? null,
-      body3: body3 ?? null,
-      hint3: hint3 ?? null,
-      status: status ?? 'draft',
-    });
+    const { row, created } = await upsertDayAdvice(validated.data);
     res.json({ experiment: row, created });
   },
   delete: async (req: AdminRequest, res: Response) => {

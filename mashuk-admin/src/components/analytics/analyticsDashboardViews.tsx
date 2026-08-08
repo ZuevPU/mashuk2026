@@ -8,6 +8,7 @@ import { DEFAULT_LEADERBOARD_FILTERS, type LeaderboardRow } from '../rating/lead
 import { useInsights } from '../insights/InsightsContext';
 import {
   ChartTooltipRu,
+  formatEmotionName,
   formatForumDay,
   formatTouchpointKey,
   formatZoneName,
@@ -126,10 +127,25 @@ export function PulseView({ data }: { data: any }) {
             <p className="adm-muted" style={{ fontSize: 12 }}>Нет серии активности</p>
           )}
         </DashCard>
-        <DashCard title="Эмоциональный пульс · сейчас">
+        <DashCard title="Эмоциональный пульс · 5 зон">
+          <p className="adm-muted" style={{ fontSize: 12, marginTop: -4 }}>
+            Доли ответов проверки состояния по зонам (сумма ≈ 100%).
+          </p>
           <ZoneBars zones={zones} />
         </DashCard>
       </DashGrid>
+
+      {(data.emotionalPulse?.emotions ?? []).length > 0 && (
+        <DashCard title="11 эмоций проверки состояния">
+          <p className="adm-muted" style={{ fontSize: 12, marginTop: -4 }}>
+            Как в форме участника: все 11 эмоций, даже с нулём.
+          </p>
+          <SrcBars items={(data.emotionalPulse.emotions as { id?: string; label: string; count: number; pct: number }[]).map(d => ({
+            label: `${d.label || formatEmotionName(d.id)} (${d.pct}%) · ${d.count}`,
+            count: d.count,
+          }))} />
+        </DashCard>
+      )}
 
       {dirRows.length > 0 && (
         <DashCard title="Сигналы по направлениям">
@@ -1697,9 +1713,12 @@ export function StateChecksView({
       </DashGrid>
 
       {(pulse.emotions ?? []).length > 0 && (
-        <DashCard title="Эмоции">
-          <SrcBars items={(pulse.emotions as { label: string; count: number; pct: number }[]).map(d => ({
-            label: `${d.label} (${d.pct}%)`,
+        <DashCard title="11 эмоций">
+          <p className="adm-muted" style={{ fontSize: 12, marginTop: -4 }}>
+            Как в форме участника: все 11 эмоций, даже с нулём.
+          </p>
+          <SrcBars items={(pulse.emotions as { id?: string; label: string; count: number; pct: number }[]).map(d => ({
+            label: `${d.label || formatEmotionName(d.id)} (${d.pct}%) · ${d.count}`,
             count: d.count,
           }))} />
         </DashCard>
@@ -1760,7 +1779,7 @@ export function StateChecksView({
                       <td>{a.direction || '—'}</td>
                       <td>{a.group || '—'}</td>
                       <td>{a.timePoint || '—'}</td>
-                      <td>{a.emotion || '—'}</td>
+                      <td>{formatEmotionName(a.emotion)}</td>
                       <td>{a.emotionZone ? formatZoneName(a.emotionZone) : '—'}</td>
                       <td>{a.energy ?? '—'}</td>
                       <td style={{ whiteSpace: 'pre-wrap', maxWidth: 360 }}>{a.answer || '—'}</td>
@@ -1987,6 +2006,14 @@ export function DirectionView({
         <ZoneBarChart title="Зоны · день" zones={pulse.byPhase?.day} />
         <ZoneBarChart title="Зоны · вечер" zones={pulse.byPhase?.evening} />
       </DashGrid>
+      {(pulse.emotions ?? []).length > 0 && (
+        <DashCard title="11 эмоций · направление">
+          <SrcBars items={(pulse.emotions as { label: string; count: number; pct: number }[]).map(d => ({
+            label: `${d.label} (${d.pct}%) · ${d.count}`,
+            count: d.count,
+          }))} />
+        </DashCard>
+      )}
       {(pulse.topReasons ?? []).length > 0 && (
         <DashCard title="Частые слова в причинах">
           <TagPills items={(pulse.topReasons as { token: string; count: number }[]).map(t => ({
@@ -2017,7 +2044,12 @@ export function DirectionView({
                     </td>
                     <td>{a.group || '—'}</td>
                     <td>{a.timePoint || '—'}</td>
-                    <td>{a.emotionZone ? formatZoneName(a.emotionZone) : (a.emotion || '—')}</td>
+                    <td>
+                      {[
+                        a.emotionZone ? formatZoneName(a.emotionZone) : null,
+                        a.emotion ? formatEmotionName(a.emotion) : null,
+                      ].filter(Boolean).join(' · ') || '—'}
+                    </td>
                     <td>{a.energy ?? '—'}</td>
                     <td style={{ whiteSpace: 'pre-wrap', maxWidth: 320 }}>{a.answer || '—'}</td>
                   </tr>

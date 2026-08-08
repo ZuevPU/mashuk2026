@@ -13,6 +13,12 @@ import {
   zonesToPercent,
   EMOTION_ZONE_LABELS,
 } from './zoneDistribution.js';
+import {
+  buildEmotionDistribution,
+  emotionIdToLabel,
+  emotionIdToZone,
+  emotionZoneToLabel,
+} from '../emotionZones.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import { resolveDayRange } from './analyticsQuery.js';
 import { loadCohortParticipants } from './cohort.js';
@@ -255,6 +261,11 @@ export async function collectKindAnswerRows(
       emotionZoneLabel?: string;
     };
     const energy = typeof payload.energy === 'number' ? payload.energy : Number(payload.energy);
+    const emotion = typeof payload.emotion === 'string' ? payload.emotion : null;
+    const zoneRaw = typeof payload.emotionZone === 'string' ? payload.emotionZone.trim().toLowerCase() : null;
+    const zone = (zoneRaw && zoneRaw in EMOTION_ZONE_LABELS
+      ? zoneRaw as keyof typeof EMOTION_ZONE_LABELS
+      : null) ?? emotionIdToZone(emotion);
     rows.push({
       answerId: r.a.id,
       participantId: r.p.id,
@@ -269,8 +280,8 @@ export async function collectKindAnswerRows(
       eventId: null,
       parentEventTitle: null,
       parentEventId: null,
-      emotion: payload.emotion ?? null,
-      emotionZone: typeof payload.emotionZone === 'string' ? payload.emotionZone : null,
+      emotion,
+      emotionZone: zone,
       energy: Number.isFinite(energy) ? energy : null,
       timePoint: payload.timePoint || q.timePoint || null,
       filledAt: r.a.createdAt ? formatTs(r.a.createdAt) : null,
@@ -351,10 +362,11 @@ export async function buildKindDashboard(
       }
     } else {
       for (const r of qRows) {
-        const zoneKey = r.emotionZone as keyof typeof EMOTION_ZONE_LABELS | null;
+        const zoneKey = (r.emotionZone as keyof typeof EMOTION_ZONE_LABELS | null)
+          ?? emotionIdToZone(r.emotion);
         const label = (zoneKey && EMOTION_ZONE_LABELS[zoneKey])
-          || r.emotionZone
-          || r.emotion
+          || emotionZoneToLabel(r.emotionZone)
+          || emotionIdToLabel(r.emotion)
           || 'без зоны';
         counts.set(label, (counts.get(label) || 0) + 1);
       }
@@ -455,7 +467,10 @@ export async function buildKindDashboard(
     });
     if (r.energy != null) energyVals.push(r.energy);
     if (r.answer?.trim()) reasons.push(r.answer.trim());
-    if (r.emotion) emotionCounts.set(r.emotion, (emotionCounts.get(r.emotion) || 0) + 1);
+    if (r.emotion) {
+      const emo = r.emotion.trim().toLowerCase();
+      if (emo) emotionCounts.set(emo, (emotionCounts.get(emo) || 0) + 1);
+    }
   }
 
   const avgEnergy = energyVals.length
@@ -478,7 +493,7 @@ export async function buildKindDashboard(
       phaseCounts: byPhaseCount,
       avgEnergy,
       riskFatiguePct: Math.round((riskPct + fatiguePct) * 10) / 10,
-      emotions: buildDistribution(emotionCounts, rows.length),
+      emotions: buildEmotionDistribution(emotionCounts, rows.length),
       topReasons: topReasonTokens(reasons, 20),
     },
   };
