@@ -1736,19 +1736,93 @@ export const seedTouchpointsTemplate = async (req: AdminRequest, res: Response):
 
 export const moderateTask = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
-  const { status, moderatorComment } = req.body;
-  const { applyTaskModeration } = await import('../services/taskModerationService.js');
-  const result = await applyTaskModeration(id, status, moderatorComment, req.adminId);
-  if (!result.ok) {
-    res.status(result.status).json({ error: result.error });
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: 'Invalid submission id' });
     return;
   }
+
+  const body = req.body ?? {};
+  const status = body.status as 'approved' | 'rejected' | undefined;
+  const hasAnswerPatch = 'answerText' in body || 'photoUrl' in body || 'postUrl' in body;
+  const hasCommentPatch = 'moderatorComment' in body;
+
+  if (status !== undefined && status !== 'approved' && status !== 'rejected') {
+    res.status(400).json({ error: 'status must be approved or rejected' });
+    return;
+  }
+  if (!status && !hasAnswerPatch && !hasCommentPatch) {
+    res.status(400).json({ error: 'Nothing to update' });
+    return;
+  }
+
+  const [existing] = await db.select().from(taskSubmissions).where(eq(taskSubmissions.id, id)).limit(1);
+  if (!existing) {
+    res.status(404).json({ error: 'Submission not found' });
+    return;
+  }
+
+  if (hasAnswerPatch || (hasCommentPatch && !status)) {
+    const { normalizePostUrl } = await import('../services/taskEligibility.js');
+    const patch: {
+      answerText?: string | null;
+      photoUrl?: string | null;
+      postUrl?: string | null;
+      postUrlNormalized?: string | null;
+      moderatorComment?: string | null;
+    } = {};
+    if ('answerText' in body) {
+      const v = body.answerText;
+      patch.answerText = v == null || v === '' ? null : String(v);
+    }
+    if ('photoUrl' in body) {
+      const v = body.photoUrl;
+      patch.photoUrl = v == null || v === '' ? null : String(v).slice(0, 500);
+    }
+    if ('postUrl' in body) {
+      const v = body.postUrl;
+      const postUrl = v == null || v === '' ? null : String(v).slice(0, 500);
+      patch.postUrl = postUrl;
+      patch.postUrlNormalized = postUrl ? normalizePostUrl(postUrl) : null;
+    }
+    if (hasCommentPatch && !status) {
+      const v = body.moderatorComment;
+      patch.moderatorComment = v == null || v === '' ? null : String(v);
+    }
+    if (Object.keys(patch).length > 0) {
+      await db.update(taskSubmissions).set(patch).where(eq(taskSubmissions.id, id));
+    }
+  }
+
+  let submission = existing;
+  if (status === 'approved' || status === 'rejected') {
+    const { applyTaskModeration } = await import('../services/taskModerationService.js');
+    const result = await applyTaskModeration(id, status, body.moderatorComment, req.adminId);
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    submission = result.submission;
+  } else {
+    const [updated] = await db.select().from(taskSubmissions).where(eq(taskSubmissions.id, id)).limit(1);
+    submission = updated ?? existing;
+  }
+
   const { logAdminAction } = await import('../services/adminActionsLog.js');
   await logAdminAction({
-    req, actionType: 'task_moderate', section: 'moderation', objectId: id,
-    newValue: { status, moderatorComment }, isCritical: true,
+    req,
+    actionType: status ? 'task_moderate' : 'task_submission_edit',
+    section: 'moderation',
+    objectId: id,
+    newValue: {
+      status: status ?? submission.status,
+      moderatorComment: body.moderatorComment,
+      answerText: hasAnswerPatch ? body.answerText : undefined,
+      photoUrl: hasAnswerPatch ? body.photoUrl : undefined,
+      postUrl: hasAnswerPatch ? body.postUrl : undefined,
+    },
+    isCritical: Boolean(status),
   });
-  res.json({ submission: enrichSubmissionRow(result.submission) });
+  res.json({ submission: enrichSubmissionRow(submission) });
 };
 
 export const bulkModerateTasks = async (req: AdminRequest, res: Response): Promise<void> => {

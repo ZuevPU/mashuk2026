@@ -11,7 +11,7 @@ import { AnswerSuccessOverlay, type SubmitSuccessPayload, type AnswerConfirmatio
 import { RosmolCareServiceCard } from '../components/org/RosmolCareServiceCard';
 import { isEveningDaySummaryQuestion } from '../utils/eveningSummaryQuestion';
 
-type ChatTab = 'reflect' | 'peer' | 'org';
+type ChatTab = 'reflect' | 'peer' | 'org' | 'myAnswers';
 
 const DEFAULT_CONFIRM: AnswerConfirmationConfig = {
   enabled: true,
@@ -289,9 +289,16 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   }, []);
 
   useEffect(() => {
-    const qId = getHashSearchParams().get('q');
+    const params = getHashSearchParams();
+    const tabParam = (params.get('tab') || '').toLowerCase();
+    if (tabParam === 'my' || tabParam === 'myanswers' || tabParam === 'answers') {
+      setTab('myAnswers');
+    } else if (tabParam === 'peer' || tabParam === 'org' || tabParam === 'reflect') {
+      setTab(tabParam as ChatTab);
+    }
+    const qId = params.get('q');
     if (qId) {
-      setTab('reflect');
+      if (!tabParam) setTab('reflect');
       openQuestion(Number(qId));
     }
   }, [openQuestion]);
@@ -446,6 +453,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const canAnswer = (status: string) => status === 'active' || status === 'overdue';
   const answeredToday = questions.filter(q => q.status === 'done' && q.answeredToday);
   const answeredEarlier = questions.filter(q => q.status === 'done' && !q.answeredToday);
+  const myAnswers = questions.filter(q => q.status === 'done');
   const locked = questions.filter(q => q.status === 'locked');
   const peerApproved = exchange.filter(q => (q.moderationStatus || '').toLowerCase() === 'approved');
 
@@ -454,6 +462,25 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
     return 'Ждёт ответа';
   };
 
+  const renderAnsweredCard = (q: any) => (
+    <div
+      key={q.id}
+      className="rq-item m-card rq-done"
+      style={{ marginBottom: 8, cursor: 'pointer' }}
+      onClick={() => openQuestion(q.id)}
+    >
+      <div className="rq-tag">{q.reflectionLabel || q.block || q.type}</div>
+      <div className="rq-q">{q.title}</div>
+      {q.dayNumber != null && (
+        <div className="rq-from">День {q.dayNumber}</div>
+      )}
+      {q.answerPreview && (
+        <div style={{ fontSize: 12, color: '#555', marginTop: 6, lineHeight: 1.4 }}>{q.answerPreview}</div>
+      )}
+      <div className="rq-btn" style={{ marginTop: 8 }}>Смотреть ответ</div>
+    </div>
+  );
+
   return (
     <Panel id={id}>
       <PanelHeader fixed>Вопросы</PanelHeader>
@@ -461,6 +488,9 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
         <div className="time-sw" style={{ marginBottom: 12 }}>
           <button type="button" className={`time-btn ${tab === 'reflect' ? 'on' : ''}`} onClick={() => setTab('reflect')}>
             Рефлексия{unanswered.length > 0 ? ` · ${unanswered.length}` : ''}
+          </button>
+          <button type="button" className={`time-btn ${tab === 'myAnswers' ? 'on' : ''}`} onClick={() => setTab('myAnswers')}>
+            Мои ответы{myAnswers.length > 0 ? ` · ${myAnswers.length}` : ''}
           </button>
           <button type="button" className={`time-btn ${tab === 'peer' ? 'on' : ''}`} onClick={() => setTab('peer')}>
             Обмен опытом{peerApproved.length > 0 ? ` · ${peerApproved.length}` : ''}
@@ -487,7 +517,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
               />
             )}
             <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8, lineHeight: 1.45 }}>
-              Вопросы для размышления и фиксации своих находок. Отвеченные можно открыть и перечитать в блоках ниже.
+              Вопросы для размышления и фиксации своих находок. Архив ответов — во вкладке «Мои ответы».
             </div>
             {unanswered.length > 0 && (
               <>
@@ -525,51 +555,41 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                 ))}
               </>
             )}
+            {unanswered.length === 0 && locked.length === 0 && (
+              <EmptyState
+                icon="💬"
+                title={myAnswers.length > 0 ? 'Сейчас нет новых вопросов' : 'Нет активных вопросов'}
+                subtitle={myAnswers.length > 0
+                  ? 'Открытые вопросы появятся по расписанию. Перечитать ответы — во вкладке «Мои ответы».'
+                  : 'Рефлексивные вопросы появятся по расписанию форума'}
+              />
+            )}
+          </>
+        ) : tab === 'myAnswers' ? (
+          <>
+            <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8, lineHeight: 1.45 }}>
+              Архив ваших ответов на вопросы рефлексии. Откройте карточку, чтобы перечитать полный ответ.
+            </div>
             {answeredToday.length > 0 && (
               <>
-                <div className="rq-hdr" style={{ marginTop: 12 }}><span className="rq-hdr-t">Отвечено сегодня · {answeredToday.length}</span></div>
-                {answeredToday.map(q => (
-                  <div
-                    key={q.id}
-                    className="rq-item m-card rq-done"
-                    style={{ marginBottom: 8, cursor: 'pointer' }}
-                    onClick={() => openQuestion(q.id)}
-                  >
-                    <div className="rq-tag">{q.reflectionLabel || q.block || q.type}</div>
-                    <div className="rq-q">{q.title}</div>
-                    {q.answerPreview && (
-                      <div style={{ fontSize: 12, color: '#555', marginTop: 6, lineHeight: 1.4 }}>{q.answerPreview}</div>
-                    )}
-                    <div className="rq-btn" style={{ marginTop: 8 }}>Смотреть ответ</div>
-                  </div>
-                ))}
+                <div className="rq-hdr"><span className="rq-hdr-t">Сегодня · {answeredToday.length}</span></div>
+                {answeredToday.map(renderAnsweredCard)}
               </>
             )}
             {answeredEarlier.length > 0 && (
               <>
-                <div className="rq-hdr" style={{ marginTop: 12 }}><span className="rq-hdr-t">Мои ответы · {answeredEarlier.length}</span></div>
-                {answeredEarlier.map(q => (
-                  <div
-                    key={q.id}
-                    className="rq-item m-card rq-done"
-                    style={{ marginBottom: 8, cursor: 'pointer' }}
-                    onClick={() => openQuestion(q.id)}
-                  >
-                    <div className="rq-tag">{q.reflectionLabel || q.block || q.type}</div>
-                    <div className="rq-q">{q.title}</div>
-                    {q.dayNumber != null && (
-                      <div className="rq-from">День {q.dayNumber}</div>
-                    )}
-                    {q.answerPreview && (
-                      <div style={{ fontSize: 12, color: '#555', marginTop: 6, lineHeight: 1.4 }}>{q.answerPreview}</div>
-                    )}
-                    <div className="rq-btn" style={{ marginTop: 8 }}>Смотреть ответ</div>
-                  </div>
-                ))}
+                <div className="rq-hdr" style={{ marginTop: answeredToday.length > 0 ? 12 : 0 }}>
+                  <span className="rq-hdr-t">Ранее · {answeredEarlier.length}</span>
+                </div>
+                {answeredEarlier.map(renderAnsweredCard)}
               </>
             )}
-            {questions.filter(q => q.status === 'done').length === 0 && unanswered.length === 0 && locked.length === 0 && (
-              <EmptyState icon="💬" title="Нет активных вопросов" subtitle="Рефлексивные вопросы появятся по расписанию форума" />
+            {myAnswers.length === 0 && (
+              <EmptyState
+                icon="📝"
+                title="Пока нет ответов"
+                subtitle="Когда ответите на вопросы во вкладке «Рефлексия», они появятся здесь"
+              />
             )}
           </>
         ) : tab === 'peer' ? (

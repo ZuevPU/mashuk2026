@@ -6,6 +6,7 @@ import type { AdminTabProps } from '../admin/types';
 import type { ProgramPlace } from '../program/types';
 import { TaskCategoriesBlock } from './TaskCategoriesBlock';
 import { TaskForm } from './TaskForm';
+import { TaskAnswersTable } from './TaskAnswersTable';
 import { TaskSubmissionsModeration } from './TaskSubmissionsModeration';
 import { TasksListTable } from './TasksListTable';
 import {
@@ -243,6 +244,14 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           showPreview={showPreview}
           onTogglePreview={() => setShowPreview(v => !v)}
         />
+        {editingId != null && (
+          <TaskAnswersTable
+            taskId={editingId}
+            taskTitle={draft.title.trim() || `Задание #${editingId}`}
+            adminFetch={adminFetch}
+            act={act}
+          />
+        )}
       </div>
     );
   }

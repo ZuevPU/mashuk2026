@@ -587,7 +587,7 @@ export const ProfilePanel: React.FC<{
                         <div style={{ fontSize: 12, color: '#555', marginTop: 4, lineHeight: 1.4 }}>{r.preview}</div>
                       </div>
                     ))}
-                    <div className="pb-link" style={{ marginTop: 10 }} onClick={() => routeNavigator.push('/questions')}>
+                    <div className="pb-link" style={{ marginTop: 10 }} onClick={() => routeNavigator.push('/questions?tab=my')}>
                       Все ответы в «Вопросы» →
                     </div>
                   </div>
