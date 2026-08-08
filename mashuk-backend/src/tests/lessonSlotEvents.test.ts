@@ -83,15 +83,23 @@ describe('filterEventsForLessonSlot', () => {
     assert.ok(!picked.some(p => p.title === 'Открытые уроки'));
   });
 
-  it('keeps a standalone session that overlaps the slot', () => {
+  it('keeps a standalone lesson session that overlaps the slot', () => {
     const dayEvents = [
       {
         id: 7,
-        title: 'Мастерская без подтем',
+        title: 'Урок о важном · без подтем',
         parentEventId: null,
         timeSlot: '16:30-17:30',
         dayNumber: 1,
         sortOrder: 0,
+      },
+      {
+        id: 8,
+        title: 'Мастерская без подтем',
+        parentEventId: null,
+        timeSlot: '16:30-17:30',
+        dayNumber: 1,
+        sortOrder: 1,
       },
     ];
     const picked = filterEventsForLessonSlot(question, dayEvents, { startDate });
