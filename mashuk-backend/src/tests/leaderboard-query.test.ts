@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   clampForumDay,
   filterLeaderboardParticipants,
+  isOrganizerDirection,
   parseLeaderboardQuery,
   participantDisplayName,
 } from '../services/leaderboardQuery.js';
@@ -52,6 +53,28 @@ describe('filterLeaderboardParticipants', () => {
     const out = filterLeaderboardParticipants(base as any, { search: 'петр' });
     assert.equal(out.length, 1);
     assert.equal(out[0].id, 2);
+  });
+
+  it('excludes organizers even when keepParticipantId matches', () => {
+    const list = [
+      { id: 1, firstName: 'Яна', lastName: 'Авакян', direction: 'Учителя', directionStored: 'Организатор форума', hideFromLeaderboard: false, selfDeletedAt: null },
+      { id: 2, firstName: 'Пётр', lastName: 'Зуев', direction: 'Организатор Форума', hideFromLeaderboard: false, selfDeletedAt: null },
+      { id: 3, firstName: 'Иван', lastName: 'Иванов', direction: 'Учителя', hideFromLeaderboard: false, selfDeletedAt: null },
+    ];
+    const out = filterLeaderboardParticipants(list as any, {
+      hideFromLeaderboard: true,
+      keepParticipantId: 2,
+    });
+    assert.deepEqual(out.map(p => p.id), [3]);
+  });
+});
+
+describe('isOrganizerDirection', () => {
+  it('matches normalized organizer names', () => {
+    assert.equal(isOrganizerDirection('Организатор Форума'), true);
+    assert.equal(isOrganizerDirection('  организатор   форума '), true);
+    assert.equal(isOrganizerDirection('Учителя', 'Организатор форума'), true);
+    assert.equal(isOrganizerDirection('Учителя'), false);
   });
 });
 

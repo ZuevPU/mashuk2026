@@ -1,10 +1,11 @@
-import { eq, and, isNull, inArray } from 'drizzle-orm';
+import { eq, and, isNull, inArray, sql } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { participants, directions } from '../../db/schema.js';
 import { buildParticipantWhere, type ParticipantListQuery } from '../participantsList.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { matchesActivity, matchesAgeCategory, AGE_CATEGORY_BUCKETS } from './cohortFilters.js';
+import { isOrganizerDirection } from '../leaderboardQuery.js';
 
 export async function loadCohortParticipants(filters: AnalyticsFilters, req?: AdminRequest) {
   const q: ParticipantListQuery = { includeDeleted: false };
@@ -16,12 +17,13 @@ export async function loadCohortParticipants(filters: AnalyticsFilters, req?: Ad
     if (dirId) q.directionIds = [dirId];
   }
   const where = buildParticipantWhere(q);
-  let rows = await db.select({
+  const loaded = await db.select({
     id: participants.id,
     firstName: participants.firstName,
     lastName: participants.lastName,
-    direction: directions.name, // Use fresh name from table
+    direction: sql<string | null>`COALESCE(${directions.name}, ${participants.direction})`,
     directionId: participants.directionId,
+    directionStored: participants.direction,
     groupId: participants.groupId,
     groupName: participants.groupName,
     age: participants.age,
@@ -39,12 +41,11 @@ export async function loadCohortParticipants(filters: AnalyticsFilters, req?: Ad
   }).from(participants)
     .leftJoin(directions, eq(participants.directionId, directions.id))
     .where(where ?? isNull(participants.selfDeletedAt));
-  
-  // Исключаем организаторов из аналитики и рейтингов
-  rows = rows.filter(p => {
-    const d = (p.direction || '').toLowerCase();
-    return d !== 'организатор форума' && d !== 'организатор';
-  });
+
+  // Исключаем организаторов (и при рассинхроне directionId / direction)
+  let rows = loaded
+    .filter(p => !isOrganizerDirection(p.direction, p.directionStored))
+    .map(({ directionStored: _drop, ...rest }) => rest);
 
   if (filters.direction) {
     rows = rows.filter(p => p.direction === filters.direction);

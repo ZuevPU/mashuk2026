@@ -400,7 +400,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
               <td onClick={e => e.stopPropagation()}>
                 <select
                   className="adm-input adm-input-narrow"
-                  value={directions.find(d => d.name === p.direction)?.id || ''}
+                  value={p.directionId ?? directions.find(d => d.name === p.direction)?.id ?? ''}
                   onChange={e => adminFetch(`/participants/${p.id}/direction`, {
                     method: 'PATCH', body: JSON.stringify({ directionId: Number(e.target.value) }),
                   }).then(reloadPage)}

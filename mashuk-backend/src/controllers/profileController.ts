@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { eq, desc, and, or, isNull, lte } from 'drizzle-orm';
+import { eq, desc, and, or, isNull, lte, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   piggybank, answers, taskSubmissions, tasks, questions, participants, directions,
@@ -322,7 +322,8 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       id: participants.id,
       firstName: participants.firstName,
       lastName: participants.lastName,
-      direction: directions.name, // Use name from directions table instead of stale string
+      direction: sql<string | null>`COALESCE(${directions.name}, ${participants.direction})`,
+      directionStored: participants.direction,
       groupId: participants.groupId,
       groupName: participants.groupName,
       pathPoints: participants.pathPoints,

@@ -516,7 +516,8 @@ export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<
     id: participants.id,
     firstName: participants.firstName,
     lastName: participants.lastName,
-    direction: directions.name, // Use name from directions table instead of potentially stale string
+    direction: sql<string | null>`COALESCE(${directions.name}, ${participants.direction})`,
+    directionStored: participants.direction,
     groupId: participants.groupId,
     groupName: participants.groupName,
     pathPoints: participants.pathPoints,

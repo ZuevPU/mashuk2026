@@ -1,20 +1,19 @@
 import { db } from '../db/index.js';
 import { dailyStats, participants, answers, questions, directions as directionsTable } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { emotionIdToZone, emptyZoneDistribution, incrementZone } from './emotionZones.js';
+import { isOrganizerDirection } from './leaderboardQuery.js';
 
 export async function recalculateDailyStats(_direction = 'all'): Promise<void> {
   let allParticipants = await db.select({
     id: participants.id,
-    direction: directionsTable.name,
+    direction: sql<string | null>`COALESCE(${directionsTable.name}, ${participants.direction})`,
+    directionStored: participants.direction,
   }).from(participants)
     .leftJoin(directionsTable, eq(participants.directionId, directionsTable.id));
   
   // Исключаем организаторов форума из статистики
-  allParticipants = allParticipants.filter(p => {
-    const d = (p.direction || '').toLowerCase();
-    return d !== 'организатор форума' && d !== 'организатор';
-  });
+  allParticipants = allParticipants.filter(p => !isOrganizerDirection(p.direction, p.directionStored));
 
   const allAnswers = await db.select().from(answers);
   const publishedQuestions = await db.select().from(questions)

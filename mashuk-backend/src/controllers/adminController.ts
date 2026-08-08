@@ -550,6 +550,12 @@ export const crudDirections = {
       .set({ name: req.body.name, isHidden: req.body.isHidden })
       .where(eq(directions.id, id)).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
+    // Keep denormalized participants.direction in sync with directions.name
+    if (typeof req.body.name === 'string' && req.body.name.trim()) {
+      await db.update(participants)
+        .set({ direction: updated.name })
+        .where(eq(participants.directionId, id));
+    }
     res.json({ direction: updated });
   },
 };

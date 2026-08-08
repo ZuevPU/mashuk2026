@@ -8,7 +8,10 @@ export type LeaderboardParticipantRow = {
   id: number;
   firstName: string | null;
   lastName: string | null;
+  /** Display direction (preferably JOIN directions.name). */
   direction: string | null;
+  /** Denormalized participants.direction — used to catch stale directionId mismatches. */
+  directionStored?: string | null;
   groupId: number | null;
   groupName: string | null;
   pathPoints: number | null;
@@ -20,6 +23,17 @@ export type LeaderboardParticipantRow = {
   avatarUrl?: string | null;
   vkId?: number | null;
 };
+
+/** True if any name is the forum-organizer direction (must not appear in public ratings). */
+export function isOrganizerDirection(...names: Array<string | null | undefined>): boolean {
+  for (const raw of names) {
+    const d = (raw || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!d) continue;
+    if (d === 'организатор форума' || d === 'организатор') return true;
+    if (d.includes('организатор форума')) return true;
+  }
+  return false;
+}
 
 export type ParsedLeaderboardQuery = {
   mode: LeaderboardMode;
@@ -105,11 +119,14 @@ export function filterLeaderboardParticipants(
   return list
     .filter(p => opts.hideDeleted !== false ? !p.selfDeletedAt : true)
     .filter(p => {
+      // Organizers never appear in ratings — even when viewing as yourself.
+      if (isOrganizerDirection(p.direction, p.directionStored)) return false;
       if (!opts.hideFromLeaderboard) return true;
-      if (opts.keepParticipantId && p.id === opts.keepParticipantId) return true;
-      if (p.hideFromLeaderboard) return false;
-      const d = (p.direction || '').toLowerCase();
-      if (d === 'организатор форума' || d === 'организатор') return false;
+      if (p.hideFromLeaderboard) {
+        // keepParticipantId only overrides hideFromLeaderboard, not organizer exclusion
+        if (opts.keepParticipantId && p.id === opts.keepParticipantId) return true;
+        return false;
+      }
       return true;
     })
     .filter(p => !opts.direction || p.direction === opts.direction)
