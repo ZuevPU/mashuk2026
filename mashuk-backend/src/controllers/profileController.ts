@@ -318,12 +318,16 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       return;
     }
 
+    // Same shift scope as admin rating — without this, old shift copies of the same VK
+    // user appear with stale direction/points.
+    const shiftId = req.participant!.shiftId;
     const list = await db.select({
       id: participants.id,
       firstName: participants.firstName,
       lastName: participants.lastName,
       direction: sql<string | null>`COALESCE(${directions.name}, ${participants.direction})`,
       directionStored: participants.direction,
+      directionId: participants.directionId,
       groupId: participants.groupId,
       groupName: participants.groupName,
       pathPoints: participants.pathPoints,
@@ -335,7 +339,14 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       avatarUrl: participants.avatarUrl,
       vkId: participants.vkId,
     }).from(participants)
-      .leftJoin(directions, eq(participants.directionId, directions.id));
+      .leftJoin(directions, eq(participants.directionId, directions.id))
+      .where(eq(participants.shiftId, shiftId));
+
+    const { isOrganizerDirection } = await import('../services/leaderboardQuery.js');
+    const allDirections = await db.select({ id: directions.id, name: directions.name }).from(directions);
+    const organizerDirectionIds = new Set(
+      allDirections.filter(d => isOrganizerDirection(d.name)).map(d => d.id),
+    );
 
     const { enrichParticipantsWithAvatarUrls } = await import('../services/participantAvatarSync.js');
     const withAvatars = await enrichParticipantsWithAvatarUrls(list);
@@ -343,6 +354,7 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
     const full = await buildLeaderboardResult(withAvatars, { ...query, limit: 0 }, {
       keepParticipantId: me,
       hideFromLeaderboard: true,
+      organizerDirectionIds,
     });
     const myRank = full.leaders.find(r => r.id === me)?.rank ?? null;
     const leaders = query.limit > 0 ? full.leaders.slice(0, query.limit) : full.leaders;

@@ -27,7 +27,11 @@ export type LeaderboardResultRow = {
 export async function buildLeaderboardResult(
   allParticipants: LeaderboardParticipantRow[],
   query: ParsedLeaderboardQuery,
-  opts: { keepParticipantId?: number; hideFromLeaderboard?: boolean } = {},
+  opts: {
+    keepParticipantId?: number;
+    hideFromLeaderboard?: boolean;
+    organizerDirectionIds?: Set<number> | null;
+  } = {},
 ): Promise<{
   mode: LeaderboardMode;
   track: string;
@@ -64,6 +68,7 @@ export async function buildLeaderboardResult(
     hideFromLeaderboard: opts.hideFromLeaderboard ?? true,
     keepParticipantId: opts.keepParticipantId,
     medalHolderIds: medalSet,
+    organizerDirectionIds: opts.organizerDirectionIds,
   });
 
   const ids = visible.map(p => p.id);

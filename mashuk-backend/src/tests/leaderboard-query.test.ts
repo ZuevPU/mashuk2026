@@ -67,6 +67,18 @@ describe('filterLeaderboardParticipants', () => {
     });
     assert.deepEqual(out.map(p => p.id), [3]);
   });
+
+  it('excludes by organizerDirectionIds even if display name is stale', () => {
+    const list = [
+      { id: 1, firstName: 'Яна', lastName: 'Авакян', direction: 'Учителя', directionId: 99, hideFromLeaderboard: false, selfDeletedAt: null },
+      { id: 2, firstName: 'Иван', lastName: 'Иванов', direction: 'Учителя', directionId: 1, hideFromLeaderboard: false, selfDeletedAt: null },
+    ];
+    const out = filterLeaderboardParticipants(list as any, {
+      hideFromLeaderboard: true,
+      organizerDirectionIds: new Set([99]),
+    });
+    assert.deepEqual(out.map(p => p.id), [2]);
+  });
 });
 
 describe('isOrganizerDirection', () => {

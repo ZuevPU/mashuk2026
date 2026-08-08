@@ -518,6 +518,7 @@ export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<
     lastName: participants.lastName,
     direction: sql<string | null>`COALESCE(${directions.name}, ${participants.direction})`,
     directionStored: participants.direction,
+    directionId: participants.directionId,
     groupId: participants.groupId,
     groupName: participants.groupName,
     pathPoints: participants.pathPoints,
@@ -532,9 +533,18 @@ export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<
     .leftJoin(directions, eq(participants.directionId, directions.id))
     .where(eq(participants.shiftId, shiftId));
 
+  const { isOrganizerDirection } = await import('../services/leaderboardQuery.js');
+  const allDirections = await db.select({ id: directions.id, name: directions.name }).from(directions);
+  const organizerDirectionIds = new Set(
+    allDirections.filter(d => isOrganizerDirection(d.name)).map(d => d.id),
+  );
+
   const { enrichParticipantsWithAvatarUrls } = await import('../services/participantAvatarSync.js');
   const withAvatars = await enrichParticipantsWithAvatarUrls(list, { preferStored: false });
-  const result = await buildLeaderboardResult(withAvatars, query, { hideFromLeaderboard: true });
+  const result = await buildLeaderboardResult(withAvatars, query, {
+    hideFromLeaderboard: true,
+    organizerDirectionIds,
+  });
   res.json(result);
 };
 

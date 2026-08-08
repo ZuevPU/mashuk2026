@@ -12,6 +12,7 @@ export type LeaderboardParticipantRow = {
   direction: string | null;
   /** Denormalized participants.direction — used to catch stale directionId mismatches. */
   directionStored?: string | null;
+  directionId?: number | null;
   groupId: number | null;
   groupName: string | null;
   pathPoints: number | null;
@@ -113,14 +114,18 @@ export function filterLeaderboardParticipants(
     hideFromLeaderboard?: boolean;
     keepParticipantId?: number;
     medalHolderIds?: Set<number> | null;
+    /** Direction IDs whose name is organizer (extra safety vs stale denormalized strings). */
+    organizerDirectionIds?: Set<number> | null;
   },
 ): LeaderboardParticipantRow[] {
   const search = opts.search?.trim().toLowerCase() ?? '';
+  const organizerIds = opts.organizerDirectionIds;
   return list
     .filter(p => opts.hideDeleted !== false ? !p.selfDeletedAt : true)
     .filter(p => {
       // Organizers never appear in ratings — even when viewing as yourself.
       if (isOrganizerDirection(p.direction, p.directionStored)) return false;
+      if (organizerIds && p.directionId != null && organizerIds.has(p.directionId)) return false;
       if (!opts.hideFromLeaderboard) return true;
       if (p.hideFromLeaderboard) {
         // keepParticipantId only overrides hideFromLeaderboard, not organizer exclusion
