@@ -266,7 +266,9 @@ export function draftFromQuestion(q: AdminQuestion, options: QuestionOption[] = 
     text: q.text || '',
     questionKind: (REFLECTIVE_KINDS.includes(q.questionKind as ReflectiveKind) ? q.questionKind : 'extra') as ReflectiveKind,
     answerType: q.answerType || (q.questionKind === 'practices_vote' ? 'practices_vote' : 'text'),
-    reflectionKind: q.reflectionKind || '',
+    reflectionKind: q.reflectionKind === 'after_blocks'
+      ? 'after_event'
+      : (q.reflectionKind || (q.questionKind === 'after_blocks' ? 'after_event' : '')),
     timePoint: q.timePoint || '',
     block: q.block || '',
     dayNumbers: [...days],
@@ -293,6 +295,23 @@ export function draftFromQuestion(q: AdminQuestion, options: QuestionOption[] = 
   };
 }
 
+const REFLECTION_KINDS = new Set([
+  'state_check', 'after_event', 'evening_summary', 'point_a', 'point_b',
+]);
+
+/** API accepts only REFLECTION_KINDS — after_blocks is questionKind, not reflectionKind. */
+export function normalizeReflectionKindForApi(
+  questionKind: string,
+  reflectionKind: string | null | undefined,
+): string | null {
+  const rk = (reflectionKind || '').trim();
+  if (rk === 'after_blocks' || (questionKind === 'after_blocks' && (!rk || rk === 'after_blocks'))) {
+    return 'after_event';
+  }
+  if (!rk) return null;
+  return REFLECTION_KINDS.has(rk) ? rk : null;
+}
+
 export function bodyFromDraft(draft: QuestionDraft, publish: boolean): Record<string, unknown> {
   const isPractices = draft.questionKind === 'practices_vote' || draft.answerType === 'practices_vote';
   const body: Record<string, unknown> = {
@@ -304,7 +323,7 @@ export function bodyFromDraft(draft: QuestionDraft, publish: boolean): Record<st
     questionKind: draft.questionKind,
     answerType: isPractices ? 'practices_vote' : draft.answerType,
     type: isPractices ? 'practices_vote' : undefined,
-    reflectionKind: draft.reflectionKind || null,
+    reflectionKind: normalizeReflectionKindForApi(draft.questionKind, draft.reflectionKind),
     timePoint: draft.timePoint || null,
     block: draft.block || null,
     dayNumbers: draft.dayNumbers.length ? draft.dayNumbers : [1],

@@ -160,7 +160,14 @@ export function QuestionForm({
                     onChange={() => onChange(
                       k === 'practices_vote'
                         ? { questionKind: k, answerType: 'practices_vote', allowRetry: true }
-                        : { questionKind: k },
+                        : k === 'after_blocks'
+                          ? {
+                            questionKind: k,
+                            reflectionKind: draft.reflectionKind && draft.reflectionKind !== 'after_blocks'
+                              ? draft.reflectionKind
+                              : 'after_event',
+                          }
+                          : { questionKind: k },
                     )}
                   />
                   {{
@@ -403,11 +410,14 @@ export function QuestionForm({
           <div className="form-row">
             <label className="adm-field" style={{ flex: 1 }}>
               <span className="adm-label">Подтип (метка)</span>
-              <select className="adm-input" value={draft.reflectionKind} onChange={e => onChange({ reflectionKind: e.target.value })}>
+              <select
+                className="adm-input"
+                value={draft.reflectionKind === 'after_blocks' ? 'after_event' : draft.reflectionKind}
+                onChange={e => onChange({ reflectionKind: e.target.value })}
+              >
                 <option value="">—</option>
                 <option value="state_check">Проверка состояния</option>
                 <option value="after_event">После события</option>
-                <option value="after_blocks">После блоков</option>
                 <option value="evening_summary">Итоги дня</option>
                 <option value="point_a">Точка А</option>
                 <option value="point_b">Точка Б</option>

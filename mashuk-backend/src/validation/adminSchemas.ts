@@ -107,7 +107,15 @@ export const questionCreateSchema = z.object({
   questionKind: z.enum(['input', 'diagnostic', 'state_check', 'after_blocks', 'day_summary', 'practices_vote', 'extra']).optional(),
   subtitle: optionalString,
   block: optionalString,
-  reflectionKind: z.enum(['state_check', 'after_event', 'evening_summary', 'point_a', 'point_b']).optional().nullable(),
+  // after_blocks is questionKind; legacy clients may still send it as reflectionKind
+  reflectionKind: z.preprocess(
+    (v) => {
+      if (v === '' || v == null) return null;
+      if (v === 'after_blocks') return 'after_event';
+      return v;
+    },
+    z.enum(['state_check', 'after_event', 'evening_summary', 'point_a', 'point_b']).optional().nullable(),
+  ),
   status: z.enum(['draft', 'published', 'archived']).optional(),
   timePoint: optionalString,
   dayNumber: z.coerce.number().int().positive().optional(),
