@@ -23,6 +23,21 @@ async function ensureBacklogFeaturesSchema(pool: ReturnType<typeof createPool>):
   await pool.query(sql);
 }
 
+/** Schema had task_qr_scans before any SQL migration existed — create if missing. */
+async function ensureTaskQrScansSchema(pool: ReturnType<typeof createPool>): Promise<void> {
+  const { rows } = await pool.query<{ ok: number }>(
+    `SELECT 1 AS ok FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = 'task_qr_scans'
+     LIMIT 1`,
+  );
+  if (rows.length > 0) return;
+
+  const sqlPath = path.join(__dirname, '../../drizzle/0048_task_qr_scans.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  console.warn('Repair: applying 0048_task_qr_scans.sql (task_qr_scans missing)');
+  await pool.query(sql);
+}
+
 export async function runMigrations(): Promise<void> {
   const pool = createPool(process.env.DATABASE_URL!);
   const db = drizzle(pool);
@@ -32,6 +47,7 @@ export async function runMigrations(): Promise<void> {
     console.log('Migrations complete.');
   } finally {
     await ensureBacklogFeaturesSchema(pool);
+    await ensureTaskQrScansSchema(pool);
     await pool.end();
   }
 }

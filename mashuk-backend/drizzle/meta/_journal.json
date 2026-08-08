@@ -330,6 +330,13 @@
       "when": 1826000000000,
       "tag": "0047_day_focus_text_html",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1827000000000,
+      "tag": "0048_task_qr_scans",
+      "breakpoints": true
     }
   ]
 }

@@ -475,6 +475,13 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
     });
   } catch (error) {
     console.error('submitTask:', error);
+    const msg = error instanceof Error ? error.message : String(error);
+    if (/task_qr_scans/i.test(msg) || /relation .* does not exist/i.test(msg)) {
+      res.status(503).json({
+        error: 'Сервис подтверждения QR временно недоступен. Обновите приложение через минуту и попробуйте снова.',
+      });
+      return;
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 };
