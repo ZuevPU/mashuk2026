@@ -33,6 +33,7 @@ import {
 } from '../services/practicesVoteConfig.js';
 import { getLevelProgress, totalRatingScore } from '../services/pointsService.js';
 import { loadDayContext } from './dayStateController.js';
+import { resolveEveningSurveyDayForParticipant } from '../services/eveningSurveyDay.js';
 import { resolveHomeActiveCard } from '../services/homeActiveCard.js';
 import { resolveActiveShiftId } from '../services/shiftService.js';
 
@@ -218,14 +219,31 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         ? participant.pointBAnswers.length > 0
         : Object.keys(participant.pointBAnswers as object).length > 0
     ));
+    const eveningSurveyDay = await resolveEveningSurveyDayForParticipant(
+      participant.id,
+      settings,
+      now,
+    );
     const dayContext = await loadDayContext(participant.id, currentDay, participant.pedagogicalRole, {
       now,
       settings,
       hasPointB,
       pointBQuestionId: pointB?.id ?? pointBQuestion?.id ?? null,
     });
-    if (currentDay >= 1 && currentDay <= 7) {
-      eveningWrap = !!dayContext.eveningQuestionnaire.open;
+    const eveningContext = eveningSurveyDay !== currentDay
+      ? await loadDayContext(participant.id, eveningSurveyDay, participant.pedagogicalRole, {
+        now,
+        settings,
+        hasPointB,
+        pointBQuestionId: pointB?.id ?? pointBQuestion?.id ?? null,
+      })
+      : dayContext;
+    const eveningQuestionnaire = {
+      ...eveningContext.eveningQuestionnaire,
+      dayNumber: eveningSurveyDay,
+    };
+    if (eveningSurveyDay >= 1 && eveningSurveyDay <= 7) {
+      eveningWrap = !!eveningQuestionnaire.open;
     }
 
     let priorityAction: { type: string; title: string; subtitle: string; route: string; id?: number } | null = null;
@@ -249,12 +267,12 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       };
     }
 
-    const eveningCard = dayContext.eveningQuestionnaire.available
+    const eveningCard = eveningQuestionnaire.available
       ? {
         title: '✦ Завершение дня',
-        subtitle: currentDay === 7
-          ? 'Итоговая анкета · без роли на завтра'
-          : 'Оценки дня · эксперимент · роль на завтра',
+        subtitle: eveningSurveyDay === 7
+          ? `Итоговая анкета · день ${eveningSurveyDay} · без роли на завтра`
+          : `Итоговая анкета · день ${eveningSurveyDay}`,
       }
       : null;
     const dayTouchpointsTotal = TOUCHPOINT_SLOTS.length;
@@ -303,7 +321,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       currentDay,
       priorityAction,
       eveningCard,
-      eveningQuestionnaire: dayContext.eveningQuestionnaire,
+      eveningQuestionnaire,
       schedule,
       touchpointItems: touchpointItems.map(i => ({
         id: typeof i.id === 'number' ? i.id : 0,
@@ -415,8 +433,8 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       activeCard,
       delayedSurvey: delayedSurveyCard,
       roleOfDay: dayContext.roleOfDay,
-      experiment: currentDay === 8 ? null : dayContext.experiment,
-      eveningQuestionnaire: dayContext.eveningQuestionnaire,
+      experiment: currentDay === 8 ? null : (eveningContext.experiment ?? dayContext.experiment),
+      eveningQuestionnaire,
       missedQuestions: [...activeMissed, ...lockedMissed],
       unansweredAfterBlocks,
       practicesSection,

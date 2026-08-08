@@ -236,7 +236,7 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
       answerRowsMatched: diagnostics.answerRowsMatched,
     },
     exportPath: dayFilter
-      ? `/exports/evening-summary?day=${dayFilter}`
-      : '/exports/evening-summary',
+      ? `/exports/evening-summary?mode=day&day=${dayFilter}`
+      : '/exports/evening-summary?mode=shift',
   };
 }

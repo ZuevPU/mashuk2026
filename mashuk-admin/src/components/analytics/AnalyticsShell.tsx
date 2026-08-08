@@ -69,7 +69,12 @@ function sliceExportCtas(
   direction?: string,
   group?: string,
 ): { label: string; path: string; file: string }[] {
-  const cohort = qs({ day, direction: direction || undefined, group: group || undefined });
+  const cohort = qs({
+    mode: 'day',
+    day,
+    direction: direction || undefined,
+    group: group || undefined,
+  });
   if (dash === 'pulse') {
     return [
       {
@@ -79,7 +84,7 @@ function sliceExportCtas(
       },
       {
         label: 'Выгрузка дня (листы)',
-        path: `/exports/day${qs({ day })}`,
+        path: `/exports/day${qs({ mode: 'day', day })}`,
         file: `day_${day}.xlsx`,
       },
     ];
@@ -88,7 +93,7 @@ function sliceExportCtas(
     return [
       {
         label: 'Скачать полностью данные по Итоговой анкете вечера',
-        path: `/exports/evening-summary${qs({ day })}`,
+        path: `/exports/evening-summary${qs({ mode: 'day', day })}`,
         file: `evening_summary_d${day}.xlsx`,
       },
     ];
@@ -97,7 +102,7 @@ function sliceExportCtas(
     return [
       {
         label: 'Скачать полностью данные «После блоков»',
-        path: `/exports/after-blocks${qs({ day, direction: direction || undefined, group: group || undefined })}`,
+        path: `/exports/after-blocks${cohort}`,
         file: `after_blocks_d${day}.xlsx`,
       },
     ];
@@ -106,7 +111,7 @@ function sliceExportCtas(
     return [
       {
         label: 'Скачать полностью данные «Проверка состояния»',
-        path: `/exports/state-checks${qs({ day, direction: direction || undefined, group: group || undefined })}`,
+        path: `/exports/state-checks${cohort}`,
         file: `state_checks_d${day}.xlsx`,
       },
     ];
@@ -116,7 +121,7 @@ function sliceExportCtas(
     return [
       {
         label: 'Скачать полный пакет направления',
-        path: `/exports/direction-pack${qs({ day, direction, group: group || undefined })}`,
+        path: `/exports/direction-pack${qs({ mode: 'day', day, direction, group: group || undefined })}`,
         file: `direction_d${day}.xlsx`,
       },
     ];
@@ -213,6 +218,7 @@ function withFormatXlsx(path: string, filterQuery: string): string {
 export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: AnalyticsTabProps) {
   const {
     forumDay,
+    setForumDay,
     direction,
     group,
     ageCategory,
@@ -239,13 +245,13 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
 
-  const effectiveDay = mode === 'today' ? String(meta?.currentForumDay ?? forumDay) : forumDay;
-
-  const apiMode = dash === 'overview' ? mode : mode;
+  // Date select is source of truth. «Сегодня» only jumps the select to live day.
+  const effectiveDay = forumDay;
+  const apiMode: ViewMode = mode === 'today' ? 'day' : mode;
 
   const filterQuery = useMemo(() => qs({
     mode: apiMode,
-    day: effectiveDay,
+    day: mode === 'shift' ? undefined : effectiveDay,
     days: mode === 'compare' ? compareDays : undefined,
     direction: direction || undefined,
     group: group || undefined,
@@ -255,7 +261,7 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
     tag: dash === 'piggybank' && piggyTag ? piggyTag : undefined,
     source: dash === 'piggybank' && piggySource ? piggySource : undefined,
     clubId: dash === 'clubs' && clubFilter ? clubFilter : undefined,
-  }), [apiMode, effectiveDay, compareDays, direction, group, ageCategory, activity, roleKey, dash, piggyTag, piggySource, clubFilter]);
+  }), [apiMode, mode, effectiveDay, compareDays, direction, group, ageCategory, activity, roleKey, dash, piggyTag, piggySource, clubFilter]);
 
   const catalogEntry = meta?.dashboardCatalog?.find(c => c.id === dash);
   const showEarlyWarning = catalogEntry && (meta?.currentForumDay ?? 1) < catalogEntry.minForumDay;
@@ -408,12 +414,26 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
         )}
         {advancedOpen && (
           <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', marginTop: 8 }}>
-            <select className="adm-input" value={mode} onChange={e => setMode(e.target.value as ViewMode)}>
-              <option value="today">Сегодня</option>
-              <option value="day">День форума</option>
+            <select
+              className="adm-input"
+              value={mode === 'today' ? 'day' : mode}
+              onChange={e => setMode(e.target.value as ViewMode)}
+            >
+              <option value="day">Выбранный день (фильтр выше)</option>
               <option value="shift">Динамика смены</option>
               <option value="compare">Сравнение дней</option>
             </select>
+            <button
+              type="button"
+              className="adm-btn adm-btn-secondary adm-btn-sm"
+              onClick={() => {
+                const live = meta?.currentForumDay;
+                if (live != null) setForumDay(String(live));
+                setMode('day');
+              }}
+            >
+              Текущий день форума
+            </button>
             {mode === 'compare' && (
               <input className="adm-input" value={compareDays} onChange={e => setCompareDays(e.target.value)} placeholder="2,5,7" />
             )}

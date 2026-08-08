@@ -27,7 +27,8 @@ export function InsightsChrome({ children }: { children: ReactNode }) {
   );
   const dayMeta = meta?.forumDays?.find(d => String(d.day) === forumDay);
   const activeEntry = catalog.find(c => c.id === activeDashboardId);
-  const currentDay = meta?.currentForumDay ?? (Number(forumDay) || 1);
+  const selectedDay = Number(forumDay) || 1;
+  const liveDay = meta?.currentForumDay ?? selectedDay;
 
   return (
     <div className="adm-insights">
@@ -51,7 +52,10 @@ export function InsightsChrome({ children }: { children: ReactNode }) {
               </button>
             </div>
             <div className="adm-insights-meta-line">
-              <span className="adm-insights-day-badge">День {currentDay}</span>
+              <span className="adm-insights-day-badge">Срез: день {selectedDay}</span>
+              {liveDay !== selectedDay ? (
+                <span className="adm-muted" style={{ fontSize: 12 }}>сейчас идёт день {liveDay}</span>
+              ) : null}
               {dayMeta?.calendarDate ? (
                 <span className="adm-muted" style={{ fontSize: 12 }}>{dayMeta.calendarDate}</span>
               ) : null}

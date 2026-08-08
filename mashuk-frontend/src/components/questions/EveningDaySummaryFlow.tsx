@@ -75,7 +75,7 @@ export function EveningDaySummaryFlow({ onClose, onSubmitted }: Props) {
 
   return (
     <EveningQuestionnaire
-      currentDay={home.currentDay}
+      currentDay={eq.dayNumber ?? home.currentDay}
       questionnaire={eq}
       experiment={home.experiment}
       onClose={onClose}

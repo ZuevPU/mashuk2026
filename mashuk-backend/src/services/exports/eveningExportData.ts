@@ -219,6 +219,11 @@ export async function collectEveningExportRows(
     baseConds.push(eq(participants.shiftId, requestedShiftId));
   }
 
+  const stateConds = [...baseConds];
+  if (filters.day != null && filters.day > 0) {
+    stateConds.push(eq(participantDayState.dayNumber, filters.day));
+  }
+
   const stateRows = await db.select({
     s: participantDayState,
     p: participants,
@@ -227,7 +232,7 @@ export async function collectEveningExportRows(
     .from(participantDayState)
     .innerJoin(participants, eq(participantDayState.participantId, participants.id))
     .leftJoin(directions, eq(participants.directionId, directions.id))
-    .where(and(...baseConds));
+    .where(and(...stateConds));
 
   diagnostics.totalDayStates = stateRows.length;
 
@@ -342,17 +347,13 @@ export async function collectEveningExportRows(
   diagnostics.afterShiftFilter = candidates.length;
 
   if (filters.day != null && filters.day > 0) {
-    const onDay = candidates.filter(r => r.dayNumber === filters.day);
-    diagnostics.afterDayFilter = onDay.length;
-    if (onDay.length > 0) {
-      candidates = onDay;
-    } else if (candidates.length > 0) {
+    // Strict forum-day filter: never fall back to other days when the slice is empty.
+    candidates = candidates.filter(r => r.dayNumber === filters.day);
+    diagnostics.afterDayFilter = candidates.length;
+    if (candidates.length === 0) {
       notes.push(
-        `За день ${filters.day} анкет на этой смене нет; в файле все дни смены (${candidates.length} строк).`,
+        `За день ${filters.day} заполненных итоговых анкет нет (фильтр по дню форума, не по часам сдачи).`,
       );
-      diagnostics.shiftFilterRelaxed = true;
-    } else {
-      candidates = onDay;
     }
   } else {
     diagnostics.afterDayFilter = candidates.length;

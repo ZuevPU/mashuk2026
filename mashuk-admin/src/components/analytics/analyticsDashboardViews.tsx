@@ -1273,7 +1273,7 @@ export function EveningView({
   }));
   const exportPath = typeof data.exportPath === 'string'
     ? data.exportPath
-    : `/exports/evening-summary?day=${forumDay}`;
+    : `/exports/evening-summary?mode=day&day=${forumDay}`;
 
   const downloadFull = async () => {
     const { adminDownloadBinary } = await import('../../admin/client');
@@ -1536,11 +1536,11 @@ export function AfterBlocksView({
   const exportPath = (() => {
     if (typeof data.exportPath === 'string' && data.exportPath) return data.exportPath;
     const u = new URLSearchParams();
+    u.set('mode', 'day');
     if (forumDay) u.set('day', forumDay);
     if (direction) u.set('direction', direction);
     if (group) u.set('group', group);
-    const qs = u.toString();
-    return qs ? `/exports/after-blocks?${qs}` : '/exports/after-blocks';
+    return `/exports/after-blocks?${u.toString()}`;
   })();
 
   const downloadFull = async () => {
@@ -1662,11 +1662,11 @@ export function StateChecksView({
   const exportPath = (() => {
     if (typeof data.exportPath === 'string' && data.exportPath) return data.exportPath;
     const u = new URLSearchParams();
+    u.set('mode', 'day');
     if (forumDay) u.set('day', forumDay);
     if (direction) u.set('direction', direction);
     if (group) u.set('group', group);
-    const qs = u.toString();
-    return qs ? `/exports/state-checks?${qs}` : '/exports/state-checks';
+    return `/exports/state-checks?${u.toString()}`;
   })();
 
   const downloadFull = async () => {
@@ -1909,7 +1909,7 @@ export function DirectionView({
   }[];
   const exportPath = typeof data.exportPath === 'string'
     ? data.exportPath
-    : `/exports/direction-pack?day=${forumDay}&direction=${encodeURIComponent(direction)}${group ? `&group=${encodeURIComponent(group)}` : ''}`;
+    : `/exports/direction-pack?mode=day&day=${forumDay}&direction=${encodeURIComponent(direction)}${group ? `&group=${encodeURIComponent(group)}` : ''}`;
 
   const download = async (path: string, file: string) => {
     const { adminDownloadBinary } = await import('../../admin/client');

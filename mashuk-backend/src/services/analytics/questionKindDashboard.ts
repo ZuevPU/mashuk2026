@@ -384,6 +384,7 @@ export async function buildKindDashboard(
   questionsOut.sort((a, b) => (a.day ?? 99) - (b.day ?? 99) || a.label.localeCompare(b.label, 'ru'));
 
   const exportParams = new URLSearchParams();
+  exportParams.set('mode', days.length > 1 ? 'shift' : 'day');
   if (dayFilter != null) exportParams.set('day', String(dayFilter));
   if (filters.direction?.trim()) exportParams.set('direction', filters.direction.trim());
   if (filters.group?.trim()) exportParams.set('group', filters.group.trim());
@@ -391,7 +392,7 @@ export async function buildKindDashboard(
     ? '/exports/after-blocks'
     : '/exports/state-checks';
   const exportQs = exportParams.toString();
-  const exportPath = exportQs ? `${exportBase}?${exportQs}` : exportBase;
+  const exportPath = `${exportBase}?${exportQs}`;
 
   const diagnosticsNotes: string[] = [];
   if (!questionMeta.length) {

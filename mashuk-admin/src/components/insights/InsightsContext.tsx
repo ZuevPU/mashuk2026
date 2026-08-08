@@ -154,8 +154,12 @@ export function InsightsProvider({
   const [activeDashboardId, setActiveDashboardIdState] = useState<DashboardId>(initial.dash);
   const [meta, setMeta] = useState<InsightsMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(true);
-  /** Auto-jump to live forum day only when user has no saved filter yet. */
+  /**
+   * Auto-jump to live forum day only on first visit (no session prefs).
+   * Once the user picks a day (including day 1), never override it.
+   */
   const pendingAutoForumDay = useRef(stored == null);
+  const userPickedDay = useRef(false);
 
   const persist = useCallback((patch: Partial<{
     forumDay: string; direction: string; group: string; ageCategory: string; activity: string; dash: DashboardId;
@@ -172,11 +176,12 @@ export function InsightsProvider({
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }, [forumDay, direction, group, ageCategory, activity, activeDashboardId]);
 
-  const setForumDay = (d: string) => {
+  const setForumDay = useCallback((d: string) => {
+    userPickedDay.current = true;
     pendingAutoForumDay.current = false;
     setForumDayState(d);
     persist({ forumDay: d });
-  };
+  }, [persist]);
   const setDirection = (v: string) => { setDirectionState(v); persist({ direction: v }); };
   const setGroup = (v: string) => { setGroupState(v); persist({ group: v }); };
   const setAgeCategory = (v: string) => { setAgeCategoryState(v); persist({ ageCategory: v }); };
@@ -209,7 +214,7 @@ export function InsightsProvider({
   }, [analyticsDashboardAllowlist, activeDashboardId]);
 
   useEffect(() => {
-    if (!pendingAutoForumDay.current) return;
+    if (userPickedDay.current || !pendingAutoForumDay.current) return;
     const live = meta?.currentForumDay;
     if (live == null || !Number.isFinite(live) || live < 1) return;
     pendingAutoForumDay.current = false;
@@ -241,8 +246,8 @@ export function InsightsProvider({
     adminFetch,
     analyticsDashboardAllowlist,
   }), [
-    forumDay, direction, group, ageCategory, activity, barsLayout, activeDashboardId, meta, metaLoading, reloadMeta,
-    setTab, activeSection, adminFetch, analyticsDashboardAllowlist,
+    forumDay, setForumDay, direction, group, ageCategory, activity, barsLayout, activeDashboardId, meta, metaLoading,
+    reloadMeta, setTab, activeSection, adminFetch, analyticsDashboardAllowlist,
   ]);
 
   return <InsightsContext.Provider value={value}>{children}</InsightsContext.Provider>;

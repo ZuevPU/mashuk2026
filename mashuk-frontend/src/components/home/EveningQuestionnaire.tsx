@@ -32,6 +32,8 @@ export type EveningExperimentContext = {
 export type EveningQuestionnaireProps = {
   currentDay: number;
   questionnaire: {
+    /** Forum day this evening survey belongs to (may differ from clock currentDay). */
+    dayNumber?: number;
     config?: { steps: EveningStep[] };
     roles?: RoleOpt[];
     askTomorrowRole?: boolean;
@@ -103,10 +105,12 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     draft?.tomorrowRoleKey || questionnaire.roles?.[0]?.roleKey || '',
   );
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Forum day of this evening survey (not necessarily clock/admin currentDay). */
+  const surveyDay = questionnaire.dayNumber ?? currentDay;
 
   const steps = useMemo(
-    () => rawSteps.filter(s => stepHasVisibleFields(s, form, experiment ?? null, questionnaire, currentDay)),
-    [rawSteps, form, experiment, questionnaire, currentDay],
+    () => rawSteps.filter(s => stepHasVisibleFields(s, form, experiment ?? null, questionnaire, surveyDay)),
+    [rawSteps, form, experiment, questionnaire, surveyDay],
   );
 
   const [step, setStep] = useState(() => Math.min(draft?.step ?? 0, Math.max(steps.length - 1, 0)));
@@ -119,13 +123,13 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       apiPatch('/day-state/evening/draft', {
-        dayNumber: currentDay,
+        dayNumber: surveyDay,
         step,
         form,
         tomorrowRoleKey: tomorrowRole || undefined,
       }).catch(() => undefined);
     }, 400);
-  }, [currentDay, step, form, tomorrowRole]);
+  }, [surveyDay, step, form, tomorrowRole]);
 
   useEffect(() => {
     persistDraft();
@@ -267,7 +271,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
       );
     }
     if (field.type === 'role_select') {
-      if (!questionnaire.askTomorrowRole || currentDay > 6) return null;
+      if (!questionnaire.askTomorrowRole || surveyDay > 6) return null;
       return (
         <FormItem key={field.key} top={fieldTop(field.label)}>
           <CustomSelect
@@ -282,11 +286,11 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
   };
 
   const handleSubmit = async () => {
-    const askRole = questionnaire.askTomorrowRole !== false && currentDay <= 6;
+    const askRole = questionnaire.askTomorrowRole !== false && surveyDay <= 6;
     const ratings = { ...form };
     delete (ratings as Record<string, unknown>).tomorrowRoleKey;
     await apiPost('/day-state/evening', {
-      dayNumber: currentDay,
+      dayNumber: surveyDay,
       tomorrowRoleKey: askRole && tomorrowRole ? tomorrowRole : undefined,
       ratings,
       experimentStatus: experiment?.status === 'done' ? 'done' : undefined,
@@ -305,7 +309,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
 
   return (
     <div className="m-card evening-q">
-      <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>Итоговая анкета</div>
+      <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>Итоговая анкета · день {surveyDay}</div>
       <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
         {currentStep.title} · шаг {step + 1} из {steps.length} · можно закрыть и вернуться
       </div>
@@ -333,7 +337,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
 
       {visibleFields.map(renderField)}
 
-      {currentDay === 7 && currentStep.fields.some(f => f.type === 'role_select') && (
+      {surveyDay === 7 && currentStep.fields.some(f => f.type === 'role_select') && (
         <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
           День 7 — роль на день отъезда не выбираем.
         </div>

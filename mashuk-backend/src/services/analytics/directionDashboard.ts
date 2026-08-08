@@ -45,11 +45,12 @@ function missingFrom(
 
 function exportPathFor(filters: AnalyticsFilters): string {
   const u = new URLSearchParams();
+  u.set('mode', filters.mode === 'shift' || filters.mode === 'compare' ? filters.mode : 'day');
   if (filters.day != null && filters.day > 0) u.set('day', String(filters.day));
   if (filters.direction?.trim()) u.set('direction', filters.direction.trim());
   if (filters.group?.trim()) u.set('group', filters.group.trim());
   const qs = u.toString();
-  return qs ? `/exports/direction-pack?${qs}` : '/exports/direction-pack';
+  return `/exports/direction-pack?${qs}`;
 }
 
 function pct(n: number, d: number): number {

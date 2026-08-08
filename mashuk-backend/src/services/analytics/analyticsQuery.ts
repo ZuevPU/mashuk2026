@@ -29,13 +29,19 @@ function parseDays(raw: unknown): number[] {
 }
 
 export function parseAnalyticsQuery(req: AdminRequest): AnalyticsFilters {
-  const modeRaw = String(req.query.mode || 'today').toLowerCase();
-  const mode: AnalyticsViewMode =
-    modeRaw === 'day' || modeRaw === 'shift' || modeRaw === 'compare' ? modeRaw : 'today';
+  const hasExplicitMode = req.query.mode != null && String(req.query.mode).trim() !== '';
+  const modeRaw = String(req.query.mode || 'day').toLowerCase();
+  let mode: AnalyticsViewMode =
+    modeRaw === 'day' || modeRaw === 'shift' || modeRaw === 'compare' || modeRaw === 'today'
+      ? (modeRaw as AnalyticsViewMode)
+      : 'day';
 
   const dayRaw = req.query.day != null && req.query.day !== '' ? Number(req.query.day) : null;
   const day = dayRaw != null && !Number.isNaN(dayRaw) && dayRaw >= 1 ? dayRaw : null;
   const compareDays = parseDays(req.query.days ?? req.query['days[]']);
+
+  // If client sent day=N without mode, treat as single-day slice (not live «today»).
+  if (!hasExplicitMode && day != null) mode = 'day';
 
   return {
     mode,
@@ -73,7 +79,16 @@ export function resolveDayRange(filters: AnalyticsFilters, currentForumDay: numb
   if (filters.mode === 'compare' && filters.compareDays.length) {
     return filters.compareDays.slice(0, 3);
   }
-  if (filters.mode === 'day' && filters.day != null) return [filters.day];
-  if (filters.mode === 'today') return [currentForumDay];
+  if (filters.mode === 'shift') {
+    return [1, 2, 3, 4, 5, 6, 7];
+  }
+  // Explicit day from UI/export always wins (including day=1).
+  if (filters.day != null && filters.day >= 1) {
+    return [filters.day];
+  }
+  if (filters.mode === 'today' || filters.mode === 'day') {
+    const live = currentForumDay >= 1 ? currentForumDay : 1;
+    return [live];
+  }
   return [1, 2, 3, 4, 5, 6, 7];
 }

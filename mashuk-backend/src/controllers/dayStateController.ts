@@ -11,6 +11,7 @@ import {
   type EveningQuestionnaireConfig,
 } from '../services/eveningQuestionnaireConfig.js';
 import { getForumSettings, resolveEffectiveCurrentDay } from '../services/helpers.js';
+import { resolveEveningSurveyDayForParticipant } from '../services/eveningSurveyDay.js';
 import { ROLE_KEYS, getRoleMeta } from '../services/roleService.js';
 import { EVENING_SCALE_KEYS } from '../services/touchpointTemplates.js';
 import { awardPoints } from '../services/pointsService.js';
@@ -45,7 +46,8 @@ export const patchEveningDraft = async (req: ParticipantRequest, res: Response):
       return;
     }
     const settings = await getForumSettings();
-    const dayNumber = parsed.data.dayNumber ?? resolveEffectiveCurrentDay(settings);
+    const dayNumber = parsed.data.dayNumber
+      ?? await resolveEveningSurveyDayForParticipant(req.participant!.id, settings);
     const draft = {
       step: parsed.data.step,
       form: parsed.data.form,
@@ -53,7 +55,7 @@ export const patchEveningDraft = async (req: ParticipantRequest, res: Response):
       updatedAt: new Date().toISOString(),
     };
     const state = await upsertDayState(req.participant!.id, dayNumber, { eveningDraft: draft });
-    res.json({ ok: true, draft: state?.eveningDraft });
+    res.json({ ok: true, draft: state?.eveningDraft, dayNumber });
   } catch (error) {
     console.error('patchEveningDraft:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -127,7 +129,8 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
     }
 
     const settings = await getForumSettings();
-    const dayNumber = parsed.data.dayNumber ?? resolveEffectiveCurrentDay(settings);
+    // Server picks forum day of the evening being closed (not clock/admin day).
+    const dayNumber = await resolveEveningSurveyDayForParticipant(req.participant!.id, settings);
     if (dayNumber < 1 || dayNumber > 7) {
       res.status(400).json({ error: 'Evening questionnaire is for days 1–7' });
       return;

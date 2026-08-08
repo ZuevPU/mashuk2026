@@ -223,7 +223,7 @@ export const HomePanel: React.FC<{
   const eveningQuestionnaireBlock = showEvening ? (
     d.eveningQuestionnaire?.available ? (
       <EveningQuestionnaire
-        currentDay={d.currentDay}
+        currentDay={d.eveningQuestionnaire?.dayNumber ?? d.currentDay}
         questionnaire={d.eveningQuestionnaire}
         experiment={d.experiment}
         onClose={() => setShowEvening(false)}
