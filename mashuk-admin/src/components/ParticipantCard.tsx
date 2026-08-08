@@ -156,7 +156,7 @@ export function ParticipantCardModal({
 
   adminFetch: (path: string, opts?: RequestInit) => Promise<any>;
 
-  act: (fn: () => Promise<void>, msg?: string) => void;
+  act: (fn: () => Promise<unknown>, msg?: string) => void;
 
   roleOptions: { key: string; name: string }[];
 
