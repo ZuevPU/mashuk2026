@@ -583,3 +583,87 @@ export const copyQuestionsSelected = async (req: AdminRequest, res: Response): P
   }
   res.json({ created: created.map(r => serializeAdminQuestion(r, 0)), count: created.length });
 };
+
+export const getPracticesResults = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const [question] = await db.select().from(questions).where(eq(questions.id, id)).limit(1);
+  if (!question) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+  const { normalizePracticesConfig, aggregatePracticeLikes } = await import('../services/practicesVoteConfig.js');
+  const config = normalizePracticesConfig(question.practicesConfig);
+  const rows = await db.select({ answerData: answers.answerData }).from(answers)
+    .where(eq(answers.questionId, id));
+  const practices = aggregatePracticeLikes(config, rows).map(p => ({
+    id: p.id,
+    title: p.title,
+    description: p.description,
+    participantName: p.participantName,
+    direction: p.direction,
+    likes: p.likes,
+    resultPlace: p.resultPlace ?? null,
+    resultTime: p.resultTime ?? null,
+    sortOrder: p.sortOrder,
+  }));
+  res.json({
+    questionId: id,
+    preamble: config.preamble,
+    likesPerParticipant: config.likesPerParticipant,
+    resultsPublished: config.resultsPublished,
+    totalVoters: rows.length,
+    practices,
+  });
+};
+
+export const publishPracticesResults = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const [question] = await db.select().from(questions).where(eq(questions.id, id)).limit(1);
+  if (!question) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+  const { normalizePracticesConfig } = await import('../services/practicesVoteConfig.js');
+  const config = normalizePracticesConfig(question.practicesConfig);
+  const updates = Array.isArray(req.body?.practices) ? req.body.practices as Array<{
+    id?: string;
+    resultPlace?: string | null;
+    resultTime?: string | null;
+  }> : [];
+  const byId = new Map(updates.filter(u => u?.id).map(u => [String(u.id), u]));
+  const next = {
+    ...config,
+    resultsPublished: true,
+    practices: config.practices.map(p => {
+      const u = byId.get(p.id);
+      if (!u) return p;
+      return {
+        ...p,
+        resultPlace: u.resultPlace != null ? String(u.resultPlace).trim() || null : p.resultPlace,
+        resultTime: u.resultTime != null ? String(u.resultTime).trim() || null : p.resultTime,
+      };
+    }),
+  };
+  const [updated] = await db.update(questions)
+    .set({ practicesConfig: next })
+    .where(eq(questions.id, id))
+    .returning();
+  res.json({ ok: true, question: serializeAdminQuestion(updated!, 0), practicesConfig: next });
+};
+
+export const unpublishPracticesResults = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const [question] = await db.select().from(questions).where(eq(questions.id, id)).limit(1);
+  if (!question) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+  const { normalizePracticesConfig } = await import('../services/practicesVoteConfig.js');
+  const config = normalizePracticesConfig(question.practicesConfig);
+  const next = { ...config, resultsPublished: false };
+  const [updated] = await db.update(questions)
+    .set({ practicesConfig: next })
+    .where(eq(questions.id, id))
+    .returning();
+  res.json({ ok: true, question: serializeAdminQuestion(updated!, 0), practicesConfig: next });
+};

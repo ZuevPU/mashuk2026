@@ -8,6 +8,7 @@ import { QuestionAnswersModal } from './QuestionAnswersModal';
 import { QuestionForm } from './QuestionForm';
 import { QuestionParticipantPreview } from './QuestionParticipantPreview';
 import { QuestionsListTable } from './QuestionsListTable';
+import { PracticesResultsModal } from './PracticesResultsModal';
 import {
   KIND_TABS,
   type AdminQuestion,
@@ -62,6 +63,9 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
   const [directions, setDirections] = useState<{ id: number; name: string }[]>([]);
   const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
   const [allEvents, setAllEvents] = useState<any[]>([]);
+  const [participants, setParticipants] = useState<{ id: number; firstName?: string | null; lastName?: string | null; direction?: string | null }[]>([]);
+  const [practicesResultsId, setPracticesResultsId] = useState<number | null>(null);
+  const [practicesResultsTitle, setPracticesResultsTitle] = useState('');
 
   const readOnly = kindTab === 'exchange' || kindTab === 'org_director';
 
@@ -92,12 +96,14 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
     }
     const allRes = await adminFetch('/questions');
     setTotalAll(allRes.totalCount ?? allRes.questions?.length ?? 0);
-    const [dirRes, grpRes, shiftsRes, evRes] = await Promise.all([
+    const [dirRes, grpRes, shiftsRes, evRes, partRes] = await Promise.all([
       adminFetch('/directions').catch(() => ({ directions: [] })),
       adminFetch('/participants/groups').catch(() => ({ groups: [] })),
       adminFetch('/shifts').catch(() => ({ shifts: [] })),
       adminFetch('/events').catch(() => ({ events: [] })),
+      adminFetch('/participants?limit=500&includeHidden=false').catch(() => ({ participants: [] })),
     ]);
+    setParticipants(partRes.participants || []);
     setDirections(dirRes.directions || []);
     setGroups(grpRes.groups || []);
     setAllEvents(evRes.events || []);
@@ -425,6 +431,17 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
           onChange={patch => setDraft(d => ({ ...d, ...patch }))}
           onSaveDraft={() => persist(false)}
           onPublish={() => persist(true)}
+          onUnpublish={() => {
+            if (!editingId) return;
+            act(async () => {
+              await adminFetch(`/questions/${editingId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ status: 'draft', isHidden: false }),
+              });
+              setDraft(d => ({ ...d, status: 'draft' }));
+              await loadQuestions();
+            }, 'Снято с публикации');
+          }}
           onCancel={() => { setView('list'); setEditingId(null); }}
           showPreview={showPreview}
           onTogglePreview={() => setShowPreview(v => !v)}
@@ -452,6 +469,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
           directions={directions}
           groups={groups}
           roleOptions={ROLE_OPTIONS}
+          participants={participants}
           programEvents={allEvents}
         />
       )}
@@ -588,6 +606,10 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
             onEdit={openEdit}
             onDuplicate={duplicateQuestion}
             onViewAnswers={viewAnswers}
+            onViewPracticesResults={(q) => {
+              setPracticesResultsId(q.id);
+              setPracticesResultsTitle(q.title);
+            }}
             onCopyToDay={copyToDay}
             onHide={hideQuestion}
             onDelete={deleteQuestion}
@@ -603,6 +625,16 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
         answers={answersModal.rows}
         onClose={() => setAnswersModal(m => ({ ...m, open: false }))}
       />
+
+      {practicesResultsId != null && (
+        <PracticesResultsModal
+          questionId={practicesResultsId}
+          title={practicesResultsTitle}
+          adminFetch={adminFetch}
+          act={act}
+          onClose={() => setPracticesResultsId(null)}
+        />
+      )}
     </div>
   );
 }

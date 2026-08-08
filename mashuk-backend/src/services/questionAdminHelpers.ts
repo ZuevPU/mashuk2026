@@ -1,3 +1,5 @@
+import { normalizePracticesConfig } from './practicesVoteConfig.js';
+
 /** Admin question kinds (reflective touchpoints). */
 export const QUESTION_KINDS = [
   'input',
@@ -5,6 +7,7 @@ export const QUESTION_KINDS = [
   'state_check',
   'after_blocks',
   'day_summary',
+  'practices_vote',
   'extra',
 ] as const;
 
@@ -18,6 +21,7 @@ export const ANSWER_TYPES = [
   'multi',
   'emotion',
   'dependent',
+  'practices_vote',
 ] as const;
 
 export type AnswerType = typeof ANSWER_TYPES[number];
@@ -34,6 +38,8 @@ export function answerTypeToLegacyType(answerType: string | null | undefined): s
       return 'multi';
     case 'dependent':
       return 'dependent';
+    case 'practices_vote':
+      return 'practices_vote';
     case 'scale_5':
     case 'scale_10':
     case 'text':
@@ -52,6 +58,8 @@ export function legacyTypeToAnswerType(type: string | null | undefined): AnswerT
       return 'multi';
     case 'dependent':
       return 'dependent';
+    case 'practices_vote':
+      return 'practices_vote';
     default:
       return 'text';
   }
@@ -119,6 +127,16 @@ export function enrichQuestionWritePayload(
       title: out.title as string | null,
       timePoint: out.timePoint as string | null,
     });
+  }
+
+  if (out.questionKind === 'practices_vote' || out.answerType === 'practices_vote') {
+    out.questionKind = 'practices_vote';
+    out.answerType = 'practices_vote';
+    out.type = 'practices_vote';
+    if (out.allowRetry === undefined) out.allowRetry = true;
+    if (out.practicesConfig !== undefined) {
+      out.practicesConfig = normalizePracticesConfig(out.practicesConfig);
+    }
   }
   return out;
 }

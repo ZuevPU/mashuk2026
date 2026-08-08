@@ -470,6 +470,8 @@ export const questions = pgTable('questions', {
   showWhen: jsonb('show_when').$type<{ questionId: number; optionValues: string[] } | null>(),
   /** IDs of program events (blocks) that this question belongs to (for questionKind=after_blocks) */
   linkedEventIds: jsonb('linked_event_ids').$type<number[]>().default([]),
+  /** Practices voting config (questionKind=practices_vote) */
+  practicesConfig: jsonb('practices_config'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('questions_shift_id_idx').on(table.shiftId),

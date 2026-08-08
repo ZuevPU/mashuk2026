@@ -99,6 +99,21 @@ async function ensureEventHideFromHomeSchema(pool: ReturnType<typeof createPool>
   await pool.query(sql);
 }
 
+/** Add practices_config to questions if missing (0054). */
+async function ensurePracticesVoteSchema(pool: ReturnType<typeof createPool>): Promise<void> {
+  const { rows } = await pool.query<{ ok: number }>(
+    `SELECT 1 AS ok FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'questions' AND column_name = 'practices_config'
+     LIMIT 1`,
+  );
+  if (rows.length > 0) return;
+
+  const sqlPath = path.join(__dirname, '../../drizzle/0054_practices_vote.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  console.warn('Repair: applying 0054_practices_vote.sql');
+  await pool.query(sql);
+}
+
 export async function runMigrations(): Promise<void> {
   const pool = createPool(process.env.DATABASE_URL!);
   const db = drizzle(pool);
@@ -113,6 +128,7 @@ export async function runMigrations(): Promise<void> {
     await ensurePushDeliveryStatusLen(pool);
     await ensureQuestionLinkedEventsSchema(pool);
     await ensureEventHideFromHomeSchema(pool);
+    await ensurePracticesVoteSchema(pool);
     await pool.end();
   }
 }

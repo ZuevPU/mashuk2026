@@ -282,11 +282,21 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
           : (collected.programThemeCount > 0 ? 'none_conducted_yet' : 'none_in_program'),
       };
     }
+    const isPracticesVote = question.questionKind === 'practices_vote'
+      || question.answerType === 'practices_vote'
+      || question.type === 'practices_vote';
+    let practicesVote: ReturnType<typeof import('../services/practicesVoteConfig.js').practicesConfigForParticipant> | null = null;
+    if (isPracticesVote) {
+      const { normalizePracticesConfig, practicesConfigForParticipant } = await import('../services/practicesVoteConfig.js');
+      practicesVote = practicesConfigForParticipant(normalizePracticesConfig(question.practicesConfig));
+    }
+
     res.json({
       question: {
         ...question,
         requiresLessonPick: isLessonRef || hasLinkedEvents || isAfterBlocks,
-        allowRetry: question.allowRetry ?? false,
+        allowRetry: isPracticesVote ? true : (question.allowRetry ?? false),
+        practicesConfig: practicesVote,
       },
       options,
       dayEvents,
@@ -350,7 +360,11 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
         eq(answers.participantId, req.participant!.id),
         eq(answers.questionId, questionId),
       )).limit(1);
-    if (existingAnswer && !question.allowRetry) {
+    const canRetry = question.allowRetry
+      || question.questionKind === 'practices_vote'
+      || question.answerType === 'practices_vote'
+      || question.type === 'practices_vote';
+    if (existingAnswer && !canRetry) {
       res.status(400).json({ error: 'Already answered' });
       return;
     }
@@ -371,6 +385,25 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
         emotionZoneLabel: zone ? EMOTION_ZONE_LABELS[zone] : null,
       };
     }
+
+    const isPracticesVote = question.questionKind === 'practices_vote'
+      || question.answerType === 'practices_vote'
+      || question.type === 'practices_vote';
+    if (isPracticesVote) {
+      const { normalizePracticesConfig, validatePracticesVote } = await import('../services/practicesVoteConfig.js');
+      const config = normalizePracticesConfig(question.practicesConfig);
+      if (config.resultsPublished) {
+        res.status(400).json({ error: 'Голосование закрыто — результаты уже опубликованы' });
+        return;
+      }
+      const validated = validatePracticesVote(answerData, config);
+      if (!validated.ok) {
+        res.status(400).json({ error: validated.error });
+        return;
+      }
+      normalizedAnswer = { likedPracticeIds: validated.likedPracticeIds };
+    }
+
     const isLessonRef = isLessonReflectionQuestion(question);
     const hasLinkedEvents = Array.isArray(question.linkedEventIds) && question.linkedEventIds.length > 0;
     const isAfterBlocks = question.questionKind === 'after_blocks' || question.reflectionKind === 'after_blocks';

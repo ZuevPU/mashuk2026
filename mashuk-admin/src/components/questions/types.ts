@@ -5,6 +5,7 @@ export type QuestionKindTab =
   | 'state_check'
   | 'after_blocks'
   | 'day_summary'
+  | 'practices_vote'
   | 'extra'
   | 'exchange'
   | 'org_director';
@@ -16,6 +17,7 @@ export const KIND_TABS: { key: QuestionKindTab; label: string }[] = [
   { key: 'state_check', label: 'Проверка состояния' },
   { key: 'after_blocks', label: 'После блоков' },
   { key: 'day_summary', label: 'Итоги дня' },
+  { key: 'practices_vote', label: 'Практики участников' },
   { key: 'extra', label: 'Дополнительные' },
   { key: 'exchange', label: 'Обмен опытом' },
   { key: 'org_director', label: 'Связь с дирекцией' },
@@ -27,6 +29,7 @@ export const REFLECTIVE_KINDS = [
   'state_check',
   'after_blocks',
   'day_summary',
+  'practices_vote',
   'extra',
 ] as const;
 
@@ -40,7 +43,52 @@ export const ANSWER_TYPES = [
   { value: 'multi', label: 'Мультивыбор' },
   { value: 'emotion', label: 'Эмоция' },
   { value: 'dependent', label: 'Зависимый' },
+  { value: 'practices_vote', label: 'Голосование за практики' },
 ] as const;
+
+export type PracticeDraftRow = {
+  id: string;
+  title: string;
+  description: string;
+  source: 'participant' | 'manual';
+  participantId: number | null;
+  participantName: string;
+  direction: string;
+  resultPlace: string;
+  resultTime: string;
+  sortOrder: number;
+};
+
+export type PracticesConfigDraft = {
+  preamble: string;
+  likesPerParticipant: number;
+  resultsPublished: boolean;
+  practices: PracticeDraftRow[];
+};
+
+export function emptyPracticeRow(): PracticeDraftRow {
+  return {
+    id: crypto.randomUUID(),
+    title: '',
+    description: '',
+    source: 'manual',
+    participantId: null,
+    participantName: '',
+    direction: '',
+    resultPlace: '',
+    resultTime: '',
+    sortOrder: 0,
+  };
+}
+
+export function emptyPracticesConfig(): PracticesConfigDraft {
+  return {
+    preamble: '',
+    likesPerParticipant: 3,
+    resultsPublished: false,
+    practices: [{ ...emptyPracticeRow(), source: 'manual', sortOrder: 0 }],
+  };
+}
 
 export type AdminQuestion = {
   id: number;
@@ -72,6 +120,7 @@ export type AdminQuestion = {
   allowRetry?: boolean;
   allowOther?: boolean;
   linkedEventIds?: number[];
+  practicesConfig?: PracticesConfigDraft | null;
   showWhen?: { questionId: number; optionValues: string[] } | null;
   answerCount?: number;
   readOnly?: boolean;
@@ -106,6 +155,7 @@ export type QuestionDraft = {
   allowRetry: boolean;
   allowOther: boolean;
   linkedEventIds: number[];
+  practicesConfig: PracticesConfigDraft;
   showWhenQuestionId: string;
   showWhenOptionValues: string[];
   status: string;
@@ -163,10 +213,40 @@ export function emptyDraft(day: number): QuestionDraft {
     allowRetry: false,
     allowOther: false,
     linkedEventIds: [],
+    practicesConfig: emptyPracticesConfig(),
     showWhenQuestionId: '',
     showWhenOptionValues: [],
     status: 'draft',
     options: [],
+  };
+}
+
+function practicesFromQuestion(raw: unknown): PracticesConfigDraft {
+  const base = emptyPracticesConfig();
+  if (!raw || typeof raw !== 'object') return base;
+  const o = raw as Record<string, unknown>;
+  const practices = Array.isArray(o.practices) ? o.practices : [];
+  return {
+    preamble: String(o.preamble ?? ''),
+    likesPerParticipant: Number(o.likesPerParticipant) > 0 ? Number(o.likesPerParticipant) : 3,
+    resultsPublished: o.resultsPublished === true,
+    practices: practices.length
+      ? practices.map((p, i) => {
+        const row = (p && typeof p === 'object' ? p : {}) as Record<string, unknown>;
+        return {
+          id: typeof row.id === 'string' && row.id ? row.id : crypto.randomUUID(),
+          title: String(row.title ?? ''),
+          description: String(row.description ?? ''),
+          source: row.source === 'manual' ? 'manual' as const : 'participant' as const,
+          participantId: row.participantId != null ? Number(row.participantId) : null,
+          participantName: String(row.participantName ?? ''),
+          direction: String(row.direction ?? ''),
+          resultPlace: String(row.resultPlace ?? ''),
+          resultTime: String(row.resultTime ?? ''),
+          sortOrder: Number.isFinite(Number(row.sortOrder)) ? Number(row.sortOrder) : i,
+        };
+      })
+      : base.practices,
   };
 }
 
@@ -185,7 +265,7 @@ export function draftFromQuestion(q: AdminQuestion, options: QuestionOption[] = 
     subtitle: q.subtitle || '',
     text: q.text || '',
     questionKind: (REFLECTIVE_KINDS.includes(q.questionKind as ReflectiveKind) ? q.questionKind : 'extra') as ReflectiveKind,
-    answerType: q.answerType || 'text',
+    answerType: q.answerType || (q.questionKind === 'practices_vote' ? 'practices_vote' : 'text'),
     reflectionKind: q.reflectionKind || '',
     timePoint: q.timePoint || '',
     block: q.block || '',
@@ -202,9 +282,10 @@ export function draftFromQuestion(q: AdminQuestion, options: QuestionOption[] = 
     sortOrder: q.sortOrder ?? 0,
     pushOnPublish: !!q.pushOnPublish,
     pushTemplate: q.pushTemplate || '',
-    allowRetry: !!q.allowRetry,
+    allowRetry: q.questionKind === 'practices_vote' ? true : !!q.allowRetry,
     allowOther: !!q.allowOther,
     linkedEventIds: q.linkedEventIds ?? [],
+    practicesConfig: practicesFromQuestion(q.practicesConfig),
     showWhenQuestionId: q.showWhen?.questionId != null ? String(q.showWhen.questionId) : '',
     showWhenOptionValues: q.showWhen?.optionValues ?? [],
     status: q.status || 'draft',
@@ -213,12 +294,16 @@ export function draftFromQuestion(q: AdminQuestion, options: QuestionOption[] = 
 }
 
 export function bodyFromDraft(draft: QuestionDraft, publish: boolean): Record<string, unknown> {
+  const isPractices = draft.questionKind === 'practices_vote' || draft.answerType === 'practices_vote';
   const body: Record<string, unknown> = {
     title: draft.title.trim(),
     subtitle: draft.subtitle.trim() || null,
-    text: draft.text.trim() || draft.title.trim(),
+    text: isPractices
+      ? (draft.practicesConfig.preamble.trim() || draft.text.trim() || draft.title.trim())
+      : (draft.text.trim() || draft.title.trim()),
     questionKind: draft.questionKind,
-    answerType: draft.answerType,
+    answerType: isPractices ? 'practices_vote' : draft.answerType,
+    type: isPractices ? 'practices_vote' : undefined,
     reflectionKind: draft.reflectionKind || null,
     timePoint: draft.timePoint || null,
     block: draft.block || null,
@@ -234,7 +319,7 @@ export function bodyFromDraft(draft: QuestionDraft, publish: boolean): Record<st
     pushOnPublish: draft.pushOnPublish,
     pushTemplate: draft.pushTemplate.trim() || null,
     linkedEventIds: draft.linkedEventIds,
-    allowRetry: draft.allowRetry,
+    allowRetry: isPractices ? true : draft.allowRetry,
     allowOther: ['choice', 'multi'].includes(draft.answerType) ? draft.allowOther : false,
     showWhen: draft.showWhenQuestionId && draft.showWhenOptionValues.length
       ? {
@@ -244,6 +329,25 @@ export function bodyFromDraft(draft: QuestionDraft, publish: boolean): Record<st
       : null,
     status: publish ? 'published' : draft.status === 'published' ? 'published' : 'draft',
   };
+  if (isPractices) {
+    body.practicesConfig = {
+      preamble: draft.practicesConfig.preamble.trim(),
+      likesPerParticipant: Math.max(1, Number(draft.practicesConfig.likesPerParticipant) || 3),
+      resultsPublished: !!draft.practicesConfig.resultsPublished,
+      practices: draft.practicesConfig.practices.map((p, i) => ({
+        id: p.id || crypto.randomUUID(),
+        title: p.title.trim(),
+        description: p.description.trim(),
+        source: p.source,
+        participantId: p.source === 'participant' ? p.participantId : null,
+        participantName: p.participantName.trim(),
+        direction: p.direction.trim(),
+        resultPlace: p.resultPlace.trim() || null,
+        resultTime: p.resultTime.trim() || null,
+        sortOrder: i,
+      })).filter(p => p.title),
+    };
+  }
   if (draft.publishTime) body.publishTime = new Date(draft.publishTime).toISOString();
   else body.publishTime = null;
   if (draft.closeTime) body.closeTime = new Date(draft.closeTime).toISOString();

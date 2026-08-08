@@ -79,12 +79,32 @@ export const taskCreateSchema = z.object({
 
 export const taskUpdateSchema = taskCreateSchema.partial();
 
+const practiceItemSchema = z.object({
+  id: z.string().min(1).optional(),
+  title: z.string().min(1),
+  description: z.string().optional().default(''),
+  source: z.enum(['participant', 'manual']).optional().default('participant'),
+  participantId: z.coerce.number().int().positive().optional().nullable(),
+  participantName: z.string().optional().default(''),
+  direction: z.string().optional().default(''),
+  resultPlace: z.string().optional().nullable(),
+  resultTime: z.string().optional().nullable(),
+  sortOrder: z.coerce.number().int().optional(),
+});
+
+export const practicesConfigSchema = z.object({
+  preamble: z.string().optional().default(''),
+  likesPerParticipant: z.coerce.number().int().min(1).max(50).optional().default(3),
+  resultsPublished: z.boolean().optional().default(false),
+  practices: z.array(practiceItemSchema).optional().default([]),
+}).optional().nullable();
+
 export const questionCreateSchema = z.object({
   title: z.string().min(1, 'title required'),
   text: z.union([z.string(), z.null()]).optional().transform(v => (v == null || v === '' ? undefined : v)),
-  type: z.enum(['open', 'checkin', 'choice', 'multi', 'dependent']).optional(),
-  answerType: z.enum(['text', 'scale_5', 'scale_10', 'choice', 'multi', 'emotion', 'dependent']).optional(),
-  questionKind: z.enum(['input', 'diagnostic', 'state_check', 'after_blocks', 'day_summary', 'extra']).optional(),
+  type: z.enum(['open', 'checkin', 'choice', 'multi', 'dependent', 'practices_vote']).optional(),
+  answerType: z.enum(['text', 'scale_5', 'scale_10', 'choice', 'multi', 'emotion', 'dependent', 'practices_vote']).optional(),
+  questionKind: z.enum(['input', 'diagnostic', 'state_check', 'after_blocks', 'day_summary', 'practices_vote', 'extra']).optional(),
   subtitle: optionalString,
   block: optionalString,
   reflectionKind: z.enum(['state_check', 'after_event', 'evening_summary', 'point_a', 'point_b']).optional().nullable(),
@@ -109,6 +129,7 @@ export const questionCreateSchema = z.object({
   pushOnPublish: optionalBool,
   pushTemplate: optionalString,
   linkedEventIds: z.array(z.coerce.number().int().positive()).optional().default([]),
+  practicesConfig: practicesConfigSchema,
   publishTime: z.coerce.date().optional().nullable(),
   closeTime: z.coerce.date().optional().nullable(),
 }).strict();

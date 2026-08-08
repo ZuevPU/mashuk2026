@@ -1685,7 +1685,13 @@ export const crudTasks = {
   },
 };
 
-export { crudQuestions, copyQuestionsSelected } from './questionAdminController.js';
+export {
+  crudQuestions,
+  copyQuestionsSelected,
+  getPracticesResults,
+  publishPracticesResults,
+  unpublishPracticesResults,
+} from './questionAdminController.js';
 
 /** Скопировать вопросы с дня fromDay на toDay */
 export const copyQuestionsDay = async (req: AdminRequest, res: Response): Promise<void> => {

@@ -11,6 +11,7 @@ import {
 import { GoalQuestionsFields } from '../onboarding/GoalQuestionsFields';
 import { apiGet } from '../../api/client';
 import { isPointBQuestion } from '../../utils/eveningSummaryQuestion';
+import { PracticesVoteForm, type PracticesVoteConfig } from './PracticesVoteForm';
 
 const CHECKIN_EMOTIONS = [
   { id: 'joy', label: 'Радость', icon: '😊' },
@@ -47,9 +48,12 @@ interface QuestionAnswerFormProps {
     text?: string;
     timePoint?: string;
     block?: string;
+    questionKind?: string | null;
+    answerType?: string | null;
     requiresLessonPick?: boolean;
     allowRetry?: boolean;
     allowOther?: boolean;
+    practicesConfig?: PracticesVoteConfig | null;
   };
   options: { id: number; label: string; value: string; parentOptionId?: number | null }[];
   dayEvents?: LessonPickEvent[];
@@ -367,6 +371,27 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
   const [masterChoice, setMasterChoice] = useState('');
   const [dependentText, setDependentText] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const isPracticesVote = question.questionKind === 'practices_vote'
+    || question.answerType === 'practices_vote'
+    || question.type === 'practices_vote'
+    || !!question.practicesConfig;
+
+  if (isPracticesVote && question.practicesConfig) {
+    const initialLiked = Array.isArray((myAnswer?.answerData as { likedPracticeIds?: string[] } | undefined)?.likedPracticeIds)
+      ? (myAnswer!.answerData as { likedPracticeIds: string[] }).likedPracticeIds
+      : [];
+    return (
+      <Div>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{question.title}</div>
+        <PracticesVoteForm
+          config={question.practicesConfig}
+          initialLikedIds={initialLiked}
+          onSubmit={onSubmit}
+        />
+      </Div>
+    );
+  }
 
   if (isPointBQuestion(question) && !myAnswer) {
     return <PointBForm onSubmit={onSubmit} />;

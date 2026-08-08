@@ -1,6 +1,13 @@
 import type { ReactNode } from 'react';
 import type { QuestionDraft } from './types';
-import { ANSWER_TYPES, REFLECTIVE_KINDS } from './types';
+import { ANSWER_TYPES, REFLECTIVE_KINDS, emptyPracticeRow } from './types';
+
+type ParticipantOption = {
+  id: number;
+  firstName?: string | null;
+  lastName?: string | null;
+  direction?: string | null;
+};
 
 type Props = {
   draft: QuestionDraft;
@@ -14,10 +21,12 @@ type Props = {
   directions?: { id: number; name: string }[];
   groups?: { id: number; name: string }[];
   roleOptions?: { key: string; name: string }[];
+  participants?: ParticipantOption[];
   onFormTab: (t: 'main' | 'versions') => void;
   onChange: (patch: Partial<QuestionDraft>) => void;
   onSaveDraft: () => void;
   onPublish: () => void;
+  onUnpublish?: () => void;
   onCancel: () => void;
   showPreview: boolean;
   onTogglePreview: () => void;
@@ -42,10 +51,12 @@ export function QuestionForm({
   directions = [],
   groups = [],
   roleOptions = [],
+  participants = [],
   onFormTab,
   onChange,
   onSaveDraft,
   onPublish,
+  onUnpublish,
   onCancel,
   showPreview,
   onTogglePreview,
@@ -144,7 +155,11 @@ export function QuestionForm({
                     type="radio"
                     name="questionKind"
                     checked={draft.questionKind === k}
-                    onChange={() => onChange({ questionKind: k })}
+                    onChange={() => onChange(
+                      k === 'practices_vote'
+                        ? { questionKind: k, answerType: 'practices_vote', allowRetry: true }
+                        : { questionKind: k },
+                    )}
                   />
                   {{
                     input: 'Входные',
@@ -152,12 +167,184 @@ export function QuestionForm({
                     state_check: 'Проверка состояния',
                     after_blocks: 'После блоков',
                     day_summary: 'Итоги дня',
+                    practices_vote: 'Практики участников',
                     extra: 'Дополнительные',
                   }[k]}
                 </label>
               ))}
             </div>
           </fieldset>
+
+          {draft.questionKind === 'practices_vote' && (
+            <div className="adm-forum-block" style={{ marginBottom: 16 }}>
+              <h4 style={{ margin: '0 0 8px' }}>Голосование за практики</h4>
+              <label className="adm-field">
+                <span className="adm-label">Приамбула (что это и зачем)</span>
+                <textarea
+                  className="adm-input"
+                  rows={3}
+                  value={draft.practicesConfig.preamble}
+                  onChange={e => onChange({
+                    practicesConfig: { ...draft.practicesConfig, preamble: e.target.value },
+                    text: e.target.value,
+                  })}
+                />
+              </label>
+              <label className="adm-field">
+                <span className="adm-label">Лайков на участника</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  className="adm-input"
+                  style={{ width: 100 }}
+                  value={draft.practicesConfig.likesPerParticipant}
+                  onChange={e => onChange({
+                    practicesConfig: {
+                      ...draft.practicesConfig,
+                      likesPerParticipant: Math.max(1, Number(e.target.value) || 1),
+                    },
+                  })}
+                />
+              </label>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="adm-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Название</th>
+                      <th>Описание</th>
+                      <th>Участник</th>
+                      <th>Направление</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {draft.practicesConfig.practices.map((row, idx) => {
+                      const isManual = row.source === 'manual' || idx === 0;
+                      return (
+                        <tr key={row.id}>
+                          <td>{idx + 1}{idx === 0 ? ' · иное' : ''}</td>
+                          <td>
+                            <input
+                              className="adm-input"
+                              value={row.title}
+                              placeholder="Название практики"
+                              onChange={e => {
+                                const practices = draft.practicesConfig.practices.map((p, i) =>
+                                  i === idx ? { ...p, title: e.target.value } : p);
+                                onChange({ practicesConfig: { ...draft.practicesConfig, practices } });
+                              }}
+                            />
+                          </td>
+                          <td>
+                            <textarea
+                              className="adm-input"
+                              rows={2}
+                              value={row.description}
+                              placeholder="Описание"
+                              onChange={e => {
+                                const practices = draft.practicesConfig.practices.map((p, i) =>
+                                  i === idx ? { ...p, description: e.target.value } : p);
+                                onChange({ practicesConfig: { ...draft.practicesConfig, practices } });
+                              }}
+                            />
+                          </td>
+                          <td>
+                            {isManual ? (
+                              <input
+                                className="adm-input"
+                                value={row.participantName}
+                                placeholder="ФИО вручную"
+                                onChange={e => {
+                                  const practices = draft.practicesConfig.practices.map((p, i) =>
+                                    i === idx ? { ...p, source: 'manual' as const, participantId: null, participantName: e.target.value } : p);
+                                  onChange({ practicesConfig: { ...draft.practicesConfig, practices } });
+                                }}
+                              />
+                            ) : (
+                              <select
+                                className="adm-input"
+                                value={row.participantId ?? ''}
+                                onChange={e => {
+                                  const pid = e.target.value ? Number(e.target.value) : null;
+                                  const p = participants.find(x => x.id === pid);
+                                  const name = p ? `${p.lastName || ''} ${p.firstName || ''}`.trim() : '';
+                                  const practices = draft.practicesConfig.practices.map((pr, i) =>
+                                    i === idx
+                                      ? {
+                                        ...pr,
+                                        source: 'participant' as const,
+                                        participantId: pid,
+                                        participantName: name,
+                                        direction: p?.direction || pr.direction,
+                                      }
+                                      : pr);
+                                  onChange({ practicesConfig: { ...draft.practicesConfig, practices } });
+                                }}
+                              >
+                                <option value="">— выбрать —</option>
+                                {participants.map(p => (
+                                  <option key={p.id} value={p.id}>
+                                    {`${p.lastName || ''} ${p.firstName || ''}`.trim() || `#${p.id}`}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </td>
+                          <td>
+                            <input
+                              className="adm-input"
+                              value={row.direction}
+                              placeholder="Направление"
+                              readOnly={!isManual && !!row.participantId}
+                              title={!isManual && !!row.participantId ? 'Подтягивается из профиля участника' : undefined}
+                              onChange={e => {
+                                if (!isManual && row.participantId) return;
+                                const practices = draft.practicesConfig.practices.map((p, i) =>
+                                  i === idx ? { ...p, direction: e.target.value } : p);
+                                onChange({ practicesConfig: { ...draft.practicesConfig, practices } });
+                              }}
+                            />
+                          </td>
+                          <td>
+                            {idx > 0 && (
+                              <button
+                                type="button"
+                                className="adm-btn adm-btn-danger adm-btn-sm"
+                                onClick={() => {
+                                  const practices = draft.practicesConfig.practices.filter((_, i) => i !== idx);
+                                  onChange({ practicesConfig: { ...draft.practicesConfig, practices } });
+                                }}
+                              >
+                                ×
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <button
+                type="button"
+                className="adm-btn adm-btn-secondary adm-btn-sm"
+                style={{ marginTop: 8 }}
+                onClick={() => onChange({
+                  practicesConfig: {
+                    ...draft.practicesConfig,
+                    practices: [
+                      ...draft.practicesConfig.practices,
+                      { ...emptyPracticeRow(), source: 'participant', sortOrder: draft.practicesConfig.practices.length },
+                    ],
+                  },
+                })}
+              >
+                Добавить строку
+              </button>
+            </div>
+          )}
 
           <div className="form-row">
             <label className="adm-field" style={{ flex: 1 }}>
@@ -229,19 +416,23 @@ export function QuestionForm({
             </p>
           )}
 
-          <label className="adm-field">
-            <span className="adm-label">Текст вопроса участнику</span>
-            <textarea className="adm-input" rows={3} value={draft.text} onChange={e => onChange({ text: e.target.value })} />
-          </label>
+          {draft.questionKind !== 'practices_vote' && (
+            <label className="adm-field">
+              <span className="adm-label">Текст вопроса участнику</span>
+              <textarea className="adm-input" rows={3} value={draft.text} onChange={e => onChange({ text: e.target.value })} />
+            </label>
+          )}
 
-          <label className="adm-field">
-            <span className="adm-label">Тип ответа</span>
-            <select className="adm-input" value={draft.answerType} onChange={e => onChange({ answerType: e.target.value })}>
-              {ANSWER_TYPES.map(a => (
-                <option key={a.value} value={a.value}>{a.label}</option>
-              ))}
-            </select>
-          </label>
+          {draft.questionKind !== 'practices_vote' && (
+            <label className="adm-field">
+              <span className="adm-label">Тип ответа</span>
+              <select className="adm-input" value={draft.answerType} onChange={e => onChange({ answerType: e.target.value })}>
+                {ANSWER_TYPES.filter(a => a.value !== 'practices_vote').map(a => (
+                  <option key={a.value} value={a.value}>{a.label}</option>
+                ))}
+              </select>
+            </label>
+          )}
 
           {needsOptions && (
             <div className="adm-field">
@@ -417,9 +608,14 @@ export function QuestionForm({
             </label>
           )}
 
-          <div className="form-row" style={{ marginTop: 16, gap: 8 }}>
+          <div className="form-row" style={{ marginTop: 16, gap: 8, flexWrap: 'wrap' }}>
             <button type="button" className="adm-btn adm-btn-secondary" onClick={onSaveDraft}>Сохранить черновик</button>
-            <button type="button" className="adm-btn" onClick={onPublish}>Опубликовать</button>
+            <button type="button" className="adm-btn" onClick={onPublish}>
+              {draft.publishTime ? 'Опубликовать по времени' : 'Опубликовать сейчас'}
+            </button>
+            {onUnpublish && draft.status === 'published' && (
+              <button type="button" className="adm-btn adm-btn-danger" onClick={onUnpublish}>Снять с публикации</button>
+            )}
           </div>
         </>
       )}

@@ -151,6 +151,9 @@ router.post('/questions/:id/options', requireAdminRole('settings'), wrap(admin.c
 router.patch('/questions/:id/options/reorder', requireAdminRole('settings'), wrap(admin.crudQuestions.reorderOptions));
 router.delete('/questions/:id/options/:optionId', requireAdminRole('delete'), wrap(admin.crudQuestions.deleteOption));
 router.get('/questions/:id/answer-count', wrap(ops.getQuestionAnswerCount));
+router.get('/questions/:id/practices-results', wrap(admin.getPracticesResults));
+router.post('/questions/:id/practices-results/publish', requireAdminRole('settings'), wrap(admin.publishPracticesResults));
+router.post('/questions/:id/practices-results/unpublish', requireAdminRole('settings'), wrap(admin.unpublishPracticesResults));
 router.post('/questions/copy-day', requireAdminRole('settings'), wrap(admin.copyQuestionsDay));
 router.post('/questions/seed-touchpoints', requireAdminRole('settings'), wrap(admin.seedTouchpointsTemplate));
 

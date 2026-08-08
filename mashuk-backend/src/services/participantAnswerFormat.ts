@@ -155,6 +155,11 @@ export function participantAnswerSummary(data: unknown, type?: string | null): s
     return o.choice.trim();
   }
 
+  if (Array.isArray(o.likedPracticeIds)) {
+    const n = o.likedPracticeIds.length;
+    return n ? `Отмечено практик: ${n}` : 'Голос не отдан';
+  }
+
   if (Array.isArray(o.choices)) {
     const items = o.choices.map(String).filter(s => s.trim());
     if (items.length) return items.join(', ');
