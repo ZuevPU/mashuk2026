@@ -10,6 +10,8 @@ export type ProgramEvent = {
   isPublished?: boolean | null;
   dayPublished?: boolean | null;
   pushReminder?: boolean | null;
+  /** Не показывать на главной (в программе остаётся). */
+  hideFromHome?: boolean | null;
   blockType?: string | null;
   isKeyBlock?: boolean | null;
   hasSubSessions?: boolean | null;

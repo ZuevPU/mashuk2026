@@ -519,6 +519,8 @@ export const events = pgTable('events', {
   isPublished: boolean('is_published').default(true),
   dayPublished: boolean('day_published').default(false),
   pushReminder: boolean('push_reminder').default(true),
+  /** When true: event stays in Program, but is omitted from Home «Сейчас/Скоро». */
+  hideFromHome: boolean('hide_from_home').default(false),
   blockType: varchar('block_type', { length: 50 }).default('session'),
   isKeyBlock: boolean('is_key_block').default(false),
   qrToken: varchar('qr_token', { length: 64 }),

@@ -267,6 +267,14 @@ export function EventEditorForm({
         Уведомление за ~15 мин до начала
       </label>
       <label className="adm-forum-check">
+        <input
+          type="checkbox"
+          checked={draft.hideFromHome}
+          onChange={e => setDraft({ ...draft, hideFromHome: e.target.checked })}
+        />
+        Не показывать на главной (в программе останется)
+      </label>
+      <label className="adm-forum-check">
         <input type="checkbox" checked={draft.hasSubSessions} onChange={e => setDraft({ ...draft, hasSubSessions: e.target.checked })} />
         Блок с подблоками (можно вкладывать подблоки в подблоки)
       </label>

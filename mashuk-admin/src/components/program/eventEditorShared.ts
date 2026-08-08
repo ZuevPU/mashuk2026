@@ -9,6 +9,7 @@ export type EventDraft = {
   timeEnd: string;
   blockType: string;
   pushReminder: boolean;
+  hideFromHome: boolean;
   tagNames: string[];
   dayNumber: number;
   /** Empty = all directions. */
@@ -38,6 +39,7 @@ export function emptyEventDraft(dayNumber: number, timeStart = '09:00', timeEnd 
     timeEnd,
     blockType: 'session',
     pushReminder: true,
+    hideFromHome: false,
     tagNames: [],
     dayNumber,
     audienceDirectionIds: [],
@@ -60,6 +62,7 @@ export function draftFromEvent(e: ProgramEvent): EventDraft {
     timeEnd: end,
     blockType,
     pushReminder: e.pushReminder !== false,
+    hideFromHome: e.hideFromHome === true,
     tagNames: [...tags],
     dayNumber: e.dayNumber ?? 1,
     audienceDirectionIds: resolveDraftAudienceIds(e),
@@ -83,6 +86,7 @@ export function draftToBody(draft: EventDraft, opts?: { publish?: boolean; dayPu
     blockType: isKeyBlock ? 'key_block' : blockType,
     isKeyBlock,
     pushReminder: draft.pushReminder,
+    hideFromHome: draft.hideFromHome,
     dayNumber,
     audienceType: ids.length ? 'direction' : 'all',
     audienceDirectionId: ids[0] ?? null,

@@ -155,7 +155,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       const { start, end } = resolveEventInterval(e, scheduleContext);
       const status = getEventLiveStatus(liveProgramDay, liveProgramDay, start, end, now);
       return { event: e, start, end, status };
-    }).filter(x => x.start);
+    }).filter(x => x.start && !x.event.hideFromHome);
 
     const schedule: { kind: string; title: string; time: string; place?: string | null }[] = [];
     // «Сейчас» — все текущие верхнеуровневые события (ужин, сессии и т.д.), не только key_block.

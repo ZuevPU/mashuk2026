@@ -365,6 +365,13 @@
       "when": 1831000000000,
       "tag": "0052_question_linked_events",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1832000000000,
+      "tag": "0053_event_hide_from_home",
+      "breakpoints": true
     }
   ]
 }

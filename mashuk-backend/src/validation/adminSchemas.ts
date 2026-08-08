@@ -15,6 +15,7 @@ export const eventCreateSchema = z.object({
   isPublished: optionalBool,
   dayPublished: optionalBool,
   pushReminder: optionalBool,
+  hideFromHome: optionalBool,
   blockType: optionalString,
   isKeyBlock: optionalBool,
   parentEventId: z.coerce.number().int().positive().optional().nullable(),

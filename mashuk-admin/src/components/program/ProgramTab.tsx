@@ -240,6 +240,7 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
             blockType: isKeyBlock ? 'key_block' : (e.blockType || 'session'),
             isKeyBlock: !!isKeyBlock,
             pushReminder: e.pushReminder !== false,
+            hideFromHome: e.hideFromHome === true,
             isPublished: e.isPublished === true,
             audienceType: e.audienceType || 'all',
             audienceDirectionId: e.audienceDirectionId ?? null,

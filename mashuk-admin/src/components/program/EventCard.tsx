@@ -31,6 +31,7 @@ type Draft = {
   timeEnd: string;
   blockType: string;
   pushReminder: boolean;
+  hideFromHome: boolean;
   tagNames: string[];
   audienceType: 'all' | 'direction';
   audienceDirectionId: string;
@@ -52,6 +53,7 @@ function draftFromEvent(e: ProgramEvent): Draft {
     timeEnd: end,
     blockType,
     pushReminder: e.pushReminder !== false,
+    hideFromHome: e.hideFromHome === true,
     tagNames: [...tags],
     audienceType: (e.audienceType === 'direction' ? 'direction' : 'all') as 'all' | 'direction',
     audienceDirectionId: e.audienceDirectionId ? String(e.audienceDirectionId) : '',
@@ -142,6 +144,7 @@ export function EventCard({
       blockType: isKeyBlock ? 'key_block' : blockType,
       isKeyBlock,
       pushReminder: draft.pushReminder,
+      hideFromHome: draft.hideFromHome,
       dayNumber: event.dayNumber,
       audienceType: draft.audienceType,
       audienceDirectionId: draft.audienceType === 'direction' && draft.audienceDirectionId
@@ -301,6 +304,14 @@ export function EventCard({
           <label className="adm-forum-check">
             <input type="checkbox" checked={draft.pushReminder} onChange={e => setDraft({ ...draft, pushReminder: e.target.checked })} />
             Уведомление за ~15 мин до начала
+          </label>
+          <label className="adm-forum-check">
+            <input
+              type="checkbox"
+              checked={draft.hideFromHome}
+              onChange={e => setDraft({ ...draft, hideFromHome: e.target.checked })}
+            />
+            Не показывать на главной (в программе останется)
           </label>
           <label className="adm-forum-check">
             <input type="checkbox" checked={draft.hasSubSessions} onChange={e => setDraft({ ...draft, hasSubSessions: e.target.checked })} />

@@ -84,6 +84,21 @@ async function ensureQuestionLinkedEventsSchema(pool: ReturnType<typeof createPo
   await pool.query(sql);
 }
 
+/** Add hide_from_home to events if missing (0053). */
+async function ensureEventHideFromHomeSchema(pool: ReturnType<typeof createPool>): Promise<void> {
+  const { rows } = await pool.query<{ ok: number }>(
+    `SELECT 1 AS ok FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'events' AND column_name = 'hide_from_home'
+     LIMIT 1`,
+  );
+  if (rows.length > 0) return;
+
+  const sqlPath = path.join(__dirname, '../../drizzle/0053_event_hide_from_home.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  console.warn('Repair: applying 0053_event_hide_from_home.sql');
+  await pool.query(sql);
+}
+
 export async function runMigrations(): Promise<void> {
   const pool = createPool(process.env.DATABASE_URL!);
   const db = drizzle(pool);
@@ -97,6 +112,7 @@ export async function runMigrations(): Promise<void> {
     await ensureDayExperimentsTripleSchema(pool);
     await ensurePushDeliveryStatusLen(pool);
     await ensureQuestionLinkedEventsSchema(pool);
+    await ensureEventHideFromHomeSchema(pool);
     await pool.end();
   }
 }
