@@ -109,7 +109,7 @@ export function filterLeaderboardParticipants(
       if (opts.keepParticipantId && p.id === opts.keepParticipantId) return true;
       if (p.hideFromLeaderboard) return false;
       const d = (p.direction || '').toLowerCase();
-      if (d === 'организатор форума') return false;
+      if (d === 'организатор форума' || d === 'организатор') return false;
       return true;
     })
     .filter(p => !opts.direction || p.direction === opts.direction)

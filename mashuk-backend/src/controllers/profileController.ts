@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { eq, desc, and, or, isNull, lte } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  piggybank, answers, taskSubmissions, tasks, questions, participants,
+  piggybank, answers, taskSubmissions, tasks, questions, participants, directions,
 } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { getRoleMeta } from '../services/roleService.js';
@@ -322,7 +322,7 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       id: participants.id,
       firstName: participants.firstName,
       lastName: participants.lastName,
-      direction: participants.direction,
+      direction: directions.name, // Use name from directions table instead of stale string
       groupId: participants.groupId,
       groupName: participants.groupName,
       pathPoints: participants.pathPoints,
@@ -333,7 +333,8 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       selfDeletedAt: participants.selfDeletedAt,
       avatarUrl: participants.avatarUrl,
       vkId: participants.vkId,
-    }).from(participants);
+    }).from(participants)
+      .leftJoin(directions, eq(participants.directionId, directions.id));
 
     const { enrichParticipantsWithAvatarUrls } = await import('../services/participantAvatarSync.js');
     const withAvatars = await enrichParticipantsWithAvatarUrls(list);

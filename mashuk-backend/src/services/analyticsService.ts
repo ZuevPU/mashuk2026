@@ -1,13 +1,20 @@
 import { db } from '../db/index.js';
-import { dailyStats, participants, answers, questions } from '../db/schema.js';
+import { dailyStats, participants, answers, questions, directions as directionsTable } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { emotionIdToZone, emptyZoneDistribution, incrementZone } from './emotionZones.js';
 
 export async function recalculateDailyStats(_direction = 'all'): Promise<void> {
-  let allParticipants = await db.select().from(participants);
+  let allParticipants = await db.select({
+    id: participants.id,
+    direction: directionsTable.name,
+  }).from(participants)
+    .leftJoin(directionsTable, eq(participants.directionId, directionsTable.id));
   
   // Исключаем организаторов форума из статистики
-  allParticipants = allParticipants.filter(p => (p.direction || '').toLowerCase() !== 'организатор форума');
+  allParticipants = allParticipants.filter(p => {
+    const d = (p.direction || '').toLowerCase();
+    return d !== 'организатор форума' && d !== 'организатор';
+  });
 
   const allAnswers = await db.select().from(answers);
   const publishedQuestions = await db.select().from(questions)
@@ -22,8 +29,8 @@ export async function recalculateDailyStats(_direction = 'all'): Promise<void> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const directions = ['all', ...new Set(allParticipants.map(p => p.direction).filter(Boolean) as string[])];
-  for (const dir of directions) {
+  const distinctDirections = ['all', ...new Set(allParticipants.map(p => p.direction).filter(Boolean) as string[])];
+  for (const dir of distinctDirections) {
     const dirParticipants = dir === 'all' ? allParticipants : allParticipants.filter(p => p.direction === dir);
     const dirParticipantIds = new Set(dirParticipants.map(p => p.id));
     const dirAnswers = allAnswers.filter(a => dirParticipantIds.has(a.participantId));

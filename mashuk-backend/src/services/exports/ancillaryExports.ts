@@ -3,7 +3,7 @@ import type { Response } from 'express';
 import { db } from '../../db/index.js';
 import {
   adminActionsLog, answers, exchangeAnswers, exchangeQuestions,
-  medals, participants, pointsLog, questions, tasks, taskSubmissions, userMedals, piggybank,
+  medals, participants, pointsLog, questions, tasks, taskSubmissions, userMedals, piggybank, forumSettings, directions
 } from '../../db/schema.js';
 import { queryPiggybankForExport } from '../../controllers/adminPiggybankController.js';
 import { isPublishedStatus } from '../publishStatus.js';
@@ -141,12 +141,24 @@ export async function writeRatingDayExport(
   if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
     conditions.push(eq(participants.shiftId, opts.shiftId));
   }
-  if (opts.direction) conditions.push(eq(participants.direction, opts.direction));
+  if (opts.direction) conditions.push(or(eq(participants.direction, opts.direction), eq(directions.name, opts.direction))!);
   if (opts.groupId != null && !Number.isNaN(opts.groupId)) {
     conditions.push(eq(participants.groupId, opts.groupId));
   }
-  conditions.push(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
-  const allP = await db.select().from(participants).where(and(...conditions));
+  conditions.push(ne(sql`LOWER(COALESCE(${directions.name}, ${participants.direction}))`, 'организатор форума'));
+  conditions.push(ne(sql`LOWER(COALESCE(${directions.name}, ${participants.direction}))`, 'организатор'));
+  const allP = await db.select({
+    id: participants.id,
+    firstName: participants.firstName,
+    lastName: participants.lastName,
+    direction: directions.name,
+    groupName: participants.groupName,
+    pathPoints: participants.pathPoints,
+    experiencePoints: participants.experiencePoints,
+    bonusPoints: participants.bonusPoints,
+  }).from(participants)
+    .leftJoin(directions, eq(participants.directionId, directions.id))
+    .where(and(...conditions));
   const ids = allP.map(p => p.id);
   const { computeLeaderboardScores, computeMedalCountLeaderboard } = await import('../leaderboardService.js');
   const scores = await computeLeaderboardScores(ids, { scope: 'day', day, track: 'total' });
@@ -230,12 +242,24 @@ export async function writeRatingTotalExport(
   if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
     conditions.push(eq(participants.shiftId, opts.shiftId));
   }
-  if (opts.direction) conditions.push(eq(participants.direction, opts.direction));
+  if (opts.direction) conditions.push(or(eq(participants.direction, opts.direction), eq(directions.name, opts.direction))!);
   if (opts.groupId != null && !Number.isNaN(opts.groupId)) {
     conditions.push(eq(participants.groupId, opts.groupId));
   }
-  conditions.push(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
-  const allP = await db.select().from(participants).where(and(...conditions));
+  conditions.push(ne(sql`LOWER(COALESCE(${directions.name}, ${participants.direction}))`, 'организатор форума'));
+  conditions.push(ne(sql`LOWER(COALESCE(${directions.name}, ${participants.direction}))`, 'организатор'));
+  const allP = await db.select({
+    id: participants.id,
+    firstName: participants.firstName,
+    lastName: participants.lastName,
+    direction: directions.name,
+    groupName: participants.groupName,
+    pathPoints: participants.pathPoints,
+    experiencePoints: participants.experiencePoints,
+    bonusPoints: participants.bonusPoints,
+  }).from(participants)
+    .leftJoin(directions, eq(participants.directionId, directions.id))
+    .where(and(...conditions));
   const ids = allP.map(p => p.id);
   const { computeLeaderboardScores } = await import('../leaderboardService.js');
   const scores = await computeLeaderboardScores(ids, { scope: 'total', track });
@@ -300,8 +324,20 @@ export async function writeRatingShiftExport(
   if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
     conditions.push(eq(participants.shiftId, opts.shiftId));
   }
-  conditions.push(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
-  const allP = await db.select().from(participants).where(and(...conditions));
+  conditions.push(ne(sql`LOWER(COALESCE(${directions.name}, ${participants.direction}))`, 'организатор форума'));
+  conditions.push(ne(sql`LOWER(COALESCE(${directions.name}, ${participants.direction}))`, 'организатор'));
+  const allP = await db.select({
+    id: participants.id,
+    firstName: participants.firstName,
+    lastName: participants.lastName,
+    direction: directions.name,
+    groupName: participants.groupName,
+    pathPoints: participants.pathPoints,
+    experiencePoints: participants.experiencePoints,
+    bonusPoints: participants.bonusPoints,
+  }).from(participants)
+    .leftJoin(directions, eq(participants.directionId, directions.id))
+    .where(and(...conditions));
   const ids = allP.map(p => p.id);
   const { computeLeaderboardScores } = await import('../leaderboardService.js');
   const scores = await computeLeaderboardScores(ids, { scope: 'shift', track: 'total' });
@@ -386,8 +422,20 @@ export async function writeRatingNominationExport(
   if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
     conditions.push(eq(participants.shiftId, opts.shiftId));
   }
-  conditions.push(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
-  const allP = await db.select().from(participants).where(and(...conditions));
+  conditions.push(ne(sql`LOWER(COALESCE(${directions.name}, ${participants.direction}))`, 'организатор форума'));
+  conditions.push(ne(sql`LOWER(COALESCE(${directions.name}, ${participants.direction}))`, 'организатор'));
+  const allP = await db.select({
+    id: participants.id,
+    firstName: participants.firstName,
+    lastName: participants.lastName,
+    direction: directions.name,
+    groupName: participants.groupName,
+    pathPoints: participants.pathPoints,
+    experiencePoints: participants.experiencePoints,
+    bonusPoints: participants.bonusPoints,
+  }).from(participants)
+    .leftJoin(directions, eq(participants.directionId, directions.id))
+    .where(and(...conditions));
   const ids = allP.map(p => p.id);
   const { computeNominationLeaderboard, NOMINATION_LABELS } = await import('../leaderboardService.js');
   const scores = await computeNominationLeaderboard(nominationKey, ids, {
@@ -446,8 +494,20 @@ export async function writeMedalLeaderboardExport(
   if (opts.shiftId != null && !Number.isNaN(opts.shiftId)) {
     conditions.push(eq(participants.shiftId, opts.shiftId));
   }
-  conditions.push(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
-  const allP = await db.select().from(participants).where(and(...conditions));
+  conditions.push(ne(sql`LOWER(COALESCE(${directions.name}, ${participants.direction}))`, 'организатор форума'));
+  conditions.push(ne(sql`LOWER(COALESCE(${directions.name}, ${participants.direction}))`, 'организатор'));
+  const allP = await db.select({
+    id: participants.id,
+    firstName: participants.firstName,
+    lastName: participants.lastName,
+    direction: directions.name,
+    groupName: participants.groupName,
+    pathPoints: participants.pathPoints,
+    experiencePoints: participants.experiencePoints,
+    bonusPoints: participants.bonusPoints,
+  }).from(participants)
+    .leftJoin(directions, eq(participants.directionId, directions.id))
+    .where(and(...conditions));
   const ids = allP.map(p => p.id);
   const {
     computeMedalCountLeaderboard,
@@ -652,11 +712,43 @@ export async function writeActivityExport(res: Response): Promise<void> {
 
 export async function writePointABSummaryExport(res: Response): Promise<void> {
   const rows = await loadEnrichedParticipants();
+  
+  const { DEFAULT_EVENING_QUESTIONNAIRE_CONFIG } = await import('../eveningQuestionnaireConfig.js');
+  const eveningFields = DEFAULT_EVENING_QUESTIONNAIRE_CONFIG.steps.flatMap(s => s.fields);
+  const goalFields = (await import('../roleService.js')).ROLE_CATALOG[0] ? [] : []; // Just to trigger import if needed
+  
+  // Actually load goal questions from forum settings to get the exact labels
+  const [settings] = await db.select().from(forumSettings).limit(1);
+  const onboarding = (settings as any)?.roleDiagnosticsConfig?.goalQuestions || [];
+
+  const headers = [
+    'ФИО',
+    ...onboarding.map((q: any) => `Точка А: ${q.text}`),
+    ...onboarding.map((q: any) => `Точка Б: ${q.text}`),
+    'Роль на входе',
+    'Сильная роль',
+    'Роль роста'
+  ];
+
+  const data = rows.map(r => {
+    const pointA = Array.isArray(r.pointA) ? r.pointA : [];
+    const pointB = Array.isArray(r.pointB) ? r.pointB : [];
+    
+    return [
+      r.fullName,
+      ...onboarding.map((_: any, i: number) => pointA[i] || ''),
+      ...onboarding.map((_: any, i: number) => pointB[i] || ''),
+      r.startRole || '',
+      r.strongRole || '',
+      r.growthRole || ''
+    ];
+  });
+
   sendCsv(
     res,
     'point_a_b_summary.csv',
-    'ID,ФИО,Точка А,Точка Б,Роль на входе,Сильная роль,Роль роста',
-    rows.map(r => [r.id, r.fullName, r.pointA, r.pointB, r.startRole, r.strongRole, r.growthRole]),
+    headers.join(','),
+    data
   );
 }
 

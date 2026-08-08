@@ -516,7 +516,7 @@ export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<
     id: participants.id,
     firstName: participants.firstName,
     lastName: participants.lastName,
-    direction: participants.direction,
+    direction: directions.name, // Use name from directions table instead of potentially stale string
     groupId: participants.groupId,
     groupName: participants.groupName,
     pathPoints: participants.pathPoints,
@@ -527,7 +527,9 @@ export const getLeaderboard = async (req: AdminRequest, res: Response): Promise<
     selfDeletedAt: participants.selfDeletedAt,
     avatarUrl: participants.avatarUrl,
     vkId: participants.vkId,
-  }).from(participants).where(eq(participants.shiftId, shiftId));
+  }).from(participants)
+    .leftJoin(directions, eq(participants.directionId, directions.id))
+    .where(eq(participants.shiftId, shiftId));
 
   const { enrichParticipantsWithAvatarUrls } = await import('../services/participantAvatarSync.js');
   const withAvatars = await enrichParticipantsWithAvatarUrls(list, { preferStored: false });

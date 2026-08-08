@@ -67,16 +67,13 @@ export function questionVisibleToParticipant(
   q: QuestionLike,
   participant: ParticipantLike,
   currentDay: number,
-  options?: { attendedEventIds?: Set<number> },
+  _options?: { attendedEventIds?: Set<number> },
 ): boolean {
   if (q.isHidden) return false;
 
-  // Если вопрос привязан к блокам программы, показываем его только если участник был на них
-  if (Array.isArray(q.linkedEventIds) && q.linkedEventIds.length > 0) {
-    const attended = options?.attendedEventIds ?? new Set<number>();
-    const matched = q.linkedEventIds.some(id => attended.has(id));
-    if (!matched) return false;
-  }
+  // Убрали жесткий фильтр по attendance для видимости вопроса, 
+  // так как он мешает пользователю открыть форму и выбрать урок.
+  // Посещаемость теперь используется только для фильтрации вариантов в самом опросе.
 
   const block = q.block;
   const dayNum = q.dayNumber ?? 8;

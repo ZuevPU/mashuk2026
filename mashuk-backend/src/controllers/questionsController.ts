@@ -244,9 +244,28 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       
       let items = collected.items;
       if (hasLinkedEvents) {
-        // Если есть явный список блоков от админа, ограничиваем выбор ими
+        // Если есть явный список блоков от админа, ограничиваем выбор ими.
+        // При этом учитываем, что админ мог выбрать родительский блок (контейнер).
         const linkedIds = new Set(question.linkedEventIds);
-        items = items.filter(e => linkedIds.has(e.id));
+        
+        // Рекурсивно собираем всех потомков для выбранных блоков, чтобы найти темы
+        const allLinkedThemes = new Set<number>();
+        const byParent = new Map<number, number[]>();
+        dayEv.forEach(e => {
+          if (e.parentEventId) {
+            const list = byParent.get(e.parentEventId) || [];
+            list.push(e.id);
+            byParent.set(e.parentEventId, list);
+          }
+        });
+
+        const collectIds = (id: number) => {
+          allLinkedThemes.add(id);
+          (byParent.get(id) || []).forEach(collectIds);
+        };
+        question.linkedEventIds!.forEach(collectIds);
+
+        items = items.filter(e => allLinkedThemes.has(e.id));
       }
 
       dayEvents = items.map(e => ({
@@ -384,7 +403,25 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
         let allowed = collected.items;
         if (hasLinkedEvents) {
           const linkedIds = new Set(question.linkedEventIds);
-          allowed = allowed.filter(e => linkedIds.has(e.id));
+          
+          // Рекурсивно собираем всех потомков для выбранных блоков
+          const allLinkedThemes = new Set<number>();
+          const byParent = new Map<number, number[]>();
+          dayEv.forEach(e => {
+            if (e.parentEventId) {
+              const list = byParent.get(e.parentEventId) || [];
+              list.push(e.id);
+              byParent.set(e.parentEventId, list);
+            }
+          });
+
+          const collectIds = (id: number) => {
+            allLinkedThemes.add(id);
+            (byParent.get(id) || []).forEach(collectIds);
+          };
+          question.linkedEventIds!.forEach(collectIds);
+
+          allowed = allowed.filter(e => allLinkedThemes.has(e.id));
         }
 
         if (collected.programThemeCount > 0 && allowed.length === 0 && !isLessonRef && !isAfterBlocks) {
