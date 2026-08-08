@@ -231,11 +231,10 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             <tr>
               <td>Итоги дня (вопросы анкеты)</td>
               <td className="adm-muted">
-                Аналитик · 1 строка = участник × день; колонки = Итоговая анкета вечера.
+                Ответы на «Итоговую анкету вечера»: широкий лист + «Ответы по вопросам» + диагностика.
                 <div style={{ marginTop: 4, fontSize: 11 }}>
-                  День берётся из фильтра Insights (сейчас D{forumDay}).
-                  Если файл пустой — снимите направление/группу или скачайте «Вся смена».
-                  На листе «Описание» будет причина, если строк 0.
+                  Рекомендуем сначала «Вся смена» без фильтров направления/группы.
+                  Если за день пусто — в файле всё равно будут найденные дни и лист «Диагностика».
                 </div>
               </td>
               <td>
@@ -247,18 +246,12 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                   className="adm-btn adm-btn-primary"
                   onClick={() =>
                     downloadXlsx(
-                      `/exports/evening-summary${buildQuery({
-                        day: String(forumDay),
-                        direction: direction || undefined,
-                        group: group || undefined,
-                        ageCategory: ageCategory || undefined,
-                        activity: activity || undefined,
-                      })}`,
-                      `evening_summary_d${forumDay}.xlsx`,
+                      '/exports/evening-summary',
+                      'evening_summary_shift.xlsx',
                     )
                   }
                 >
-                  За день
+                  Вся смена
                 </button>
                 <button
                   type="button"
@@ -266,16 +259,13 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                   onClick={() =>
                     downloadXlsx(
                       `/exports/evening-summary${buildQuery({
-                        direction: direction || undefined,
-                        group: group || undefined,
-                        ageCategory: ageCategory || undefined,
-                        activity: activity || undefined,
+                        day: String(forumDay),
                       })}`,
-                      'evening_summary_shift.xlsx',
+                      `evening_summary_d${forumDay}.xlsx`,
                     )
                   }
                 >
-                  Вся смена
+                  За день D{forumDay}
                 </button>
               </td>
             </tr>

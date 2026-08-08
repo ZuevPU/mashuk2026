@@ -11,14 +11,14 @@ import { createWorkbook, sendWorkbook } from './workbook.js';
 export type EveningSummaryExportFilters = EveningExportFilters;
 
 /**
- * Аналитическая выгрузка «Итоги дня»: 1 строка = участник × день.
- * Источники: participant_day_state.evening_ratings и answers по вопросам «Итоги дня».
+ * Аналитическая выгрузка «Итоги дня»: ответы участников на итоговую анкету вечера.
+ * Листы: Описание, Итоги дня (широкий), Ответы по вопросам (1 строка = вопрос), Диагностика.
  */
 export async function writeEveningSummaryExport(
   res: Response,
   filters: EveningSummaryExportFilters = {},
 ): Promise<void> {
-  const { rows, fields, emptyReason } = await collectEveningExportRows(filters);
+  const { rows, fields, emptyReason, diagnostics } = await collectEveningExportRows(filters);
   const questionHeaders = fields.map(f => f.label || f.key);
 
   const metaHeaders = [
@@ -32,19 +32,23 @@ export async function writeEveningSummaryExport(
     'Роль на входе',
     'День',
     'Время заполнения',
+    'Статус',
+    'Источник',
   ];
 
   const wb = await createWorkbook();
   addReadmeSheet(wb, [
-    'Выгрузка «Итоги дня» (вечерняя итоговая анкета из раздела Форум).',
-    'Одна строка = один участник × один день форума (сданные анкеты).',
-    'Данные: evening_ratings участника и ответы на вопросы «Итоги дня».',
+    'Выгрузка «Итоги дня» — ответы на Итоговую анкету вечера (Форум).',
+    'Лист «Итоги дня»: 1 строка = участник × день, вопросы в колонках.',
+    'Лист «Ответы по вопросам»: 1 строка = один ответ на один вопрос (удобно для сводных).',
+    'Лист «Диагностика»: счётчики, если строк мало или файл казался пустым.',
     `Строк с ответами: ${rows.length}.`,
     emptyReason || '',
-    filters.day ? `Фильтр: день ${filters.day}.` : 'Фильтр: все дни смены.',
+    ...(diagnostics.notes || []),
+    filters.day ? `Запрошен день: ${filters.day}.` : 'Фильтр дней: вся смена.',
     filters.direction ? `Направление: ${filters.direction}.` : '',
     filters.group ? `Группа: ${filters.group}.` : '',
-    filters.shiftId != null ? `Смена #${filters.shiftId}.` : '',
+    filters.shiftId != null ? `Смена админки #${filters.shiftId}.` : '',
   ].filter(Boolean));
 
   const ws = wb.addWorksheet('Итоги дня');
@@ -63,31 +67,67 @@ export async function writeEveningSummaryExport(
       roleLabel(r.p.pedagogicalRole),
       r.dayNumber,
       formatTs(r.filledAt),
+      r.status,
+      r.source,
       ...fields.map(f => formatEveningFieldValue(f, r.ratings, r.tomorrowRoleKey)),
     ]);
   }
 
-  const long = wb.addWorksheet('Вопросы (длинный)');
-  long.addRow([
-    'ID участника', 'ФИО', 'Направление', 'Группа', 'День', 'Время заполнения',
-    'Ключ вопроса', 'Вопрос', 'Ответ',
+  // Главный лист для аналитики: каждый вопрос отдельной строкой
+  const byQ = wb.addWorksheet('Ответы по вопросам');
+  byQ.addRow([
+    'ID участника',
+    'ФИО',
+    'Направление',
+    'Группа',
+    'День',
+    'Время заполнения',
+    'Статус',
+    'Ключ вопроса',
+    'Вопрос',
+    'Ответ',
   ]);
   for (const r of rows) {
     for (const field of fields) {
       const answer = formatEveningFieldValue(field, r.ratings, r.tomorrowRoleKey);
       if (answer === '' || answer == null) continue;
-      long.addRow([
+      byQ.addRow([
         r.p.id,
         fullName(r.p),
         r.directionName ?? r.p.direction ?? '',
         r.p.groupName ?? '',
         r.dayNumber,
         formatTs(r.filledAt),
+        r.status,
         field.key,
         field.label || field.key,
         answer,
       ]);
     }
+  }
+
+  const diag = wb.addWorksheet('Диагностика');
+  diag.addRow(['Параметр', 'Значение']);
+  diag.addRow(['Всего participant_day_state (без удалённых)', diagnostics.totalDayStates]);
+  diag.addRow(['С evening_ratings (сдано)', diagnostics.withRatings]);
+  diag.addRow(['Только evening_draft (черновик)', diagnostics.withDraftOnly]);
+  diag.addRow(['Answers по вопросам «Итоги дня»', diagnostics.answerRowsMatched]);
+  diag.addRow(['После фильтра смены', diagnostics.afterShiftFilter]);
+  diag.addRow(['После фильтра дня', diagnostics.afterDayFilter]);
+  diag.addRow(['После фильтров направления/группы', diagnostics.afterCohortFilter]);
+  diag.addRow(['Итого строк в файле', rows.length]);
+  diag.addRow(['Смена админки', diagnostics.shiftId ?? 'не задана']);
+  diag.addRow(['Запрошенный день', diagnostics.day ?? 'все']);
+  diag.addRow(['Фильтр смены/дня ослаблен', diagnostics.shiftFilterRelaxed ? 'да' : 'нет']);
+  for (const note of diagnostics.notes) {
+    diag.addRow(['Примечание', note]);
+  }
+  if (emptyReason) diag.addRow(['Причина пустоты', emptyReason]);
+  if (rows.length === 0) {
+    diag.addRow([
+      'Подсказка',
+      'Если «С evening_ratings» = 0, участники ещё не нажали «Отправить» в анкете. Черновики тоже выгружаются (статус «черновик»).',
+    ]);
   }
 
   const dayPart = filters.day != null && filters.day > 0 ? `d${filters.day}` : 'shift';
