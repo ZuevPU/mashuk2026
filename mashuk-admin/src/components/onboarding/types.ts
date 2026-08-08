@@ -6,10 +6,19 @@ export type DiagQuestion = { text: string; options: string[] };
 
 export type GoalAnswerType = 'open' | 'choice' | 'multi';
 
+export type GoalShowWhen = {
+  questionId: string;
+  options: string[];
+};
+
 export type GoalQuestion = {
+  id: string;
   text: string;
   type: GoalAnswerType;
   options: string[];
+  allowOther?: boolean;
+  otherLabel?: string;
+  showWhen?: GoalShowWhen | null;
 };
 
 export type RoleDiagnosticsConfig = {
@@ -51,3 +60,9 @@ export const ONBOARDING_STEPS: { id: OnboardingStep; label: string }[] = [
   { id: 'advice', label: 'Каталог советов' },
   { id: 'preview', label: 'Превью' },
 ];
+
+export const GOAL_OTHER_VALUE = '__other__';
+
+export function newGoalQuestionId(): string {
+  return `gq_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}

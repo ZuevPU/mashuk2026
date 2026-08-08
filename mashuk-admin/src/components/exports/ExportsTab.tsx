@@ -488,7 +488,7 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
       <div className="card adm-forum-block">
         <h3>Архив</h3>
-        <p className="adm-forum-hint">Полные базы, сводки и ZIP — реже, тяжелее. Лимит базы участников: 5000 строк.</p>
+        <p className="adm-forum-hint">Полные базы, сводки и ZIP — тяжелее по объёму. Выгрузка участников без лимита строк (все данные смены). Роли и статусы — на русском.</p>
         <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadXlsx(`/exports/participants?format=xlsx${filterQs.replace('?', '&')}`, 'participants_full.xlsx')}>
             База участников (профиль)

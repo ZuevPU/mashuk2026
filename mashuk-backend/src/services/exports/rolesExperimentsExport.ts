@@ -1,14 +1,15 @@
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { Response } from 'express';
 import { db } from '../../db/index.js';
 import { dayExperiments, participantDayState, participants } from '../../db/schema.js';
 import { addReadmeSheet, fullName } from './exportCommon.js';
+import {
+  dayModeLabel,
+  experimentStatusLabel,
+  roleLabel,
+  roleLabelsList,
+} from './exportLabels.js';
 import { createWorkbook, sendWorkbook } from './workbook.js';
-
-function dayMode(startRole: string | null | undefined, active: string | null | undefined): string {
-  if (!active || !startRole) return '';
-  return active === startRole ? 'explore_own' : 'boost_other';
-}
 
 export async function writeRolesExperimentsExport(res: Response): Promise<void> {
   const roleRows = await db.select({ s: participantDayState, p: participants })
@@ -22,12 +23,12 @@ export async function writeRolesExperimentsExport(res: Response): Promise<void> 
   }
 
   const wb = await createWorkbook();
-  addReadmeSheet(wb, ['Роли и эксперименты по смене.']);
+  addReadmeSheet(wb, ['Роли и эксперименты по смене. Роли — русские названия.']);
 
   const byDay = wb.addWorksheet('По дням');
   byDay.addRow([
-    'participant_id', 'direction', 'group', 'day', 'start_role', 'active_role', 'day_mode',
-    'experiment_status', 'experiment_title', 'experiment_body', 'experiment_result', 'tomorrow_role',
+    'ID участника', 'Направление', 'Группа', 'День', 'Роль на входе', 'Активная роль', 'Режим дня',
+    'Статус эксперимента', 'Название эксперимента', 'Текст эксперимента', 'Результат эксперимента', 'Роль на завтра',
   ]);
   for (const r of roleRows) {
     const exp = r.s.activeRoleKey
@@ -35,10 +36,14 @@ export async function writeRolesExperimentsExport(res: Response): Promise<void> 
       : undefined;
     const ratings = r.s.eveningRatings as Record<string, unknown> | null;
     byDay.addRow([
-      r.p?.id, r.p?.direction, r.p?.groupName, r.s.dayNumber, r.p?.pedagogicalRole,
-      r.s.activeRoleKey, dayMode(r.p?.pedagogicalRole, r.s.activeRoleKey),
-      r.s.experimentStatus, exp?.title ?? '', exp?.body ?? '',
-      ratings?.experimentResult ?? '', r.s.tomorrowRoleKey,
+      r.p?.id, r.p?.direction, r.p?.groupName, r.s.dayNumber,
+      roleLabel(r.p?.pedagogicalRole),
+      roleLabel(r.s.activeRoleKey),
+      dayModeLabel(r.p?.pedagogicalRole, r.s.activeRoleKey),
+      experimentStatusLabel(r.s.experimentStatus),
+      exp?.title ?? '', exp?.body ?? '',
+      ratings?.experimentResult ?? '',
+      roleLabel(r.s.tomorrowRoleKey),
     ]);
   }
 
@@ -51,20 +56,20 @@ export async function writeRolesExperimentsExport(res: Response): Promise<void> 
     byParticipant.get(id)!.push(r);
   }
   const traj = wb.addWorksheet('Путь ролей участника');
-  traj.addRow(['participant_id', 'name', 'start', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7']);
+  traj.addRow(['ID участника', 'ФИО', 'Старт', 'День 1', 'День 2', 'День 3', 'День 4', 'День 5', 'День 6', 'День 7']);
   for (const p of allP) {
     const states = byParticipant.get(p.id) || [];
     const byDayNum: Record<number, string> = {};
-    for (const s of states) byDayNum[s.s.dayNumber] = s.s.activeRoleKey || '';
+    for (const s of states) byDayNum[s.s.dayNumber] = roleLabel(s.s.activeRoleKey);
     traj.addRow([
-      p.id, fullName(p), p.pedagogicalRole,
+      p.id, fullName(p), roleLabel(p.pedagogicalRole),
       byDayNum[1] || '', byDayNum[2] || '', byDayNum[3] || '', byDayNum[4] || '',
       byDayNum[5] || '', byDayNum[6] || '', byDayNum[7] || '',
     ]);
   }
 
   const dist = wb.addWorksheet('Распределение ролей');
-  dist.addRow(['day', 'direction', 'role_key', 'count']);
+  dist.addRow(['День', 'Направление', 'Роль', 'Количество']);
   const counts = new Map<string, number>();
   for (const r of roleRows) {
     if (!r.s.activeRoleKey) continue;
@@ -73,17 +78,20 @@ export async function writeRolesExperimentsExport(res: Response): Promise<void> 
   }
   for (const [key, count] of counts) {
     const [day, direction, role] = key.split('|');
-    dist.addRow([day, direction, role, count]);
+    dist.addRow([day, direction, roleLabel(role), count]);
   }
 
   const fin = wb.addWorksheet('Способ действия D7');
-  fin.addRow(['participant_id', 'name', 'start_role', 'explored_roles_count', 'explored_roles', 'strong_role', 'growth_role', 'next_experiment']);
+  fin.addRow([
+    'ID участника', 'ФИО', 'Роль на входе', 'Число исследованных ролей', 'Исследованные роли',
+    'Сильная роль', 'Роль роста', 'Следующий эксперимент',
+  ]);
   for (const p of allP) {
     const states = byParticipant.get(p.id) || [];
     const explored = [...new Set(states.filter(s => s.s.activeRoleKey).map(s => s.s.activeRoleKey!))];
     fin.addRow([
-      p.id, fullName(p), p.pedagogicalRole, explored.length, explored.join(', '),
-      p.strongRole, p.growthRole, p.nextExperiment,
+      p.id, fullName(p), roleLabel(p.pedagogicalRole), explored.length, roleLabelsList(explored),
+      roleLabel(p.strongRole), roleLabel(p.growthRole), p.nextExperiment,
     ]);
   }
 

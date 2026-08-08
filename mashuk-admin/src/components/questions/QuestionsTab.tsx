@@ -47,6 +47,8 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
   const [bulkTargetDay, setBulkTargetDay] = useState(2);
   const [copyDayForm, setCopyDayForm] = useState({ fromDay: 1, toDay: 2, overwrite: false });
 
+  const [branchParentOptions, setBranchParentOptions] = useState<Record<number, { label: string; value: string }[]>>({});
+
   const [answersModal, setAnswersModal] = useState<{ open: boolean; title: string; loading: boolean; rows: any[] }>({
     open: false, title: '', loading: false, rows: [],
   });
@@ -137,6 +139,30 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
   useEffect(() => {
     setSelectedIds(new Set());
   }, [kindTab, listQuery]);
+
+  useEffect(() => {
+    if (view !== 'form') return;
+    const parents = questions.filter(q =>
+      q.id !== editingId
+      && (q.answerType === 'choice' || q.answerType === 'multi' || q.type === 'choice' || q.type === 'multi'),
+    );
+    let cancelled = false;
+    Promise.all(parents.map(async (p) => {
+      try {
+        const res = await adminFetch(`/questions/${p.id}/options`);
+        const opts = (res.options || []).map((o: { label?: string; value?: string }) => ({
+          label: o.label || o.value || '',
+          value: o.value || o.label || '',
+        }));
+        return [p.id, opts] as const;
+      } catch {
+        return [p.id, []] as const;
+      }
+    })).then((entries) => {
+      if (!cancelled) setBranchParentOptions(Object.fromEntries(entries));
+    });
+    return () => { cancelled = true; };
+  }, [view, questions, editingId, adminFetch]);
 
   const openCreate = async () => {
     const meta = await loadMeta();
@@ -392,6 +418,16 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
           }}
           onAddOption={() => setDraft(d => ({ ...d, options: [...d.options, { label: '', value: '' }] }))}
           onRemoveOption={i => setDraft(d => ({ ...d, options: d.options.filter((_, idx) => idx !== i) }))}
+          branchParents={questions
+            .filter(q =>
+              q.id !== editingId
+              && (q.answerType === 'choice' || q.answerType === 'multi' || q.type === 'choice' || q.type === 'multi'),
+            )
+            .map(q => ({
+              id: q.id,
+              title: q.title,
+              options: branchParentOptions[q.id] || [],
+            }))}
           previewSlot={<QuestionParticipantPreview draft={draft} />}
           directions={directions}
           groups={groups}

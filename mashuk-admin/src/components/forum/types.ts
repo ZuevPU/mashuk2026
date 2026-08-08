@@ -3,6 +3,7 @@ export type EveningFieldType =
   | 'yes_no'
   | 'text'
   | 'scale_1_10'
+  | 'choice'
   | 'role_select'
   | 'experiment_text'
   | 'point_b_cta';
@@ -12,6 +13,9 @@ export type EveningField = {
   type: EveningFieldType;
   label: string;
   required?: boolean;
+  options?: string[];
+  allowOther?: boolean;
+  otherLabel?: string;
   visibleWhen?: { field: string; equals: boolean | string | number };
 };
 
@@ -50,6 +54,7 @@ export const SECTIONS = ['home', 'program', 'tasks', 'questions', 'profile'] as 
 export const EVENING_FIELD_TYPE_OPTIONS: { value: EveningFieldType; label: string }[] = [
   { value: 'scale_1_5', label: 'Шкала 1–5' },
   { value: 'yes_no', label: 'Да / нет' },
+  { value: 'choice', label: 'Один ответ из списка' },
   { value: 'text', label: 'Текстовый ответ' },
   { value: 'scale_1_10', label: 'Шкала 1–10' },
   { value: 'role_select', label: 'Выбор роли на завтра' },

@@ -4,10 +4,11 @@ import {
   GOAL_QUESTIONS,
   ROLE_CATALOG,
   coerceGoalQuestions,
-  parseMultiGoalAnswer,
-  joinMultiGoalAnswer,
+  visibleGoalQuestionsFilled,
+  pruneHiddenGoalAnswers,
   type GoalQuestion,
 } from '../../data/onboarding';
+import { GoalQuestionsFields } from '../onboarding/GoalQuestionsFields';
 import { apiGet } from '../../api/client';
 import { isPointBQuestion } from '../../utils/eveningSummaryQuestion';
 
@@ -35,6 +36,7 @@ interface QuestionAnswerFormProps {
     block?: string;
     requiresLessonPick?: boolean;
     allowRetry?: boolean;
+    allowOther?: boolean;
   };
   options: { id: number; label: string; value: string; parentOptionId?: number | null }[];
   dayEvents?: { id: number; title: string; place?: string | null; startTime?: string | null }[];
@@ -55,6 +57,7 @@ function formatStoredAnswer(
     if (typeof o.text === 'string' && o.text.trim()) {
       return o.eventTitle ? `${o.eventTitle}\n\n${o.text.trim()}` : o.text.trim();
     }
+    if (o.choice === '__other__' && typeof o.otherText === 'string') return o.otherText;
     if (typeof o.choice === 'string') return o.choice;
     if (Array.isArray(o.choices)) return o.choices.map(String).join(', ');
     if (o.emotion != null || o.energy != null) {
@@ -100,7 +103,7 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
       .catch(() => undefined);
   }, []);
 
-  const canNextAnswers = goalQuestions.every((_, i) => (answers[i] || '').trim().length > 0);
+  const canNextAnswers = visibleGoalQuestionsFilled(goalQuestions, answers);
   const canSubmit = !!strongRole && !!growthRole && growthWhy.trim().length > 0;
 
   const handleSubmit = async () => {
@@ -108,7 +111,7 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
     setSaving(true);
     try {
       await onSubmit({
-        answers: answers.map(a => a.trim()),
+        answers: pruneHiddenGoalAnswers(goalQuestions, answers).map(a => a.trim()),
         strongRole,
         growthRole,
         growthWhy: growthWhy.trim(),
@@ -131,61 +134,12 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
 
       {step === 0 && (
         <>
-          {goalQuestions.map((q, i) => {
-            const title = `${i + 1}. ${q.text.trim() || 'Вопрос'}`;
-            const setAnswer = (value: string) => {
-              const next = [...answers];
-              next[i] = value;
-              setAnswers(next);
-            };
-            if (q.type === 'choice') {
-              return (
-                <FormItem key={i} top={title} topMultiline>
-                  {q.options.map(opt => (
-                    <Radio
-                      key={opt}
-                      checked={answers[i] === opt}
-                      onChange={() => setAnswer(opt)}
-                      style={{ marginBottom: 6 }}
-                    >
-                      {opt}
-                    </Radio>
-                  ))}
-                </FormItem>
-              );
-            }
-            if (q.type === 'multi') {
-              const selected = parseMultiGoalAnswer(answers[i] || '');
-              return (
-                <FormItem key={i} top={`${title} (можно несколько)`} topMultiline>
-                  {q.options.map(opt => (
-                    <Checkbox
-                      key={opt}
-                      checked={selected.includes(opt)}
-                      onChange={() => {
-                        const nextSel = selected.includes(opt)
-                          ? selected.filter(v => v !== opt)
-                          : [...selected, opt];
-                        setAnswer(joinMultiGoalAnswer(nextSel));
-                      }}
-                      style={{ marginBottom: 6 }}
-                    >
-                      {opt}
-                    </Checkbox>
-                  ))}
-                </FormItem>
-              );
-            }
-            return (
-              <FormItem key={i} top={title} topMultiline>
-                <Textarea
-                  value={answers[i]}
-                  onChange={e => setAnswer(e.target.value)}
-                  placeholder="Ответ на выходе…"
-                />
-              </FormItem>
-            );
-          })}
+          <GoalQuestionsFields
+            questions={goalQuestions}
+            answers={answers}
+            onChange={setAnswers}
+            openPlaceholder="Ответ на выходе…"
+          />
           <Button size="l" stretched disabled={!canNextAnswers} onClick={() => setStep(1)}>Далее</Button>
         </>
       )}
@@ -350,6 +304,7 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
 }) => {
   const [text, setText] = useState('');
   const [choice, setChoice] = useState('');
+  const [otherText, setOtherText] = useState('');
   const [multi, setMulti] = useState<string[]>([]);
   const [emotion, setEmotion] = useState('');
   const [energy, setEnergy] = useState(5);
@@ -420,7 +375,9 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
           break;
         }
         case 'choice':
-          answerData = { choice };
+          answerData = choice === '__other__'
+            ? { choice: '__other__', otherText: otherText.trim() }
+            : { choice };
           break;
         case 'multi':
           answerData = { choices: multi };
@@ -493,9 +450,26 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
         <Textarea value={text} onChange={e => setText(e.target.value)} placeholder="Ваш ответ..." />
       )}
 
-      {question.type === 'choice' && options.map(o => (
-        <Radio key={o.id} checked={choice === o.value} onChange={() => setChoice(o.value)}>{o.label}</Radio>
-      ))}
+      {question.type === 'choice' && (
+        <>
+          {options.map(o => (
+            <Radio key={o.id} checked={choice === o.value} onChange={() => setChoice(o.value)}>{o.label}</Radio>
+          ))}
+          {question.allowOther && (
+            <>
+              <Radio checked={choice === '__other__'} onChange={() => setChoice('__other__')}>Свой вариант</Radio>
+              {choice === '__other__' && (
+                <Textarea
+                  value={otherText}
+                  onChange={e => setOtherText(e.target.value)}
+                  placeholder="Введите свой вариант…"
+                  style={{ marginTop: 8 }}
+                />
+              )}
+            </>
+          )}
+        </>
+      )}
 
       {question.type === 'multi' && options.map(o => (
         <Checkbox key={o.id} checked={multi.includes(o.value)} onChange={() => toggleMulti(o.value)}>{o.label}</Checkbox>

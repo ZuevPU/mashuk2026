@@ -25,7 +25,7 @@ import {
 import { writeParticipantsArchiveZip, writeFinalProfilesZip } from '../services/exports/participantArchiveExport.js';
 import { writeParticipantActivityWideWorkbook } from '../services/exports/participantActivityWide.js';
 import {
-  ANSWER_ROW_HEADERS, buildAnswerRow, answerText,
+  ANSWER_ROW_HEADERS_RU, buildAnswerRow, answerText,
 } from '../services/exports/exportCommon.js';
 import { normalizeExportTouchpointFilter } from '../services/exports/touchpointFilter.js';
 import { sendCsv } from '../services/exports/workbook.js';
@@ -66,10 +66,14 @@ export async function exportParticipantsFullHandler(req: AdminRequest, res: Resp
   const { applyCohortNameFilters } = await import('../services/exports/exportCohort.js');
   let parsed = parseParticipantListQuery(req);
   parsed.page = 1;
-  const rawLimit = req.query.limit != null && req.query.limit !== ''
-    ? Number(req.query.limit)
-    : 5000;
-  parsed.limit = Math.max(1, Math.min(5000, Number.isFinite(rawLimit) ? rawLimit : 5000));
+  // No hard 5000 cap — export all matching participants unless client/env sets a limit.
+  if (req.query.limit != null && req.query.limit !== '') {
+    const rawLimit = Number(req.query.limit);
+    if (Number.isFinite(rawLimit) && rawLimit > 0) parsed.limit = Math.floor(rawLimit);
+    else delete parsed.limit;
+  } else {
+    delete parsed.limit;
+  }
   if (parsed.shiftId == null || Number.isNaN(parsed.shiftId)) {
     parsed.shiftId = await resolveAdminShiftId(req);
   }
@@ -92,7 +96,7 @@ export async function exportAnswersHandler(req: AdminRequest, res: Response): Pr
     publishedOnly: true,
   });
 
-  const header = [...ANSWER_ROW_HEADERS, ...(includeDepth ? ['depth_orientir'] : [])].join(',');
+  const header = [...ANSWER_ROW_HEADERS_RU, ...(includeDepth ? ['Глубина'] : [])].join(',');
   sendCsv(
     res,
     day ? `answers_day${day}.csv` : 'answers.csv',

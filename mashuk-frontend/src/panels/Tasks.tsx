@@ -607,7 +607,11 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
   }, [data, openSubmit]);
 
   useEffect(() => {
-    if (activePanel !== id) return;
+    if (activePanel !== id) {
+      if (submitTaskId) setSubmitTaskId(null);
+      setModal(null);
+      return;
+    }
     if (submitTaskId) {
       setModal(
         <ModalRoot activeModal="task-submit" onClose={() => setSubmitTaskId(null)}>

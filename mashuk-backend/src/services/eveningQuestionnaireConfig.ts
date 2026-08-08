@@ -7,6 +7,7 @@ export type EveningFieldType =
   | 'yes_no'
   | 'text'
   | 'scale_1_10'
+  | 'choice'
   | 'role_select'
   | 'experiment_text'
   | 'point_b_cta';
@@ -16,6 +17,10 @@ export type EveningField = {
   type: EveningFieldType;
   label: string;
   required?: boolean;
+  /** Options for type=choice */
+  options?: string[];
+  allowOther?: boolean;
+  otherLabel?: string;
   visibleWhen?: { field: string; equals: boolean | string | number };
 };
 
@@ -213,8 +218,15 @@ export function resolveEveningConfigForDay(
 export function isFieldVisible(
   field: EveningField,
   form: Record<string, unknown>,
+  allFields: EveningField[] = [],
 ): boolean {
   if (!field.visibleWhen) return true;
   const v = form[field.visibleWhen.field];
-  return v === field.visibleWhen.equals;
+  const expected = field.visibleWhen.equals;
+  if (expected === '__other__') {
+    const parent = allFields.find(f => f.key === field.visibleWhen!.field);
+    const opts = parent?.options ?? [];
+    return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v);
+  }
+  return v === expected;
 }

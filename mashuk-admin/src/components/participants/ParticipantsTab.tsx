@@ -139,7 +139,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
   const exportList = (ids?: number[]) => {
     const sp = new URLSearchParams(listQuery);
     sp.set('format', 'xlsx');
-    sp.set('limit', '5000');
+    sp.delete('limit');
     sp.delete('page');
     if (ids?.length) sp.set('ids', ids.join(','));
     act(() => adminDownloadBinary(`/exports/participants?${sp.toString()}`, 'participants.xlsx'), 'Выгрузка');

@@ -15,6 +15,7 @@ import {
 } from './exportCommon.js';
 import { queryAnswerJoinRows } from './answerJoinQuery.js';
 import { loadEnrichedParticipants } from './participantEnrichment.js';
+import { submissionStatusLabel } from './exportLabels.js';
 import { createWorkbook } from './workbook.js';
 import type { ExportSourceId } from './exportMeta.js';
 import { resolveColumnLabels } from './exportMeta.js';
@@ -136,6 +137,7 @@ async function fetchParticipantRows(params: CustomParams) {
       total_rating: r.totalRating,
       start_role: r.startRole,
       strong_role: r.strongRole,
+      growth_role: r.growthRole,
     }));
 }
 
@@ -152,7 +154,7 @@ async function fetchTaskRows(params: CustomParams) {
       direction: r.p?.direction ?? '',
       group_name: r.p?.groupName ?? '',
       task_title: r.t?.title ?? '',
-      status: r.s.status,
+      status: submissionStatusLabel(r.s.status),
       points: r.s.pointsAwarded ?? '',
       submitted_at: formatTs(r.s.submittedAt),
     }));

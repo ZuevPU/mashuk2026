@@ -459,6 +459,9 @@ export const questions = pgTable('questions', {
   pushOnPublish: boolean('push_on_publish').default(false),
   pushTemplate: text('push_template'),
   parentQuestionId: integer('parent_question_id'),
+  allowOther: boolean('allow_other').default(false),
+  /** { questionId: number, optionValues: string[] } — show if parent answer matches */
+  showWhen: jsonb('show_when').$type<{ questionId: number; optionValues: string[] } | null>(),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('questions_shift_id_idx').on(table.shiftId),

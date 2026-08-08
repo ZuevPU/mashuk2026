@@ -8,9 +8,10 @@ import { inferReflectionDepth } from '../reflectionDepth.js';
 import { isPublishedStatus } from '../publishStatus.js';
 import { EVENING_SCALE_KEYS } from '../touchpointTemplates.js';
 import {
-  ANSWER_ROW_HEADERS, addReadmeSheet, answerText, buildAnswerRow, filterAnswersByTouchpoint, fullName,
+  ANSWER_ROW_HEADERS_RU, addReadmeSheet, answerText, buildAnswerRow, filterAnswersByTouchpoint, fullName,
 } from './exportCommon.js';
 import { queryAnswerJoinRows } from './answerJoinQuery.js';
+import { experimentStatusLabel, roleLabel, submissionStatusLabel } from './exportLabels.js';
 import { normalizeExportTouchpointFilter } from './touchpointFilter.js';
 import { createWorkbook, sendWorkbook } from './workbook.js';
 
@@ -56,7 +57,7 @@ export async function writeDayWorkbook(res: Response, day: number, typeRaw: stri
   ]);
 
   const sheetAns = wb.addWorksheet('Ответы дня');
-  sheetAns.addRow([...ANSWER_ROW_HEADERS, 'depth_orientir', 'question_id', 'block']);
+  sheetAns.addRow([...ANSWER_ROW_HEADERS_RU, 'Глубина', 'ID вопроса', 'Блок']);
   for (const r of dayAns) {
     const text = answerText(r.a.answerData);
     const row = buildAnswerRow(r, { source: 'question' });
@@ -68,44 +69,45 @@ export async function writeDayWorkbook(res: Response, day: number, typeRaw: stri
   for (const e of dayEvents) sheetEv.addRow([e.id, e.title, e.place, e.startTime?.toISOString(), e.endTime?.toISOString()]);
 
   const sheetTasks = wb.addWorksheet('Задания');
-  sheetTasks.addRow(['id', 'title', 'points', 'confirmation']);
+  sheetTasks.addRow(['ID', 'Название', 'Баллы', 'Тип подтверждения']);
   for (const t of dayTasks) sheetTasks.addRow([t.id, t.title, t.points, t.confirmationType]);
 
   const sheetSubs = wb.addWorksheet('Сдачи');
-  sheetSubs.addRow(['id', 'participant', 'task', 'status', 'points']);
+  sheetSubs.addRow(['ID', 'Участник', 'Задание', 'Статус', 'Баллы']);
   for (const r of daySubs) {
-    sheetSubs.addRow([r.s.id, fullName(r.p), r.t?.title, r.s.status, r.s.pointsAwarded]);
+    sheetSubs.addRow([r.s.id, fullName(r.p), r.t?.title, submissionStatusLabel(r.s.status), r.s.pointsAwarded]);
   }
 
   const sheetMat = wb.addWorksheet('Материалы');
-  sheetMat.addRow(['id', 'title', 'type', 'direction', 'url']);
+  sheetMat.addRow(['ID', 'Название', 'Тип', 'Направление', 'URL']);
   for (const m of dayMats) sheetMat.addRow([m.id, m.title, m.type, m.direction, m.url]);
 
   const sheetRoles = wb.addWorksheet('Роли по дням');
   sheetRoles.addRow([
-    'participant_id', 'name', 'direction', 'group', 'day',
-    'start_role', 'active_role', 'tomorrow_role', 'experiment_status',
+    'ID участника', 'ФИО', 'Направление', 'Группа', 'День',
+    'Роль на входе', 'Активная роль', 'Роль на завтра', 'Статус эксперимента',
   ]);
   for (const r of dayRoles) {
     sheetRoles.addRow([
       r.p?.id, fullName(r.p), r.p?.direction, r.p?.groupName, r.s.dayNumber,
-      r.p?.pedagogicalRole, r.s.activeRoleKey, r.s.tomorrowRoleKey, r.s.experimentStatus,
+      roleLabel(r.p?.pedagogicalRole), roleLabel(r.s.activeRoleKey),
+      roleLabel(r.s.tomorrowRoleKey), experimentStatusLabel(r.s.experimentStatus),
     ]);
   }
 
   const sheetEvening = wb.addWorksheet('Итоговая анкета');
   sheetEvening.addRow([
-    'participant_id', 'name', 'direction', 'group', 'day', 'submitted_at', 'tomorrow_role',
+    'ID участника', 'ФИО', 'Направление', 'Группа', 'День', 'Отправлено', 'Роль на завтра',
     ...EVENING_SCALE_KEYS,
-    'tripYes', 'tripScore', 'practiceYes', 'practiceName', 'recommendYes', 'recommendScore',
-    'mainThesis', 'understandingChange', 'likedMost', 'improveTomorrow', 'freeNote', 'experimentResult',
+    'Поездка да/нет', 'Оценка поездки', 'Практика да/нет', 'Название практики', 'Рекомендация да/нет', 'Оценка рекомендации',
+    'Главный тезис', 'Изменение понимания', 'Больше всего понравилось', 'Улучшить завтра', 'Свободная заметка', 'Результат эксперимента',
   ]);
   for (const r of dayRoles) {
     const ratings = r.s.eveningRatings as Record<string, unknown> | null;
     if (!ratings) continue;
     sheetEvening.addRow([
       r.p?.id, fullName(r.p), r.p?.direction, r.p?.groupName, r.s.dayNumber,
-      r.s.updatedAt?.toISOString?.() ?? '', r.s.tomorrowRoleKey,
+      r.s.updatedAt?.toISOString?.() ?? '', roleLabel(r.s.tomorrowRoleKey),
       ...EVENING_SCALE_KEYS.map(k => ratings[k] ?? ''),
       ratings.tripYes, ratings.tripScore, ratings.practiceYes, ratings.practiceName,
       ratings.recommendYes, ratings.recommendScore,
@@ -122,18 +124,22 @@ export async function writeDayWorkbook(res: Response, day: number, typeRaw: stri
     byParticipant.get(id)!.push(r);
   }
   const sheetTraj = wb.addWorksheet('Путь ролей');
-  sheetTraj.addRow(['participant_id', 'name', 'start_role', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'strong', 'growth']);
+  sheetTraj.addRow([
+    'ID участника', 'ФИО', 'Роль на входе',
+    'День 1', 'День 2', 'День 3', 'День 4', 'День 5', 'День 6', 'День 7',
+    'Сильная роль', 'Роль роста',
+  ]);
   for (const p of allParticipants) {
     const states = byParticipant.get(p.id) || [];
     const byDay: Record<number, string> = {};
     for (const s of states) {
-      byDay[s.s.dayNumber] = s.s.activeRoleKey || s.s.tomorrowRoleKey || '';
+      byDay[s.s.dayNumber] = roleLabel(s.s.activeRoleKey || s.s.tomorrowRoleKey);
     }
     sheetTraj.addRow([
-      p.id, fullName(p), p.pedagogicalRole,
+      p.id, fullName(p), roleLabel(p.pedagogicalRole),
       byDay[1] || '', byDay[2] || '', byDay[3] || '', byDay[4] || '',
       byDay[5] || '', byDay[6] || '', byDay[7] || '',
-      p.strongRole, p.growthRole,
+      roleLabel(p.strongRole), roleLabel(p.growthRole),
     ]);
   }
 

@@ -2413,42 +2413,11 @@ export const crudMaterialTypes = {
 
 export const exportParticipants = async (req: AdminRequest, res: Response): Promise<void> => {
   const format = String(req.query.format || 'csv').toLowerCase();
+  const { writeParticipantsFullExport } = await import('../services/exports/participantsExport.js');
   const parsed = parseParticipantListQuery(req);
-  parsed.limit = 5000;
   parsed.page = 1;
-  const { participants: list } = await queryParticipants(parsed);
-
-  if (format === 'xlsx') {
-    const ExcelJS = await import('exceljs');
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Участники');
-    ws.addRow([
-      'id', 'vk_id', 'first_name', 'last_name', 'direction', 'group_name', 'pedagogical_role',
-      'path_points', 'experience_points', 'total_rating', 'last_active_at', 'is_blocked', 'created_at',
-    ]);
-    for (const p of list) {
-      ws.addRow([
-        p.id, p.vkId, p.firstName, p.lastName, p.direction, p.groupName, p.pedagogicalRole,
-        p.pathPoints, p.experiencePoints, p.totalRating, p.lastActiveAt, p.isBlocked, p.createdAt,
-      ]);
-    }
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=participants.xlsx');
-    await wb.xlsx.write(res);
-    res.end();
-    return;
-  }
-
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename=participants.csv');
-  const header = 'id,vk_id,first_name,last_name,direction,group_name,pedagogical_role,path_points,experience_points,total_rating,last_active_at,is_blocked,created_at\n';
-  const rows = list.map(p =>
-    [
-      p.id, p.vkId, p.firstName, p.lastName, p.direction, p.groupName, p.pedagogicalRole,
-      p.pathPoints, p.experiencePoints, p.totalRating, p.lastActiveAt, p.isBlocked, p.createdAt,
-    ].map(v => JSON.stringify(v ?? '')).join(','),
-  ).join('\n');
-  res.send('\uFEFF' + header + rows);
+  delete parsed.limit;
+  await writeParticipantsFullExport(res, format === 'xlsx' ? 'xlsx' : 'csv', parsed);
 };
 
 export const exportAnswers = async (req: AdminRequest, res: Response): Promise<void> => {

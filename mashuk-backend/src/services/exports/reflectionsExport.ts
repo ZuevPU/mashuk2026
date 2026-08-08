@@ -5,7 +5,8 @@ import { answers, participants, questions } from '../../db/schema.js';
 import { inferReflectionDepth } from '../reflectionDepth.js';
 import { isPublishedStatus } from '../publishStatus.js';
 import {
-  ANSWER_ROW_HEADERS, addReadmeSheet, answerText, buildAnswerRow, fullName,
+  ANSWER_ROW_HEADERS_RU, addReadmeSheet, answerText, buildAnswerRow, fullName,
+
 } from './exportCommon.js';
 import { queryAnswerJoinRows } from './answerJoinQuery.js';
 import { touchpointTypeForQuestion } from './touchpointFilter.js';
@@ -38,13 +39,13 @@ export async function writeReflectionsExport(
   } = {},
 ): Promise<void> {
   const rows = await loadReflectionRows(filters);
-  const extraHeaders = ['question_id', 'touchpoint_type', 'block_id', 'word_count', 'depth_orientir'];
+  const extraHeadersRu = ['ID вопроса', 'Тип точки', 'Блок', 'Слов', 'Глубина'];
 
   if (format === 'xlsx') {
     const wb = await createWorkbook();
     addReadmeSheet(wb, ['Сквозная выгрузка текстовых ответов рефлексии за смену.']);
     const ws = wb.addWorksheet('Рефлексия');
-    ws.addRow([...ANSWER_ROW_HEADERS, ...extraHeaders]);
+    ws.addRow([...ANSWER_ROW_HEADERS_RU, ...extraHeadersRu]);
     for (const r of rows) {
       const text = answerText(r.a.answerData);
       ws.addRow([
@@ -60,7 +61,7 @@ export async function writeReflectionsExport(
   sendCsv(
     res,
     'reflections.csv',
-    [...ANSWER_ROW_HEADERS, ...extraHeaders].join(','),
+    [...ANSWER_ROW_HEADERS_RU, ...extraHeadersRu].join(','),
     rows.map(r => {
       const text = answerText(r.a.answerData);
       return [
@@ -109,7 +110,7 @@ export async function writeParticipantAnswersExport(
   if (format === 'xlsx') {
     const wb = await createWorkbook();
     const ws = wb.addWorksheet('Ответы');
-    ws.addRow([...ANSWER_ROW_HEADERS, 'question_id']);
+    ws.addRow([...ANSWER_ROW_HEADERS_RU, 'ID вопроса']);
     for (const r of rows) {
       ws.addRow([...buildAnswerRow(r, { source: 'question' }), r.q?.id]);
     }
@@ -120,7 +121,7 @@ export async function writeParticipantAnswersExport(
   sendCsv(
     res,
     `${fname}.csv`,
-    [...ANSWER_ROW_HEADERS, 'question_id'].join(','),
+    [...ANSWER_ROW_HEADERS_RU, 'ID вопроса'].join(','),
     rows.map(r => [...buildAnswerRow(r, { source: 'question' }).map(String), String(r.q?.id ?? '')]),
   );
 }

@@ -168,11 +168,22 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
       const payload: RoleDiagnosticsConfig = {
         ...currentConfig,
         goalQuestions: goalQuestions.map(q => ({
+          id: q.id,
           text: q.text.trim(),
           type: q.type,
           options: q.type === 'open'
             ? []
             : q.options.map(o => o.trim()).filter(Boolean),
+          allowOther: q.type !== 'open' && q.allowOther ? true : undefined,
+          otherLabel: q.type !== 'open' && q.allowOther
+            ? (q.otherLabel?.trim() || 'Свой вариант')
+            : undefined,
+          showWhen: q.showWhen?.questionId && q.showWhen.options?.length
+            ? {
+              questionId: q.showWhen.questionId,
+              options: q.showWhen.options,
+            }
+            : null,
         })),
       };
       await adminFetch('/forum-settings', {

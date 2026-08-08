@@ -1,6 +1,7 @@
 /** Defaults synced with mashuk-backend navDiagnosticsDefaults (8×6). */
 
 import type { GoalQuestion } from './types';
+import { newGoalQuestionId } from './types';
 
 export const DEFAULT_DIAG_MATRIX: string[][] = [
   ['meaning_researcher', 'content_packer', 'practice_realizer', 'process_navigator', 'communication_guide', 'environment_keeper'],
@@ -19,29 +20,63 @@ export const DEFAULT_GOAL_QUESTIONS: GoalQuestion[] = [
   'Какой запрос ты хочешь принести своему направлению?',
   'Что для тебя было бы главным результатом этих 8 дней?',
   'Что ты ожидаешь от других участников?',
-].map((text) => ({ text, type: 'open' as const, options: [] }));
+].map((text, i) => ({ id: `gq_default_${i + 1}`, text, type: 'open' as const, options: [] }));
 
 export function coerceGoalQuestions(raw: unknown): GoalQuestion[] {
   if (!Array.isArray(raw) || raw.length < 1) {
     return DEFAULT_GOAL_QUESTIONS.map(q => ({ ...q, options: [...q.options] }));
   }
-  return raw.slice(0, 12).map((item) => {
+  const usedIds = new Set<string>();
+  return raw.slice(0, 24).map((item, index) => {
     if (typeof item === 'string') {
-      return { text: item, type: 'open' as const, options: [] };
+      let id = newGoalQuestionId();
+      while (usedIds.has(id)) id = newGoalQuestionId();
+      usedIds.add(id);
+      return { id, text: item, type: 'open' as const, options: [] };
     }
     if (!item || typeof item !== 'object') {
-      return { text: '', type: 'open' as const, options: [] };
+      let id = newGoalQuestionId();
+      while (usedIds.has(id)) id = newGoalQuestionId();
+      usedIds.add(id);
+      return { id, text: '', type: 'open' as const, options: [] };
     }
-    const obj = item as { text?: unknown; type?: unknown; options?: unknown };
+    const obj = item as {
+      id?: unknown;
+      text?: unknown;
+      type?: unknown;
+      options?: unknown;
+      allowOther?: unknown;
+      otherLabel?: unknown;
+      showWhen?: unknown;
+    };
+    let id = String(obj.id ?? '').trim();
+    if (!id || usedIds.has(id)) id = newGoalQuestionId();
+    usedIds.add(id);
     const typeRaw = String(obj.type ?? 'open');
     const type = (typeRaw === 'choice' || typeRaw === 'multi') ? typeRaw : 'open';
     const options = Array.isArray(obj.options)
       ? obj.options.map(o => String(o ?? ''))
       : [];
+    let showWhen: GoalQuestion['showWhen'] = null;
+    if (obj.showWhen && typeof obj.showWhen === 'object') {
+      const sw = obj.showWhen as { questionId?: unknown; options?: unknown };
+      const questionId = String(sw.questionId ?? '').trim();
+      const swOpts = Array.isArray(sw.options)
+        ? sw.options.map(o => String(o ?? '').trim()).filter(Boolean)
+        : [];
+      if (questionId && swOpts.length) showWhen = { questionId, options: swOpts };
+    }
+    const allowOther = type !== 'open' && obj.allowOther === true;
     return {
+      id,
       text: String(obj.text ?? ''),
       type,
       options: type === 'open' ? [] : options,
+      allowOther: allowOther || undefined,
+      otherLabel: allowOther
+        ? (String(obj.otherLabel ?? '').trim() || 'Свой вариант')
+        : undefined,
+      showWhen,
     };
   });
 }

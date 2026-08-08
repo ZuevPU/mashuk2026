@@ -141,6 +141,20 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
         if (q.access === 'soon') return false;
         // Проверка состояния после окна — скрываем, чтобы нельзя было ответить
         if (q.access === 'locked' && q.latePolicy === 'hard_close') return false;
+        const sw = q.showWhen as { questionId?: number; optionValues?: string[] } | null;
+        if (sw?.questionId && Array.isArray(sw.optionValues) && sw.optionValues.length) {
+          const parentAns = answerByQuestion.get(sw.questionId);
+          if (!parentAns) return false;
+          const data = parentAns.answerData as Record<string, unknown> | null;
+          const choice = typeof data?.choice === 'string' ? data.choice : null;
+          const choices = Array.isArray(data?.choices) ? data.choices.map(String) : [];
+          const hit = sw.optionValues.some(v =>
+            (choice != null && choice === v)
+            || choices.includes(v)
+            || (v === '__other__' && choice === '__other__'),
+          );
+          if (!hit) return false;
+        }
         return true;
       })
       .sort((a, b) => (b.sortOrder ?? 0) - (a.sortOrder ?? 0) || a.id - b.id);

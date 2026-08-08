@@ -7,7 +7,8 @@ import { PassThrough } from 'stream';
 import { db } from '../../db/index.js';
 import { participants } from '../../db/schema.js';
 import { loadParticipantAnswerRows } from './reflectionsExport.js';
-import { ANSWER_ROW_HEADERS, buildAnswerRow } from './exportCommon.js';
+import { ANSWER_ROW_HEADERS_RU, buildAnswerRow } from './exportCommon.js';
+import { archiveExportMaxParticipants } from './exportLabels.js';
 import { createWorkbook, contentDispositionAttachment } from './workbook.js';
 
 export type ArchiveProgress = {
@@ -16,14 +17,11 @@ export type ArchiveProgress = {
   progress: number;
 };
 
-function exportMaxParticipants(): number {
-  const n = Number(process.env.EXPORT_MAX_PARTICIPANTS);
-  return Number.isFinite(n) && n > 0 ? n : 500;
-}
-
 async function listArchiveParticipants(opts: { participantId?: number }): Promise<(typeof participants.$inferSelect)[]> {
-  const max = exportMaxParticipants();
-  let list = await db.select().from(participants).where(isNull(participants.selfDeletedAt)).limit(max);
+  const max = archiveExportMaxParticipants();
+  let listQuery = db.select().from(participants).where(isNull(participants.selfDeletedAt));
+  if (max != null) listQuery = listQuery.limit(max) as typeof listQuery;
+  let list = await listQuery;
   if (opts.participantId) {
     list = list.filter(p => p.id === opts.participantId);
   }
@@ -50,7 +48,7 @@ export async function writeParticipantsArchiveZip(
     const rows = await loadParticipantAnswerRows(p.id, opts.textOnly);
     const wb = await createWorkbook();
     const ws = wb.addWorksheet('Ответы');
-    ws.addRow([...ANSWER_ROW_HEADERS, 'question_id']);
+    ws.addRow([...ANSWER_ROW_HEADERS_RU, 'ID вопроса']);
     for (const r of rows) {
       ws.addRow([...buildAnswerRow(r, { source: 'question' }), r.q?.id]);
     }
@@ -87,7 +85,7 @@ export async function writeParticipantsArchiveZipToFile(
         const rows = await loadParticipantAnswerRows(p.id, opts.textOnly);
         const wb = await createWorkbook();
         const ws = wb.addWorksheet('Ответы');
-        ws.addRow([...ANSWER_ROW_HEADERS, 'question_id']);
+        ws.addRow([...ANSWER_ROW_HEADERS_RU, 'ID вопроса']);
         for (const r of rows) {
           ws.addRow([...buildAnswerRow(r, { source: 'question' }), r.q?.id]);
         }
@@ -112,8 +110,10 @@ export async function writeFinalProfilesZip(res: Response): Promise<void> {
   const { pdfWhitelist } = await import('../../db/schema.js');
   const { gatherProfileBundle, streamProfilePdf } = await import('../profilePdfBuilder.js');
   const wl = await db.select().from(pdfWhitelist).where(eq(pdfWhitelist.enabled, true));
-  const max = exportMaxParticipants();
-  const ids = wl.map(w => w.participantId).slice(0, max);
+  const max = archiveExportMaxParticipants();
+  const ids = max == null
+    ? wl.map(w => w.participantId)
+    : wl.map(w => w.participantId).slice(0, max);
 
   if (ids.length === 0) {
     res.status(404).json({ error: 'No whitelisted PDF profiles' });
@@ -149,8 +149,10 @@ export async function writeFinalProfilesZipToFile(
   const { pdfWhitelist } = await import('../../db/schema.js');
   const { gatherProfileBundle, streamProfilePdf } = await import('../profilePdfBuilder.js');
   const wl = await db.select().from(pdfWhitelist).where(eq(pdfWhitelist.enabled, true));
-  const max = exportMaxParticipants();
-  const ids = wl.map(w => w.participantId).slice(0, max);
+  const max = archiveExportMaxParticipants();
+  const ids = max == null
+    ? wl.map(w => w.participantId)
+    : wl.map(w => w.participantId).slice(0, max);
   if (ids.length === 0) {
     throw new Error('No whitelisted PDF profiles');
   }

@@ -148,6 +148,9 @@ export function participantAnswerSummary(data: unknown, type?: string | null): s
     if (parts.length) return parts.join(' · ');
   }
 
+  if (o.choice === '__other__' && typeof o.otherText === 'string' && o.otherText.trim()) {
+    return o.otherText.trim();
+  }
   if (typeof o.choice === 'string' && o.choice.trim()) {
     return o.choice.trim();
   }

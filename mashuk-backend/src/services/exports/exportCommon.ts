@@ -3,6 +3,7 @@ import { isPublishedStatus } from '../publishStatus.js';
 import { getReflectionTypeLabel } from '../reflectionTypeLabel.js';
 import { questionMatchesExportFilter, touchpointTypeForQuestion, type ExportTouchpointFilter } from './touchpointFilter.js';
 
+/** Stable keys for custom export column picker (not shown as CSV titles). */
 export const ANSWER_ROW_HEADERS = [
   'participant_id',
   'full_name',
@@ -16,6 +17,22 @@ export const ANSWER_ROW_HEADERS = [
   'answer',
   'points',
   'source',
+] as const;
+
+/** Russian titles for answer CSV / XLSX downloads. */
+export const ANSWER_ROW_HEADERS_RU = [
+  'ID участника',
+  'ФИО',
+  'Направление',
+  'Группа',
+  'День',
+  'Время заполнения',
+  'Время ответа',
+  'Тип данных',
+  'Вопрос',
+  'Ответ',
+  'Баллы',
+  'Источник',
 ] as const;
 
 export function fullName(p: { firstName?: string | null; lastName?: string | null } | null | undefined): string {

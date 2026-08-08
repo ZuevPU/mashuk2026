@@ -178,8 +178,10 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
     }, published ? `Анкета дня ${day} опубликована` : `Ручная публикация дня ${day} снята`);
   };
 
-  const yesNoFieldsInStep = (step: EveningStep) =>
-    step.fields.filter(f => f.type === 'yes_no');
+  const conditionParentsInStep = (step: EveningStep, fieldKey: string) =>
+    step.fields.filter(f =>
+      f.key !== fieldKey && (f.type === 'yes_no' || f.type === 'choice'),
+    );
 
   const fieldTypeOptions = EVENING_FIELD_TYPE_OPTIONS.filter(o => o.value !== 'point_b_cta');
 
@@ -310,7 +312,19 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
               <select
                 className="adm-input"
                 value={field.type}
-                onChange={e => updateField(stepIndex, fieldIndex, { type: e.target.value as EveningFieldType })}
+                onChange={e => {
+                  const type = e.target.value as EveningFieldType;
+                  const patch: Partial<EveningField> = { type };
+                  if (type === 'choice' && !(field.options?.length)) {
+                    patch.options = ['Вариант 1', 'Вариант 2'];
+                  }
+                  if (type !== 'choice') {
+                    patch.options = undefined;
+                    patch.allowOther = undefined;
+                    patch.otherLabel = undefined;
+                  }
+                  updateField(stepIndex, fieldIndex, patch);
+                }}
               >
                 {fieldTypeOptions.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -324,7 +338,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
                 />
                 Обязательное
               </label>
-              {yesNoFieldsInStep(step).length > 0 && (
+              {conditionParentsInStep(step, field.key).length > 0 && (
                 <label className="adm-forum-check">
                   <input
                     type="checkbox"
@@ -334,43 +348,125 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
                         updateField(stepIndex, fieldIndex, { visibleWhen: undefined });
                         return;
                       }
-                      const dep = yesNoFieldsInStep(step)[0]?.key;
-                      if (dep) updateField(stepIndex, fieldIndex, { visibleWhen: { field: dep, equals: true } });
+                      const dep = conditionParentsInStep(step, field.key)[0];
+                      if (!dep) return;
+                      const equals = dep.type === 'yes_no'
+                        ? true
+                        : (dep.options?.filter(Boolean)[0] || '');
+                      updateField(stepIndex, fieldIndex, { visibleWhen: { field: dep.key, equals } });
                     }}
                   />
                   Условие
                 </label>
               )}
-              {field.visibleWhen && (
-                <>
-                  <select
-                    className="adm-input adm-input-narrow"
-                    value={field.visibleWhen.field}
-                    onChange={e => updateField(stepIndex, fieldIndex, {
-                      visibleWhen: { field: e.target.value, equals: field.visibleWhen!.equals },
-                    })}
-                  >
-                    {yesNoFieldsInStep(step).map(f => (
-                      <option key={f.key} value={f.key}>{f.label.slice(0, 40)}</option>
-                    ))}
-                  </select>
-                  <select
-                    className="adm-input adm-input-narrow"
-                    value={String(field.visibleWhen.equals)}
-                    onChange={e => updateField(stepIndex, fieldIndex, {
-                      visibleWhen: { field: field.visibleWhen!.field, equals: e.target.value === 'true' },
-                    })}
-                  >
-                    <option value="true">= Да</option>
-                    <option value="false">= Нет</option>
-                  </select>
-                </>
-              )}
+              {field.visibleWhen && (() => {
+                const parents = conditionParentsInStep(step, field.key);
+                const parent = parents.find(f => f.key === field.visibleWhen!.field) || parents[0];
+                return (
+                  <>
+                    <select
+                      className="adm-input adm-input-narrow"
+                      value={field.visibleWhen.field}
+                      onChange={e => {
+                        const dep = parents.find(f => f.key === e.target.value);
+                        const equals = dep?.type === 'yes_no'
+                          ? true
+                          : (dep?.options?.filter(Boolean)[0] || '');
+                        updateField(stepIndex, fieldIndex, {
+                          visibleWhen: { field: e.target.value, equals },
+                        });
+                      }}
+                    >
+                      {parents.map(f => (
+                        <option key={f.key} value={f.key}>{f.label.slice(0, 40)}</option>
+                      ))}
+                    </select>
+                    <select
+                      className="adm-input adm-input-narrow"
+                      value={String(field.visibleWhen.equals)}
+                      onChange={e => {
+                        const raw = e.target.value;
+                        let equals: boolean | string = raw;
+                        if (raw === 'true') equals = true;
+                        else if (raw === 'false') equals = false;
+                        updateField(stepIndex, fieldIndex, {
+                          visibleWhen: { field: field.visibleWhen!.field, equals },
+                        });
+                      }}
+                    >
+                      {parent?.type === 'yes_no' ? (
+                        <>
+                          <option value="true">= Да</option>
+                          <option value="false">= Нет</option>
+                        </>
+                      ) : (
+                        <>
+                          {(parent?.options || []).filter(Boolean).map(opt => (
+                            <option key={opt} value={opt}>= {opt}</option>
+                          ))}
+                          {parent?.allowOther && (
+                            <option value="__other__">= {parent.otherLabel || 'Свой вариант'}</option>
+                          )}
+                        </>
+                      )}
+                    </select>
+                  </>
+                );
+              })()}
               <div className="adm-forum-field-actions">
                 <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => moveField(stepIndex, fieldIndex, -1)}>↑</button>
                 <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => moveField(stepIndex, fieldIndex, 1)}>↓</button>
                 <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={() => removeField(stepIndex, fieldIndex)}>×</button>
               </div>
+              {field.type === 'choice' && (
+                <div style={{ gridColumn: '1 / -1', marginTop: 6 }}>
+                  <div className="adm-label">Варианты ответа</div>
+                  {(field.options || []).map((opt, oi) => (
+                    <div key={oi} className="adm-forum-diag-row" style={{ marginTop: 4 }}>
+                      <input
+                        className="adm-input"
+                        value={opt}
+                        onChange={e => {
+                          const options = [...(field.options || [])];
+                          options[oi] = e.target.value;
+                          updateField(stepIndex, fieldIndex, { options });
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="adm-btn adm-btn-ghost adm-btn-sm"
+                        disabled={(field.options || []).length <= 2}
+                        onClick={() => updateField(stepIndex, fieldIndex, {
+                          options: (field.options || []).filter((_, idx) => idx !== oi),
+                        })}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="adm-btn adm-btn-secondary adm-btn-sm"
+                    style={{ marginTop: 6 }}
+                    onClick={() => updateField(stepIndex, fieldIndex, {
+                      options: [...(field.options || []), `Вариант ${(field.options || []).length + 1}`],
+                    })}
+                  >
+                    + Вариант
+                  </button>
+                  <label className="adm-forum-check" style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!field.allowOther}
+                      onChange={e => updateField(stepIndex, fieldIndex, {
+                        allowOther: e.target.checked,
+                        otherLabel: e.target.checked ? (field.otherLabel || 'Свой вариант') : undefined,
+                      })}
+                    />
+                    Свой вариант (текст)
+                  </label>
+                </div>
+              )}
             </div>
           ))}
           <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => addField(stepIndex)}>

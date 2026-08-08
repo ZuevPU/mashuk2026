@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Panel, PanelHeader, Group, FormItem, CustomSelect, Button, Div, Cell,
-  Snackbar, Input, Textarea, Checkbox, Radio, Progress,
+  Snackbar, Input, Checkbox, Progress,
 } from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
@@ -13,11 +13,12 @@ import {
   ROLE_CATALOG,
   scoreRoleClient,
   coerceGoalQuestions,
-  parseMultiGoalAnswer,
-  joinMultiGoalAnswer,
+  visibleGoalQuestionsFilled,
+  pruneHiddenGoalAnswers,
   type GoalQuestion,
   type RoleKey,
 } from '../data/onboarding';
+import { GoalQuestionsFields } from '../components/onboarding/GoalQuestionsFields';
 import {
   REGION_OTHER_VALUE,
   REGION_SELECT_OPTIONS,
@@ -207,7 +208,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
     && workplace.trim() && position.trim() && region && consentPd && consentAnalytics
     && (groupAssignMode !== 'list' || groups.length === 0 || groupId),
   );
-  const canGoStep2 = goalQuestions.every((_, i) => (goalAnswers[i] || '').trim().length > 0);
+  const canGoStep2 = visibleGoalQuestionsFilled(goalQuestions, goalAnswers);
   const canGoStep3 = interests.length >= interestMin && interests.length <= interestMax;
   const canGoStep4 = roleAnswers[diagIndex] !== null;
 
@@ -237,7 +238,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         consentPdVersion: consentPdMeta?.version,
         consentAnalyticsVersion: consentAnalyticsMeta?.version,
         groupId: groupAssignMode === 'list' ? groupId : undefined,
-        goalAnswers: goalAnswers.map(a => a.trim()),
+        goalAnswers: pruneHiddenGoalAnswers(goalQuestions, goalAnswers).map(a => a.trim()),
         interests,
         roleAnswers,
         vkPhotoUrl: fetchedUser?.photo_200 || fetchedUser?.photo_100 || undefined,
@@ -354,61 +355,11 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 Эти же вопросы мы зададим на последний день, чтобы ты увидел, как изменился за смену.
               </p>
             </Div>
-            {goalQuestions.map((q, i) => {
-              const title = `${i + 1}. ${q.text.trim() || 'Вопрос'}`;
-              const setAnswer = (value: string) => {
-                const next = [...goalAnswers];
-                next[i] = value;
-                setGoalAnswers(next);
-              };
-              if (q.type === 'choice') {
-                return (
-                  <FormItem key={i} top={title} topMultiline>
-                    {q.options.map(opt => (
-                      <Radio
-                        key={opt}
-                        checked={goalAnswers[i] === opt}
-                        onChange={() => setAnswer(opt)}
-                        style={{ marginBottom: 6 }}
-                      >
-                        {opt}
-                      </Radio>
-                    ))}
-                  </FormItem>
-                );
-              }
-              if (q.type === 'multi') {
-                const selected = parseMultiGoalAnswer(goalAnswers[i] || '');
-                return (
-                  <FormItem key={i} top={`${title} (можно несколько)`} topMultiline>
-                    {q.options.map(opt => (
-                      <Checkbox
-                        key={opt}
-                        checked={selected.includes(opt)}
-                        onChange={() => {
-                          const nextSel = selected.includes(opt)
-                            ? selected.filter(v => v !== opt)
-                            : [...selected, opt];
-                          setAnswer(joinMultiGoalAnswer(nextSel));
-                        }}
-                        style={{ marginBottom: 6 }}
-                      >
-                        {opt}
-                      </Checkbox>
-                    ))}
-                  </FormItem>
-                );
-              }
-              return (
-                <FormItem key={i} top={title} topMultiline>
-                  <Textarea
-                    value={goalAnswers[i]}
-                    onChange={e => setAnswer(e.target.value)}
-                    placeholder="Ответь свободно, 1–2 предложения"
-                  />
-                </FormItem>
-              );
-            })}
+            <GoalQuestionsFields
+              questions={goalQuestions}
+              answers={goalAnswers}
+              onChange={setGoalAnswers}
+            />
             <Button size="l" stretched disabled={!canGoStep2} onClick={() => setStep(3)}>
               Дальше → Интересы
             </Button>

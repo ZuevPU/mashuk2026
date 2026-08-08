@@ -1,4 +1,5 @@
 import type { GoalQuestion } from './types';
+import { GOAL_OTHER_VALUE, newGoalQuestionId } from './types';
 
 type Props = {
   questions: GoalQuestion[];
@@ -7,7 +8,7 @@ type Props = {
   dirty: boolean;
 };
 
-const MAX_GOALS = 12;
+const MAX_GOALS = 24;
 const MAX_OPT = 12;
 const MIN_OPT = 2;
 
@@ -18,19 +19,25 @@ const TYPE_OPTIONS: { value: GoalQuestion['type']; label: string; hint: string }
 ];
 
 function emptyQuestion(): GoalQuestion {
-  return { text: '', type: 'open', options: [] };
+  return { id: newGoalQuestionId(), text: '', type: 'open', options: [] };
 }
 
 function filledOptions(options: string[]): string[] {
   return options.map(o => o.trim()).filter(Boolean);
 }
 
-function questionError(q: GoalQuestion): string | null {
+function questionError(q: GoalQuestion, all: GoalQuestion[], index: number): string | null {
   if (!q.text.trim()) return 'Введите текст вопроса';
   if (q.type === 'choice' || q.type === 'multi') {
     if (filledOptions(q.options).length < MIN_OPT) {
       return `Добавьте минимум ${MIN_OPT} варианта ответа`;
     }
+  }
+  if (q.showWhen?.questionId) {
+    const parentIdx = all.findIndex(x => x.id === q.showWhen!.questionId);
+    if (parentIdx < 0) return 'Условие ссылается на удалённый вопрос';
+    if (parentIdx >= index) return 'Условие можно ставить только на вопрос выше по списку';
+    if (!q.showWhen.options?.length) return 'Выберите варианты ответа для условия';
   }
   return null;
 }
@@ -43,7 +50,7 @@ export function GoalsStepEditor({ questions, onChange, onSave, dirty }: Props) {
   const setType = (i: number, type: GoalQuestion['type']) => {
     const q = questions[i];
     if (type === 'open') {
-      updateAt(i, { type, options: [] });
+      updateAt(i, { type, options: [], allowOther: false, otherLabel: undefined });
       return;
     }
     const options = q.options.length >= MIN_OPT
@@ -53,29 +60,55 @@ export function GoalsStepEditor({ questions, onChange, onSave, dirty }: Props) {
     updateAt(i, { type, options });
   };
 
-  const errors = questions.map(questionError);
+  const errors = questions.map((q, i) => questionError(q, questions, i));
   const canSave = errors.every(e => !e);
+
+  const toggleShowWhenOption = (qi: number, opt: string) => {
+    const q = questions[qi];
+    const sw = q.showWhen;
+    if (!sw) return;
+    const has = sw.options.includes(opt);
+    const options = has ? sw.options.filter(o => o !== opt) : [...sw.options, opt];
+    updateAt(qi, { showWhen: { ...sw, options } });
+  };
 
   return (
     <div className="adm-forum-block card">
       <h3>Шаг «Цели» (Точка А)</h3>
       <p className="adm-forum-hint">
-        Вопросы целеполагания при регистрации. Для каждого вопроса выберите формат ответа:
-        открытый текст, один вариант или несколько. Варианты для выбора админ добавляет кнопкой.
-        Ответы попадут в профиль и PDF; на выезде (Точка Б) будут те же вопросы.
+        Вопросы целеполагания при регистрации. Для выбора одного ответа можно включить «Свой вариант»
+        и добавить цепочку: следующий вопрос появляется только если участник выбрал нужный вариант.
+        Те же вопросы используются в Точке Б.
       </p>
       {questions.map((q, i) => {
         const needsOptions = q.type === 'choice' || q.type === 'multi';
         const err = errors[i];
+        const parents = questions.slice(0, i).filter(p =>
+          (p.type === 'choice' || p.type === 'multi') && filledOptions(p.options).length >= MIN_OPT,
+        );
+        const parent = q.showWhen
+          ? questions.find(x => x.id === q.showWhen!.questionId)
+          : undefined;
         return (
-          <div key={i} className="card adm-forum-nested-card">
+          <div key={q.id} className="card adm-forum-nested-card">
             <div className="adm-forum-toolbar" style={{ marginBottom: 6 }}>
               <label className="adm-label" style={{ margin: 0 }}>Вопрос {i + 1}</label>
               <button
                 type="button"
                 className="adm-btn adm-btn-danger adm-btn-sm"
                 disabled={questions.length <= 1}
-                onClick={() => onChange(questions.filter((_, idx) => idx !== i))}
+                onClick={() => {
+                  const removedId = q.id;
+                  onChange(
+                    questions
+                      .filter((_, idx) => idx !== i)
+                      .map(item => (
+                        item.showWhen?.questionId === removedId
+                          ? { ...item, showWhen: null }
+                          : item
+                      )),
+                  );
+                }}
               >
                 Удалить
               </button>
@@ -102,17 +135,10 @@ export function GoalsStepEditor({ questions, onChange, onSave, dirty }: Props) {
                 </button>
               ))}
             </div>
-            <p className="adm-muted" style={{ marginTop: 6, fontSize: 12 }}>
-              {TYPE_OPTIONS.find(o => o.value === q.type)?.hint}
-            </p>
 
             {needsOptions && (
               <div style={{ marginTop: 10 }}>
                 <div className="adm-label">Варианты ответа</div>
-                <p className="adm-muted" style={{ fontSize: 12, marginTop: 0 }}>
-                  Добавляйте варианты кнопкой ниже — участник увидит их как
-                  {q.type === 'choice' ? ' радиокнопки (один выбор)' : ' чекбоксы (несколько)'}.
-                </p>
                 {q.options.map((opt, oi) => (
                   <div key={oi} className="adm-forum-diag-row" style={{ marginTop: 6 }}>
                     <span className="adm-muted adm-forum-diag-opt-label">Вариант {oi + 1}</span>
@@ -148,6 +174,105 @@ export function GoalsStepEditor({ questions, onChange, onSave, dirty }: Props) {
                 >
                   + Добавить вариант ответа
                 </button>
+                <label className="adm-forum-check" style={{ display: 'flex', marginTop: 10, gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!q.allowOther}
+                    onChange={e => updateAt(i, {
+                      allowOther: e.target.checked,
+                      otherLabel: e.target.checked ? (q.otherLabel || 'Свой вариант') : undefined,
+                    })}
+                  />
+                  Пункт «Свой вариант» (поле ввода текста)
+                </label>
+                {q.allowOther && (
+                  <input
+                    className="adm-input"
+                    style={{ marginTop: 6 }}
+                    value={q.otherLabel || 'Свой вариант'}
+                    onChange={e => updateAt(i, { otherLabel: e.target.value })}
+                    placeholder="Подпись пункта…"
+                  />
+                )}
+              </div>
+            )}
+
+            {i > 0 && (
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #EEE6DA' }}>
+                <label className="adm-forum-check" style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!q.showWhen}
+                    disabled={parents.length === 0}
+                    onChange={e => {
+                      if (!e.target.checked) {
+                        updateAt(i, { showWhen: null });
+                        return;
+                      }
+                      const p = parents[parents.length - 1];
+                      if (!p) return;
+                      updateAt(i, {
+                        showWhen: {
+                          questionId: p.id,
+                          options: filledOptions(p.options).slice(0, 1),
+                        },
+                      });
+                    }}
+                  />
+                  Показывать по условию (если участник выбрал определённый ответ выше)
+                </label>
+                {parents.length === 0 && (
+                  <p className="adm-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                    Чтобы задать условие, выше нужен вопрос с выбором вариантов.
+                  </p>
+                )}
+                {q.showWhen && (
+                  <div style={{ marginTop: 8 }}>
+                    <div className="adm-label">Если в вопросе</div>
+                    <select
+                      className="adm-input"
+                      value={q.showWhen.questionId}
+                      onChange={e => {
+                        const p = questions.find(x => x.id === e.target.value);
+                        updateAt(i, {
+                          showWhen: {
+                            questionId: e.target.value,
+                            options: p ? filledOptions(p.options).slice(0, 1) : [],
+                          },
+                        });
+                      }}
+                    >
+                      {parents.map((p, pi) => (
+                        <option key={p.id} value={p.id}>
+                          {pi + 1}. {p.text.trim().slice(0, 60) || 'Без текста'}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="adm-label" style={{ marginTop: 8 }}>выбран ответ</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                      {(parent ? filledOptions(parent.options) : []).map(opt => (
+                        <label key={opt} className="adm-forum-check" style={{ display: 'flex', gap: 6 }}>
+                          <input
+                            type="checkbox"
+                            checked={q.showWhen!.options.includes(opt)}
+                            onChange={() => toggleShowWhenOption(i, opt)}
+                          />
+                          {opt}
+                        </label>
+                      ))}
+                      {parent?.allowOther && (
+                        <label className="adm-forum-check" style={{ display: 'flex', gap: 6 }}>
+                          <input
+                            type="checkbox"
+                            checked={q.showWhen!.options.includes(GOAL_OTHER_VALUE)}
+                            onChange={() => toggleShowWhenOption(i, GOAL_OTHER_VALUE)}
+                          />
+                          {parent.otherLabel || 'Свой вариант'}
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

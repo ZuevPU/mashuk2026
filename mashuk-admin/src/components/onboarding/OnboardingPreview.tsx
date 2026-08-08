@@ -26,14 +26,18 @@ export function OnboardingPreview({ goalQuestions, interestGroups, diagQuestions
         <h4>Регистрация → Цели</h4>
         <ol className="adm-onboarding-preview-list">
           {goalQuestions.map((q, i) => (
-            <li key={i}>
+            <li key={q.id || i}>
               <strong>Вопрос {i + 1}.</strong> {q.text || '—'}
               <span className="adm-muted"> ({TYPE_LABEL[q.type]})</span>
+              {q.showWhen?.questionId && (
+                <div className="adm-muted" style={{ fontSize: 12 }}>по условию от предыдущего ответа</div>
+              )}
               {(q.type === 'choice' || q.type === 'multi') && q.options.length > 0 && (
                 <ul>
                   {q.options.filter(o => o.trim()).map((o, oi) => (
                     <li key={oi}>{o}</li>
                   ))}
+                  {q.allowOther && <li>{q.otherLabel || 'Свой вариант'}</li>}
                 </ul>
               )}
             </li>

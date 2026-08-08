@@ -33,11 +33,30 @@ export type GoalAnswerType = (typeof GOAL_ANSWER_TYPES)[number];
 /** Separator for multi-select goal answers stored as a single string. */
 export const GOAL_MULTI_SEP = ' · ';
 
+/** Sentinel in showWhen.options — trigger when participant picked «Свой вариант». */
+export const GOAL_OTHER_VALUE = '__other__';
+
+export type GoalShowWhen = {
+  questionId: string;
+  /** Option labels to match, or GOAL_OTHER_VALUE for custom text. */
+  options: string[];
+};
+
 export type GoalQuestion = {
+  id: string;
   text: string;
   type: GoalAnswerType;
   options: string[];
+  /** Show «Свой вариант» + free-text input for choice/multi. */
+  allowOther?: boolean;
+  otherLabel?: string;
+  /** Show this question only when a previous question matches. */
+  showWhen?: GoalShowWhen | null;
 };
+
+export function newGoalQuestionId(): string {
+  return `gq_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export type OnboardingConfig = {
   goalQuestions: GoalQuestion[];
@@ -52,7 +71,7 @@ export type OnboardingConfig = {
 export const DEFAULT_INTEREST_MIN = 5;
 export const DEFAULT_INTEREST_MAX = 8;
 export const MIN_GOAL_QUESTIONS = 1;
-export const MAX_GOAL_QUESTIONS = 12;
+export const MAX_GOAL_QUESTIONS = 24;
 export const MIN_GOAL_OPTIONS = 2;
 export const MAX_GOAL_OPTIONS = 12;
 
@@ -203,7 +222,7 @@ export const GOAL_QUESTIONS: GoalQuestion[] = [
   'Какой запрос ты хочешь принести своему направлению?',
   'Что для тебя было бы главным результатом этих 8 дней?',
   'Что ты ожидаешь от других участников?',
-].map((text) => ({ text, type: 'open' as const, options: [] }));
+].map((text, i) => ({ id: `gq_default_${i + 1}`, text, type: 'open' as const, options: [] }));
 
 export const INTEREST_GROUPS: Array<{ title: string; tags: string[] }> = [
   {
@@ -264,20 +283,57 @@ function normalizeGoalAnswerType(raw: unknown): GoalAnswerType {
   return (GOAL_ANSWER_TYPES as readonly string[]).includes(t) ? (t as GoalAnswerType) : 'open';
 }
 
+function normalizeShowWhen(raw: unknown, knownIds: Set<string>): GoalShowWhen | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as { questionId?: unknown; options?: unknown };
+  const questionId = String(obj.questionId ?? '').trim();
+  if (!questionId || !knownIds.has(questionId)) return null;
+  const options = Array.isArray(obj.options)
+    ? obj.options.map(o => String(o ?? '').trim()).filter(Boolean).slice(0, MAX_GOAL_OPTIONS + 1)
+    : [];
+  if (!options.length) return null;
+  return { questionId, options };
+}
+
 export function normalizeGoalQuestions(raw: unknown): GoalQuestion[] {
-  const defaults = GOAL_QUESTIONS.map(q => ({ text: q.text, type: q.type, options: [...q.options] }));
+  const defaults = GOAL_QUESTIONS.map(q => ({
+    id: q.id,
+    text: q.text,
+    type: q.type,
+    options: [...q.options],
+    allowOther: false,
+    showWhen: null as GoalShowWhen | null,
+  }));
   if (!Array.isArray(raw) || raw.length < MIN_GOAL_QUESTIONS) return defaults;
-  const out: GoalQuestion[] = [];
+  const usedIds = new Set<string>();
+  const draft: Array<Omit<GoalQuestion, 'showWhen'> & { showWhenRaw?: unknown }> = [];
   for (const item of raw.slice(0, MAX_GOAL_QUESTIONS)) {
     if (typeof item === 'string') {
-      out.push({ text: item.trim().slice(0, 2000), type: 'open', options: [] });
+      let id = newGoalQuestionId();
+      while (usedIds.has(id)) id = newGoalQuestionId();
+      usedIds.add(id);
+      draft.push({ id, text: item.trim().slice(0, 2000), type: 'open', options: [], allowOther: false });
       continue;
     }
     if (!item || typeof item !== 'object') {
-      out.push({ text: '', type: 'open', options: [] });
+      let id = newGoalQuestionId();
+      while (usedIds.has(id)) id = newGoalQuestionId();
+      usedIds.add(id);
+      draft.push({ id, text: '', type: 'open', options: [], allowOther: false });
       continue;
     }
-    const obj = item as { text?: unknown; type?: unknown; options?: unknown };
+    const obj = item as {
+      id?: unknown;
+      text?: unknown;
+      type?: unknown;
+      options?: unknown;
+      allowOther?: unknown;
+      otherLabel?: unknown;
+      showWhen?: unknown;
+    };
+    let id = String(obj.id ?? '').trim();
+    if (!id || usedIds.has(id)) id = newGoalQuestionId();
+    usedIds.add(id);
     const text = String(obj.text ?? '').trim().slice(0, 2000);
     const type = normalizeGoalAnswerType(obj.type);
     let options: string[] = [];
@@ -287,13 +343,94 @@ export function normalizeGoalQuestions(raw: unknown): GoalQuestion[] {
         .filter(o => o.length > 0)
         .slice(0, MAX_GOAL_OPTIONS);
     }
-    out.push({
+    const allowOther = type !== 'open' && obj.allowOther === true;
+    const otherLabel = allowOther
+      ? (String(obj.otherLabel ?? '').trim().slice(0, 120) || 'Свой вариант')
+      : undefined;
+    draft.push({
+      id,
       text,
       type,
       options: type === 'open' ? [] : options,
+      allowOther,
+      otherLabel,
+      showWhenRaw: obj.showWhen,
     });
   }
+  const knownIds = new Set(draft.map(q => q.id));
+  const out: GoalQuestion[] = draft.map((q, index) => {
+    const showWhen = normalizeShowWhen(q.showWhenRaw, knownIds);
+    // Only allow conditions on earlier questions (no cycles / forward refs).
+    let safeShowWhen: GoalShowWhen | null = null;
+    if (showWhen) {
+      const parentIdx = draft.findIndex(d => d.id === showWhen.questionId);
+      if (parentIdx >= 0 && parentIdx < index) safeShowWhen = showWhen;
+    }
+    return {
+      id: q.id,
+      text: q.text,
+      type: q.type,
+      options: q.options,
+      allowOther: q.allowOther || undefined,
+      otherLabel: q.otherLabel,
+      showWhen: safeShowWhen,
+    };
+  });
   return out.length >= MIN_GOAL_QUESTIONS ? out : defaults;
+}
+
+export function parseGoalAnswerParts(answer: string): string[] {
+  return String(answer ?? '').split(GOAL_MULTI_SEP).map(s => s.trim()).filter(Boolean);
+}
+
+export function goalAnswerMatchesTriggers(
+  parent: GoalQuestion,
+  parentAnswer: string,
+  triggers: string[],
+): boolean {
+  const parts = parent.type === 'multi'
+    ? parseGoalAnswerParts(parentAnswer)
+    : [String(parentAnswer ?? '').trim()].filter(Boolean);
+  if (!parts.length || !triggers.length) return false;
+  for (const trigger of triggers) {
+    if (trigger === GOAL_OTHER_VALUE) {
+      if (parts.some(p => !parent.options.includes(p))) return true;
+    } else if (parts.includes(trigger)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Whether question at index should be shown given current answers. */
+export function isGoalQuestionVisible(
+  questions: GoalQuestion[],
+  answers: string[],
+  index: number,
+): boolean {
+  const q = questions[index];
+  if (!q) return false;
+  if (!q.showWhen?.questionId || !q.showWhen.options?.length) return true;
+  const parentIdx = questions.findIndex(x => x.id === q.showWhen!.questionId);
+  if (parentIdx < 0 || parentIdx >= index) return false;
+  if (!isGoalQuestionVisible(questions, answers, parentIdx)) return false;
+  return goalAnswerMatchesTriggers(questions[parentIdx], answers[parentIdx] ?? '', q.showWhen.options);
+}
+
+/** Clear answers for questions that are currently hidden (chain-safe). */
+export function pruneHiddenGoalAnswers(questions: GoalQuestion[], answers: string[]): string[] {
+  const next = questions.map((_, i) => String(answers[i] ?? ''));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < questions.length; i++) {
+      if (!isGoalQuestionVisible(questions, next, i) && next[i]) {
+        next[i] = '';
+        changed = true;
+      }
+    }
+  }
+  return next;
 }
 
 /** Returns error message or null if answers match the configured questions. */
@@ -302,11 +439,14 @@ export function validateGoalAnswers(
   answers: string[],
 ): string | null {
   if (answers.length !== questions.length) {
-    return `Нужно ответить на ${questions.length} вопрос(а/ов) целеполагания`;
+    return `Нужно ответить на вопросы целеполагания`;
   }
+  const pruned = pruneHiddenGoalAnswers(questions, answers);
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
-    const answer = String(answers[i] ?? '').trim();
+    const visible = isGoalQuestionVisible(questions, pruned, i);
+    const answer = String(pruned[i] ?? '').trim();
+    if (!visible) continue;
     if (!answer) {
       return `Ответьте на вопрос ${i + 1}`;
     }
@@ -317,16 +457,20 @@ export function validateGoalAnswers(
       q.type !== 'open' && q.options.length >= MIN_GOAL_OPTIONS ? q.type : 'open'
     );
     if (effectiveType === 'choice') {
-      if (!q.options.includes(answer)) {
+      if (!q.options.includes(answer) && !q.allowOther) {
         return `Выберите один из вариантов для вопроса ${i + 1}`;
       }
     } else if (effectiveType === 'multi') {
-      const parts = answer.split(GOAL_MULTI_SEP).map(s => s.trim()).filter(Boolean);
+      const parts = parseGoalAnswerParts(answer);
       if (parts.length === 0) {
         return `Выберите хотя бы один вариант для вопроса ${i + 1}`;
       }
+      if (new Set(parts).size !== parts.length) {
+        return `Некорректный выбор вариантов для вопроса ${i + 1}`;
+      }
       const allowed = new Set(q.options);
-      if (new Set(parts).size !== parts.length || !parts.every(p => allowed.has(p))) {
+      const unknown = parts.filter(p => !allowed.has(p));
+      if (unknown.length > 1 || (unknown.length === 1 && !q.allowOther)) {
         return `Некорректный выбор вариантов для вопроса ${i + 1}`;
       }
     }

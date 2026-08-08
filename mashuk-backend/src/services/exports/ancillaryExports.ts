@@ -541,12 +541,11 @@ export async function writeModerationLogExport(res: Response): Promise<void> {
       like(adminActionsLog.section, '%moder%'),
       like(adminActionsLog.actionType, '%moder%'),
     ))
-    .orderBy(desc(adminActionsLog.createdAt))
-    .limit(5000);
+    .orderBy(desc(adminActionsLog.createdAt));
   sendCsv(
     res,
     'moderation_log.csv',
-    'time,admin_id,action,section,object_id',
+    'Время,ID админа,Действие,Раздел,ID объекта',
     rows.map(r => [r.createdAt, r.adminId, r.actionType, r.section, r.objectId]),
   );
 }
@@ -638,7 +637,7 @@ export async function writeActivityExport(res: Response): Promise<void> {
   sendCsv(
     res,
     'activity.csv',
-    'participant_id,name,direction,group,last_active,path_points,exp_points,touchpoints_completed',
+    'ID участника,ФИО,Направление,Группа,Последняя активность,Баллы Путь,Баллы Опыт,Точки осмысления',
     rows,
   );
 }
@@ -648,7 +647,7 @@ export async function writePointABSummaryExport(res: Response): Promise<void> {
   sendCsv(
     res,
     'point_a_b_summary.csv',
-    'id,name,point_a,point_b,start_role,strong_role,growth_role',
+    'ID,ФИО,Точка А,Точка Б,Роль на входе,Сильная роль,Роль роста',
     rows.map(r => [r.id, r.fullName, r.pointA, r.pointB, r.startRole, r.strongRole, r.growthRole]),
   );
 }

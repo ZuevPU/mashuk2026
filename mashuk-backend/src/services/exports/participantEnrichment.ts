@@ -7,6 +7,7 @@ import {
   type ParticipantListQuery,
 } from '../participantsList.js';
 import { fullName, formatTs } from './exportCommon.js';
+import { participantExportMaxRows, roleLabel } from './exportLabels.js';
 
 export async function countIdeasForParticipant(participantId: number): Promise<number> {
   const rows = await db.select({ id: piggybank.id, tags: piggybank.tags })
@@ -78,9 +79,9 @@ export function enrichParticipantRowSync(
     consentDate: p.consentPd ? formatTs(p.onboardingCompletedAt) : '',
     pointA: goal ? JSON.stringify(goal) : '',
     pointB: pointB ? JSON.stringify(pointB) : '',
-    startRole: p.pedagogicalRole,
-    strongRole: p.strongRole,
-    growthRole: p.growthRole,
+    startRole: roleLabel(p.pedagogicalRole),
+    strongRole: roleLabel(p.strongRole),
+    growthRole: roleLabel(p.growthRole),
     nextExperiment: p.nextExperiment,
     interests,
     roleAnswers: p.roleAnswers ? JSON.stringify(p.roleAnswers) : '',
@@ -99,11 +100,18 @@ export async function enrichParticipantRow(p: typeof participants.$inferSelect) 
 }
 
 export async function loadEnrichedParticipants(query: ParticipantListQuery = {}) {
-  const limit = Math.max(1, Math.min(5000, query.limit || 5000));
+  const cap = participantExportMaxRows();
+  const requested = query.limit != null && Number.isFinite(query.limit) && query.limit > 0
+    ? Math.floor(query.limit)
+    : null;
+  const limit = cap == null
+    ? requested
+    : Math.max(1, Math.min(cap, requested ?? cap));
+
   const where = buildParticipantWhere(query);
   let listQuery = db.select().from(participants)
-    .orderBy(desc(participants.createdAt))
-    .limit(limit);
+    .orderBy(desc(participants.createdAt));
+  if (limit != null) listQuery = listQuery.limit(limit) as typeof listQuery;
   if (where) listQuery = listQuery.where(where) as typeof listQuery;
   const list = await listQuery;
 

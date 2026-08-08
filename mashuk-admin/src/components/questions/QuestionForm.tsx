@@ -24,6 +24,8 @@ type Props = {
   onReorderOption: (from: number, to: number) => void;
   onAddOption: () => void;
   onRemoveOption: (index: number) => void;
+  /** Published questions for showWhen parent picker (same day / earlier). */
+  branchParents?: { id: number; title: string; options: { label: string; value: string }[] }[];
   previewSlot?: ReactNode;
 };
 
@@ -49,6 +51,7 @@ export function QuestionForm({
   onReorderOption,
   onAddOption,
   onRemoveOption,
+  branchParents = [],
   previewSlot,
 }: Props) {
   const toggleDay = (d: number) => {
@@ -222,6 +225,75 @@ export function QuestionForm({
                 </div>
               ))}
               <button type="button" className="adm-btn adm-btn-sm" onClick={onAddOption}>+ Вариант</button>
+              {(draft.answerType === 'choice' || draft.answerType === 'multi') && (
+                <label className="adm-forum-check" style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={draft.allowOther}
+                    onChange={e => onChange({ allowOther: e.target.checked })}
+                  />
+                  Пункт «Свой вариант» (поле ввода текста)
+                </label>
+              )}
+            </div>
+          )}
+
+          {(draft.answerType === 'choice' || draft.answerType === 'multi') && branchParents.length > 0 && (
+            <div className="adm-field">
+              <span className="adm-label">Показывать по условию</span>
+              <p className="adm-muted" style={{ fontSize: 12, marginTop: 0 }}>
+                Вопрос появится у участника только если на выбранный выше вопрос дан нужный ответ.
+              </p>
+              <select
+                className="adm-input"
+                value={draft.showWhenQuestionId}
+                onChange={e => onChange({
+                  showWhenQuestionId: e.target.value,
+                  showWhenOptionValues: [],
+                })}
+              >
+                <option value="">Без условия (всегда)</option>
+                {branchParents.map(p => (
+                  <option key={p.id} value={p.id}>{p.title}</option>
+                ))}
+              </select>
+              {draft.showWhenQuestionId && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                  {(branchParents.find(p => String(p.id) === draft.showWhenQuestionId)?.options || []).map(opt => {
+                    const val = opt.value || opt.label;
+                    const checked = draft.showWhenOptionValues.includes(val);
+                    return (
+                      <label key={val} className="adm-forum-check" style={{ display: 'flex', gap: 6 }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const next = checked
+                              ? draft.showWhenOptionValues.filter(v => v !== val)
+                              : [...draft.showWhenOptionValues, val];
+                            onChange({ showWhenOptionValues: next });
+                          }}
+                        />
+                        {opt.label}
+                      </label>
+                    );
+                  })}
+                  <label className="adm-forum-check" style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={draft.showWhenOptionValues.includes('__other__')}
+                      onChange={() => {
+                        const checked = draft.showWhenOptionValues.includes('__other__');
+                        const next = checked
+                          ? draft.showWhenOptionValues.filter(v => v !== '__other__')
+                          : [...draft.showWhenOptionValues, '__other__'];
+                        onChange({ showWhenOptionValues: next });
+                      }}
+                    />
+                    Свой вариант
+                  </label>
+                </div>
+              )}
             </div>
           )}
 

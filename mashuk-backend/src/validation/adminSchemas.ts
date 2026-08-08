@@ -100,6 +100,11 @@ export const questionCreateSchema = z.object({
   isRequired: optionalBool,
   isHidden: optionalBool,
   allowRetry: optionalBool,
+  allowOther: optionalBool,
+  showWhen: z.object({
+    questionId: z.coerce.number().int().positive(),
+    optionValues: z.array(z.string().min(1)).min(1).max(24),
+  }).nullable().optional(),
   pushOnPublish: optionalBool,
   pushTemplate: optionalString,
   publishTime: z.coerce.date().optional().nullable(),

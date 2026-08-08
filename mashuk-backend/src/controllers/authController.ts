@@ -10,6 +10,7 @@ import {
   normalizeOnboardingConfig,
   interestTagsFromConfig,
   validateGoalAnswers,
+  pruneHiddenGoalAnswers,
 } from '../services/roleService.js';
 import { normalizeRegion } from '../data/regions.js';
 import { getActiveConsentVersions } from './consentsController.js';
@@ -37,7 +38,7 @@ const onboardingBaseSchema = z.object({
   consentPdVersion: z.coerce.number().int().positive().optional(),
   consentAnalyticsVersion: z.coerce.number().int().positive().optional(),
   groupId: z.coerce.number().int().positive().optional().nullable(),
-  goalAnswers: z.array(z.string().min(1).max(2000)).min(1).max(12),
+  goalAnswers: z.array(z.string().max(2000)).min(1).max(24),
   interests: z.array(z.string().min(1).max(100)).min(1).max(30),
   roleAnswers: z.array(z.coerce.number().int().min(0).max(11)).min(1).max(12),
   vkPhotoUrl: z.string().url().max(2000).optional(),
@@ -140,6 +141,7 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
 
     const data = parsed.data;
     const onboardingConfig = await getForumOnboardingConfig();
+    data.goalAnswers = pruneHiddenGoalAnswers(onboardingConfig.goalQuestions, data.goalAnswers);
     const goalErr = validateGoalAnswers(onboardingConfig.goalQuestions, data.goalAnswers);
     if (goalErr) {
       res.status(400).json({ error: goalErr });

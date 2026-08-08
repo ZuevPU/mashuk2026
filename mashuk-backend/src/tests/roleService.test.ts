@@ -114,6 +114,25 @@ describe('validateGoalAnswers', () => {
     assert.match(validateGoalAnswers(qs, ['C', 'X']) || '', /вариант/);
     assert.match(validateGoalAnswers(qs, ['A', 'X · W']) || '', /Некорректный/);
   });
+
+  it('supports allowOther and conditional follow-ups', () => {
+    const qs = normalizeGoalQuestions([
+      { id: 'q1', text: 'one', type: 'choice', options: ['A', 'B'], allowOther: true },
+      {
+        id: 'q2',
+        text: 'follow',
+        type: 'open',
+        options: [],
+        showWhen: { questionId: 'q1', options: ['A', '__other__'] },
+      },
+    ]);
+    assert.equal(validateGoalAnswers(qs, ['A', 'detail']), null);
+    assert.equal(validateGoalAnswers(qs, ['my custom', 'detail']), null);
+    // Hidden follow-up answers are pruned — only parent answer required when B selected.
+    assert.equal(validateGoalAnswers(qs, ['B', '']), null);
+    assert.equal(validateGoalAnswers(qs, ['B', 'stale hidden text']), null);
+    assert.match(validateGoalAnswers(qs, ['A', '']) || '', /Ответьте/);
+  });
 });
 
 describe('scorePedagogicalRole', () => {

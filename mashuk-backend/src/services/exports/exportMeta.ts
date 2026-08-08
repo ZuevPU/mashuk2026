@@ -35,11 +35,12 @@ const PARTICIPANT_COLUMNS: ExportColumnDef[] = [
   { key: 'full_name', label: 'ФИО' },
   { key: 'direction', label: 'Направление' },
   { key: 'group_name', label: 'Группа' },
-  { key: 'path_points', label: 'Путь' },
-  { key: 'experience_points', label: 'Опыт' },
-  { key: 'total_rating', label: 'Рейтинг' },
+  { key: 'path_points', label: 'Баллы Путь' },
+  { key: 'experience_points', label: 'Баллы Опыт' },
+  { key: 'total_rating', label: 'Суммарный рейтинг' },
   { key: 'start_role', label: 'Роль на входе' },
   { key: 'strong_role', label: 'Сильная роль' },
+  { key: 'growth_role', label: 'Роль роста' },
 ];
 
 const TASK_COLUMNS: ExportColumnDef[] = [

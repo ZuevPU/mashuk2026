@@ -70,6 +70,8 @@ export type AdminQuestion = {
   pushOnPublish?: boolean;
   pushTemplate?: string | null;
   allowRetry?: boolean;
+  allowOther?: boolean;
+  showWhen?: { questionId: number; optionValues: string[] } | null;
   answerCount?: number;
   readOnly?: boolean;
   source?: string;
@@ -101,6 +103,9 @@ export type QuestionDraft = {
   pushOnPublish: boolean;
   pushTemplate: string;
   allowRetry: boolean;
+  allowOther: boolean;
+  showWhenQuestionId: string;
+  showWhenOptionValues: string[];
   status: string;
   options: { label: string; value: string; id?: number }[];
 };
@@ -154,6 +159,9 @@ export function emptyDraft(day: number): QuestionDraft {
     pushOnPublish: false,
     pushTemplate: '',
     allowRetry: false,
+    allowOther: false,
+    showWhenQuestionId: '',
+    showWhenOptionValues: [],
     status: 'draft',
     options: [],
   };
@@ -192,6 +200,9 @@ export function draftFromQuestion(q: AdminQuestion, options: QuestionOption[] = 
     pushOnPublish: !!q.pushOnPublish,
     pushTemplate: q.pushTemplate || '',
     allowRetry: !!q.allowRetry,
+    allowOther: !!q.allowOther,
+    showWhenQuestionId: q.showWhen?.questionId != null ? String(q.showWhen.questionId) : '',
+    showWhenOptionValues: q.showWhen?.optionValues ?? [],
     status: q.status || 'draft',
     options: options.map(o => ({ id: o.id, label: o.label, value: o.value || o.label })),
   };
@@ -219,6 +230,13 @@ export function bodyFromDraft(draft: QuestionDraft, publish: boolean): Record<st
     pushOnPublish: draft.pushOnPublish,
     pushTemplate: draft.pushTemplate.trim() || null,
     allowRetry: draft.allowRetry,
+    allowOther: ['choice', 'multi'].includes(draft.answerType) ? draft.allowOther : false,
+    showWhen: draft.showWhenQuestionId && draft.showWhenOptionValues.length
+      ? {
+        questionId: Number(draft.showWhenQuestionId),
+        optionValues: draft.showWhenOptionValues,
+      }
+      : null,
     status: publish ? 'published' : draft.status === 'published' ? 'published' : 'draft',
   };
   if (draft.publishTime) body.publishTime = new Date(draft.publishTime).toISOString();

@@ -7,6 +7,9 @@ export type EveningField = {
   type: string;
   label: string;
   required?: boolean;
+  options?: string[];
+  allowOther?: boolean;
+  otherLabel?: string;
   visibleWhen?: { field: string; equals: boolean | string | number };
 };
 
@@ -41,9 +44,20 @@ export type EveningQuestionnaireProps = {
   onSubmitted: () => void;
 };
 
-function fieldVisible(field: EveningField, form: Record<string, unknown>): boolean {
+function fieldVisible(
+  field: EveningField,
+  form: Record<string, unknown>,
+  allFields: EveningField[] = [],
+): boolean {
   if (!field.visibleWhen) return true;
-  return form[field.visibleWhen.field] === field.visibleWhen.equals;
+  const v = form[field.visibleWhen.field];
+  const expected = field.visibleWhen.equals;
+  if (expected === '__other__') {
+    const parent = allFields.find(f => f.key === field.visibleWhen!.field);
+    const opts = parent?.options ?? [];
+    return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v);
+  }
+  return v === expected;
 }
 
 function stepHasVisibleFields(
@@ -54,7 +68,7 @@ function stepHasVisibleFields(
   currentDay: number,
 ): boolean {
   return step.fields.some(f => {
-    if (!fieldVisible(f, form)) return false;
+    if (!fieldVisible(f, form, step.fields)) return false;
     if (f.type === 'experiment_text' && !experiment) return false;
     if (f.type === 'role_select') {
       if (!questionnaire.askTomorrowRole || currentDay > 6) return false;
@@ -126,7 +140,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
 
   const currentStep = steps[Math.min(step, Math.max(steps.length - 1, 0))] ?? steps[0];
   const visibleFields = useMemo(
-    () => (currentStep?.fields ?? []).filter(f => fieldVisible(f, form)),
+    () => (currentStep?.fields ?? []).filter(f => fieldVisible(f, form, currentStep?.fields ?? [])),
     [currentStep, form],
   );
   const showExperimentBlock = currentStep && isExperimentStep(currentStep) && !!experiment;
@@ -174,6 +188,63 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
           <div style={{ display: 'flex', gap: 8 }}>
             <Button mode={val ? 'primary' : 'secondary'} onClick={() => setField(field.key, true)}>Да</Button>
             <Button mode={!val ? 'primary' : 'secondary'} onClick={() => setField(field.key, false)}>Нет</Button>
+          </div>
+        </FormItem>
+      );
+    }
+    if (field.type === 'choice') {
+      const opts = (field.options || []).map(o => String(o).trim()).filter(Boolean);
+      const raw = String(form[field.key] ?? '');
+      const otherOn = !!field.allowOther && raw.length > 0 && !opts.includes(raw);
+      const otherLabel = field.otherLabel || 'Свой вариант';
+      return (
+        <FormItem key={field.key} top={field.label}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {opts.map(opt => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setField(field.key, opt)}
+                style={{
+                  textAlign: 'left',
+                  padding: '8px 10px',
+                  borderRadius: 10,
+                  border: raw === opt ? '2px solid #2D6A4F' : '1px solid #ddd',
+                  background: raw === opt ? '#D8F3DC' : '#fff',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                }}
+              >
+                {opt}
+              </button>
+            ))}
+            {field.allowOther && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setField(field.key, otherOn ? raw : ' ')}
+                  style={{
+                    textAlign: 'left',
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    border: otherOn ? '2px solid #2D6A4F' : '1px solid #ddd',
+                    background: otherOn ? '#D8F3DC' : '#fff',
+                    cursor: 'pointer',
+                    fontSize: 13,
+                  }}
+                >
+                  {otherLabel}
+                </button>
+                {otherOn && (
+                  <textarea
+                    value={raw.trim() ? raw : ''}
+                    onChange={e => setField(field.key, e.target.value)}
+                    placeholder="Введите свой вариант…"
+                    style={{ width: '100%', minHeight: 48, borderRadius: 10, border: '1px solid #ddd', padding: 10 }}
+                  />
+                )}
+              </>
+            )}
           </div>
         </FormItem>
       );

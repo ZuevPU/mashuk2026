@@ -17,6 +17,7 @@ import {
 } from './exportCommon.js';
 import { touchpointTypeForQuestion } from './touchpointFilter.js';
 import { loadEnrichedParticipants } from './participantEnrichment.js';
+import { roleLabel } from './exportLabels.js';
 import type { ParticipantListQuery } from '../participantsList.js';
 import { createWorkbook, sendWorkbook } from './workbook.js';
 
@@ -155,14 +156,11 @@ export async function buildParticipantActivityWide(params: WideParams = {}): Pro
   const mode: 'day' | 'shift' = day != null ? 'day' : 'shift';
   const columns = getWideColumnsForParams(params);
 
-  const PARTICIPANT_LIMIT = 5000;
   const listQuery: ParticipantListQuery = {
     page: 1,
-    limit: PARTICIPANT_LIMIT,
     shiftId: params.shiftId ?? undefined,
   };
   const enriched = await loadEnrichedParticipants(listQuery);
-  const truncatedLoad = enriched.length >= PARTICIPANT_LIMIT;
   const people = enriched.filter(p => cohortMatch(p, params));
   const ids = people.map(p => p.id);
   const idSet = new Set(ids);
@@ -295,8 +293,8 @@ export async function buildParticipantActivityWide(params: WideParams = {}): Pro
         tasks_submitted_count: daySubs.length,
         tasks_approved_count: approved.length,
         tasks_points: tasksPoints,
-        active_role: state?.activeRoleKey ?? '',
-        tomorrow_role: state?.tomorrowRoleKey ?? '',
+        active_role: roleLabel(state?.activeRoleKey),
+        tomorrow_role: roleLabel(state?.tomorrowRoleKey),
         experiment_status: state?.experimentStatus ?? '',
         piggybank_entries_count: piggyEntries,
         ideas_count: p.ideasCount,
@@ -341,7 +339,7 @@ export async function buildParticipantActivityWide(params: WideParams = {}): Pro
         perDay[`evening_d${d}`] = evening;
         perDay[`answers_d${d}`] = dayAnswers.length;
         perDay[`tasks_d${d}`] = daySubs.length;
-        perDay[`role_d${d}`] = state?.activeRoleKey || state?.tomorrowRoleKey || '';
+        perDay[`role_d${d}`] = roleLabel(state?.activeRoleKey || state?.tomorrowRoleKey);
 
         for (const a of dayAnswers) {
           const q = qById.get(a.questionId!);
@@ -396,9 +394,7 @@ export async function buildParticipantActivityWide(params: WideParams = {}): Pro
     `Черновики вопросов не включены. Шкалы итогов дня: ${EVENING_SCALE_KEYS.join(', ')}.`,
     params.direction ? `Фильтр направления: ${params.direction}` : 'Фильтр направления: все',
     params.group ? `Фильтр группы: ${params.group}` : 'Фильтр группы: все',
-    truncatedLoad
-      ? `ВНИМАНИЕ: выборка участников обрезана до ${PARTICIPANT_LIMIT}. Сузьте фильтр или разбейте выгрузку.`
-      : `Участников в файле: ${people.length}.`,
+    `Участников в файле: ${people.length}.`,
   ];
 
   return { mode, day, columns, rows, longRows, readme };

@@ -19,36 +19,13 @@ const scaleField = z.coerce.number().int().min(1).max(5).optional();
 
 const eveningSchema = z.object({
   dayNumber: z.coerce.number().int().min(1).max(7).optional(),
-  ratings: z.object({
-    // 9 шкал ТЗ
-    direction: scaleField,
-    lessonsImportant: scaleField,
-    openLessons: scaleField,
-    morningHealth: scaleField,
-    workshops: scaleField,
-    eveningAtmosphere: scaleField,
-    food: scaleField,
-    housing: scaleField,
-    curator: scaleField,
-    // legacy
-    energy: scaleField,
-    usefulness: scaleField,
-    // условные
-    tripYes: z.boolean().optional(),
-    tripScore: z.coerce.number().int().min(1).max(5).optional(),
-    practiceYes: z.boolean().optional(),
-    practiceName: z.string().max(500).optional(),
-    recommendYes: z.boolean().optional(),
-    recommendScore: z.coerce.number().int().min(1).max(10).optional(),
-    // открытые
-    mainThesis: z.string().max(2000).optional(),
-    understandingChange: z.string().max(2000).optional(),
-    likedMost: z.string().max(2000).optional(),
-    improveTomorrow: z.string().max(2000).optional(),
-    freeNote: z.string().max(4000).optional(),
-    experimentResult: z.string().max(2000).optional(),
-    note: z.string().max(2000).optional(),
-  }).default({}),
+  // Dynamic keys from admin evening builder (choice / text / scales / yes_no).
+  ratings: z.record(z.union([
+    z.string().max(4000),
+    z.number(),
+    z.boolean(),
+    z.null(),
+  ])).default({}),
   tomorrowRoleKey: z.enum(ROLE_KEYS as unknown as [string, ...string[]]).optional(),
   experimentStatus: z.enum(['none', 'in_progress', 'done']).optional(),
 });
