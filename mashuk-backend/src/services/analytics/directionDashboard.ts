@@ -256,6 +256,45 @@ export async function buildDirectionDashboard(filters: AnalyticsFilters, req?: A
   ];
   if (!registered) notes.push('В направлении нет зарегистрированных участников в срезе.');
 
+  const pulseDaySeries = (pulse.activity?.daySeries ?? []) as {
+    day: number; active: number; coveragePct: number; eveningCompleted: number; touchpoints: number; answers: number;
+  }[];
+  const eveningDaySeries = (evening.daySeries ?? evening.activity?.daySeries ?? []) as {
+    day: number; submitted: number; fillRatePct: number;
+  }[];
+  const afterDaySeries = (afterBlocks.daySeries ?? afterBlocks.activity?.daySeries ?? []) as {
+    day: number; submitted: number; fillRatePct: number; answerCount?: number;
+  }[];
+  const stateDaySeries = (stateCheck.daySeries ?? stateCheck.activity?.daySeries ?? []) as {
+    day: number; submitted: number; fillRatePct: number; riskFatiguePct?: number;
+  }[];
+  const dayKeys = [...new Set([
+    ...pulseDaySeries.map(r => r.day),
+    ...eveningDaySeries.map(r => r.day),
+    ...afterDaySeries.map(r => r.day),
+    ...stateDaySeries.map(r => r.day),
+  ])].sort((a, b) => a - b);
+  const daySeries = dayKeys.map(day => {
+    const p = pulseDaySeries.find(r => r.day === day);
+    const e = eveningDaySeries.find(r => r.day === day);
+    const a = afterDaySeries.find(r => r.day === day);
+    const s = stateDaySeries.find(r => r.day === day);
+    return {
+      day,
+      active: p?.active ?? 0,
+      coveragePct: p?.coveragePct ?? 0,
+      touchpoints: p?.touchpoints ?? 0,
+      answers: p?.answers ?? 0,
+      eveningCompleted: e?.submitted ?? p?.eveningCompleted ?? 0,
+      eveningFillPct: e?.fillRatePct ?? 0,
+      afterBlocksSubmitted: a?.submitted ?? 0,
+      afterBlocksFillPct: a?.fillRatePct ?? 0,
+      stateCheckSubmitted: s?.submitted ?? 0,
+      stateCheckFillPct: s?.fillRatePct ?? 0,
+      riskFatiguePct: s?.riskFatiguePct ?? 0,
+    };
+  });
+
   return {
     requiresDirection: false,
     direction,
@@ -284,7 +323,9 @@ export async function buildDirectionDashboard(filters: AnalyticsFilters, req?: A
       eveningFillPct: pct(eveningSubmitted, registered),
       afterBlocksFillPct: pct(afterSubmitted, registered),
       stateCheckFillPct: pct(stateSubmitted, registered),
+      daySeries,
     },
+    daySeries,
     forumCompare: {
       registered: forumRegistered,
       activityRatePct: forumActivityRatePct,

@@ -24,6 +24,7 @@ import { resolveDayRange } from './analyticsQuery.js';
 import { loadCohortParticipants } from './cohort.js';
 import { getForumSettings } from '../helpers.js';
 import { stateCheckPhaseForAnswer } from './touchpointMetrics.js';
+import { buildKindDaySeries, forumSeriesDays } from './dayComparison.js';
 
 export type KindDashboardMode = 'after_blocks' | 'state_check';
 
@@ -411,6 +412,13 @@ export async function buildKindDashboard(
     diagnosticsNotes.push(`Фильтр группы: ${filters.group.trim()}.`);
   }
 
+  const { daySeries, byDirectionDaySeries } = await buildKindDaySeries(
+    mode,
+    cohort,
+    forumSeriesDays(currentDay),
+    filters.shiftId,
+  );
+
   const base = {
     filters,
     currentForumDay: currentDay,
@@ -422,7 +430,11 @@ export async function buildKindDashboard(
       fillRatePct,
       questionsPublished: questionMeta.length,
       byDirection,
+      daySeries,
+      byDirectionDaySeries,
     },
+    daySeries,
+    byDirectionDaySeries,
     byDirection,
     questions: questionsOut,
     exportPath,

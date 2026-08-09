@@ -35,6 +35,16 @@ import {
   flagFromActivityRate,
 } from './dashboardUi';
 import { OrientableBarChart } from './orientableBars';
+import {
+  AFTER_BLOCKS_DAY_METRICS,
+  DayComparisonPanel,
+  DIRECTION_DAY_METRICS,
+  EVENING_DAY_METRICS,
+  PULSE_DAY_METRICS,
+  STATE_CHECK_DAY_METRICS,
+} from './DayComparisonPanel';
+import { TouchpointCoveragePanel } from './TouchpointCoveragePanel';
+import { ExchangeAnalyticsPanel } from './ExchangeAnalyticsPanel';
 
 function ZoneBarChart({ title, zones, hint }: { title: string; zones?: Record<string, number>; hint?: string }) {
   const data = zonesToBarRows(zones ?? {});
@@ -109,6 +119,14 @@ export function PulseView({ data }: { data: any }) {
         />
       </DashGrid>
 
+      <DayComparisonPanel
+        title="Динамика по дням"
+        series={data.activity?.daySeries}
+        byDirectionDaySeries={data.activity?.byDirectionDaySeries}
+        metrics={PULSE_DAY_METRICS}
+        directionMetricKey="coveragePct"
+      />
+
       <DashGrid cols={2}>
         <DashCard title="Динамика активности">
           {series.length > 0 ? (
@@ -149,13 +167,17 @@ export function PulseView({ data }: { data: any }) {
 
       {dirRows.length > 0 && (
         <DashCard title="Сигналы по направлениям">
+          <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
+            Охват активностей среза: ответы на вопросы + сданные вечерние анкеты.
+            Норма ≥70%, внимание 50–69%, флаг ниже 50%. Сначала слабые направления.
+          </p>
           <table className="adm-table">
             <thead>
               <tr>
                 <th>Направление</th>
                 <th>Зарег.</th>
-                <th>Активны</th>
-                <th>% активности</th>
+                <th>Участвуют</th>
+                <th>% охвата</th>
                 <th>Статус</th>
               </tr>
             </thead>
@@ -1023,6 +1045,18 @@ export function OverviewView({ data }: { data: any }) {
         />
       </DashGrid>
 
+      <DayComparisonPanel
+        title="Динамика по дням"
+        series={data.pulse?.daySeries}
+        byDirectionDaySeries={data.pulse?.byDirectionDaySeries}
+        metrics={PULSE_DAY_METRICS}
+        directionMetricKey="coveragePct"
+      />
+
+      <TouchpointCoveragePanel data={data.pulse?.touchpointThreshold} />
+
+      <ExchangeAnalyticsPanel data={data.exchange} />
+
       <SectionLabel>Очереди и сообщество</SectionLabel>
       <DashGrid cols={3}>
         <DashCard title="На модерации · обмен">
@@ -1075,12 +1109,15 @@ export function OverviewView({ data }: { data: any }) {
           </button>
         </DashCard>
         <DashCard title="Сигналы по направлениям">
+          <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
+            % охвата вопросов и вечерних анкет. Сначала слабые направления.
+          </p>
           {dirRows.length > 0 ? (
             <table className="adm-table">
               <thead>
                 <tr>
                   <th>Направление</th>
-                  <th>% акт.</th>
+                  <th>% охвата</th>
                   <th>Статус</th>
                 </tr>
               </thead>
@@ -1315,6 +1352,14 @@ export function EveningView({
             : (data.diagnostics?.eveningOpenNow ? 'анкета открыта' : 'по расписанию / закрыта')}
         />
       </DashGrid>
+
+      <DayComparisonPanel
+        title="Динамика по дням · анкета вечера"
+        series={data.daySeries ?? data.activity?.daySeries}
+        byDirectionDaySeries={data.byDirectionDaySeries ?? data.activity?.byDirectionDaySeries}
+        metrics={EVENING_DAY_METRICS}
+        directionMetricKey="submitted"
+      />
 
       {notes.length > 0 && (
         <DashCard title="Примечания">
@@ -1563,6 +1608,14 @@ export function AfterBlocksView({
         <DashKpi value={dashVal(data.activity?.questionsPublished ?? questions.length)} label="вопросов в срезе" />
       </DashGrid>
 
+      <DayComparisonPanel
+        title="Динамика по дням · после блоков"
+        series={data.daySeries ?? data.activity?.daySeries}
+        byDirectionDaySeries={data.byDirectionDaySeries ?? data.activity?.byDirectionDaySeries}
+        metrics={AFTER_BLOCKS_DAY_METRICS}
+        directionMetricKey="submitted"
+      />
+
       {notes.length > 0 && (
         <DashCard title="Примечания">
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
@@ -1688,6 +1741,14 @@ export function StateChecksView({
         <DashKpi value={dashVal(pulse.avgEnergy)} label="средняя энергия" sub="шкала 1–10" accent="#f59e0b" />
         <DashKpi value={pulse.riskFatiguePct != null ? `${pulse.riskFatiguePct}%` : '—'} label="риск + усталость" sub="доля зон" accent="#ef4444" />
       </DashGrid>
+
+      <DayComparisonPanel
+        title="Динамика по дням · проверка состояния"
+        series={data.daySeries ?? data.activity?.daySeries}
+        byDirectionDaySeries={data.byDirectionDaySeries ?? data.activity?.byDirectionDaySeries}
+        metrics={STATE_CHECK_DAY_METRICS}
+        directionMetricKey="submitted"
+      />
 
       <DashGrid cols={3}>
         <DashKpi value={dashVal(pulse.phaseCounts?.morning)} label="ответов · утро" />
@@ -1985,6 +2046,14 @@ export function DirectionView({
           sub={`охват ${kpi.eveningFillPct ?? '—'}% · ${kpi.afterBlocksFillPct ?? '—'}%`}
         />
       </DashGrid>
+
+      <DayComparisonPanel
+        title="Динамика по дням · направление"
+        hint="Показатели выбранного направления по дням форума. Разрез «по направлениям» скрыт — вы уже внутри одного направления."
+        series={data.daySeries ?? kpi.daySeries}
+        metrics={DIRECTION_DAY_METRICS}
+        hideDirectionTab
+      />
 
       {notes.length > 0 && (
         <DashCard title="Примечания">

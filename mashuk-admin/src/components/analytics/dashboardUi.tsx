@@ -307,7 +307,7 @@ export function DashScreenTitle({
   );
 }
 
-/** Heuristic direction flag from activity rate % */
+/** Светофор охвата активностей направления: ≥70 норма, 50–69 внимание, ниже 50 — флаг */
 export function flagFromActivityRate(pct: number): 'ok' | 'warn' | 'flag' {
   if (pct >= 70) return 'ok';
   if (pct >= 50) return 'warn';

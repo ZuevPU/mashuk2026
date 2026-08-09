@@ -13,6 +13,7 @@ import { buildProgramDashboard } from './programDashboard.js';
 import { buildActivityDashboard } from './activityDashboard.js';
 import { buildPiggybankDashboard } from './piggybankDashboard.js';
 import { buildSemanticDashboard, buildClubsDashboard } from './semanticDashboard.js';
+import { buildExchangeAnalytics } from './exchangeAnalytics.js';
 import { DASHBOARD_CATALOG, forumDayCalendarDate } from './dashboardCatalog.js';
 import { resolveAdminShiftId } from '../shiftService.js';
 
@@ -61,7 +62,7 @@ export async function buildAnalyticsMeta(req: AdminRequest) {
 
 export async function composeLegacyDashboards(req: AdminRequest) {
   const filters = await resolveAnalyticsFilters(req);
-  const [pulse, portrait, program, activity, piggybank, semantic, community] = await Promise.all([
+  const [pulse, portrait, program, activity, piggybank, semantic, community, exchange] = await Promise.all([
     buildPulseDashboard(filters, req),
     buildPortraitDashboard(filters, req),
     buildProgramDashboard(filters, req),
@@ -69,11 +70,13 @@ export async function composeLegacyDashboards(req: AdminRequest) {
     buildPiggybankDashboard(filters, req),
     buildSemanticDashboard(filters, req),
     loadCommunityQueueCounts(),
+    buildExchangeAnalytics(filters, req),
   ]);
   return {
     mode: filters.mode,
     day: filters.day,
     community,
+    exchange,
     pulse: {
       registered: pulse.activity.registered,
       activeToday: pulse.activity.activeToday,
@@ -81,6 +84,9 @@ export async function composeLegacyDashboards(req: AdminRequest) {
       totalAnswers: pulse.activity.activitySeries.reduce((s, d) => s + d.answers, 0),
       energySeries: [],
       completionByDay: pulse.activity.activitySeries,
+      daySeries: pulse.activity.daySeries ?? [],
+      byDirectionDaySeries: pulse.activity.byDirectionDaySeries ?? [],
+      touchpointThreshold: pulse.activity.touchpointThreshold ?? null,
       completionByDirection: pulse.activity.completionByDirection ?? [],
       stateReasonsTop: pulse.stateReasons?.topTokens?.slice(0, 8) ?? [],
     },

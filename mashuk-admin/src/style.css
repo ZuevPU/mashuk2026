@@ -1270,6 +1270,51 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   outline: 2px solid rgba(31, 58, 95, 0.35);
   outline-offset: 1px;
 }
+.adm-day-compare-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.adm-day-compare-tabs,
+.adm-day-compare-metrics {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.adm-metric-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: transparent;
+  color: #86868b;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.adm-metric-chip:hover {
+  background: rgba(0, 0, 0, 0.03);
+  color: #1d1d1f;
+}
+.adm-metric-chip.is-active {
+  background: rgba(31, 58, 95, 0.06);
+  color: #1d1d1f;
+  border-color: rgba(31, 58, 95, 0.22);
+  font-weight: 600;
+}
+.adm-metric-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
 .adm-dash-status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .adm-dash-flag { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .adm-dash-flag-ok { background: #22c55e; }

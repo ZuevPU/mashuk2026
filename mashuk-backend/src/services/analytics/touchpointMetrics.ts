@@ -8,6 +8,11 @@ import {
   touchpointTypeForQuestion,
 } from '../exports/touchpointFilter.js';
 import { getMoscowPhase } from '../timePhase.js';
+import { TOUCHPOINT_SLOTS } from '../touchpointTemplates.js';
+import {
+  isTouchpointQuestionForForumDay,
+  touchpointCompletionRatio,
+} from '../touchpointProgress.js';
 
 type QuestionRow = typeof questions.$inferSelect;
 
@@ -94,6 +99,111 @@ export async function countEveningCompleted(participantIds: number[], dayNumbers
     && s.eveningRatings != null
     && typeof s.eveningRatings === 'object',
   ).length;
+}
+
+export type TouchpointThresholdPoint = {
+  day: number;
+  registered: number;
+  /** Сколько человек закрыли ≥ k слотов (k = 1…7) */
+  atLeast: Record<string, number>;
+};
+
+export type TouchpointThresholdDirectionPoint = TouchpointThresholdPoint & {
+  direction: string;
+};
+
+/**
+ * Охват 7 точек осмысления: по дням и по направлениям×день.
+ * atLeast[k] = число зарегистрированных с completed ≥ k (канонический счётчик слотов).
+ */
+export async function buildTouchpointThresholdCoverage(
+  cohort: { id: number; direction?: string | null; onboardingCompletedAt?: Date | null }[],
+  days: number[],
+  shiftId?: number | null,
+): Promise<{
+  slotsTotal: number;
+  byDay: TouchpointThresholdPoint[];
+  byDirectionDay: TouchpointThresholdDirectionPoint[];
+}> {
+  const slotsTotal = TOUCHPOINT_SLOTS.length;
+  const emptyAtLeast = (): Record<string, number> => {
+    const o: Record<string, number> = {};
+    for (let k = 1; k <= slotsTotal; k++) o[String(k)] = 0;
+    return o;
+  };
+  const registered = cohort.filter(p => p.onboardingCompletedAt);
+  const ids = cohort.map(p => p.id);
+
+  if (!days.length || !registered.length) {
+    return {
+      slotsTotal,
+      byDay: days.map(day => ({ day, registered: registered.length, atLeast: emptyAtLeast() })),
+      byDirectionDay: [],
+    };
+  }
+
+  const qRows = shiftId != null
+    ? await db.select().from(questions).where(eq(questions.shiftId, shiftId))
+    : await db.select().from(questions);
+  const published = qRows.filter(q => isPublishedStatus(q.status));
+  const tpQs = published.filter(q => days.some(d => isTouchpointQuestionForForumDay(q, d)));
+  const tpQIds = tpQs.map(q => q.id);
+
+  const ans = ids.length && tpQIds.length
+    ? await db.select({
+      participantId: answers.participantId,
+      questionId: answers.questionId,
+    }).from(answers).where(and(
+      inArray(answers.participantId, ids),
+      inArray(answers.questionId, tpQIds),
+    ))
+    : [];
+
+  const answeredByPid = new Map<number, Set<number>>();
+  for (const a of ans) {
+    if (!answeredByPid.has(a.participantId)) answeredByPid.set(a.participantId, new Set());
+    answeredByPid.get(a.participantId)!.add(a.questionId);
+  }
+
+  /** completed slots for registered participant on day */
+  const completedByKey = new Map<string, number>();
+  for (const p of registered) {
+    const answeredIds = answeredByPid.get(p.id) ?? new Set<number>();
+    for (const day of days) {
+      const { completed } = touchpointCompletionRatio(tpQs, answeredIds, day);
+      completedByKey.set(`${p.id}:${day}`, completed);
+    }
+  }
+
+  const tally = (list: typeof registered, day: number) => {
+    const atLeast = emptyAtLeast();
+    for (const p of list) {
+      const done = completedByKey.get(`${p.id}:${day}`) ?? 0;
+      for (let k = 1; k <= slotsTotal; k++) {
+        if (done >= k) atLeast[String(k)] += 1;
+      }
+    }
+    return { day, registered: list.length, atLeast };
+  };
+
+  const byDay = days.map(day => tally(registered, day));
+
+  const byDir = new Map<string, typeof registered>();
+  for (const p of registered) {
+    const d = (p.direction || '—').trim() || '—';
+    if (!byDir.has(d)) byDir.set(d, []);
+    byDir.get(d)!.push(p);
+  }
+
+  const byDirectionDay: TouchpointThresholdDirectionPoint[] = [];
+  for (const [direction, list] of byDir) {
+    for (const day of days) {
+      byDirectionDay.push({ direction, ...tally(list, day) });
+    }
+  }
+  byDirectionDay.sort((a, b) => a.day - b.day || a.direction.localeCompare(b.direction, 'ru'));
+
+  return { slotsTotal, byDay, byDirectionDay };
 }
 
 export async function activityByDaySeries(

@@ -11,6 +11,7 @@ import type { AnalyticsFilters } from './analyticsQuery.js';
 import { resolveDayRange } from './analyticsQuery.js';
 import { loadCohortParticipants } from './cohort.js';
 import { getForumSettings } from '../helpers.js';
+import { buildEveningDaySeries, forumSeriesDays } from './dayComparison.js';
 
 export type EveningAnswerRow = {
   participantId: number;
@@ -214,6 +215,11 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
     .map(f => aggregateField(f, submittedRows))
     .filter(q => q.answered > 0 || fields.some(f => f.key === q.key));
 
+  const { daySeries, byDirectionDaySeries } = await buildEveningDaySeries(
+    cohort,
+    forumSeriesDays(currentDay),
+  );
+
   return {
     filters,
     currentForumDay: currentDay,
@@ -224,7 +230,11 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
       fillRatePct,
       totalRows: rows.length,
       byDirection,
+      daySeries,
+      byDirectionDaySeries,
     },
+    daySeries,
+    byDirectionDaySeries,
     byDirection,
     questions,
     diagnostics: {
