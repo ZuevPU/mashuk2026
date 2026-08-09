@@ -14,6 +14,8 @@ import { buildActivityDashboard } from './activityDashboard.js';
 import { buildPiggybankDashboard } from './piggybankDashboard.js';
 import { buildSemanticDashboard, buildClubsDashboard } from './semanticDashboard.js';
 import { buildExchangeAnalytics } from './exchangeAnalytics.js';
+import { buildEveningDashboard } from './eveningDashboard.js';
+import { buildStateCheckDashboard } from './stateCheckDashboard.js';
 import { DASHBOARD_CATALOG, forumDayCalendarDate } from './dashboardCatalog.js';
 import { resolveAdminShiftId } from '../shiftService.js';
 
@@ -62,7 +64,7 @@ export async function buildAnalyticsMeta(req: AdminRequest) {
 
 export async function composeLegacyDashboards(req: AdminRequest) {
   const filters = await resolveAnalyticsFilters(req);
-  const [pulse, portrait, program, activity, piggybank, semantic, community, exchange] = await Promise.all([
+  const [pulse, portrait, program, activity, piggybank, semantic, community, exchange, evening, stateCheck] = await Promise.all([
     buildPulseDashboard(filters, req),
     buildPortraitDashboard(filters, req),
     buildProgramDashboard(filters, req),
@@ -71,18 +73,40 @@ export async function composeLegacyDashboards(req: AdminRequest) {
     buildSemanticDashboard(filters, req),
     loadCommunityQueueCounts(),
     buildExchangeAnalytics(filters, req),
+    buildEveningDashboard(filters, req),
+    buildStateCheckDashboard(filters, req),
   ]);
+  const scPulse = (stateCheck as {
+    emotionalPulse?: {
+      avgEnergy?: number | null;
+      energyByDay?: { day: number; avg: number | null; responses: number }[];
+      energyByDirectionDay?: { direction: string; day: number; avg: number | null; responses: number }[];
+    };
+  }).emotionalPulse ?? {};
   return {
     mode: filters.mode,
     day: filters.day,
     community,
     exchange,
+    evening: {
+      submitted: evening.activity.submitted,
+      fillRatePct: evening.activity.fillRatePct,
+      scaleAverages: evening.scaleAverages ?? [],
+      scaleOverallAvg: evening.scaleOverallAvg ?? null,
+      scaleByDay: evening.scaleByDay ?? [],
+      scaleByDirectionDay: evening.scaleByDirectionDay ?? [],
+    },
+    energy: {
+      avg: scPulse.avgEnergy ?? null,
+      byDay: scPulse.energyByDay ?? [],
+      byDirectionDay: scPulse.energyByDirectionDay ?? [],
+    },
     pulse: {
       registered: pulse.activity.registered,
       activeToday: pulse.activity.activeToday,
       eveningCompleted: pulse.activity.eveningCompleted,
       totalAnswers: pulse.activity.activitySeries.reduce((s, d) => s + d.answers, 0),
-      energySeries: [],
+      energySeries: scPulse.energyByDay ?? [],
       completionByDay: pulse.activity.activitySeries,
       daySeries: pulse.activity.daySeries ?? [],
       byDirectionDaySeries: pulse.activity.byDirectionDaySeries ?? [],

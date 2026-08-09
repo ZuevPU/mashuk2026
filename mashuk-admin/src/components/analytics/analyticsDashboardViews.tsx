@@ -43,6 +43,8 @@ import {
 } from './DayComparisonPanel';
 import { TouchpointCoveragePanel } from './TouchpointCoveragePanel';
 import { ExchangeAnalyticsPanel } from './ExchangeAnalyticsPanel';
+import { EveningScaleAverages } from './EveningScaleAverages';
+import { EnergyAverages } from './EnergyAverages';
 
 function ZoneBarChart({ title, zones, hint }: { title: string; zones?: Record<string, number>; hint?: string }) {
   const data = zonesToBarRows(zones ?? {});
@@ -177,6 +179,12 @@ export function PulseView({
         byDirectionDaySeries={sc.byDirectionDaySeries ?? scActivity.byDirectionDaySeries}
         metrics={STATE_CHECK_DAY_METRICS}
         directionMetricKey="submitted"
+      />
+
+      <EnergyAverages
+        avg={data.emotionalPulse?.avgEnergy}
+        byDay={data.emotionalPulse?.energyByDay}
+        byDirectionDay={data.emotionalPulse?.energyByDirectionDay}
       />
 
       <DashGrid cols={2}>
@@ -1143,8 +1151,9 @@ export function OverviewView({ data }: { data: any }) {
           accent="#22c55e"
         />
         <DashKpi
-          value={dashVal(data.pulse?.eveningCompleted)}
+          value={dashVal(data.pulse?.eveningCompleted ?? data.evening?.submitted)}
           label="итоги дня"
+          sub={data.evening?.scaleOverallAvg != null ? `ср. оценка ${data.evening.scaleOverallAvg}` : undefined}
           accent="#f59e0b"
         />
         <DashKpi
@@ -1161,6 +1170,27 @@ export function OverviewView({ data }: { data: any }) {
         byDirectionDaySeries={data.pulse?.byDirectionDaySeries}
         metrics={PULSE_DAY_METRICS}
         directionMetricKey="coveragePct"
+      />
+
+      <EveningScaleAverages
+        title="Итоги дня · средние по шкалам"
+        rows={data.evening?.scaleAverages}
+        overallAvg={data.evening?.scaleOverallAvg}
+        byDay={data.evening?.scaleByDay}
+        byDirectionDay={data.evening?.scaleByDirectionDay}
+        compact
+      />
+      <div style={{ marginTop: -4 }}>
+        <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={go('evening')}>
+          Открыть итоги дня →
+        </button>
+      </div>
+
+      <EnergyAverages
+        avg={data.energy?.avg}
+        byDay={data.energy?.byDay}
+        byDirectionDay={data.energy?.byDirectionDay}
+        compact
       />
 
       <TouchpointCoveragePanel data={data.pulse?.touchpointThreshold} />
@@ -1469,6 +1499,22 @@ export function EveningView({
         byDirectionDaySeries={data.byDirectionDaySeries ?? data.activity?.byDirectionDaySeries}
         metrics={EVENING_DAY_METRICS}
         directionMetricKey="submitted"
+      />
+
+      <EveningScaleAverages
+        rows={data.scaleAverages ?? questions
+          .filter(q => (q.type === 'scale_1_5' || q.type === 'scale_1_10') && q.avg != null)
+          .map(q => ({
+            key: q.key,
+            label: q.label,
+            avg: q.avg as number,
+            answered: q.answered,
+            max: q.type === 'scale_1_10' ? 10 : 5,
+            type: q.type,
+          }))}
+        overallAvg={data.scaleOverallAvg}
+        byDay={data.scaleByDay}
+        byDirectionDay={data.scaleByDirectionDay}
       />
 
       {notes.length > 0 && (

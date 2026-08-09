@@ -37,6 +37,8 @@ export async function getPulseDashboardHandler(req: AdminRequest, res: Response)
       riskFatiguePct?: number | null;
       phaseCounts?: Record<string, number>;
       topReasons?: { token: string; count: number }[];
+      energyByDay?: { day: number; avg: number | null; responses: number }[];
+      energyByDirectionDay?: { direction: string; day: number; avg: number | null; responses: number }[];
     };
   };
   const scPulse = stateCheck.emotionalPulse ?? {};
@@ -48,6 +50,8 @@ export async function getPulseDashboardHandler(req: AdminRequest, res: Response)
       riskFatiguePct: scPulse.riskFatiguePct ?? null,
       phaseCounts: scPulse.phaseCounts ?? pulse.activity?.stateChecks ?? null,
       topReasons: scPulse.topReasons ?? pulse.stateReasons?.topTokens ?? [],
+      energyByDay: scPulse.energyByDay ?? [],
+      energyByDirectionDay: scPulse.energyByDirectionDay ?? [],
     },
     /** Операционка проверки состояния (бывший отдельный дашборд) */
     stateCheck: {

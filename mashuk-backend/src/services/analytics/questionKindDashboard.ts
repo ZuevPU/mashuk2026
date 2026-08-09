@@ -492,6 +492,36 @@ export async function buildKindDashboard(
   const riskPct = zonesToPercent(zones).risk;
   const fatiguePct = zonesToPercent(zones).fatigue;
 
+  const mean = (vals: number[]) => (vals.length
+    ? Math.round((vals.reduce((s, n) => s + n, 0) / vals.length) * 10) / 10
+    : null);
+
+  const energyByDayMap = new Map<number, number[]>();
+  const energyByDirDayMap = new Map<string, number[]>();
+  for (const r of rows) {
+    if (r.energy == null || !Number.isFinite(r.energy)) continue;
+    if (r.day == null || r.day < 1) continue;
+    if (!energyByDayMap.has(r.day)) energyByDayMap.set(r.day, []);
+    energyByDayMap.get(r.day)!.push(r.energy);
+    const dir = (r.direction || '—').trim() || '—';
+    const key = `${dir}::${r.day}`;
+    if (!energyByDirDayMap.has(key)) energyByDirDayMap.set(key, []);
+    energyByDirDayMap.get(key)!.push(r.energy);
+  }
+  const energySeriesDays = forumSeriesDays(currentDay);
+  const energyByDay = energySeriesDays.map(day => {
+    const vals = energyByDayMap.get(day) ?? [];
+    return { day, avg: mean(vals), responses: vals.length };
+  });
+  const energyDirections = [...new Set(rows.map(r => (r.direction || '—').trim() || '—'))]
+    .sort((a, b) => a.localeCompare(b, 'ru'));
+  const energyByDirectionDay = energySeriesDays.flatMap(day =>
+    energyDirections.map(direction => {
+      const vals = energyByDirDayMap.get(`${direction}::${day}`) ?? [];
+      return { direction, day, avg: mean(vals), responses: vals.length };
+    }),
+  );
+
   return {
     ...base,
     title: 'Проверка состояния',
@@ -508,6 +538,8 @@ export async function buildKindDashboard(
       riskFatiguePct: Math.round((riskPct + fatiguePct) * 10) / 10,
       emotions: buildEmotionDistribution(emotionCounts, rows.length),
       topReasons: topReasonTokens(reasons, 20),
+      energyByDay,
+      energyByDirectionDay,
     },
   };
 }

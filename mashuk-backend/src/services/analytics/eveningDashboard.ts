@@ -215,9 +215,88 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
     .map(f => aggregateField(f, submittedRows))
     .filter(q => q.answered > 0 || fields.some(f => f.key === q.key));
 
+  const scaleFields = fields.filter(f => f.type === 'scale_1_5' || f.type === 'scale_1_10');
+
+  function scaleStatsForRows(slice: EveningExportRow[]) {
+    const byQuestion = scaleFields.map(f => {
+      const maxScale = f.type === 'scale_1_10' ? 10 : 5;
+      let sum = 0;
+      let n = 0;
+      for (const r of slice) {
+        const raw = r.ratings[f.key];
+        const num = typeof raw === 'number' ? raw : Number(raw);
+        if (Number.isFinite(num) && num >= 1 && num <= maxScale) {
+          sum += num;
+          n += 1;
+        }
+      }
+      return {
+        key: f.key,
+        label: f.label || f.key,
+        avg: n ? Math.round((sum / n) * 10) / 10 : null as number | null,
+        answered: n,
+        max: maxScale,
+        type: f.type,
+      };
+    }).filter(q => q.answered > 0 && q.avg != null) as {
+      key: string; label: string; avg: number; answered: number; max: number; type: string;
+    }[];
+
+    let allSum = 0;
+    let allN = 0;
+    for (const q of byQuestion) {
+      allSum += q.avg * q.answered;
+      allN += q.answered;
+    }
+    return {
+      byQuestion,
+      overallAvg: allN ? Math.round((allSum / allN) * 10) / 10 : null,
+      answered: allN,
+    };
+  }
+
+  const scaleSlice = scaleStatsForRows(submittedRows);
+  const scaleAverages = scaleSlice.byQuestion;
+  const scaleOverallAvg = scaleSlice.overallAvg;
+
+  const seriesDays = forumSeriesDays(currentDay);
+  const scaleByDay = seriesDays.map(day => {
+    const dayRows = submittedRows.filter(r => r.dayNumber === day);
+    const stats = scaleStatsForRows(dayRows);
+    return {
+      day,
+      overallAvg: stats.overallAvg,
+      answered: stats.answered,
+      byQuestion: stats.byQuestion,
+    };
+  });
+
+  const directions = [...new Set([
+    ...cohort.map(p => (p.direction || '—').trim() || '—'),
+    ...submittedRows.map(r => (r.directionName || r.p.direction || '—').trim() || '—'),
+  ])].sort((a, b) => a.localeCompare(b, 'ru'));
+
+  const scaleByDirectionDay = seriesDays.flatMap(day =>
+    directions.map(direction => {
+      const slice = submittedRows.filter(r => {
+        if (r.dayNumber !== day) return false;
+        const d = (r.directionName || r.p.direction || '—').trim() || '—';
+        return d === direction;
+      });
+      const stats = scaleStatsForRows(slice);
+      return {
+        direction,
+        day,
+        overallAvg: stats.overallAvg,
+        answered: stats.answered,
+        byQuestion: stats.byQuestion,
+      };
+    }),
+  );
+
   const { daySeries, byDirectionDaySeries } = await buildEveningDaySeries(
     cohort,
-    forumSeriesDays(currentDay),
+    seriesDays,
   );
 
   return {
@@ -237,6 +316,10 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
     byDirectionDaySeries,
     byDirection,
     questions,
+    scaleAverages,
+    scaleOverallAvg,
+    scaleByDay,
+    scaleByDirectionDay,
     diagnostics: {
       eveningOpenNow: diagnostics.eveningOpenNow,
       eveningForceUnpublished: diagnostics.eveningForceUnpublished,
