@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
@@ -9,6 +9,7 @@ import {
   ZONE_ORDER,
   formatZoneName,
 } from '../analytics/chartRu';
+import { ChartOrientToggle, type BarsLayout } from '../analytics/orientableBars';
 
 type PhaseKey = 'morning' | 'day' | 'evening';
 
@@ -56,14 +57,17 @@ function ChartTooltip({
 }
 
 /**
- * 100% stacked columns: зоны эмоций утро / день / вечер.
- * Данные — emotionalPulse.byPhase из pulse/hub.
+ * 100% stacked bars: зоны эмоций утро / день / вечер.
+ * Переключатель ▤/▥ — горизонтальные полосы или вертикальные столбцы.
  */
 export function PhaseEmotionPulseChart({
   byPhase,
 }: {
   byPhase?: Partial<Record<PhaseKey, Record<string, number>>> | null;
 }) {
+  const [barsLayout, setBarsLayout] = useState<BarsLayout>('vertical');
+  const horizontal = barsLayout === 'horizontal';
+
   const chartData = useMemo(() => {
     return PHASES.map(phase => {
       const zones = byPhase?.[phase] ?? {};
@@ -84,7 +88,6 @@ export function PhaseEmotionPulseChart({
 
   const hasData = chartData.some(r => Number(r._sum) > 0);
 
-  /** Медиана доли зоны по трём фазам — для подсказки внизу. */
   const medianNote = useMemo(() => {
     if (!hasData) return null;
     const liftVals = chartData.map(r => Number(r.lift) || 0).sort((a, b) => a - b);
@@ -93,6 +96,8 @@ export function PhaseEmotionPulseChart({
     return `Медиана по фазам: подъём ${Math.round(mid(liftVals))}%, риск ${Math.round(mid(riskVals))}%.`;
   }, [chartData, hasData]);
 
+  const height = horizontal ? Math.max(220, chartData.length * 56 + 48) : 300;
+
   return (
     <DashCard title="Состояние по времени дня">
       <div style={{
@@ -100,7 +105,7 @@ export function PhaseEmotionPulseChart({
         flexWrap: 'wrap',
         gap: 8,
         justifyContent: 'space-between',
-        alignItems: 'baseline',
+        alignItems: 'center',
         marginBottom: 8,
       }}>
         <p className="adm-muted" style={{ fontSize: 12, margin: 0 }}>
@@ -113,46 +118,93 @@ export function PhaseEmotionPulseChart({
         </p>
       ) : (
         <>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart
-              data={chartData}
-              margin={{ left: 4, right: 12, top: 8, bottom: 4 }}
-              barCategoryGap="28%"
-            >
-              <CartesianGrid stroke="#e5e5ea" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="label"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 12, fill: '#1d1d1f' }}
-              />
-              <YAxis
-                domain={[0, 100]}
-                ticks={[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]}
-                tickFormatter={v => `${v}%`}
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 11, fill: '#86868b' }}
-                width={44}
-              />
-              <Tooltip content={<ChartTooltip />} />
-              <Legend
-                formatter={(value: string) => formatZoneName(value)}
-                wrapperStyle={{ fontSize: 12, paddingTop: 4 }}
-              />
-              {ZONE_ORDER.map(key => (
-                <Bar
-                  key={key}
-                  dataKey={key}
-                  name={key}
-                  stackId="phase"
-                  fill={STACK_COLORS[key] ?? ZONE_COLORS[key]}
-                  isAnimationActive={false}
-                  maxBarSize={72}
-                />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="adm-chart-frame">
+            <ChartOrientToggle value={barsLayout} onChange={setBarsLayout} />
+            <ResponsiveContainer width="100%" height={height}>
+              {horizontal ? (
+                <BarChart
+                  data={chartData}
+                  layout="vertical"
+                  margin={{ left: 4, right: 16, top: 8, bottom: 4 }}
+                  barCategoryGap="22%"
+                >
+                  <CartesianGrid stroke="#e5e5ea" strokeDasharray="3 3" horizontal={false} />
+                  <XAxis
+                    type="number"
+                    domain={[0, 100]}
+                    ticks={[0, 25, 50, 75, 100]}
+                    tickFormatter={v => `${v}%`}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: '#86868b' }}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="label"
+                    width={56}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 12, fill: '#1d1d1f' }}
+                  />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Legend
+                    formatter={(value: string) => formatZoneName(value)}
+                    wrapperStyle={{ fontSize: 12, paddingTop: 4 }}
+                  />
+                  {ZONE_ORDER.map(key => (
+                    <Bar
+                      key={key}
+                      dataKey={key}
+                      name={key}
+                      stackId="phase"
+                      fill={STACK_COLORS[key] ?? ZONE_COLORS[key]}
+                      isAnimationActive={false}
+                      maxBarSize={28}
+                    />
+                  ))}
+                </BarChart>
+              ) : (
+                <BarChart
+                  data={chartData}
+                  margin={{ left: 4, right: 12, top: 8, bottom: 4 }}
+                  barCategoryGap="28%"
+                >
+                  <CartesianGrid stroke="#e5e5ea" strokeDasharray="3 3" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 12, fill: '#1d1d1f' }}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    ticks={[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]}
+                    tickFormatter={v => `${v}%`}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: '#86868b' }}
+                    width={44}
+                  />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Legend
+                    formatter={(value: string) => formatZoneName(value)}
+                    wrapperStyle={{ fontSize: 12, paddingTop: 4 }}
+                  />
+                  {ZONE_ORDER.map(key => (
+                    <Bar
+                      key={key}
+                      dataKey={key}
+                      name={key}
+                      stackId="phase"
+                      fill={STACK_COLORS[key] ?? ZONE_COLORS[key]}
+                      isAnimationActive={false}
+                      maxBarSize={72}
+                    />
+                  ))}
+                </BarChart>
+              )}
+            </ResponsiveContainer>
+          </div>
           {medianNote && (
             <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 0', fontStyle: 'italic' }}>
               {medianNote}

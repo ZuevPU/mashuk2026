@@ -77,6 +77,17 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
       topReasons?: { token: string; count: number }[];
       energyByDay?: { day: number; avg: number | null; responses: number }[];
       energyByDirectionDay?: { direction: string; day: number; avg: number | null; responses: number }[];
+      directionEmotionEnergy?: {
+        direction: string;
+        day: number;
+        energyAvg: number | null;
+        responses: number;
+        energyResponses: number;
+        zones: Record<string, number>;
+        riskFatiguePct: number;
+        engagementLiftPct: number;
+        dominantZone: string;
+      }[];
     };
   };
   const scPulse = stateCheck.emotionalPulse ?? {};
@@ -169,6 +180,7 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
       topReasons: scPulse.topReasons ?? pulse.stateReasons?.topTokens ?? [],
       energyByDay: scPulse.energyByDay ?? [],
       energyByDirectionDay: scPulse.energyByDirectionDay ?? [],
+      directionEmotionEnergy: scPulse.directionEmotionEnergy ?? [],
     },
     stateCheck: {
       activity: stateCheck.activity,
@@ -215,5 +227,6 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
     touchpointThreshold: pulse.activity.touchpointThreshold ?? null,
     touchpointSlotCoverage: pulse.activity.touchpointSlotCoverage ?? null,
     roleDirectionMatrix,
+    directionEmotionEnergy: scPulse.directionEmotionEnergy ?? [],
   };
 }

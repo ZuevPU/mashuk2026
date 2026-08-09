@@ -602,6 +602,61 @@ export async function buildKindDashboard(
     }),
   );
 
+  /**
+   * Joint energy+zones по направлению × дню (для Штаба «Эмоции × энергия»).
+   * Серия по D1…Dcurrent — как energyByDirectionDay, не обрезается mode=day.
+   */
+  type DirDayJoint = {
+    energies: number[];
+    zones: ReturnType<typeof emptyZoneDistribution>;
+    n: number;
+  };
+  const dirDayJoint = new Map<string, DirDayJoint>();
+  for (const r of energySourceRows) {
+    if (r.day == null || r.day < 1) continue;
+    const dir = (r.direction || '—').trim() || '—';
+    const key = `${dir}::${r.day}`;
+    if (!dirDayJoint.has(key)) {
+      dirDayJoint.set(key, { energies: [], zones: emptyZoneDistribution(), n: 0 });
+    }
+    const bucket = dirDayJoint.get(key)!;
+    bucket.n += 1;
+    accumulateZoneFromAnswer(bucket.zones, {
+      emotion: r.emotion,
+      emotionZone: r.emotionZone,
+    });
+    if (r.energy != null && Number.isFinite(r.energy)) bucket.energies.push(r.energy);
+  }
+  const zoneKeys = ['risk', 'fatigue', 'neutral', 'engagement', 'lift'] as const;
+  const directionEmotionEnergy = energySeriesDays.flatMap(day =>
+    energyDirections.flatMap(direction => {
+      const bucket = dirDayJoint.get(`${direction}::${day}`);
+      if (!bucket || bucket.n === 0) return [];
+      const zPct = zonesToPercent(bucket.zones);
+      const riskFatiguePct = Math.round((zPct.risk + zPct.fatigue) * 10) / 10;
+      const engagementLiftPct = Math.round((zPct.engagement + zPct.lift) * 10) / 10;
+      let dominantZone: (typeof zoneKeys)[number] = 'neutral';
+      let dominantVal = -1;
+      for (const zk of zoneKeys) {
+        if (zPct[zk] > dominantVal) {
+          dominantVal = zPct[zk];
+          dominantZone = zk;
+        }
+      }
+      return [{
+        direction,
+        day,
+        energyAvg: mean(bucket.energies),
+        responses: bucket.n,
+        energyResponses: bucket.energies.length,
+        zones: zPct,
+        riskFatiguePct,
+        engagementLiftPct,
+        dominantZone,
+      }];
+    }),
+  );
+
   return {
     ...base,
     title: 'Проверка состояния',
@@ -622,6 +677,7 @@ export async function buildKindDashboard(
       topReasons: topReasonTokens(reasons, 20),
       energyByDay,
       energyByDirectionDay,
+      directionEmotionEnergy,
     },
   };
 }

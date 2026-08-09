@@ -33,6 +33,7 @@ import { DirectionEmotionPulseChart } from './DirectionEmotionPulseChart';
 import { DirectionZonePhaseTable } from './DirectionZonePhaseTable';
 import { PhaseEmotionPulseChart } from './PhaseEmotionPulseChart';
 import { DirectionEnergyCompareChart } from './DirectionEnergyCompareChart';
+import { DirectionEmotionEnergyBlock } from './DirectionEmotionEnergyBlock';
 import { DirectionRadarCompare } from './DirectionRadarCompare';
 import { StateReasonsByDirectionTable } from './StateReasonsByDirectionTable';
 import { RoleDirectionHeatmap } from './RoleDirectionHeatmap';
@@ -322,6 +323,10 @@ export function HubForumScreen({
         byDay={pulse.energyByDay}
         byDirectionDay={pulse.energyByDirectionDay}
         title="Средняя энергия · 0–10"
+      />
+      <DirectionEmotionEnergyBlock
+        rows={data.directionEmotionEnergy ?? pulse.directionEmotionEnergy}
+        onOpenDirection={openDirection}
       />
       <DashGrid cols={2}>
         <DirectionEnergyCompareChart byDirectionDay={pulse.energyByDirectionDay} />
