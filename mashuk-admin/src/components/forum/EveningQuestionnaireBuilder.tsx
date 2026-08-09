@@ -143,12 +143,11 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
     });
   };
 
-  /** Ready-made chain: Да/Нет → событие программы → оценка 1–10 */
+  /** Ready-made chain: Да/Нет → события/подтемы с оценкой 1–10 под каждой */
   const addProgramRateChain = (stepIndex: number) => {
     const keys = collectFieldKeys(config);
     const yesKey = slugKey('attended_block', keys);
     const eventKey = slugKey('program_block', keys);
-    const scoreKey = slugKey('block_score', keys);
     const chain: EveningField[] = [
       {
         key: yesKey,
@@ -159,17 +158,10 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
       {
         key: eventKey,
         type: 'program_event',
-        label: 'Выберите блок / тему из программы',
+        label: 'Выберите блоки и темы из программы (можно несколько) и оцените каждую',
         required: true,
         linkedEventIds: [],
         visibleWhen: { field: yesKey, equals: true },
-      },
-      {
-        key: scoreKey,
-        type: 'scale_1_10',
-        label: 'Оцените выбранный блок',
-        required: true,
-        visibleWhen: { field: eventKey, equals: '__set__' },
       },
     ];
     setConfig(prev => {
@@ -668,9 +660,9 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
               type="button"
               className="adm-btn adm-btn-secondary adm-btn-sm"
               onClick={() => addProgramRateChain(stepIndex)}
-              title="Да/нет → выбор из программы → оценка 1–10"
+              title="Да/нет → несколько тем из программы, оценка 1–10 под каждой"
             >
-              + Цепочка: Да → событие → 1–10
+              + Цепочка: Да → темы + оценки
             </button>
           </div>
         </div>

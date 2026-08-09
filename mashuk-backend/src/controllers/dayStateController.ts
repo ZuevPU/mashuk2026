@@ -26,12 +26,27 @@ import { resolveActiveShiftId } from '../services/shiftService.js';
 
 const scaleField = z.coerce.number().int().min(1).max(5).optional();
 
-const programEventRatingValue = z.object({
+const programEventItemSchema = z.object({
   eventId: z.coerce.number().int().positive(),
   eventTitle: z.string().max(500),
-  parentEventId: z.coerce.number().int().positive().nullable().optional(),
-  parentEventTitle: z.string().max(500).nullable().optional(),
+  parentEventId: z.coerce.number().int().positive(),
+  parentEventTitle: z.string().max(500),
+  score: z.coerce.number().int().min(1).max(10),
 });
+
+const programEventRatingValue = z.union([
+  z.object({
+    items: z.array(programEventItemSchema).min(1).max(40),
+  }),
+  // Legacy single pick — only if score already filled
+  z.object({
+    eventId: z.coerce.number().int().positive(),
+    eventTitle: z.string().max(500),
+    parentEventId: z.coerce.number().int().positive().nullable().optional(),
+    parentEventTitle: z.string().max(500).nullable().optional(),
+    score: z.coerce.number().int().min(1).max(10),
+  }),
+]);
 
 const eveningSchema = z.object({
   dayNumber: z.coerce.number().int().min(1).max(7).optional(),

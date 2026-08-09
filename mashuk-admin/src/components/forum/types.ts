@@ -61,7 +61,7 @@ export const EVENING_FIELD_TYPE_OPTIONS: { value: EveningFieldType; label: strin
   { value: 'scale_1_5', label: 'Шкала 1–5' },
   { value: 'yes_no', label: 'Да / нет' },
   { value: 'choice', label: 'Один ответ из списка' },
-  { value: 'program_event', label: 'Событие / тема из программы' },
+  { value: 'program_event', label: 'События программы + оценка 1–10' },
   { value: 'text', label: 'Текстовый ответ' },
   { value: 'scale_1_10', label: 'Шкала 1–10' },
   { value: 'role_select', label: 'Выбор роли на завтра' },

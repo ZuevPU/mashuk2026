@@ -8,12 +8,15 @@ import {
   type ProgramPickNode,
 } from './programEventTree';
 
-type ProgramEventValue = {
+type ProgramEventItem = {
   eventId: number;
   eventTitle: string;
-  parentEventId?: number | null;
-  parentEventTitle?: string | null;
+  parentEventId: number;
+  parentEventTitle: string;
+  score: number | null;
 };
+
+type ProgramEventValue = { items: ProgramEventItem[] };
 
 type Props = {
   day: number;
@@ -27,14 +30,40 @@ const MOCK_ROLES = [
   { roleKey: 'mentor', name: 'Наставник' },
 ];
 
+function normalizeProgramValue(raw: unknown): ProgramEventValue | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  if (Array.isArray(o.items)) {
+    const items = (o.items as ProgramEventItem[]).filter(i => i && Number(i.eventId) > 0);
+    return items.length ? { items } : null;
+  }
+  if (Number(o.eventId) > 0) {
+    return {
+      items: [{
+        eventId: Number(o.eventId),
+        eventTitle: String(o.eventTitle || ''),
+        parentEventId: Number(o.parentEventId) || Number(o.eventId),
+        parentEventTitle: String(o.parentEventTitle || o.eventTitle || ''),
+        score: o.score == null ? null : Number(o.score),
+      }],
+    };
+  }
+  return null;
+}
+
+function isProgramComplete(raw: unknown): boolean {
+  const v = normalizeProgramValue(raw);
+  if (!v?.items.length) return false;
+  return v.items.every(i => i.score != null && i.score >= 1 && i.score <= 10);
+}
+
 function isValueSet(value: unknown): boolean {
   if (value == null) return false;
   if (typeof value === 'string') return value.trim().length > 0;
   if (typeof value === 'number') return Number.isFinite(value);
   if (typeof value === 'boolean') return true;
-  if (typeof value === 'object' && value !== null && 'eventId' in value) {
-    return Number.isFinite(Number((value as ProgramEventValue).eventId));
-  }
+  if (normalizeProgramValue(value)) return isProgramComplete(value);
+  if (typeof value === 'object') return Object.keys(value as object).length > 0;
   return false;
 }
 
@@ -116,16 +145,23 @@ function ProgramEventPreviewField({
   nodes: ProgramPickNode[];
   onChange: (v: ProgramEventValue | null) => void;
 }) {
-  const [parentId, setParentId] = useState<number | null>(value?.parentEventId ?? null);
+  const items = value?.items || [];
+  const [parentId, setParentId] = useState<number | null>(items[0]?.parentEventId ?? null);
   const parent = nodes.find(n => n.id === parentId) || null;
   const subtopics = parent
     ? flattenSelectableLeaves(parent).filter(l => l.id !== parent.id)
     : [];
 
+  const emit = (next: ProgramEventItem[]) => onChange(next.length ? { items: next } : null);
+  const find = (id: number) => items.find(i => i.eventId === id);
+
   return (
     <div className="adm-evening-preview-field">
       <div className="adm-evening-preview-label">{field.label}</div>
       <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>1. Событие программы</div>
+      <div style={{ fontSize: 11, color: '#666', marginBottom: 8 }}>
+        Можно отметить несколько тем — под каждой шкала 1–10.
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {nodes.length === 0 && (
           <div style={{ fontSize: 12, color: '#888' }}>Нет блоков программы на этот день.</div>
@@ -134,29 +170,29 @@ function ProgramEventPreviewField({
           const active = parentId === root.id;
           const time = formatTimeRange(root.startTime, root.endTime);
           const leafCount = countProgramLeaves(root.children);
+          const picked = items.filter(i => i.parentEventId === root.id).length;
           return (
             <button
               key={root.id}
               type="button"
               onClick={() => {
                 setParentId(root.id);
-                if (!root.children.length) {
-                  onChange({
+                if (!root.children.length && !find(root.id)) {
+                  emit([...items, {
                     eventId: root.id,
                     eventTitle: root.title,
                     parentEventId: root.id,
                     parentEventTitle: root.title,
-                  });
-                } else if (value?.parentEventId !== root.id) {
-                  onChange(null);
+                    score: null,
+                  }]);
                 }
               }}
               style={{
                 textAlign: 'left',
                 padding: '10px 12px',
                 borderRadius: 12,
-                border: active ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
-                background: active ? '#D8F3DC' : '#FBF9F5',
+                border: active || picked > 0 ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
+                background: active || picked > 0 ? '#D8F3DC' : '#FBF9F5',
                 cursor: 'pointer',
               }}
             >
@@ -168,60 +204,92 @@ function ProgramEventPreviewField({
                 {leafCount > 0 && (
                   <span style={{ fontWeight: 500, color: '#666' }}> · {leafCount} тем</span>
                 )}
+                {picked > 0 && (
+                  <span style={{ fontWeight: 600, color: '#2D6A4F' }}> · выбрано {picked}</span>
+                )}
               </div>
-              {leafCount > 0 && (
-                <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-                  {active ? '▼ выберите подсобытие ниже' : '▼ есть подсобытия'}
-                </div>
-              )}
             </button>
           );
         })}
       </div>
       {parent && subtopics.length > 0 && (
         <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>2. Подсобытие / тема</div>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>2. Подсобытия / темы</div>
           <div style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>{parent.title}</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {subtopics.map(leaf => {
-              const selected = value?.eventId === leaf.id;
+              const item = find(leaf.id);
+              const selected = !!item;
               return (
-                <button
+                <div
                   key={leaf.id}
-                  type="button"
-                  onClick={() => onChange({
-                    eventId: leaf.id,
-                    eventTitle: leaf.title,
-                    parentEventId: parent.id,
-                    parentEventTitle: parent.title,
-                  })}
                   style={{
-                    display: 'flex',
-                    gap: 8,
-                    textAlign: 'left',
-                    padding: '8px 10px',
                     borderRadius: 10,
                     border: selected ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
-                    background: selected ? '#D8F3DC' : '#fff',
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    lineHeight: 1.35,
+                    background: selected ? '#F3FAF5' : '#fff',
+                    padding: '8px 10px',
                   }}
                 >
-                  <span style={{ color: '#888' }}>·</span>
-                  <span style={{ flex: 1 }}>{leaf.title}</span>
-                  <span style={{ color: '#888' }}>›</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selected) emit(items.filter(i => i.eventId !== leaf.id));
+                      else emit([...items, {
+                        eventId: leaf.id,
+                        eventTitle: leaf.title,
+                        parentEventId: parent.id,
+                        parentEventTitle: parent.title,
+                        score: null,
+                      }]);
+                    }}
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      width: '100%',
+                      textAlign: 'left',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      padding: 0,
+                    }}
+                  >
+                    <span style={{ fontWeight: 700, color: selected ? '#2D6A4F' : '#888' }}>
+                      {selected ? '✓' : '·'}
+                    </span>
+                    <span style={{ flex: 1 }}>{leaf.title}</span>
+                  </button>
+                  {selected && item && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #E5E5E5' }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Оценка 1–10</div>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => emit(items.map(i => (
+                              i.eventId === leaf.id ? { ...i, score: n } : i
+                            )))}
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 8,
+                              border: item.score === n ? '2px solid #2D6A4F' : '1px solid #ddd',
+                              background: item.score === n ? '#D8F3DC' : '#fff',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
-        </div>
-      )}
-      {value && (
-        <div style={{ fontSize: 12, color: '#2D6A4F', marginTop: 10, fontWeight: 600 }}>
-          Выбрано: {value.parentEventTitle && value.parentEventTitle !== value.eventTitle
-            ? `${value.parentEventTitle} → ${value.eventTitle}`
-            : value.eventTitle}
         </div>
       )}
     </div>
@@ -354,7 +422,7 @@ export function EveningQuestionnaireParticipantPreview({ day, config, programEve
     }
     if (field.type === 'program_event') {
       const nodes = buildEveningProgramPickNodes(programEvents, day, field.linkedEventIds);
-      const current = isValueSet(form[field.key]) ? form[field.key] as ProgramEventValue : null;
+      const current = normalizeProgramValue(form[field.key]);
       return (
         <ProgramEventPreviewField
           key={field.key}

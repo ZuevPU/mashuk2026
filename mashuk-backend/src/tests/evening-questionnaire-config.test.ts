@@ -145,6 +145,17 @@ describe('eveningQuestionnaireConfig', () => {
     assert.equal(isFieldVisible(score, { ev: null }), false);
     assert.equal(isFieldVisible(score, {
       ev: { eventId: 12, eventTitle: 'Практика А' },
+    }), false);
+    assert.equal(isFieldVisible(score, {
+      ev: {
+        items: [{
+          eventId: 12,
+          eventTitle: 'Практика А',
+          parentEventId: 1,
+          parentEventTitle: 'Блок',
+          score: 8,
+        }],
+      },
     }), true);
   });
 });

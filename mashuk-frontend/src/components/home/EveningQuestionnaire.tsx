@@ -31,11 +31,16 @@ export type EveningProgramEventNode = {
   children: EveningProgramEventNode[];
 };
 
-export type EveningProgramEventValue = {
+export type EveningProgramEventItem = {
   eventId: number;
   eventTitle: string;
-  parentEventId?: number | null;
-  parentEventTitle?: string | null;
+  parentEventId: number;
+  parentEventTitle: string;
+  score: number | null;
+};
+
+export type EveningProgramEventValue = {
+  items: EveningProgramEventItem[];
 };
 
 function formatEventTimeRange(
@@ -92,10 +97,49 @@ export type EveningQuestionnaireProps = {
   onSubmitted: () => void;
 };
 
-function isProgramEventValue(raw: unknown): raw is EveningProgramEventValue {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+function normalizeProgramEventValue(raw: unknown): EveningProgramEventValue | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
-  return Number.isFinite(Number(o.eventId)) && Number(o.eventId) > 0;
+  if (Array.isArray(o.items)) {
+    const items: EveningProgramEventItem[] = [];
+    for (const row of o.items) {
+      if (!row || typeof row !== 'object') continue;
+      const r = row as Record<string, unknown>;
+      const eventId = Number(r.eventId);
+      if (!Number.isFinite(eventId) || eventId <= 0) continue;
+      const scoreNum = r.score == null || r.score === '' ? NaN : Number(r.score);
+      items.push({
+        eventId,
+        eventTitle: String(r.eventTitle || ''),
+        parentEventId: Number(r.parentEventId) || eventId,
+        parentEventTitle: String(r.parentEventTitle || r.eventTitle || ''),
+        score: Number.isFinite(scoreNum) && scoreNum >= 1 && scoreNum <= 10 ? Math.floor(scoreNum) : null,
+      });
+    }
+    return items.length ? { items } : null;
+  }
+  const eventId = Number(o.eventId);
+  if (!Number.isFinite(eventId) || eventId <= 0) return null;
+  const scoreNum = o.score == null || o.score === '' ? NaN : Number(o.score);
+  return {
+    items: [{
+      eventId,
+      eventTitle: String(o.eventTitle || ''),
+      parentEventId: Number(o.parentEventId) || eventId,
+      parentEventTitle: String(o.parentEventTitle || o.eventTitle || ''),
+      score: Number.isFinite(scoreNum) && scoreNum >= 1 && scoreNum <= 10 ? Math.floor(scoreNum) : null,
+    }],
+  };
+}
+
+function isProgramEventValue(raw: unknown): boolean {
+  return normalizeProgramEventValue(raw) != null;
+}
+
+function isProgramEventComplete(raw: unknown): boolean {
+  const v = normalizeProgramEventValue(raw);
+  if (!v?.items.length) return false;
+  return v.items.every(i => i.score != null && i.score >= 1 && i.score <= 10);
 }
 
 function isFieldValueSet(value: unknown): boolean {
@@ -103,7 +147,7 @@ function isFieldValueSet(value: unknown): boolean {
   if (typeof value === 'string') return value.trim().length > 0;
   if (typeof value === 'number') return Number.isFinite(value);
   if (typeof value === 'boolean') return true;
-  if (isProgramEventValue(value)) return true;
+  if (isProgramEventValue(value)) return isProgramEventComplete(value);
   if (typeof value === 'object') return Object.keys(value as object).length > 0;
   return false;
 }
@@ -131,6 +175,37 @@ function flattenSelectableLeaves(node: EveningProgramEventNode): EveningProgramE
   return node.children.flatMap(ch => flattenSelectableLeaves(ch));
 }
 
+function ScoreRow({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (n: number) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
+      {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+        <button
+          key={n}
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onChange(n); }}
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            border: value === n ? '2px solid #2D6A4F' : '1px solid #ddd',
+            background: value === n ? '#D8F3DC' : '#fff',
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          {n}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ProgramEventPicker({
   field,
   value,
@@ -144,48 +219,74 @@ function ProgramEventPicker({
   emptyReason?: string;
   onChange: (v: EveningProgramEventValue | null) => void;
 }) {
-  const initialParentId = value?.parentEventId ?? (
-    value?.eventId && nodes.some(n => n.id === value.eventId) ? value.eventId : null
-  );
+  const items = value?.items || [];
+  const initialParentId = items[0]?.parentEventId
+    ?? (items[0] && nodes.some(n => n.id === items[0].eventId) ? items[0].eventId : null);
   const [selectedParentId, setSelectedParentId] = useState<number | null>(initialParentId);
 
   useEffect(() => {
-    if (!value) return;
-    const pid = value.parentEventId
-      ?? (nodes.some(n => n.id === value.eventId) ? value.eventId : null);
+    if (!items.length) return;
+    const last = items[items.length - 1];
+    const pid = last.parentEventId
+      ?? (nodes.some(n => n.id === last.eventId) ? last.eventId : null);
     if (pid != null) setSelectedParentId(pid);
-  }, [value?.eventId, value?.parentEventId, nodes]);
+  }, [items.length]); // eslint-disable-line react-hooks/exhaustive-deps -- follow last pick
 
   const selectedParent = nodes.find(n => n.id === selectedParentId) || null;
   const subtopics = selectedParent
     ? flattenSelectableLeaves(selectedParent).filter(l => l.id !== selectedParent.id)
     : [];
   const needsSubtopic = subtopics.length > 0;
-  const waitingForSubtopic = !!selectedParent && needsSubtopic && !value;
+
+  const emit = (nextItems: EveningProgramEventItem[]) => {
+    onChange(nextItems.length ? { items: nextItems } : null);
+  };
+
+  const findItem = (eventId: number) => items.find(i => i.eventId === eventId);
+
+  const toggleLeaf = (leaf: EveningProgramEventNode, root: EveningProgramEventNode) => {
+    const existing = findItem(leaf.id);
+    if (existing) {
+      emit(items.filter(i => i.eventId !== leaf.id));
+      return;
+    }
+    emit([
+      ...items,
+      {
+        eventId: leaf.id,
+        eventTitle: leaf.title,
+        parentEventId: root.id,
+        parentEventTitle: root.title,
+        score: null,
+      },
+    ]);
+  };
+
+  const setScore = (eventId: number, score: number) => {
+    emit(items.map(i => (i.eventId === eventId ? { ...i, score } : i)));
+  };
 
   const pickParent = (root: EveningProgramEventNode) => {
     setSelectedParentId(root.id);
     if (!root.children?.length) {
-      onChange({
-        eventId: root.id,
-        eventTitle: root.title,
-        parentEventId: root.id,
-        parentEventTitle: root.title,
-      });
-      return;
+      const existing = findItem(root.id);
+      if (!existing) {
+        emit([
+          ...items.filter(i => i.parentEventId !== root.id || i.eventId !== root.id),
+          {
+            eventId: root.id,
+            eventTitle: root.title,
+            parentEventId: root.id,
+            parentEventTitle: root.title,
+            score: null,
+          },
+        ]);
+      }
     }
-    // Wait for subtopic pick — clear incomplete answer
-    if (value?.parentEventId !== root.id) onChange(null);
   };
 
-  const pickSubtopic = (leaf: EveningProgramEventNode, root: EveningProgramEventNode) => {
-    onChange({
-      eventId: leaf.id,
-      eventTitle: leaf.title,
-      parentEventId: root.id,
-      parentEventTitle: root.title,
-    });
-  };
+  const parentSelectedCount = (rootId: number) =>
+    items.filter(i => i.parentEventId === rootId).length;
 
   return (
     <FormItem top={<span className="evening-q__label">{field.label}</span>}>
@@ -201,7 +302,7 @@ function ProgramEventPicker({
             1. Событие программы
           </div>
           <div style={{ fontSize: 11, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
-            Выберите крупный блок — затем тему / подсобытие внутри него.
+            Выберите крупный блок, затем отметьте одну или несколько тем — под каждой появится оценка 1–10.
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {nodes.map(root => {
@@ -209,37 +310,56 @@ function ProgramEventPicker({
               const timeRange = formatEventTimeRange(root.startTime, root.endTime);
               const leafCount = countProgramLeaves(root.children);
               const hasKids = (root.children?.length ?? 0) > 0;
+              const picked = parentSelectedCount(root.id);
+              const rootItem = !hasKids ? findItem(root.id) : null;
               return (
-                <button
-                  key={root.id}
-                  type="button"
-                  onClick={() => pickParent(root)}
-                  style={{
-                    textAlign: 'left',
-                    padding: '10px 12px',
-                    borderRadius: 12,
-                    border: active ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
-                    background: active ? '#D8F3DC' : '#FBF9F5',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {timeRange && (
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#2D6A4F', marginBottom: 4 }}>
-                      {timeRange}
+                <div key={root.id}>
+                  <button
+                    type="button"
+                    onClick={() => pickParent(root)}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '10px 12px',
+                      borderRadius: 12,
+                      border: active || picked > 0 ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
+                      background: active || picked > 0 ? '#D8F3DC' : '#FBF9F5',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {timeRange && (
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#2D6A4F', marginBottom: 4 }}>
+                        {timeRange}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.35 }}>
+                      {root.title}
+                      {hasKids ? (
+                        <span style={{ fontWeight: 500, color: '#666' }}> · {leafCount} тем</span>
+                      ) : null}
+                      {picked > 0 && hasKids ? (
+                        <span style={{ fontWeight: 600, color: '#2D6A4F' }}> · выбрано {picked}</span>
+                      ) : null}
+                    </div>
+                    {hasKids && (
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                        {active ? '▼ отметьте подсобытия ниже' : '▼ есть подсобытия'}
+                      </div>
+                    )}
+                  </button>
+                  {!hasKids && rootItem && (
+                    <div style={{
+                      marginTop: 6,
+                      padding: '8px 10px',
+                      borderRadius: 10,
+                      border: '1px solid #E0DAD0',
+                      background: '#fff',
+                    }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Оценка 1–10</div>
+                      <ScoreRow value={rootItem.score} onChange={n => setScore(root.id, n)} />
                     </div>
                   )}
-                  <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.35 }}>
-                    {root.title}
-                    {hasKids ? (
-                      <span style={{ fontWeight: 500, color: '#666' }}> · {leafCount} тем</span>
-                    ) : null}
-                  </div>
-                  {hasKids && (
-                    <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-                      {active ? '▼ выберите подсобытие ниже' : '▼ есть подсобытия'}
-                    </div>
-                  )}
-                </button>
+                </div>
               );
             })}
           </div>
@@ -247,54 +367,85 @@ function ProgramEventPicker({
           {selectedParent && needsSubtopic && (
             <div style={{ marginTop: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
-                2. Подсобытие / тема
+                2. Подсобытия / темы — можно несколько
               </div>
               <div style={{ fontSize: 12, color: '#555', marginBottom: 8, lineHeight: 1.35 }}>
                 {selectedParent.title}
               </div>
-              {waitingForSubtopic && (
-                <div style={{ fontSize: 12, color: '#9B2C2C', marginBottom: 8 }}>
-                  Выберите тему внутри блока — без этого ответ не сохранится.
-                </div>
-              )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {subtopics.map(leaf => {
-                  const selected = value?.eventId === leaf.id;
+                  const item = findItem(leaf.id);
+                  const selected = !!item;
                   return (
-                    <button
+                    <div
                       key={leaf.id}
-                      type="button"
-                      onClick={() => pickSubtopic(leaf, selectedParent)}
                       style={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: 8,
-                        width: '100%',
-                        textAlign: 'left',
-                        padding: '8px 10px',
                         borderRadius: 10,
                         border: selected ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
-                        background: selected ? '#D8F3DC' : '#fff',
-                        cursor: 'pointer',
-                        fontSize: 13,
-                        lineHeight: 1.35,
+                        background: selected ? '#F3FAF5' : '#fff',
+                        padding: '8px 10px',
                       }}
                     >
-                      <span style={{ color: '#888' }}>·</span>
-                      <span style={{ flex: 1 }}>{leaf.title}</span>
-                      <span style={{ color: '#888' }}>›</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleLeaf(leaf, selectedParent)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 8,
+                          width: '100%',
+                          textAlign: 'left',
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          fontSize: 13,
+                          lineHeight: 1.35,
+                          padding: 0,
+                        }}
+                      >
+                        <span style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: 4,
+                          border: selected ? '2px solid #2D6A4F' : '1px solid #bbb',
+                          background: selected ? '#2D6A4F' : '#fff',
+                          color: '#fff',
+                          fontSize: 12,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          marginTop: 1,
+                        }}
+                        >
+                          {selected ? '✓' : ''}
+                        </span>
+                        <span style={{ flex: 1, fontWeight: selected ? 600 : 500 }}>{leaf.title}</span>
+                      </button>
+                      {selected && item && (
+                        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #E5E5E5' }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                            Оцените это подсобытие (1–10)
+                          </div>
+                          <ScoreRow value={item.score} onChange={n => setScore(leaf.id, n)} />
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
             </div>
           )}
 
-          {value && (
-            <div style={{ fontSize: 12, color: '#2D6A4F', marginTop: 12, fontWeight: 600 }}>
-              Выбрано: {value.parentEventTitle && value.parentEventTitle !== value.eventTitle
-                ? `${value.parentEventTitle} → ${value.eventTitle}`
-                : value.eventTitle}
+          {items.length > 0 && (
+            <div style={{ fontSize: 12, color: '#2D6A4F', marginTop: 12, fontWeight: 600, lineHeight: 1.4 }}>
+              Выбрано ({items.length}):{' '}
+              {items.map(i => {
+                const path = i.parentEventTitle && i.parentEventTitle !== i.eventTitle
+                  ? `${i.parentEventTitle} → ${i.eventTitle}`
+                  : i.eventTitle;
+                return `${path}${i.score != null ? ` [${i.score}]` : ''}`;
+              }).join('; ')}
             </div>
           )}
         </>
@@ -304,18 +455,11 @@ function ProgramEventPicker({
 }
 
 function programEventAnswerComplete(
-  field: EveningField,
+  _field: EveningField,
   form: Record<string, unknown>,
-  options: EveningQuestionnaireProps['questionnaire']['programEventOptions'],
+  _options: EveningQuestionnaireProps['questionnaire']['programEventOptions'],
 ): boolean {
-  const nodes = options?.[field.key]?.events || [];
-  const raw = form[field.key];
-  if (!isProgramEventValue(raw)) return false;
-  const parent = nodes.find(n => n.id === raw.parentEventId) || nodes.find(n => n.id === raw.eventId);
-  if (!parent) return true;
-  const leaves = flattenSelectableLeaves(parent).filter(l => l.id !== parent.id);
-  if (leaves.length === 0) return raw.eventId === parent.id;
-  return leaves.some(l => l.id === raw.eventId);
+  return isProgramEventComplete(form[_field.key]);
 }
 
 function stepHasVisibleFields(
@@ -529,7 +673,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     }
     if (field.type === 'program_event') {
       const pack = questionnaire.programEventOptions?.[field.key];
-      const current = isProgramEventValue(form[field.key]) ? form[field.key] as EveningProgramEventValue : null;
+      const current = normalizeProgramEventValue(form[field.key]);
       return (
         <ProgramEventPicker
           key={field.key}

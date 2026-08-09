@@ -24,30 +24,90 @@ export type EveningField = {
   otherLabel?: string;
   /**
    * For type=program_event: root program block ids to offer (empty = all day roots).
-   * Participant picks block → theme/subtopic (same tree as «После блоков»).
+   * Participant picks block → one or more themes, each with score 1–10.
    */
   linkedEventIds?: number[];
   /**
    * Show field when another field matches.
    * Special equals:
    * - `__other__` — choice «свой вариант»
-   * - `__set__` — parent has a non-empty value (e.g. event picked)
+   * - `__set__` — parent has a non-empty value (e.g. event picked + rated)
    */
   visibleWhen?: { field: string; equals: boolean | string | number };
 };
 
+/** One selected theme/block with optional inline 1–10 score. */
+export type EveningProgramEventItem = {
+  eventId: number;
+  eventTitle: string;
+  parentEventId: number;
+  parentEventTitle: string;
+  /** 1–10; null while choosing */
+  score: number | null;
+};
+
 /** Stored shape for type=program_event answers inside evening_ratings. */
 export type EveningProgramEventValue = {
+  items: EveningProgramEventItem[];
+};
+
+/** Legacy single-pick shape (pre multi-select). */
+type LegacyProgramEventValue = {
   eventId: number;
   eventTitle: string;
   parentEventId?: number | null;
   parentEventTitle?: string | null;
+  score?: number | null;
 };
 
-export function isEveningProgramEventValue(raw: unknown): raw is EveningProgramEventValue {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+export function normalizeEveningProgramEventValue(raw: unknown): EveningProgramEventValue | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
-  return Number.isFinite(Number(o.eventId)) && Number(o.eventId) > 0;
+  if (Array.isArray(o.items)) {
+    const items: EveningProgramEventItem[] = [];
+    for (const row of o.items) {
+      if (!row || typeof row !== 'object') continue;
+      const r = row as Record<string, unknown>;
+      const eventId = Number(r.eventId);
+      if (!Number.isFinite(eventId) || eventId <= 0) continue;
+      const scoreRaw = r.score;
+      const score = scoreRaw == null || scoreRaw === ''
+        ? null
+        : Number(scoreRaw);
+      items.push({
+        eventId,
+        eventTitle: String(r.eventTitle || ''),
+        parentEventId: Number(r.parentEventId) || eventId,
+        parentEventTitle: String(r.parentEventTitle || r.eventTitle || ''),
+        score: Number.isFinite(score) && score! >= 1 && score! <= 10 ? Math.floor(score!) : null,
+      });
+    }
+    return items.length ? { items } : null;
+  }
+  // Legacy: single eventId
+  const eventId = Number(o.eventId);
+  if (!Number.isFinite(eventId) || eventId <= 0) return null;
+  const legacy = o as LegacyProgramEventValue;
+  const score = legacy.score == null ? null : Number(legacy.score);
+  return {
+    items: [{
+      eventId,
+      eventTitle: String(legacy.eventTitle || ''),
+      parentEventId: Number(legacy.parentEventId) || eventId,
+      parentEventTitle: String(legacy.parentEventTitle || legacy.eventTitle || ''),
+      score: Number.isFinite(score) && score! >= 1 && score! <= 10 ? Math.floor(score!) : null,
+    }],
+  };
+}
+
+export function isEveningProgramEventValue(raw: unknown): boolean {
+  return normalizeEveningProgramEventValue(raw) != null;
+}
+
+export function isEveningProgramEventComplete(raw: unknown): boolean {
+  const v = normalizeEveningProgramEventValue(raw);
+  if (!v?.items.length) return false;
+  return v.items.every(i => i.score != null && i.score >= 1 && i.score <= 10);
 }
 
 export function isEveningFieldValueSet(value: unknown): boolean {
@@ -55,7 +115,7 @@ export function isEveningFieldValueSet(value: unknown): boolean {
   if (typeof value === 'string') return value.trim().length > 0;
   if (typeof value === 'number') return Number.isFinite(value);
   if (typeof value === 'boolean') return true;
-  if (isEveningProgramEventValue(value)) return true;
+  if (isEveningProgramEventValue(value)) return isEveningProgramEventComplete(value);
   if (typeof value === 'object') return Object.keys(value as object).length > 0;
   return false;
 }

@@ -152,7 +152,25 @@ export function formatEveningFieldValue(
   if (typeof raw === 'boolean') return formatYesNo(raw);
   if (typeof raw === 'number') return raw;
   if (field.type === 'program_event' && typeof raw === 'object' && !Array.isArray(raw)) {
-    const o = raw as { eventTitle?: string; parentEventTitle?: string; eventId?: number };
+    const o = raw as {
+      eventTitle?: string;
+      parentEventTitle?: string;
+      eventId?: number;
+      items?: Array<{
+        eventTitle?: string;
+        parentEventTitle?: string;
+        score?: number | null;
+      }>;
+    };
+    if (Array.isArray(o.items) && o.items.length) {
+      return o.items.map(it => {
+        const title = String(it.eventTitle || '').trim();
+        const parent = String(it.parentEventTitle || '').trim();
+        const path = title && parent && parent !== title ? `${parent} → ${title}` : (title || parent);
+        const score = it.score != null ? ` [${it.score}/10]` : '';
+        return `${path}${score}`;
+      }).join('; ');
+    }
     const title = String(o.eventTitle || '').trim();
     const parent = String(o.parentEventTitle || '').trim();
     if (title && parent && parent !== title) return `${parent} → ${title}`;
