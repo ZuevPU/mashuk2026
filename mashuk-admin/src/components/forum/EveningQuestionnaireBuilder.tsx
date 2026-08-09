@@ -8,6 +8,7 @@ import {
   type EveningQuestionnaireConfig,
   type EveningStep,
 } from './types';
+import { EveningQuestionnaireParticipantPreview } from './EveningQuestionnaireParticipantPreview';
 
 type Props = {
   adminFetch: (path: string, opts?: RequestInit) => Promise<any>;
@@ -394,18 +395,11 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
         </button>
       </div>
       {previewOpen && (
-        <div className="adm-forum-preview">
-          {config.steps.map((step, si) => (
-            <div key={step.id} className="adm-forum-preview-step">
-              <strong>{si + 1}. {step.title}</strong>
-              <ul>
-                {step.fields.map(f => (
-                  <li key={f.key}>{f.label}{f.required ? ' *' : ''}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
+        <EveningQuestionnaireParticipantPreview
+          day={day}
+          config={config}
+          programEvents={programEvents}
+        />
       )}
       {config.steps.map((step, stepIndex) => (
         <div key={`${step.id}-${stepIndex}`} className="adm-forum-step-card">
