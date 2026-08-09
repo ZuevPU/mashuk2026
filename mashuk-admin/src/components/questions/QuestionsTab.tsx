@@ -494,7 +494,15 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
               });
               const n = res?.participantsAffected ?? 0;
               const pts = res?.pointsRevoked ?? 0;
-              return `Снято: ${pts} б. у ${n} уч. (${res?.revokedLogs ?? 0} записей)`;
+              const logs = res?.revokedLogs ?? 0;
+              const unmatched = res?.unmatchedAnswers ?? 0;
+              if (logs === 0) {
+                return unmatched > 0
+                  ? `Не найдено начислений для снятия (ответов: ${res?.answersCount ?? 0}, без лога: ${unmatched})`
+                  : 'Начислений по этому вопросу не найдено';
+              }
+              return `Снято: ${pts} б. у ${n} уч. (${logs} записей)`
+                + (unmatched > 0 ? `, без лога: ${unmatched}` : '');
             });
           }}
           onViewPracticesResults={() => {

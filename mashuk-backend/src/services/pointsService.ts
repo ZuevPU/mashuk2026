@@ -1,4 +1,4 @@
-import { eq, and, sql, gte, lte, isNull, inArray, asc } from 'drizzle-orm';
+import { eq, and, sql, isNull, inArray, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { pointsLog, levelsConfig, participants, answers, questions } from '../db/schema.js';
 import { env } from '../config/env.js';
@@ -29,12 +29,44 @@ const BONUS_ACTIONS = new Set(['bonus_regularity', 'bonus_diversity']);
 const EXP_ACTIONS = new Set(['task_complete', 'piggybank_entry', 'admin_manual_experience', 'admin_manual_task']);
 
 export function pointsTrackForAction(actionType: string): PointTrack | 'bonus' {
-  if (actionType === 'admin_manual_path') return 'path';
-  if (actionType === 'admin_manual_experience') return 'experience';
-  if (actionType === 'admin_manual_deduct_path') return 'path';
-  if (actionType === 'admin_manual_deduct_experience') return 'experience';
-  if (BONUS_ACTIONS.has(actionType)) return 'bonus';
-  return PATH_ACTIONS.has(actionType) ? 'path' : 'experience';
+  // Reversal rows use `${base}_revoke` — keep them on the same track as the original award.
+  const base = actionType.replace(/_revoke$/i, '');
+  if (base === 'admin_manual_path' || actionType === 'admin_manual_deduct_path') return 'path';
+  if (base === 'admin_manual_experience' || actionType === 'admin_manual_deduct_experience') return 'experience';
+  if (BONUS_ACTIONS.has(base)) return 'bonus';
+  return PATH_ACTIONS.has(base) ? 'path' : 'experience';
+}
+
+/** Rebuild participant path/experience/bonus/forum totals from non-revoked points_log rows. */
+export async function recalculateParticipantTotals(participantId: number): Promise<void> {
+  const rows = await db.select({
+    actionType: pointsLog.actionType,
+    points: pointsLog.points,
+  }).from(pointsLog).where(and(
+    eq(pointsLog.participantId, participantId),
+    isNull(pointsLog.revokedAt),
+  ));
+
+  let path = 0;
+  let experience = 0;
+  let bonus = 0;
+  for (const r of rows) {
+    const track = pointsTrackForAction(r.actionType || '');
+    // Skip *_revoke rows: originals are already marked revokedAt; counting negatives would double-apply.
+    if ((r.actionType || '').endsWith('_revoke')) continue;
+    if (track === 'path') path += r.points;
+    else if (track === 'bonus') bonus += r.points;
+    else experience += r.points;
+  }
+
+  await db.update(participants)
+    .set({
+      pathPoints: Math.max(0, path),
+      experiencePoints: Math.max(0, experience),
+      bonusPoints: Math.max(0, bonus),
+      forumPoints: Math.max(0, path + experience + bonus),
+    })
+    .where(eq(participants.id, participantId));
 }
 
 const DEFAULT_THRESHOLDS = [0, 100, 250, 500, 1000];
@@ -340,10 +372,17 @@ export async function revokePointsLogEntry(
   return { ok: true, reversalId: reversal.id };
 }
 
+function asDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 /**
- * Revoke path/experience awards tied to answers on a forum question.
- * Matches positive, non-revoked points_log rows for the answer's participant
- * within a short time window of the answer (submit awards in the same request).
+ * Revoke awards tied to answers on a forum question, then rebuild affected totals.
+ * Matching: prefer points_log_id on answer; else closest positive log of the question's
+ * action type near the answer time (up to 48h), optionally same forum day.
  */
 export async function revokePointsForQuestionAnswers(
   questionId: number,
@@ -354,6 +393,7 @@ export async function revokePointsForQuestionAnswers(
   revokedLogs: number;
   participantsAffected: number;
   pointsRevoked: number;
+  unmatchedAnswers: number;
 } | { ok: false; error: string }> {
   const [question] = await db.select().from(questions).where(eq(questions.id, questionId)).limit(1);
   if (!question) return { ok: false, error: 'Question not found' };
@@ -362,43 +402,113 @@ export async function revokePointsForQuestionAnswers(
   const actionTypes = actionType === 'question_answer'
     ? ['question_answer']
     : [actionType, 'question_answer'];
+  const forumDay = question.dayNumber ?? null;
 
   const answerRows = await db.select({
     id: answers.id,
     participantId: answers.participantId,
     createdAt: answers.createdAt,
+    pointsLogId: answers.pointsLogId,
   }).from(answers).where(eq(answers.questionId, questionId));
 
   let revokedLogs = 0;
   let pointsRevoked = 0;
+  let unmatchedAnswers = 0;
   const affected = new Set<number>();
+  const usedLogIds = new Set<number>();
 
   for (const answer of answerRows) {
-    if (!answer.createdAt) continue;
-    const start = new Date(answer.createdAt.getTime() - 10_000);
-    const end = new Date(answer.createdAt.getTime() + 90_000);
+    const answerAt = asDate(answer.createdAt);
+    const toRevoke: Array<{ id: number; points: number }> = [];
 
-    const logs = await db.select({
-      id: pointsLog.id,
-      points: pointsLog.points,
-      actionType: pointsLog.actionType,
-    }).from(pointsLog).where(and(
-      eq(pointsLog.participantId, answer.participantId),
-      isNull(pointsLog.revokedAt),
-      sql`${pointsLog.points} > 0`,
-      inArray(pointsLog.actionType, actionTypes),
-      gte(pointsLog.createdAt, start),
-      lte(pointsLog.createdAt, end),
-    )).orderBy(asc(pointsLog.createdAt)).limit(3);
+    if (answer.pointsLogId && !usedLogIds.has(answer.pointsLogId)) {
+      const [linked] = await db.select({
+        id: pointsLog.id,
+        points: pointsLog.points,
+        revokedAt: pointsLog.revokedAt,
+      }).from(pointsLog).where(eq(pointsLog.id, answer.pointsLogId)).limit(1);
+      if (linked && !linked.revokedAt && linked.points > 0) {
+        toRevoke.push({ id: linked.id, points: linked.points });
+      }
+    }
 
-    const ordered = [
-      ...logs.filter(l => l.actionType === actionType),
-      ...logs.filter(l => l.actionType !== actionType),
-    ].slice(0, 2);
+    if (toRevoke.length === 0) {
+      const candidates = await db.select({
+        id: pointsLog.id,
+        points: pointsLog.points,
+        actionType: pointsLog.actionType,
+        forumDay: pointsLog.forumDay,
+        createdAt: pointsLog.createdAt,
+      }).from(pointsLog).where(and(
+        eq(pointsLog.participantId, answer.participantId),
+        isNull(pointsLog.revokedAt),
+        sql`${pointsLog.points} > 0`,
+        inArray(pointsLog.actionType, actionTypes),
+      ));
 
-    for (const log of ordered) {
+      const ranked = candidates
+        .filter(l => !usedLogIds.has(l.id))
+        .map(l => {
+          const logAt = asDate(l.createdAt);
+          const deltaMs = answerAt && logAt
+            ? Math.abs(logAt.getTime() - answerAt.getTime())
+            : Number.POSITIVE_INFINITY;
+          const sameDay = forumDay != null && l.forumDay === forumDay ? 0 : 1;
+          const primary = l.actionType === actionType ? 0 : 1;
+          return { ...l, deltaMs, sameDay, primary };
+        })
+        // Prefer primary action, same forum day, then closest in time (max 48h)
+        .filter(l => Number.isFinite(l.deltaMs) && l.deltaMs <= 48 * 60 * 60 * 1000)
+        .sort((a, b) => (
+          a.primary - b.primary
+          || a.sameDay - b.sameDay
+          || a.deltaMs - b.deltaMs
+        ));
+
+      const primary = ranked.find(l => l.actionType === actionType) ?? ranked[0];
+      if (primary) {
+        toRevoke.push({ id: primary.id, points: primary.points });
+        // Depth bonus (3) often awarded in the same submit
+        const bonus = ranked.find(l => (
+          l.id !== primary.id
+          && l.actionType === 'question_answer'
+          && l.points === 3
+          && Math.abs(l.deltaMs - primary.deltaMs) <= 60_000
+        ));
+        if (bonus) toRevoke.push({ id: bonus.id, points: bonus.points });
+      }
+    }
+
+    // Last resort: one unused primary-action log for this participant on the question's forum day
+    if (toRevoke.length === 0 && forumDay != null) {
+      const [fallback] = await db.select({
+        id: pointsLog.id,
+        points: pointsLog.points,
+      }).from(pointsLog).where(and(
+        eq(pointsLog.participantId, answer.participantId),
+        isNull(pointsLog.revokedAt),
+        sql`${pointsLog.points} > 0`,
+        eq(pointsLog.actionType, actionType),
+        eq(pointsLog.forumDay, forumDay),
+      )).orderBy(asc(pointsLog.createdAt)).limit(1);
+      if (fallback && !usedLogIds.has(fallback.id)) {
+        toRevoke.push(fallback);
+      }
+    }
+
+    if (toRevoke.length === 0) {
+      unmatchedAnswers += 1;
+      await db.update(answers)
+        .set({ pointsAwarded: 0, pointsLogId: null })
+        .where(eq(answers.id, answer.id));
+      continue;
+    }
+
+    for (const log of toRevoke) {
+      if (usedLogIds.has(log.id)) continue;
       const result = await revokePointsLogEntry(log.id, answer.participantId, reason);
       if (result.ok) {
+        usedLogIds.add(log.id);
         revokedLogs += 1;
         pointsRevoked += log.points;
         affected.add(answer.participantId);
@@ -406,8 +516,13 @@ export async function revokePointsForQuestionAnswers(
     }
 
     await db.update(answers)
-      .set({ pointsAwarded: 0 })
+      .set({ pointsAwarded: 0, pointsLogId: null })
       .where(eq(answers.id, answer.id));
+  }
+
+  // Rebuild counters from logs so rating / profile cannot stay stale.
+  for (const participantId of affected) {
+    await recalculateParticipantTotals(participantId);
   }
 
   return {
@@ -416,5 +531,6 @@ export async function revokePointsForQuestionAnswers(
     revokedLogs,
     participantsAffected: affected.size,
     pointsRevoked,
+    unmatchedAnswers,
   };
 }

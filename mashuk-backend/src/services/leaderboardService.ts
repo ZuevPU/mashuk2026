@@ -107,6 +107,7 @@ export async function computeLeaderboardScores(
     inArray(pointsLog.participantId, participantIds),
     isNull(pointsLog.revokedAt),
     sql`${pointsLog.points} > 0`,
+    sql`${pointsLog.actionType} NOT LIKE '%\\_revoke' ESCAPE '\\'`,
   ];
   if (opts.scope === 'day' && opts.day) {
     conditions.push(eq(pointsLog.forumDay, opts.day));

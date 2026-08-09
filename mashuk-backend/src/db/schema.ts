@@ -498,11 +498,14 @@ export const answers = pgTable('answers', {
   answerData: jsonb('answer_data'),
   questionTextSnapshot: text('question_text_snapshot'),
   pointsAwarded: integer('points_awarded').default(0),
+  /** Primary award row in points_log (for revoke-by-question). */
+  pointsLogId: integer('points_log_id'),
   wordCount: integer('word_count').default(0),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('answers_participant_id_idx').on(table.participantId),
   index('answers_question_id_idx').on(table.questionId),
+  index('answers_points_log_id_idx').on(table.pointsLogId),
 ]);
 
 export const events = pgTable('events', {

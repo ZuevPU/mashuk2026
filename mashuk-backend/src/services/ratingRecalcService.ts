@@ -40,6 +40,8 @@ export async function recalculateAllParticipantTotals(adminId?: number): Promise
       let experience = 0;
       let bonus = 0;
       for (const r of rows) {
+        // Originals with revokedAt are already filtered out; skip reversal rows too.
+        if ((r.actionType || '').endsWith('_revoke')) continue;
         const track = pointsTrackForAction(r.actionType || '');
         if (track === 'path') path += r.points;
         else if (track === 'bonus') bonus += r.points;

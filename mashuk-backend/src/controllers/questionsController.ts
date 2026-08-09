@@ -612,7 +612,8 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
           answerData: normalizedAnswer,
           wordCount,
           questionTextSnapshot: question.text,
-          pointsAwarded: question.points ?? 0,
+          pointsAwarded: 0,
+          pointsLogId: null,
           createdAt: new Date(),
         })
         .where(eq(answers.id, existingAnswer.id))
@@ -624,7 +625,8 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
         answerData: normalizedAnswer,
         wordCount,
         questionTextSnapshot: question.text,
-        pointsAwarded: question.points ?? 0,
+        pointsAwarded: 0,
+        pointsLogId: null,
       }).returning();
     }
 
@@ -680,12 +682,23 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
       reflectionBonus = bonus?.awarded ?? 0;
     }
 
+    const xpAwarded = (pointsResult?.awarded ?? 0) + reflectionBonus;
+    if (answer) {
+      [answer] = await db.update(answers)
+        .set({
+          pointsAwarded: xpAwarded,
+          pointsLogId: pointsResult?.logId ?? null,
+        })
+        .where(eq(answers.id, answer.id))
+        .returning();
+    }
+
     const { newMedals, confirm } = await answerSubmitExtras(req.participant!.id, settings);
 
     res.json({
       answer,
       reflectionDepth: depthLabel,
-      xpAwarded: (pointsResult?.awarded ?? 0) + reflectionBonus,
+      xpAwarded,
       track: pointsResult?.track ?? 'path',
       newMedals,
       confirm,

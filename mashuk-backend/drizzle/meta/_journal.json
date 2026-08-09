@@ -393,6 +393,13 @@
       "when": 1835000000000,
       "tag": "0056_task_qr_short_codes",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1836000000000,
+      "tag": "0057_answers_points_log_id",
+      "breakpoints": true
     }
   ]
 }
