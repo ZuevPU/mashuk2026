@@ -3,7 +3,7 @@ import { and, eq, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db/index.js';
 import {
-  participantDayState, dayExperiments, pedagogicalRoles, questions, answers, events,
+  participantDayState, dayExperiments, questions, answers, events,
 } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
@@ -15,7 +15,10 @@ import {
 } from '../services/eveningQuestionnaireConfig.js';
 import { getForumSettings, resolveEffectiveCurrentDay } from '../services/helpers.js';
 import { resolveEveningSurveyDayForParticipant } from '../services/eveningSurveyDay.js';
-import { ROLE_KEYS, getRoleMeta } from '../services/roleService.js';
+import {
+  findPedagogicalRole,
+  listPedagogicalRoleOptions,
+} from '../services/roleService.js';
 import { EVENING_SCALE_KEYS } from '../services/touchpointTemplates.js';
 import { awardPoints } from '../services/pointsService.js';
 import {
@@ -58,7 +61,7 @@ const eveningSchema = z.object({
     z.null(),
     programEventRatingValue,
   ])).default({}),
-  tomorrowRoleKey: z.enum(ROLE_KEYS as unknown as [string, ...string[]]).optional(),
+  tomorrowRoleKey: z.string().trim().min(1).max(100).optional(),
   experimentStatus: z.enum(['none', 'in_progress', 'done']).optional(),
 });
 
@@ -167,6 +170,14 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
       return;
     }
 
+    if (parsed.data.tomorrowRoleKey) {
+      const allowed = await listPedagogicalRoleOptions();
+      if (!allowed.some(r => r.roleKey === parsed.data.tomorrowRoleKey)) {
+        res.status(400).json({ error: 'Unknown tomorrowRoleKey' });
+        return;
+      }
+    }
+
     const eveningConfig = resolveEveningConfigForDay(settings, dayNumber);
     const opensAt = getEveningOpensAtMsk(eveningConfig);
     if (!isEveningOpenForConfig(eveningConfig) && process.env.NODE_ENV !== 'test') {
@@ -245,7 +256,7 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
       ok: true,
       state,
       tomorrowRole: parsed.data.tomorrowRoleKey
-        ? getRoleMeta(parsed.data.tomorrowRoleKey)
+        ? await findPedagogicalRole(parsed.data.tomorrowRoleKey)
         : null,
       scales: EVENING_SCALE_KEYS,
     });
@@ -273,23 +284,7 @@ export async function loadDayContext(
     || (dayNumber === 1 ? pedagogicalRole : null)
     || pedagogicalRole;
 
-  let roleMeta = activeRoleKey ? getRoleMeta(activeRoleKey) : null;
-  if (activeRoleKey && !roleMeta) {
-    const [row] = await db.select().from(pedagogicalRoles)
-      .where(eq(pedagogicalRoles.roleKey, activeRoleKey)).limit(1);
-    if (row) {
-      roleMeta = {
-        roleKey: row.roleKey as import('../services/roleService.js').RoleKey,
-        name: row.name,
-        quadrant: row.quadrant || '',
-        essence: row.essence || '',
-        inClass: row.inClass || '',
-        keywords: row.keywords || '',
-        iconKey: row.iconKey || '',
-        sortOrder: row.sortOrder ?? 0,
-      };
-    }
-  }
+  const roleMeta = await findPedagogicalRole(activeRoleKey);
 
   let experiment = null;
   if (dayNumber >= 2 && dayNumber <= 7 && activeRoleKey) {
@@ -389,7 +384,15 @@ export async function loadDayContext(
           curator: 'Работа куратора группы',
         } as Record<string, string>)[key],
       })),
-      roles: askTomorrowRole ? ROLE_KEYS.map(k => getRoleMeta(k)).filter(Boolean) : [],
+      roles: askTomorrowRole
+        ? (await listPedagogicalRoleOptions()).map(r => ({
+          roleKey: r.roleKey,
+          name: r.name,
+          quadrant: r.quadrant,
+          essence: r.essence,
+          iconKey: r.iconKey,
+        }))
+        : [],
       saved: state?.eveningRatings || null,
       savedDraft: draft,
       pointBQuestionId: opts?.pointBQuestionId ?? null,

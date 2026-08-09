@@ -1,3 +1,6 @@
+import { asc, eq } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { pedagogicalRoles } from '../db/schema.js';
 import { NAV_DIAG_OPTION_TO_ROLE, NAV_DIAG_QUESTIONS } from './navDiagnosticsDefaults.js';
 
 export const ROLE_KEYS = [
@@ -601,4 +604,70 @@ export function scorePedagogicalRole(
 
 export function getRoleMeta(roleKey: string) {
   return ROLE_CATALOG.find(r => r.roleKey === roleKey) ?? null;
+}
+
+/** Опции выбора роли: источник — pedagogical_roles (как в админке / регистрации). */
+export type PedagogicalRoleOption = {
+  roleKey: string;
+  name: string;
+  quadrant: string;
+  essence: string;
+  inClass: string;
+  keywords: string;
+  iconKey: string;
+  sortOrder: number;
+};
+
+function catalogFallbackOptions(): PedagogicalRoleOption[] {
+  return ROLE_CATALOG.map(r => ({
+    roleKey: r.roleKey,
+    name: r.name,
+    quadrant: r.quadrant || '',
+    essence: r.essence || '',
+    inClass: r.inClass || '',
+    keywords: r.keywords || '',
+    iconKey: r.iconKey || '',
+    sortOrder: r.sortOrder ?? 0,
+  }));
+}
+
+function rowToOption(row: typeof pedagogicalRoles.$inferSelect): PedagogicalRoleOption {
+  return {
+    roleKey: row.roleKey,
+    name: row.name,
+    quadrant: row.quadrant || '',
+    essence: row.essence || '',
+    inClass: row.inClass || '',
+    keywords: row.keywords || '',
+    iconKey: row.iconKey || '',
+    sortOrder: row.sortOrder ?? 0,
+  };
+}
+
+/** Список ролей для селектов (вечерняя анкета, онбординг). Пустая БД → ROLE_CATALOG. */
+export async function listPedagogicalRoleOptions(): Promise<PedagogicalRoleOption[]> {
+  const rows = await db.select().from(pedagogicalRoles)
+    .orderBy(asc(pedagogicalRoles.sortOrder), asc(pedagogicalRoles.id));
+  if (!rows.length) return catalogFallbackOptions();
+  return rows.map(rowToOption);
+}
+
+/** Мета роли: сначала БД, иначе каталог в коде. */
+export async function findPedagogicalRole(roleKey: string | null | undefined): Promise<PedagogicalRoleOption | null> {
+  if (!roleKey) return null;
+  const [row] = await db.select().from(pedagogicalRoles)
+    .where(eq(pedagogicalRoles.roleKey, roleKey)).limit(1);
+  if (row) return rowToOption(row);
+  const catalog = getRoleMeta(roleKey);
+  if (!catalog) return null;
+  return {
+    roleKey: catalog.roleKey,
+    name: catalog.name,
+    quadrant: catalog.quadrant || '',
+    essence: catalog.essence || '',
+    inClass: catalog.inClass || '',
+    keywords: catalog.keywords || '',
+    iconKey: catalog.iconKey || '',
+    sortOrder: catalog.sortOrder ?? 0,
+  };
 }

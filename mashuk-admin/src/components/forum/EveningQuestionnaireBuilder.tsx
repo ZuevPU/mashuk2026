@@ -38,6 +38,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [programEvents, setProgramEvents] = useState<ProgramEventRow[]>([]);
+  const [roles, setRoles] = useState<{ roleKey: string; name: string }[]>([]);
 
   const applyPublishState = (res: {
     opensAtMsk?: string;
@@ -74,6 +75,17 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
   useEffect(() => {
     loadDay(day).catch(() => {});
   }, [day]);
+
+  useEffect(() => {
+    adminFetch('/roles')
+      .then((res: { roles?: { roleKey: string; name: string; sortOrder?: number | null }[] }) => {
+        const list = [...(res.roles || [])].sort(
+          (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, 'ru'),
+        );
+        setRoles(list.map(r => ({ roleKey: r.roleKey, name: r.name })));
+      })
+      .catch(() => setRoles([]));
+  }, [adminFetch]);
 
   useEffect(() => {
     adminFetch('/events')
@@ -409,6 +421,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
           day={day}
           config={config}
           programEvents={programEvents}
+          roles={roles}
         />
       )}
       {config.steps.map((step, stepIndex) => (
@@ -555,6 +568,24 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
                 <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => moveField(stepIndex, fieldIndex, 1)}>↓</button>
                 <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={() => removeField(stepIndex, fieldIndex)}>×</button>
               </div>
+              {field.type === 'role_select' && (
+                <div style={{ gridColumn: '1 / -1', marginTop: 6 }}>
+                  <div className="adm-label">Варианты ролей</div>
+                  <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 8px' }}>
+                    Подставляются из раздела «Роли» (как при регистрации). Редактировать названия —
+                    там же.
+                  </p>
+                  {roles.length === 0 ? (
+                    <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>Роли ещё не загружены или список пуст.</p>
+                  ) : (
+                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
+                      {roles.map(r => (
+                        <li key={r.roleKey}>{r.name}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
               {field.type === 'choice' && (
                 <div style={{ gridColumn: '1 / -1', marginTop: 6 }}>
                   <div className="adm-label">Варианты ответа</div>

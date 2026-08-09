@@ -18,17 +18,15 @@ type ProgramEventItem = {
 
 type ProgramEventValue = { items: ProgramEventItem[] };
 
+type RoleOpt = { roleKey: string; name: string };
+
 type Props = {
   day: number;
   config: EveningQuestionnaireConfig;
   programEvents: ProgramEventRow[];
+  /** Роли из pedagogical_roles (админка «Роли»). */
+  roles?: RoleOpt[];
 };
-
-const MOCK_ROLES = [
-  { roleKey: 'navigator', name: 'Навигатор' },
-  { roleKey: 'facilitator', name: 'Фасилитатор' },
-  { roleKey: 'mentor', name: 'Наставник' },
-];
 
 function normalizeProgramValue(raw: unknown): ProgramEventValue | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -296,16 +294,18 @@ function ProgramEventPreviewField({
   );
 }
 
-export function EveningQuestionnaireParticipantPreview({ day, config, programEvents }: Props) {
+export function EveningQuestionnaireParticipantPreview({
+  day, config, programEvents, roles = [],
+}: Props) {
   const [form, setForm] = useState<Record<string, unknown>>({});
-  const [tomorrowRole, setTomorrowRole] = useState(MOCK_ROLES[0].roleKey);
+  const [tomorrowRole, setTomorrowRole] = useState(roles[0]?.roleKey || '');
   const [step, setStep] = useState(0);
 
   useEffect(() => {
     setForm({});
     setStep(0);
-    setTomorrowRole(MOCK_ROLES[0].roleKey);
-  }, [day, config]);
+    setTomorrowRole(roles[0]?.roleKey || '');
+  }, [day, config, roles]);
 
   const steps = useMemo(
     () => (config.steps || []).filter(s => stepHasVisibleFields(s, form, day)),
@@ -464,10 +464,17 @@ export function EveningQuestionnaireParticipantPreview({ day, config, programEve
             onChange={e => setTomorrowRole(e.target.value)}
             style={{ width: '100%' }}
           >
-            {MOCK_ROLES.map(r => (
-              <option key={r.roleKey} value={r.roleKey}>{r.name}</option>
-            ))}
+            {roles.length === 0 ? (
+              <option value="">Нет ролей в разделе «Роли»</option>
+            ) : (
+              roles.map(r => (
+                <option key={r.roleKey} value={r.roleKey}>{r.name}</option>
+              ))
+            )}
           </select>
+          <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+            Список из админки «Роли» (pedagogical_roles)
+          </div>
         </div>
       );
     }
