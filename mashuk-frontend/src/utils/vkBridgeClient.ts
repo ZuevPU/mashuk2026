@@ -2,8 +2,25 @@ import vkBridgeModule from '@vkontakte/vk-bridge';
 
 const mod = vkBridgeModule as unknown as { default?: typeof vkBridgeModule };
 export const bridge = mod.default ?? vkBridgeModule;
+
+/** True inside VK Mini App shell (embedded iframe or native WebView). */
 export function isVkEnvironment(): boolean {
-  return typeof bridge.isEmbedded === 'function' && bridge.isEmbedded();
+  try {
+    if (typeof bridge.isEmbedded === 'function' && bridge.isEmbedded()) return true;
+    if (typeof (bridge as { isWebView?: () => boolean }).isWebView === 'function'
+      && (bridge as { isWebView: () => boolean }).isWebView()) {
+      return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  // Fallback: launch params present (iOS sometimes reports not-embedded briefly)
+  try {
+    const q = typeof window !== 'undefined' ? window.location.search : '';
+    return /(?:^|[?&])vk_app_id=\d+/.test(q);
+  } catch {
+    return false;
+  }
 }
 
 export function withTimeout<T>(promise: Promise<T>, ms = 5000): Promise<T> {
@@ -18,19 +35,26 @@ export function withTimeout<T>(promise: Promise<T>, ms = 5000): Promise<T> {
 
 let vkInitPromise: Promise<void> | null = null;
 
-// VK Bridge calls made before VKWebAppInit resolves can hang or fail silently
-// on native VK apps (iOS/Android) — every caller must await this first.
+/**
+ * Always notify the VK client with VKWebAppInit when bridge.send exists.
+ * Do NOT gate on isEmbedded(): on iOS the flag can be false for a moment and
+ * skipping Init shows the shell error «Приложение не инициализировано».
+ */
 export function initVkBridge(): Promise<void> {
   if (vkInitPromise) return vkInitPromise;
-  if (!isVkEnvironment() || typeof bridge.send !== 'function') {
+  if (typeof bridge.send !== 'function') {
     vkInitPromise = Promise.resolve();
     return vkInitPromise;
   }
-  vkInitPromise = withTimeout(bridge.send('VKWebAppInit'), 5000)
+  // Fire immediately; outside VK the promise rejects and we ignore it.
+  vkInitPromise = withTimeout(bridge.send('VKWebAppInit'), 8000)
     .then(() => undefined)
     .catch(() => undefined);
   return vkInitPromise;
 }
+
+// Start Init as soon as this module loads (before React mounts) — critical for slow iOS WebViews.
+void initVkBridge();
 
 export type CodeReaderFailureReason = 'unavailable' | 'cancelled' | 'timeout' | 'error';
 

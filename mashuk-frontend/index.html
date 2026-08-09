@@ -13,6 +13,29 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Early VKWebAppInit before the JS bundle: iOS VK shell can show «не инициализировано» if Init is late -->
+    <script>
+      (function () {
+        try {
+          var ios = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.VKWebAppInit;
+          if (ios && typeof ios.postMessage === 'function') {
+            ios.postMessage({});
+            return;
+          }
+          if (window.AndroidBridge && typeof window.AndroidBridge.VKWebAppInit === 'function') {
+            window.AndroidBridge.VKWebAppInit('{}');
+            return;
+          }
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({
+              handler: 'VKWebAppInit',
+              params: {},
+              type: 'vk-connect'
+            }, '*');
+          }
+        } catch (e) { /* ignore */ }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
