@@ -115,7 +115,7 @@ export function HubGroupsScreen({
     <div className="adm-dash-stack">
       <DashScreenTitle
         title="Группы"
-        subtitle="Итоговая анкета по дням · 7 точек активности за выбранный день"
+        hint="Итоговая анкета по дням · 7 точек активности за выбранный день"
       />
 
       <HubKpiRow
