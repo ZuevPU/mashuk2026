@@ -542,10 +542,28 @@ export async function buildKindDashboard(
     return Math.round(m * 10) / 10;
   };
 
+  const energySeriesDays = forumSeriesDays(currentDay);
+  /**
+   * Серии энергии всегда по D1…Dcurrent — даже если дашборд открыт в режиме одного дня.
+   * Иначе сравнение «день A → день B» в Штабе видит только текущий день фильтра.
+   */
+  let energySourceRows = rows;
+  if (days.length === 1 && energySeriesDays.length > 1) {
+    const { rows: seriesRows } = await collectKindAnswerRows(mode, {
+      ...filters,
+      mode: 'shift',
+      day: null,
+      compareDays: [],
+    });
+    energySourceRows = seriesRows.filter(
+      r => r.day != null && r.day >= 1 && energySeriesDays.includes(r.day),
+    );
+  }
+
   const energyByDayMap = new Map<number, number[]>();
   const energyByDirDayMap = new Map<string, number[]>();
   const riskFatigueByDay = new Map<number, { risk: number; total: number }>();
-  for (const r of rows) {
+  for (const r of energySourceRows) {
     if (r.day != null && r.day >= 1) {
       if (!riskFatigueByDay.has(r.day)) riskFatigueByDay.set(r.day, { risk: 0, total: 0 });
       const bucket = riskFatigueByDay.get(r.day)!;
@@ -562,7 +580,6 @@ export async function buildKindDashboard(
     if (!energyByDirDayMap.has(key)) energyByDirDayMap.set(key, []);
     energyByDirDayMap.get(key)!.push(r.energy);
   }
-  const energySeriesDays = forumSeriesDays(currentDay);
   const energyByDay = energySeriesDays.map(day => {
     const vals = energyByDayMap.get(day) ?? [];
     const rf = riskFatigueByDay.get(day);
@@ -576,7 +593,7 @@ export async function buildKindDashboard(
         : null,
     };
   });
-  const energyDirections = [...new Set(rows.map(r => (r.direction || '—').trim() || '—'))]
+  const energyDirections = [...new Set(energySourceRows.map(r => (r.direction || '—').trim() || '—'))]
     .sort((a, b) => a.localeCompare(b, 'ru'));
   const energyByDirectionDay = energySeriesDays.flatMap(day =>
     energyDirections.map(direction => {

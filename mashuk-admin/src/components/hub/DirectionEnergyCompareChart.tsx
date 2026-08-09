@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
@@ -40,10 +40,10 @@ function EnergyTooltip({
       fontSize: 12,
     }}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>{p.direction}</div>
-      <div>Энергия сегодня: {p.energy.toFixed(1).replace('.', ',')}</div>
+      <div>Энергия за день B: {p.energy.toFixed(1).replace('.', ',')}</div>
       {p.prev != null && (
         <div style={{ opacity: 0.85, marginTop: 2 }}>
-          Было: {p.prev.toFixed(1).replace('.', ',')}
+          День A: {p.prev.toFixed(1).replace('.', ',')}
           {p.delta != null ? ` (${p.delta > 0 ? '+' : ''}${p.delta.toFixed(1).replace('.', ',')})` : ''}
         </div>
       )}
@@ -53,7 +53,7 @@ function EnergyTooltip({
 
 /**
  * Столбцы — энергия за день B; подпись — Δ к дню A.
- * Данные: emotionalPulse.energyByDirectionDay.
+ * В селектах — только дни, где есть ответы с энергией.
  */
 export function DirectionEnergyCompareChart({
   byDirectionDay,
@@ -62,31 +62,37 @@ export function DirectionEnergyCompareChart({
 }) {
   const { forumDay, meta } = useInsights();
   const rows = byDirectionDay ?? [];
-  const daysPresent = useMemo(() => {
-    const set = new Set(rows.filter(r => r.responses > 0 && r.avg != null).map(r => r.day));
-    if (set.size === 0) {
-      const cur = meta?.currentForumDay ?? (Number(forumDay) || 1);
-      return Array.from({ length: Math.min(Math.max(cur, 2), 8) }, (_, i) => i + 1);
-    }
+
+  /** Дни с реальными ответами (есть avg и responses). */
+  const daysWithData = useMemo(() => {
+    const set = new Set(
+      rows.filter(r => r.responses > 0 && r.avg != null).map(r => r.day),
+    );
     return [...set].sort((a, b) => a - b);
-  }, [rows, meta?.currentForumDay, forumDay]);
+  }, [rows]);
 
-  const current = meta?.currentForumDay ?? (Number(forumDay) || 1);
-  const defaultB = (() => {
-    if (daysPresent.includes(current) && current > 1) return current;
-    if (daysPresent.length >= 2) return daysPresent[daysPresent.length - 1];
-    return daysPresent[0] ?? 2;
-  })();
-  const defaultA = (() => {
-    if (daysPresent.includes(defaultB - 1)) return defaultB - 1;
-    const earlier = [...daysPresent].reverse().find(d => d < defaultB);
-    return earlier ?? daysPresent[0] ?? 1;
-  })();
+  const [dayA, setDayA] = useState<number | null>(null);
+  const [dayB, setDayB] = useState<number | null>(null);
 
-  const [dayA, setDayA] = useState(defaultA);
-  const [dayB, setDayB] = useState(defaultB);
+  useEffect(() => {
+    if (!daysWithData.length) {
+      setDayA(null);
+      setDayB(null);
+      return;
+    }
+    const current = meta?.currentForumDay ?? (Number(forumDay) || daysWithData[daysWithData.length - 1]);
+    const preferredB = daysWithData.includes(current)
+      ? current
+      : daysWithData[daysWithData.length - 1];
+    const preferredA = [...daysWithData].reverse().find(d => d < preferredB)
+      ?? daysWithData[0];
+
+    setDayA(prev => (prev != null && daysWithData.includes(prev) ? prev : preferredA));
+    setDayB(prev => (prev != null && daysWithData.includes(prev) ? prev : preferredB));
+  }, [daysWithData, meta?.currentForumDay, forumDay]);
 
   const chartData = useMemo(() => {
+    if (dayA == null || dayB == null) return [];
     const dirs = [...new Set(rows.map(r => r.direction || '—'))]
       .sort((a, b) => a.localeCompare(b, 'ru'));
     return dirs.map(direction => {
@@ -120,8 +126,12 @@ export function DirectionEnergyCompareChart({
     ];
   }, [chartData]);
 
+  const title = dayA != null && dayB != null
+    ? `Энергия по направлениям · ${formatForumDay(dayA)} → ${formatForumDay(dayB)}`
+    : 'Энергия по направлениям';
+
   return (
-    <DashCard title={`Энергия по направлениям · ${formatForumDay(dayA)} → ${formatForumDay(dayB)}`}>
+    <DashCard title={title}>
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
@@ -131,28 +141,49 @@ export function DirectionEnergyCompareChart({
         marginBottom: 8,
       }}>
         <p className="adm-muted" style={{ fontSize: 12, margin: 0 }}>
-          Столбцы — {formatForumDay(dayB)}, подпись — изменение за выбранный интервал
+          {dayB != null
+            ? `Столбцы — ${formatForumDay(dayB)}, подпись — изменение к дню A`
+            : 'Выберите два дня с данными по энергии'}
+          {daysWithData.length > 0 && (
+            <span> · доступны: {daysWithData.map(d => formatForumDay(d)).join(', ')}</span>
+          )}
         </p>
         <div className="adm-forum-toolbar" style={{ gap: 8, margin: 0 }}>
           <label className="adm-insights-filter">
             День A
-            <select className="adm-input" value={dayA} onChange={e => setDayA(Number(e.target.value))}>
-              {daysPresent.map(d => (
+            <select
+              className="adm-input"
+              value={dayA ?? ''}
+              disabled={daysWithData.length === 0}
+              onChange={e => setDayA(Number(e.target.value))}
+            >
+              {daysWithData.map(d => (
                 <option key={d} value={d}>{formatForumDay(d)}</option>
               ))}
             </select>
           </label>
           <label className="adm-insights-filter">
             День B
-            <select className="adm-input" value={dayB} onChange={e => setDayB(Number(e.target.value))}>
-              {daysPresent.map(d => (
+            <select
+              className="adm-input"
+              value={dayB ?? ''}
+              disabled={daysWithData.length === 0}
+              onChange={e => setDayB(Number(e.target.value))}
+            >
+              {daysWithData.map(d => (
                 <option key={d} value={d}>{formatForumDay(d)}</option>
               ))}
             </select>
           </label>
         </div>
       </div>
-      {chartData.length === 0 ? (
+      {daysWithData.length < 2 ? (
+        <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>
+          {daysWithData.length === 0
+            ? 'Нет дней с данными по энергии из проверок состояния.'
+            : `Пока есть данные только за ${formatForumDay(daysWithData[0])} — для сравнения нужен ещё хотя бы один день с ответами.`}
+        </p>
+      ) : chartData.length === 0 ? (
         <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>
           Нет данных по энергии направлений за выбранные дни.
         </p>
