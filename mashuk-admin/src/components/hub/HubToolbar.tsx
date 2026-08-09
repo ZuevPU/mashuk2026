@@ -4,10 +4,11 @@ import type { HubLens } from './HubTab';
 const LENS_LABELS: Record<HubLens, string> = {
   forum: 'Форум',
   direction: 'Направление',
+  groups: 'Группы',
   participant: 'Участник',
 };
 
-const LENS_ORDER: HubLens[] = ['forum', 'direction', 'participant'];
+const LENS_ORDER: HubLens[] = ['forum', 'direction', 'groups', 'participant'];
 
 /** Свой маленький тулбар вместо InsightsChrome — тот тащит таб-бар старых 14 дашбордов. */
 export function HubToolbar({

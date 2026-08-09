@@ -269,6 +269,7 @@ router.patch('/analytics/forum-clubs/:id', requireAdminRole('settings'), wrap(an
 router.post('/analytics/recalculate', requireAdminRole('settings'), wrap(admin.triggerAnalyticsRecalc));
 router.post('/analytics/refresh', requireAdminRole('settings'), wrap(analyticsCtrl.postAnalyticsRefreshHandler));
 router.get('/analytics/hub/forum', P('analytics', 'read'), wrap(hubCtrl.getHubForumHandler));
+router.get('/analytics/hub/groups', P('analytics', 'read'), wrap(hubCtrl.getHubGroupsHandler));
 router.get('/analytics/hub/piggybank-matrix', P('analytics', 'read'), wrap(hubCtrl.getHubPiggybankMatrixHandler));
 router.get('/analytics/hub/participant-feed', P('analytics', 'read'), wrap(hubCtrl.getHubParticipantFeedHandler));
 router.post('/push/send', requireAdminRole('settings'), wrap(admin.sendManualPush));

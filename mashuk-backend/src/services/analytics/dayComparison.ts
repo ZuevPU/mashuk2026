@@ -73,9 +73,19 @@ export type QuestionnaireDayPoint = {
   riskFatiguePct?: number;
 };
 
+export type GroupDayPoint = {
+  group: string;
+  day: number;
+  submitted: number;
+  registered: number;
+  fillRatePct: number;
+  drafts: number;
+};
+
 type CohortP = {
   id: number;
   direction?: string | null;
+  groupName?: string | null;
   onboardingCompletedAt?: Date | null;
 };
 
@@ -91,6 +101,10 @@ function pct(n: number, d: number): number {
 
 function dirOf(p: CohortP): string {
   return (p.direction || '—').trim() || '—';
+}
+
+function groupOf(p: CohortP): string {
+  return (p.groupName || 'без группы').trim() || 'без группы';
 }
 
 async function loadPublishedQuestions(dayNumbers: number[], shiftId?: number | null) {
@@ -284,11 +298,15 @@ export async function buildForumDayKpiSeries(
   return { daySeries, byDirectionDaySeries };
 }
 
-/** Evening questionnaire: submitted / drafts / fillRate by forum day (+ by direction). */
+/** Evening questionnaire: submitted / drafts / fillRate by forum day (+ by direction / group). */
 export async function buildEveningDaySeries(
   cohort: CohortP[],
   days: number[],
-): Promise<{ daySeries: QuestionnaireDayPoint[]; byDirectionDaySeries: DirectionDayPoint[] }> {
+): Promise<{
+  daySeries: QuestionnaireDayPoint[];
+  byDirectionDaySeries: DirectionDayPoint[];
+  byGroupDaySeries: GroupDayPoint[];
+}> {
   const registered = cohort.filter(p => p.onboardingCompletedAt).length;
   const ids = cohort.map(p => p.id);
   const empty = (day: number): QuestionnaireDayPoint => ({
@@ -299,9 +317,11 @@ export async function buildEveningDaySeries(
     drafts: 0,
   });
 
-  if (!days.length) return { daySeries: [], byDirectionDaySeries: [] };
+  if (!days.length) {
+    return { daySeries: [], byDirectionDaySeries: [], byGroupDaySeries: [] };
+  }
   if (!ids.length) {
-    return { daySeries: days.map(empty), byDirectionDaySeries: [] };
+    return { daySeries: days.map(empty), byDirectionDaySeries: [], byGroupDaySeries: [] };
   }
 
   const states = await db.select({
@@ -374,7 +394,38 @@ export async function buildEveningDaySeries(
   byDirectionDaySeries.sort((a, b) =>
     a.day - b.day || a.direction.localeCompare(b.direction, 'ru'));
 
-  return { daySeries, byDirectionDaySeries };
+  const byGroup = new Map<string, CohortP[]>();
+  for (const p of cohort) {
+    const g = groupOf(p);
+    if (!byGroup.has(g)) byGroup.set(g, []);
+    byGroup.get(g)!.push(p);
+  }
+
+  const byGroupDaySeries: GroupDayPoint[] = [];
+  for (const [group, list] of byGroup) {
+    const reg = list.filter(p => p.onboardingCompletedAt).length;
+    const pids = new Set(list.map(p => p.id));
+    for (const day of days) {
+      let submitted = 0;
+      let drafts = 0;
+      const sub = submittedByDay.get(day);
+      const dr = draftsByDay.get(day);
+      if (sub) for (const pid of sub) if (pids.has(pid)) submitted += 1;
+      if (dr) for (const pid of dr) if (pids.has(pid)) drafts += 1;
+      byGroupDaySeries.push({
+        group,
+        day,
+        submitted,
+        registered: reg,
+        fillRatePct: pct(submitted, reg),
+        drafts,
+      });
+    }
+  }
+  byGroupDaySeries.sort((a, b) =>
+    a.day - b.day || a.group.localeCompare(b.group, 'ru'));
+
+  return { daySeries, byDirectionDaySeries, byGroupDaySeries };
 }
 
 /** After-blocks / state-checks: unique submitters & answers by forum day. */

@@ -2,12 +2,18 @@ import type { Response } from 'express';
 import type { AdminRequest } from '../middlewares/adminAuth.js';
 import { resolveAnalyticsFilters } from '../services/analytics/analyticsQuery.js';
 import { buildHubForumDashboard } from '../services/analytics/hubForumDashboard.js';
+import { buildHubGroupsDashboard } from '../services/analytics/hubGroupsDashboard.js';
 import { buildPiggybankDirectionMatrix } from '../services/analytics/piggybankDirectionMatrix.js';
 import { buildParticipantDayFeed } from '../services/analytics/participantDayFeed.js';
 
 export async function getHubForumHandler(req: AdminRequest, res: Response): Promise<void> {
   const filters = await resolveAnalyticsFilters(req);
   res.json(await buildHubForumDashboard(filters, req));
+}
+
+export async function getHubGroupsHandler(req: AdminRequest, res: Response): Promise<void> {
+  const filters = await resolveAnalyticsFilters(req);
+  res.json(await buildHubGroupsDashboard(filters, req));
 }
 
 export async function getHubPiggybankMatrixHandler(req: AdminRequest, res: Response): Promise<void> {

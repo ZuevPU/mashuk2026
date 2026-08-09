@@ -4,12 +4,13 @@ import { InsightsProvider } from '../insights/InsightsContext';
 import { HubToolbar } from './HubToolbar';
 import { HubDirectionScreen } from './HubDirectionScreen';
 import { HubForumScreen } from './HubForumScreen';
+import { HubGroupsScreen } from './HubGroupsScreen';
 import { HubParticipantScreen } from './HubParticipantScreen';
 
-export type HubLens = 'forum' | 'direction' | 'participant';
+export type HubLens = 'forum' | 'direction' | 'groups' | 'participant';
 
 /**
- * Единый дашборд «Штаб» — 3 линзы (форум/направление/участник) в одной вкладке,
+ * Единый дашборд «Штаб» — линзы (форум/направление/группы/участник) в одной вкладке,
  * вместо 14 разрозненных экранов старой вкладки «Дашборды». Аддитивно: ничего
  * в components/analytics или components/insights не меняет.
  */
@@ -43,6 +44,7 @@ function HubShell({ onOpenCard }: { onOpenCard: (id: number) => void }) {
       <HubToolbar lens={lens} onLensChange={setLens} />
       {lens === 'forum' && <HubForumScreen onLensChange={setLens} />}
       {lens === 'direction' && <HubDirectionScreen onOpenCard={onOpenCard} />}
+      {lens === 'groups' && <HubGroupsScreen onLensChange={setLens} />}
       {lens === 'participant' && <HubParticipantScreen onOpenCard={onOpenCard} />}
     </div>
   );
