@@ -27,31 +27,21 @@ describe('task short QR codes', () => {
     assert.equal(formatTaskQrDisplayCode('a7k2x9'), 'МШК-A7K2X9');
   });
 
-  it('buildTaskQrUrl uses PUBLIC_URL /q/ or tasks deep-link fallback', () => {
+  it('buildTaskQrUrl uses PUBLIC_URL /q/ or scan deep-link fallback', () => {
     const prev = process.env.PUBLIC_URL;
     process.env.PUBLIC_URL = 'https://api.example.com';
     try {
       // env module may already be cached — URL builder reads env at call time via imported env
       const url = buildTaskQrUrl('https://vk.ru/app1', 42, 'A7K2X9');
-      assert.ok(
-        url.includes('/q/A7K2X9')
-        || url.includes('#/tasks?task=42&qr=A7K2X9')
-        || url.includes('#/scan?qr=A7K2X9'),
-        url,
-      );
+      assert.ok(url.includes('/q/A7K2X9') || url.includes('#/scan?qr=A7K2X9'), url);
     } finally {
       if (prev === undefined) delete process.env.PUBLIC_URL;
       else process.env.PUBLIC_URL = prev;
     }
   });
 
-  it('buildTaskScanDeepLink with taskId opens #/tasks', () => {
+  it('buildTaskScanDeepLink opens #/scan for auto-credit', () => {
     const link = buildTaskScanDeepLink('A7K2X9', 42);
-    assert.match(link, /#\/tasks\?task=42&qr=A7K2X9$/);
-  });
-
-  it('buildTaskScanDeepLink without taskId falls back to #/scan', () => {
-    const link = buildTaskScanDeepLink('A7K2X9');
     assert.match(link, /#\/scan\?qr=A7K2X9$/);
   });
 });

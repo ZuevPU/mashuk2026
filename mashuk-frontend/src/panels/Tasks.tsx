@@ -52,7 +52,7 @@ const STATUS_LABEL: Record<string, string> = {
   soon: '⚪ Скоро откроется',
   available: '🔵 Доступно',
   pending: '🟡 На проверке',
-  done: '🟢 Выполнено',
+  done: '🟢 Засчитано',
   rejected: '🔴 Не принято',
 };
 
@@ -227,6 +227,7 @@ const TaskSubmitModal = ({
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const autoQrSubmitRef = useRef(false);
   const methods = taskMethodsFromMeta(meta);
   const answerType = meta?.answerType || (methods.includes('photo') ? 'text_and_photo' : 'text');
   const answerOptions: Array<{ label: string; value: string }> = meta?.answerOptions || [];
@@ -253,6 +254,7 @@ const TaskSubmitModal = ({
     setPhotoUrl(null);
     setSubmitting(false);
     setFormError(null);
+    autoQrSubmitRef.current = false;
   }, [taskId, meta?._scannedQr]);
 
   const finishSuccess = useCallback((payload: SubmitSuccessPayload) => {
@@ -294,6 +296,43 @@ const TaskSubmitModal = ({
   const needsPostUrl = !isQr && methods.includes('link');
   const needsTeam = !isQr && methods.includes('team');
   const isAuto = methods.length === 0;
+
+  // Fallback: if user opened #/tasks?task=&qr=, credit immediately (main path is #/scan).
+  useEffect(() => {
+    if (!isQr || !effectiveQr || !taskId || submitting || autoQrSubmitRef.current) return;
+    autoQrSubmitRef.current = true;
+    setSubmitting(true);
+    setFormError(null);
+    void apiPost<{ xpAwarded?: number; track?: 'path' | 'experience' }>(`/tasks/${taskId}/submit`, {
+      answerText: 'Готово',
+      qrToken: effectiveQr,
+      deviceKey: getDeviceKey(),
+    })
+      .then((res) => {
+        const xp = res.xpAwarded ?? 0;
+        finishSuccess({
+          confirm: {
+            ...TASK_SUBMIT_CONFIRM,
+            titleTemplate: 'Задание засчитано',
+            showPoints: xp > 0,
+          },
+          detail: xp > 0 ? `Начислено +${xp}` : 'QR принят, задание выполнено',
+          tone: 'success',
+          xpAwarded: xp,
+          track: res.track ?? 'experience',
+        });
+      })
+      .catch((err) => {
+        const msg = err instanceof ApiError ? err.message : 'Ошибка отправки';
+        if (err instanceof ApiError && isTaskAlreadySubmittedError(msg)) {
+          finishAlreadySubmitted(msg);
+          return;
+        }
+        setFormError(msg);
+        setSubmitting(false);
+        autoQrSubmitRef.current = false;
+      });
+  }, [isQr, effectiveQr, taskId, submitting, finishSuccess, finishAlreadySubmitted]);
 
   useEffect(() => {
     if (!needsTeam || teamSearch.trim().length < 2) {
@@ -410,9 +449,9 @@ const TaskSubmitModal = ({
           )}
           {isQr && (
             <div className="tasks-qr-status" style={{ fontSize: 14, marginBottom: 12, lineHeight: 1.45 }}>
-              {effectiveQr
-                ? 'QR принят. Нажмите «Отправить задание» — и всё.'
-                : 'Отсканируйте обычной камерой телефона QR, который даст организатор на событии, и отправьте задание. Без этого QR отправить задание нельзя.'}
+              {effectiveQr || submitting
+                ? 'QR принят — засчитываем задание…'
+                : 'Отсканируйте обычной камерой телефона QR, который даст организатор на событии — задание засчитается автоматически.'}
             </div>
           )}
           {isChoice && answerOptions.map(opt => (
@@ -494,29 +533,36 @@ const TaskSubmitModal = ({
               {formError}
             </div>
           )}
-          <Button
-            size="l"
-            stretched
-            onClick={() => void handleSubmit()}
-            style={{ marginTop: 12 }}
-            loading={submitting}
-            disabled={
-              submitting
-              || (isQr && !effectiveQr)
-              || (!isQr && isChoice && !selectedChoice)
-              || (!isQr && isMulti && selectedMulti.length === 0)
-              || (!isQr && answerType === 'text' && !answerText.trim())
-              || (needsPhoto && !photoUrl)
-            }
-          >
-            {submitting
-              ? 'Отправляем…'
-              : isAuto
-                ? 'Подтвердить'
-                : isQr
-                  ? 'Отправить задание'
-                  : 'Отправить на проверку'}
-          </Button>
+          {!(isQr && effectiveQr) && (
+            <Button
+              size="l"
+              stretched
+              onClick={() => void handleSubmit()}
+              style={{ marginTop: 12 }}
+              loading={submitting}
+              disabled={
+                submitting
+                || (isQr && !effectiveQr)
+                || (!isQr && isChoice && !selectedChoice)
+                || (!isQr && isMulti && selectedMulti.length === 0)
+                || (!isQr && answerType === 'text' && !answerText.trim())
+                || (needsPhoto && !photoUrl)
+              }
+            >
+              {submitting
+                ? 'Отправляем…'
+                : isAuto
+                  ? 'Подтвердить'
+                  : isQr
+                    ? 'Нужен QR организатора'
+                    : 'Отправить на проверку'}
+            </Button>
+          )}
+          {isQr && (effectiveQr || submitting) && (
+            <div style={{ marginTop: 12, textAlign: 'center' }}>
+              <Spinner />
+            </div>
+          )}
         </div>
       </Group>
     </ModalPage>
@@ -717,29 +763,32 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
               <EmptyState icon="📋" title="Нет заданий" subtitle="Задания появятся по ходу дня" />
             ) : filteredTasks.map((t: any) => {
               const tone = t.category ? categoryTone(t.category) : null;
+              const isDone = t.status === 'done';
+              const isQrTask = taskMethodsFromMeta(t).includes('qr');
               return (
               <div
                 key={t.id}
-                className={`m-card tasks-card${tone ? ` tasks-card--${tone}` : ''}`}
+                className={`m-card tasks-card${tone && !isDone ? ` tasks-card--${tone}` : ''}${isDone ? ' tasks-card--done' : ''}`}
                 style={{
                   marginBottom: 10,
-                  border: (t.status === 'available' || t.canResubmit) ? '2px solid var(--m-accent, #B8621A)' : undefined,
+                  border: (t.status === 'available' || t.canResubmit) && !isDone ? '2px solid var(--m-accent, #B8621A)' : undefined,
                   opacity: t.status === 'soon' ? 0.65 : 1,
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
                   <strong className="tasks-card-title">{t.title}</strong>
-                  <span className={`tasks-status-pill tasks-status-pill--${t.status === 'unknown'}`}>
-                    {STATUS_LABEL[t.status] || t.status}
+                  <span className={`tasks-status-pill tasks-status-pill--${t.status || 'unknown'}`}>
+                    {isDone && isQrTask ? '🟢 QR засчитан' : (STATUS_LABEL[t.status] || t.status)}
                   </span>
                 </div>
                 {t.category && (
                   <span className="tasks-cat-badge" data-tone={tone || 'sand'}>{t.category}</span>
                 )}
                 {t.description && <TaskDescriptionClamp text={t.description} />}
-                <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
+                <div style={{ fontSize: 11, color: isDone ? '#2F6B45' : '#888', marginTop: 6 }}>
                   +{t.points ?? 0} · {taskConfirmLabel(t)}
                   {repeatableProgressLabel(t) ? ` · ${repeatableProgressLabel(t)}` : ''}
+                  {isDone && isQrTask ? ' · готово' : ''}
                 </div>
                 {(t.status === 'available' || t.canResubmit) && (
                   <Button size="m" style={{ marginTop: 8 }} onClick={() => openSubmit(t)}>

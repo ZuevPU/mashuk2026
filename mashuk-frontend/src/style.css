@@ -1855,9 +1855,14 @@ body {
 }
 .tasks-status-pill--available { background: #E8F3EC; color: #2F6B45; }
 .tasks-status-pill--pending { background: #FFF3DF; color: #9A5B12; }
-.tasks-status-pill--done { background: #E7F0FA; color: #2B5C8A; }
+.tasks-status-pill--done { background: #D8F3E0; color: #1F7A3A; }
 .tasks-status-pill--rejected { background: #FDECEA; color: #C0392B; }
 .tasks-status-pill--soon { background: #F0EBE3; color: #888; }
+.tasks-card--done {
+  border: 2px solid #3DA35D !important;
+  background: linear-gradient(180deg, #F3FBF5 0%, #fff 55%);
+}
+.tasks-card--done .tasks-card-title { color: #1F7A3A; }
 
 .tab-item-inner--fab {
   display: flex;

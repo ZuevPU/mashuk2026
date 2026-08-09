@@ -145,11 +145,11 @@ export const App = () => {
         const task = params.get('task');
         const pending = peekPendingTaskQr();
         const qr = params.get('qr') || pending?.qr || null;
-        const taskFromPending = task || (pending?.taskId ? String(pending.taskId) : null);
         if (q) routeNavigator.push(`/questions?q=${q}`);
-        else if (taskFromPending && qr) routeNavigator.push(`/tasks?task=${taskFromPending}&qr=${encodeURIComponent(qr)}`);
-        else if (taskFromPending) routeNavigator.push(`/tasks?task=${taskFromPending}`);
+        // QR deep-link always goes to scan → instant credit
         else if (qr) routeNavigator.push(`/scan?qr=${encodeURIComponent(qr)}`);
+        else if (task) routeNavigator.push(`/tasks?task=${task}`);
+        else if (pending?.taskId) routeNavigator.push(`/tasks?task=${pending.taskId}`);
       }
     } catch (error) {
       console.error('Init error', error);

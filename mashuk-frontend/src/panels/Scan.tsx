@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Panel, PanelHeader, Group, Spinner, Button } from '@vkontakte/vkui';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { apiPost, ApiError, getHashSearchParams } from '../api/client';
+import { getDeviceKey } from '../utils/deviceKey';
 import { extractTaskQrToken } from '../utils/qrDeepLink';
-import { peekPendingTaskQr, setPendingTaskQr } from '../utils/launchParams';
+import { clearPendingTaskQr, peekPendingTaskQr, takePendingTaskQr } from '../utils/launchParams';
 import {
   AnswerSuccessOverlay,
   type SubmitSuccessPayload,
@@ -12,21 +13,22 @@ import {
 
 const SCAN_CONFIRM: AnswerConfirmationConfig = {
   enabled: true,
-  showPoints: false,
-  titleTemplate: 'QR принят',
+  showPoints: true,
+  titleTemplate: 'Задание засчитано',
 };
 
-type ResolveResult = {
-  taskId: number;
+type ScanResult = {
+  points?: number;
+  xpAwarded?: number;
   taskTitle?: string;
-  qrToken?: string;
+  taskId?: number;
 };
 
 export function ScanPanel({ id }: { id: string }) {
   const routeNavigator = useRouteNavigator();
   const started = useRef(false);
   const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading');
-  const [message, setMessage] = useState('Принимаем QR…');
+  const [message, setMessage] = useState('Засчитываем QR…');
   const [successPayload, setSuccessPayload] = useState<SubmitSuccessPayload | null>(null);
 
   useEffect(() => {
@@ -36,6 +38,7 @@ export function ScanPanel({ id }: { id: string }) {
     const fromHash = getHashSearchParams().get('qr');
     const raw = fromHash || peekPendingTaskQr()?.qr || '';
     const code = extractTaskQrToken(raw);
+    takePendingTaskQr();
 
     if (!code) {
       setStatus('error');
@@ -43,7 +46,7 @@ export function ScanPanel({ id }: { id: string }) {
       return;
     }
 
-    // Strip code from URL so it is not visible / re-applied on refresh
+    // Strip code from URL so refresh does not re-submit
     try {
       const path = window.location.pathname + window.location.search;
       window.history.replaceState(null, '', `${path}#/scan`);
@@ -51,29 +54,35 @@ export function ScanPanel({ id }: { id: string }) {
       /* ignore */
     }
 
-    void apiPost<ResolveResult>('/tasks/qr/resolve', { qr: code })
+    void apiPost<ScanResult>('/tasks/scan', { qr: code, deviceKey: getDeviceKey() })
       .then((res) => {
-        const token = extractTaskQrToken(res.qrToken || code) || code;
-        setPendingTaskQr(token, res.taskId);
+        clearPendingTaskQr();
+        const points = res.points ?? res.xpAwarded ?? 0;
         setStatus('ok');
         setMessage(res.taskTitle
-          ? `QR принят · ${res.taskTitle}. Откройте задание и нажмите «Отправить задание».`
-          : 'QR принят. Откройте задание и нажмите «Отправить задание».');
-        void routeNavigator.push(`/tasks?task=${res.taskId}`);
+          ? `Засчитано · ${res.taskTitle}${points > 0 ? ` · +${points}` : ''}`
+          : 'Задание засчитано');
+        setSuccessPayload({
+          confirm: { ...SCAN_CONFIRM, showPoints: points > 0 },
+          detail: res.taskTitle || undefined,
+          tone: 'success',
+          xpAwarded: points,
+          track: 'experience',
+        });
       })
       .catch((err) => {
-        const msg = err instanceof ApiError ? err.message : 'Не удалось принять QR';
+        const msg = err instanceof ApiError ? err.message : 'Не удалось засчитать QR';
         setStatus('error');
         setMessage(msg);
         setSuccessPayload({
-          confirm: { ...SCAN_CONFIRM, titleTemplate: 'QR не принят', showPoints: false },
+          confirm: { ...SCAN_CONFIRM, titleTemplate: 'QR не засчитан', showPoints: false },
           detail: msg,
           tone: 'error',
           xpAwarded: 0,
           track: 'experience',
         });
       });
-  }, [routeNavigator]);
+  }, []);
 
   return (
     <Panel id={id}>
@@ -82,7 +91,7 @@ export function ScanPanel({ id }: { id: string }) {
         <div className="m-card" style={{ textAlign: 'center', padding: 24 }}>
           {status === 'loading' && <Spinner />}
           <div style={{ marginTop: 12, fontSize: 15 }}>{message}</div>
-          {status === 'error' && (
+          {status !== 'loading' && (
             <Button
               size="l"
               stretched
