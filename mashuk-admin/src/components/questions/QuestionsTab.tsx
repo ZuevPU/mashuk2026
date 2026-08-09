@@ -592,7 +592,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
               title: q.title,
               options: branchParentOptions[q.id] || [],
             }))}
-          previewSlot={<QuestionParticipantPreview draft={draft} />}
+          previewSlot={<QuestionParticipantPreview draft={draft} programEvents={allEvents} />}
           directions={directions}
           groups={groups}
           roleOptions={ROLE_OPTIONS}
