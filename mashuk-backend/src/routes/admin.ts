@@ -209,6 +209,7 @@ router.get('/exports/piggybank', P('exports', 'export'), wrap(exportsCtrl.export
 router.get('/exports/task-submissions', P('exports', 'export'), wrap(exportsCtrl.exportTaskSubmissionsHandler));
 router.get('/exports/tasks-catalog', P('exports', 'export'), wrap(exportsCtrl.exportTasksCatalogHandler));
 router.get('/exports/exchange', P('exports', 'export'), wrap(exportsCtrl.exportExchangeHandler));
+router.get('/exports/org-director', P('exports', 'export'), wrap(exportsCtrl.exportOrgDirectorHandler));
 router.get('/exports/attendance', P('exports', 'export'), wrap(admin.exportAttendance));
 router.get('/exports/points-log', P('exports', 'export'), wrap(admin.exportPointsLog));
 router.get('/exports/day', P('exports', 'export'), wrap(exportsCtrl.exportDayWorkbookHandler));

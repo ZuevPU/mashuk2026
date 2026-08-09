@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
-import { ADMIN_SHIFT_CHANGED_EVENT, getAdminEditingShiftId } from '../../admin/client';
+import { ADMIN_SHIFT_CHANGED_EVENT, adminDownloadBinary, getAdminEditingShiftId } from '../../admin/client';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
 import { AnswerConfirmationSettings, type AnswerConfirmForm } from './AnswerConfirmationSettings';
@@ -574,6 +574,30 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
           <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
             <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setView('confirm')}>Подтверждение ответа</button>
             <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setView('tools')}>Инструменты</button>
+            {kindTab === 'org_director' && (
+              <button
+                type="button"
+                className="adm-btn adm-btn-primary adm-btn-sm"
+                onClick={() => act(
+                  () => adminDownloadBinary('/exports/org-director', 'org_director.xlsx'),
+                  'Файл скачан',
+                )}
+              >
+                Выгрузить обращения
+              </button>
+            )}
+            {kindTab === 'exchange' && (
+              <button
+                type="button"
+                className="adm-btn adm-btn-secondary adm-btn-sm"
+                onClick={() => act(
+                  () => adminDownloadBinary('/exports/exchange', 'exchange.csv'),
+                  'Файл скачан',
+                )}
+              >
+                Выгрузить обмен
+              </button>
+            )}
             {!readOnly && (
               <button type="button" className="adm-btn" style={{ marginLeft: 'auto' }} onClick={openCreate}>+ Создать вопрос</button>
             )}

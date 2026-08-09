@@ -1,9 +1,9 @@
-import { eq, desc, and, isNull, like, or, inArray, lte, ne, sql } from 'drizzle-orm';
+import { eq, desc, asc, and, isNull, like, or, inArray, lte, ne, sql } from 'drizzle-orm';
 import type { Response } from 'express';
 import { db } from '../../db/index.js';
 import {
   adminActionsLog, answers, exchangeAnswers, exchangeQuestions,
-  medals, participants, pointsLog, questions, tasks, taskSubmissions, userMedals, piggybank, forumSettings, directions
+  medals, orgMessages, orgThreads, participants, pointsLog, questions, tasks, taskSubmissions, userMedals, piggybank, forumSettings, directions
 } from '../../db/schema.js';
 import { queryPiggybankForExport } from '../../controllers/adminPiggybankController.js';
 import { isPublishedStatus } from '../publishStatus.js';
@@ -650,6 +650,139 @@ export async function writeExchangeFullExport(res: Response): Promise<void> {
       ...ans.map(r => ['answer', r.a.id, r.p?.id, fullName(r.p), r.p?.direction, r.a.text, '', r.a.createdAt, '']),
     ],
   );
+}
+
+const ORG_STATUS_RU: Record<string, string> = {
+  waiting: 'Ожидает ответа',
+  answered: 'Отвечено',
+  closed: 'Закрыто',
+};
+
+const ORG_SENDER_RU: Record<string, string> = {
+  participant: 'Участник',
+  admin: 'Дирекция / админ',
+};
+
+/** Выгрузка «Связь с дирекцией»: обращения участников и переписка. */
+export async function writeOrgDirectorExport(
+  res: Response,
+  opts?: { shiftId?: number | null; status?: string | null },
+): Promise<void> {
+  const conditions = [];
+  if (opts?.shiftId != null) conditions.push(eq(participants.shiftId, opts.shiftId));
+  if (opts?.status) conditions.push(eq(orgThreads.status, opts.status));
+
+  const threads = await db.select({
+    t: orgThreads,
+    p: participants,
+  }).from(orgThreads)
+    .innerJoin(participants, eq(orgThreads.participantId, participants.id))
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(orgThreads.updatedAt));
+
+  const threadIds = threads.map(r => r.t.id);
+  const messages = threadIds.length
+    ? await db.select().from(orgMessages)
+      .where(inArray(orgMessages.threadId, threadIds))
+      .orderBy(asc(orgMessages.createdAt), asc(orgMessages.id))
+    : [];
+
+  const messagesByThread = new Map<number, typeof messages>();
+  for (const m of messages) {
+    const list = messagesByThread.get(m.threadId) ?? [];
+    list.push(m);
+    messagesByThread.set(m.threadId, list);
+  }
+
+  const wb = await createWorkbook();
+  addReadmeSheet(wb, [
+    'Выгрузка «Связь с дирекцией» — обращения участников к дирекции форума.',
+    'Лист «Обращения»: 1 строка = один тред (тема + первый вопрос участника).',
+    'Лист «Сообщения»: вся переписка по тредам в хронологическом порядке.',
+    `Тредов: ${threads.length}.`,
+    `Сообщений: ${messages.length}.`,
+    opts?.shiftId != null ? `Смена (shiftId): ${opts.shiftId}.` : 'Смена: без фильтра.',
+    opts?.status ? `Статус: ${opts.status}.` : 'Статус: все.',
+  ]);
+
+  const wsThreads = wb.addWorksheet('Обращения');
+  wsThreads.addRow([
+    'ID треда',
+    'ID участника',
+    'ФИО',
+    'Направление',
+    'Группа',
+    'Тема',
+    'Первый вопрос участника',
+    'Статус',
+    'Сообщений',
+    'От участника',
+    'От дирекции',
+    'Создано',
+    'Обновлено',
+  ]);
+
+  for (const row of threads) {
+    const list = messagesByThread.get(row.t.id) ?? [];
+    const firstParticipantMsg = list.find(m => m.senderType === 'participant');
+    const fromParticipant = list.filter(m => m.senderType === 'participant').length;
+    const fromAdmin = list.filter(m => m.senderType === 'admin').length;
+    const status = row.t.status || 'waiting';
+    wsThreads.addRow([
+      row.t.id,
+      row.p.id,
+      fullName(row.p),
+      row.p.direction || '',
+      row.p.groupName || '',
+      row.t.subject || '',
+      firstParticipantMsg?.text || row.t.subject || '',
+      ORG_STATUS_RU[status] || status,
+      list.length,
+      fromParticipant,
+      fromAdmin,
+      row.t.createdAt ?? '',
+      row.t.updatedAt ?? '',
+    ]);
+  }
+
+  const wsMsg = wb.addWorksheet('Сообщения');
+  wsMsg.addRow([
+    'ID сообщения',
+    'ID треда',
+    'Тема треда',
+    'ID участника',
+    'ФИО',
+    'Направление',
+    'Группа',
+    'Статус треда',
+    'Кто написал',
+    'ID отправителя',
+    'Текст',
+    'Время',
+  ]);
+
+  const threadMeta = new Map(threads.map(r => [r.t.id, r]));
+  for (const m of messages) {
+    const meta = threadMeta.get(m.threadId);
+    if (!meta) continue;
+    const status = meta.t.status || 'waiting';
+    wsMsg.addRow([
+      m.id,
+      m.threadId,
+      meta.t.subject || '',
+      meta.p.id,
+      fullName(meta.p),
+      meta.p.direction || '',
+      meta.p.groupName || '',
+      ORG_STATUS_RU[status] || status,
+      ORG_SENDER_RU[m.senderType] || m.senderType,
+      m.senderId ?? '',
+      m.text,
+      m.createdAt ?? '',
+    ]);
+  }
+
+  await sendWorkbook(res, wb, 'org_director.xlsx');
 }
 
 export async function writeActivityExport(res: Response): Promise<void> {

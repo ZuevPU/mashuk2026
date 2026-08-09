@@ -1141,6 +1141,16 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   margin-top: 8px; padding: 8px 12px; background: #FFFAF0; border: 1px solid #FEEBC8; border-radius: 8px; font-size: 13px;
 }
 .adm-insights-dimmed { opacity: 0.85; }
+.adm-insights-refreshing {
+  opacity: 0.72;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+.adm-insights-refresh-badge {
+  font-size: 12px;
+  color: #1F3A5F;
+  font-weight: 600;
+}
 .adm-insights-availability { margin: 8px 0 0; }
 
 /* Dashboard layout primitives (mockup density, admin colors) */

@@ -19,6 +19,7 @@ import {
   writeModerationLogExport,
   writePointsManualExport,
   writeExchangeFullExport,
+  writeOrgDirectorExport,
   writeActivityExport,
   writePointABSummaryExport,
   writeDelayedMeasureTemplate,
@@ -307,6 +308,16 @@ export const exportMedalsHandler = async (req: AdminRequest, res: Response) => {
 export const exportModerationLogHandler = (_req: AdminRequest, res: Response) => writeModerationLogExport(res);
 export const exportPointsManualHandler = (_req: AdminRequest, res: Response) => writePointsManualExport(res);
 export const exportExchangeHandler = (_req: AdminRequest, res: Response) => writeExchangeFullExport(res);
+export const exportOrgDirectorHandler = async (req: AdminRequest, res: Response) => {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const status = typeof req.query.status === 'string' && req.query.status.trim()
+    ? req.query.status.trim()
+    : null;
+  await writeOrgDirectorExport(res, {
+    shiftId: await resolveAdminShiftId(req),
+    status,
+  });
+};
 export const exportActivityHandler = (_req: AdminRequest, res: Response) => writeActivityExport(res);
 export const exportPointABHandler = (_req: AdminRequest, res: Response) => writePointABSummaryExport(res);
 export const exportDelayedMeasureHandler = (_req: AdminRequest, res: Response) => writeDelayedMeasureTemplate(res);

@@ -69,9 +69,16 @@ export function getAdminApiBase(): string {
   return API_BASE ? `${API_BASE}/admin` : '/api/admin';
 }
 
+function isAbortError(e: unknown): boolean {
+  return e instanceof DOMException
+    ? e.name === 'AbortError'
+    : Boolean(e && typeof e === 'object' && 'name' in e && (e as { name?: string }).name === 'AbortError');
+}
+
 async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
   for (let i = 0; i <= retries; i++) {
     try {
+      if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
       const res = await fetch(url, options);
       if (res.status >= 500 && i < retries) {
         await new Promise(r => setTimeout(r, 1000 * (i + 1)));
@@ -79,6 +86,7 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = 2): P
       }
       return res;
     } catch (e) {
+      if (isAbortError(e) || options.signal?.aborted) throw e;
       if (i === retries) {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('api-error', { detail: 'Ошибка сети. Проверьте подключение.' }));

@@ -254,8 +254,13 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
   const [chartHelpOpen, setChartHelpOpen] = useState(false);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const loadedDashRef = useRef<DashboardId | null>(null);
+  const hasDataRef = useRef(false);
+  const requestSeq = useRef(0);
 
   // Date select is source of truth. «Сегодня» only jumps the select to live day.
   const effectiveDay = forumDay;
@@ -275,33 +280,90 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
     clubId: dash === 'clubs' && clubFilter ? clubFilter : undefined,
   }), [apiMode, mode, effectiveDay, compareDays, direction, group, ageCategory, activity, roleKey, dash, piggyTag, piggySource, clubFilter]);
 
+  /** Debounce filter changes so selects stay snappy; dashboard switch is immediate. */
+  const [debouncedQuery, setDebouncedQuery] = useState(filterQuery);
+  const prevDashForQuery = useRef(dash);
+  useEffect(() => {
+    const dashChanged = prevDashForQuery.current !== dash;
+    prevDashForQuery.current = dash;
+    if (dashChanged) {
+      setDebouncedQuery(filterQuery);
+      return;
+    }
+    const t = window.setTimeout(() => setDebouncedQuery(filterQuery), 180);
+    return () => window.clearTimeout(t);
+  }, [filterQuery, dash]);
+
   const catalogEntry = meta?.dashboardCatalog?.find(c => c.id === dash);
   const showEarlyWarning = catalogEntry && (meta?.currentForumDay ?? 1) < catalogEntry.minForumDay;
 
-  const loadDash = useCallback(async () => {
+  const loadDash = useCallback(async (opts?: { soft?: boolean }) => {
     if (dash === 'roles') {
+      abortRef.current?.abort();
+      loadedDashRef.current = 'roles';
+      hasDataRef.current = false;
       setData(null);
       setLoading(false);
+      setRefreshing(false);
       return;
     }
     const path = dashboardApiPath(dash);
     if (!path) return;
-    setLoading(true);
-    try {
-      setData(await adminFetch(`${path}${filterQuery}`));
-      setUpdatedAt(new Date());
-    } finally {
-      setLoading(false);
+
+    const soft = opts?.soft
+      ?? (loadedDashRef.current === dash && hasDataRef.current);
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    const seq = ++requestSeq.current;
+
+    if (soft) setRefreshing(true);
+    else {
+      setLoading(true);
+      setRefreshing(false);
     }
-  }, [adminFetch, dash, filterQuery]);
+
+    try {
+      const next = await adminFetch(`${path}${debouncedQuery}`, { signal: ac.signal });
+      if (ac.signal.aborted || seq !== requestSeq.current) return;
+      setData(next);
+      hasDataRef.current = true;
+      setUpdatedAt(new Date());
+      loadedDashRef.current = dash;
+    } catch (e) {
+      if (ac.signal.aborted || (e instanceof DOMException && e.name === 'AbortError')) return;
+      if (seq !== requestSeq.current) return;
+      if (!soft) {
+        setData(null);
+        hasDataRef.current = false;
+      }
+    } finally {
+      if (seq === requestSeq.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  }, [adminFetch, dash, debouncedQuery]);
 
   useEffect(() => {
-    loadDash().catch(() => setLoading(false));
+    if (loadedDashRef.current != null && loadedDashRef.current !== dash) {
+      hasDataRef.current = false;
+      setData(null);
+      setLoading(true);
+    }
+  }, [dash]);
+
+  useEffect(() => {
+    const soft = loadedDashRef.current === dash && hasDataRef.current;
+    loadDash({ soft }).catch(() => undefined);
+    return () => {
+      abortRef.current?.abort();
+    };
   }, [loadDash, reloadKey]);
 
   useEffect(() => {
     if (!meta?.refreshMs || dash === 'roles') return;
-    const t = setInterval(() => loadDash().catch(() => undefined), meta.refreshMs);
+    const t = setInterval(() => loadDash({ soft: true }).catch(() => undefined), meta.refreshMs);
     return () => clearInterval(t);
   }, [meta?.refreshMs, loadDash, dash]);
 
@@ -345,7 +407,10 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
     <div className="adm-forum adm-analytics">
       <div className="card adm-forum-block">
         <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap' }}>
-          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => loadDash()}>Обновить</button>
+          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => loadDash({ soft: true })} disabled={refreshing}>
+            Обновить
+          </button>
+          {refreshing ? <span className="adm-insights-refresh-badge">Обновление…</span> : null}
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => exportPng()} disabled={dash === 'roles'}>
             Скачать PNG
           </button>
@@ -467,6 +532,11 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
                 Обновлено: {updatedAt.toLocaleTimeString('ru-RU')}
               </span>
             )}
+            {refreshing && (
+              <span className="adm-insights-refresh-badge" style={{ marginLeft: 8 }}>
+                Обновление…
+              </span>
+            )}
           </p>
         )}
         {showEarlyWarning && (
@@ -505,10 +575,17 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
         </div>
       )}
 
-      {loading && dash !== 'roles' && <p className="adm-muted">Загрузка…</p>}
+      {loading && !data && dash !== 'roles' && <p className="adm-muted">Загрузка…</p>}
 
-      {!loading && data && dash !== 'roles' && (
-        <div ref={chartRef} className={showEarlyWarning ? 'adm-insights-dimmed' : undefined}>
+      {data && dash !== 'roles' && (
+        <div
+          ref={chartRef}
+          className={[
+            showEarlyWarning ? 'adm-insights-dimmed' : '',
+            refreshing ? 'adm-insights-refreshing' : '',
+          ].filter(Boolean).join(' ') || undefined}
+          aria-busy={refreshing || undefined}
+        >
           {dash === 'pulse' && <PulseView data={data} onOpenCard={onOpenCard} />}
           {dash === 'direction' && <DirectionView data={data} onOpenCard={onOpenCard} />}
           {dash === 'evening' && <EveningView data={data} onOpenCard={onOpenCard} />}

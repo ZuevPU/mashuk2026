@@ -505,6 +505,29 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
               </td>
             </tr>
             <tr>
+              <td>Связь с дирекцией</td>
+              <td className="adm-muted">
+                Обращения участников к дирекции: темы, первые вопросы и вся переписка (текущая смена)
+              </td>
+              <td><span className="adm-muted">Текущая смена</span></td>
+              <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-primary"
+                  onClick={() => downloadXlsx('/exports/org-director', 'org_director.xlsx')}
+                >
+                  Скачать XLSX
+                </button>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-secondary"
+                  onClick={() => downloadXlsx('/exports/org-director?status=waiting', 'org_director_waiting.xlsx')}
+                >
+                  Только ожидающие
+                </button>
+              </td>
+            </tr>
+            <tr>
               <td>Заявки / медали / журналы</td>
               <td className="adm-muted">Операционка · быстрые срезы</td>
               <td />
