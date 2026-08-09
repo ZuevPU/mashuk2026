@@ -217,6 +217,7 @@ const TaskSubmitModal = ({
   const [formError, setFormError] = useState<string | null>(null);
   const autoQrSubmitRef = useRef(false);
   const qrFileRef = useRef<HTMLInputElement>(null);
+  const qrGalleryRef = useRef<HTMLInputElement>(null);
   const canNativeScan = isVkEnvironment();
   const methods = taskMethodsFromMeta(meta);
   const answerType = meta?.answerType || (methods.includes('photo') ? 'text_and_photo' : 'text');
@@ -258,6 +259,35 @@ const TaskSubmitModal = ({
     setFormError(null);
     return true;
   }, [showQrOverlay]);
+
+  const handleQrImageFile = useCallback(async (file: File | null) => {
+    if (!file) return;
+    setQrDecoding(true);
+    try {
+      const raw = await decodeQrFromImageFile(file);
+      if (!raw) {
+        showQrOverlay({
+          confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'QR на фото не найден', showPoints: false },
+          detail: 'Снимите QR крупнее при хорошем свете, без бликов. Или выберите чёткое фото из галереи / вставьте ссылку с QR.',
+          tone: 'error',
+          xpAwarded: 0,
+          track: 'experience',
+        });
+        return;
+      }
+      applyScannedQr(raw);
+    } catch {
+      showQrOverlay({
+        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Не удалось прочитать фото', showPoints: false },
+        detail: 'Попробуйте другое фото или вставьте ссылку с QR.',
+        tone: 'error',
+        xpAwarded: 0,
+        track: 'experience',
+      });
+    } finally {
+      setQrDecoding(false);
+    }
+  }, [applyScannedQr, showQrOverlay]);
 
   const finishSuccess = useCallback((payload: SubmitSuccessPayload) => {
     onClose();
@@ -469,35 +499,21 @@ const TaskSubmitModal = ({
                 accept="image/*"
                 capture="environment"
                 style={{ display: 'none' }}
-                onChange={async (e) => {
+                onChange={(e) => {
                   const file = e.target.files?.[0] || null;
                   e.target.value = '';
-                  if (!file) return;
-                  setQrDecoding(true);
-                  try {
-                    const raw = await decodeQrFromImageFile(file);
-                    if (!raw) {
-                      showQrOverlay({
-                        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'QR на фото не найден', showPoints: false },
-                        detail: 'Снимите QR ближе и ровнее или вставьте ссылку из QR вручную.',
-                        tone: 'error',
-                        xpAwarded: 0,
-                        track: 'experience',
-                      });
-                      return;
-                    }
-                    applyScannedQr(raw);
-                  } catch {
-                    showQrOverlay({
-                      confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Не удалось прочитать фото', showPoints: false },
-                      detail: 'Попробуйте ещё раз или вставьте ссылку с QR.',
-                      tone: 'error',
-                      xpAwarded: 0,
-                      track: 'experience',
-                    });
-                  } finally {
-                    setQrDecoding(false);
-                  }
+                  void handleQrImageFile(file);
+                }}
+              />
+              <input
+                ref={qrGalleryRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  e.target.value = '';
+                  void handleQrImageFile(file);
                 }}
               />
               <Button
@@ -509,6 +525,16 @@ const TaskSubmitModal = ({
                 onClick={() => qrFileRef.current?.click()}
               >
                 Сфотографировать QR
+              </Button>
+              <Button
+                size="m"
+                mode="secondary"
+                stretched
+                loading={qrDecoding}
+                style={{ marginTop: 8 }}
+                onClick={() => qrGalleryRef.current?.click()}
+              >
+                Выбрать фото QR из галереи
               </Button>
               {canNativeScan && (
                 <Button

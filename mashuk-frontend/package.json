@@ -21,6 +21,7 @@
     "@vkontakte/vk-bridge": "^3.0.2",
     "@vkontakte/vk-mini-apps-router": "^1.8.6",
     "@vkontakte/vkui": "^8.3.0",
+    "@zxing/browser": "^0.2.1",
     "jsqr": "^1.4.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.7",

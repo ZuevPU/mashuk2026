@@ -309,6 +309,10 @@ export const HomePanel: React.FC<{
           />
         )}
 
+        {d.practicesSection && (
+          <PracticesHomeCard section={d.practicesSection} />
+        )}
+
         {d.experiment && d.currentDay !== 8 && !d.roleOfDay && (
           <ExperimentCard
             experiment={d.experiment}
@@ -363,10 +367,6 @@ export const HomePanel: React.FC<{
               ))}
             </div>
           </div>
-        )}
-
-        {d.practicesSection && (
-          <PracticesHomeCard section={d.practicesSection} />
         )}
 
         {d.currentDay === 8 && (
