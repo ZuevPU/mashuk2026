@@ -196,35 +196,36 @@ export function pushCategoryOf(triggerType: string): string {
   return triggerType;
 }
 
-function shouldTryCommunity(mini: VkApiResult): boolean {
-  if (mini.ok) return false;
-  return mini.status.startsWith('error:')
-    || mini.status === 'skipped_no_service_token'
-    || mini.status === 'skipped_no_token';
-}
-
+/**
+ * Always attempt community ЛС when VK_COMMUNITY_TOKEN is set.
+ * Mini-app push alone is easy to miss; operators expect a message in the group chat.
+ */
 async function finalizeDelivery(
   vkId: number,
   text: string,
   mini: VkApiResult,
   logContext?: string,
 ): Promise<string> {
-  if (mini.ok) return mini.status;
+  const parts: string[] = [];
+  if (mini.ok) parts.push(mini.status);
 
-  if (shouldTryCommunity(mini)) {
+  if (env.VK_COMMUNITY_TOKEN) {
     const comm = await sendCommunityMessage(vkId, text);
-    const status = comm.ok
-      ? comm.status
-      : (mini.status !== 'skipped_no_service_token'
-        ? `${mini.status}; ${comm.status}`
-        : comm.status);
-    if (shouldLogPushDeliveryIssue(status)) {
-      console.warn(`[push] deliver vkId=${vkId}${logContext ? ` ${logContext}` : ''} status=${status}`);
+    parts.push(comm.status);
+  } else if (!mini.ok) {
+    // No community token: keep previous fallback semantics for diagnostics.
+    if (
+      mini.status.startsWith('error:')
+      || mini.status === 'skipped_no_service_token'
+      || mini.status === 'skipped_no_token'
+    ) {
+      parts.push('skipped_no_community_token');
     }
-    return status;
   }
 
-  const status = mini.status;
+  if (!parts.length) parts.push(mini.status);
+
+  const status = parts.join('; ');
   if (shouldLogPushDeliveryIssue(status)) {
     console.warn(`[push] deliver vkId=${vkId}${logContext ? ` ${logContext}` : ''} status=${status}`);
   }
@@ -480,28 +481,9 @@ export async function sendTestCampaignToParticipant(
   });
   const vkText = formatVkPushText(notification.pushTitle, personalizedBody);
   const triggerType = `admin_test_${notification.id}`;
-  // Normal path: mini-app first, community only if mini fails.
+  // Delivers mini + community ЛС (see finalizeDelivery).
   const deliveryStatus = await sendPushNotification([participantId], vkText, triggerType) ?? 'unknown';
-
-  // Extra probe: always verify community ЛС on admin test (even if mini already delivered).
-  // Otherwise operators think community is broken when they only see sent_mini.
-  let status = deliveryStatus;
-  if (p.vkId && env.VK_COMMUNITY_TOKEN && deliveryStatus === 'sent_mini') {
-    const probeText = `[тест ЛС сообщества]\n${vkText}`;
-    const comm = await sendCommunityMessage(p.vkId, probeText);
-    status = `${deliveryStatus}; community_probe:${comm.status}`;
-    await db.insert(pushLog).values({
-      participantId,
-      text: probeText.slice(0, 500),
-      triggerType: `${triggerType}_community_probe`,
-      sentAt: new Date(),
-      deliveryStatus: clipDeliveryStatus(comm.status),
-    });
-  } else if (p.vkId && !env.VK_COMMUNITY_TOKEN) {
-    status = `${deliveryStatus}; community_probe:skipped_no_community_token`;
-  }
-
-  return { personalizedBody, deliveryStatus: status };
+  return { personalizedBody, deliveryStatus };
 }
 
 export async function refreshNotificationStats(notificationId: number): Promise<void> {

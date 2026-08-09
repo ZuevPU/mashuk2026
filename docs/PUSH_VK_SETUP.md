@@ -1,11 +1,11 @@
 # Настройка push-уведомлений VK (Машук)
 
-Бэкенд отправляет уведомления **двумя каналами** (см. `mashuk-backend/src/services/pushService.ts`):
+Бэкенд отправляет уведомления **двумя каналами сразу** (см. `mashuk-backend/src/services/pushService.ts`):
 
 1. **Мини-приложение** — `notifications.sendMessage` + `VK_SERVICE_TOKEN`
-2. **Fallback** — ЛС сообщества — `messages.send` + `VK_COMMUNITY_TOKEN`
+2. **ЛС сообщества** — `messages.send` + `VK_COMMUNITY_TOKEN` (если токен задан)
 
-Если mini-app не доставил (`error`, `skipped_no_token`, нет `vk_id`), пробуется сообщение от группы.
+Оба канала вызываются при каждой доставке. Статус может быть вида `sent_mini; sent_community` или `sent_mini; error: ... (code_901)`.
 
 > Важно: метод называется именно `notifications.sendMessage`. Старый/ошибочный `notifications.send` даёт `Unknown method passed`.
 

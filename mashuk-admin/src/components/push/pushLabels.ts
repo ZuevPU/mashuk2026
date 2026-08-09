@@ -127,8 +127,8 @@ export function deliveryStatusShort(status: string | null | undefined): string {
     return 'Не настроены ключи VK';
   }
   if (status.includes(';')) {
-    if (/community_probe:sent_community/.test(status)) return '✓ Mini + ЛС сообщества';
-    if (/community_probe:/.test(status) && /sent_mini/.test(status)) {
+    if (/sent_mini/.test(status) && /sent_community/.test(status)) return '✓ Mini + ЛС сообщества';
+    if (/sent_mini/.test(status) && /error:|skipped_no_community/.test(status)) {
       return '✓ Mini; ЛС: ошибка (см. подсказку)';
     }
     if (/(^|;\s*)sent_community/.test(status)) return '✓ Личное сообщение VK';

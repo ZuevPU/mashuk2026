@@ -41,7 +41,11 @@ describe('pushDeliveryStatus', () => {
 
   it('isPushDeliveredOk and shouldLogPushDeliveryIssue', () => {
     assert.equal(isPushDeliveredOk('sent_mini'), true);
+    assert.equal(isPushDeliveredOk('sent_mini; sent_community'), true);
+    assert.equal(isPushDeliveredOk('sent_mini; error: Can\'t send messages (code_901)'), true);
     assert.equal(shouldLogPushDeliveryIssue('sent_mini'), false);
+    assert.equal(shouldLogPushDeliveryIssue('sent_mini; sent_community'), false);
+    assert.equal(shouldLogPushDeliveryIssue('sent_mini; error: code_901'), true);
     assert.equal(shouldLogPushDeliveryIssue('skipped_no_token'), false);
     assert.equal(shouldLogPushDeliveryIssue('error: denied'), true);
   });

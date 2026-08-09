@@ -80,11 +80,16 @@ export function describeDeliveryStatus(status: string): string {
 }
 
 export function isPushDeliveredOk(status: string): boolean {
-  return status === 'sent_mini' || status === 'sent_community' || status === 'ok';
+  if (status === 'sent_mini' || status === 'sent_community' || status === 'ok') return true;
+  // Combined statuses: "sent_mini; sent_community" or "sent_mini; error: ..."
+  return /(^|;\s*)sent_mini\b/.test(status) || /(^|;\s*)sent_community\b/.test(status);
 }
 
 export function shouldLogPushDeliveryIssue(status: string): boolean {
+  if (isPushDeliveredOk(status) && !/error:|skipped_no_community/.test(status)) return false;
+  if (status.startsWith('skipped_') && !status.includes('error:')) return false;
+  // Log when community leg failed even if mini succeeded.
+  if (/sent_mini/.test(status) && /error:|skipped_no_community/.test(status)) return true;
   if (isPushDeliveredOk(status)) return false;
-  if (status.startsWith('skipped_')) return false;
   return true;
 }
