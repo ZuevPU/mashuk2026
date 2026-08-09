@@ -39,7 +39,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<QuestionDraft>(() => emptyDraft(1));
   const [showPreview, setShowPreview] = useState(false);
-  const [formTab, setFormTab] = useState<'main' | 'versions'>('main');
+  const [formTab, setFormTab] = useState<'main' | 'versions' | 'tagcloud'>('main');
   const [versions, setVersions] = useState<{ id: number; title: string; status?: string; createdAt?: string }[]>([]);
   const [versionNotice, setVersionNotice] = useState<string | null>(null);
   const [answerCount, setAnswerCount] = useState(0);
@@ -490,6 +490,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
           versionNotice={versionNotice}
           formTab={formTab}
           versions={versions}
+          adminFetch={adminFetch}
           onFormTab={setFormTab}
           onChange={patch => setDraft(d => ({ ...d, ...patch }))}
           onSaveDraft={() => persist(false)}

@@ -1904,3 +1904,96 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   padding: 12px;
   font-size: 12px;
 }
+
+/* Tag cloud constructor (question form) */
+.adm-tagcloud { display: flex; flex-direction: column; gap: 12px; }
+.adm-tagcloud-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+}
+.adm-tagcloud-controls input[type="range"] {
+  display: block;
+  width: 220px;
+  margin-top: 6px;
+}
+.adm-tagcloud-palette {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.adm-tagcloud-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #d6d3d1;
+  cursor: pointer;
+  padding: 0;
+  display: inline-block;
+}
+.adm-tagcloud-swatch input[type="color"] {
+  width: 40px;
+  height: 40px;
+  border: none;
+  padding: 0;
+  margin: -6px;
+  cursor: pointer;
+  background: none;
+}
+.adm-tagcloud-selected {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.adm-tagcloud-canvas-wrap {
+  width: 100%;
+  overflow: auto;
+  border: 1px dashed #d6d3d1;
+  border-radius: 10px;
+  background:
+    linear-gradient(45deg, #f5f5f4 25%, transparent 25%),
+    linear-gradient(-45deg, #f5f5f4 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #f5f5f4 75%),
+    linear-gradient(-45deg, transparent 75%, #f5f5f4 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+.adm-tagcloud-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  background: transparent;
+}
+.adm-tagcloud-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: baseline;
+}
+.adm-tagcloud-list li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.adm-tagcloud-word {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  line-height: 1.15;
+  font-family: inherit;
+}
+.adm-tagcloud-word:hover { text-decoration: underline; }
+.adm-tagcloud-word.is-selected {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 4px;
+}

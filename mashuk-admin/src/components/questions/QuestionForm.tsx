@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { QuestionDraft } from './types';
 import { ANSWER_TYPES, REFLECTIVE_KINDS, emptyPracticeRow } from './types';
+import { QuestionTagCloudConstructor } from './QuestionTagCloudConstructor';
 
 type ParticipantOption = {
   id: number;
@@ -16,13 +17,14 @@ type Props = {
   currentQuestionId?: number | null;
   answerCount?: number;
   versionNotice?: string | null;
-  formTab: 'main' | 'versions';
+  formTab: 'main' | 'versions' | 'tagcloud';
   versions: { id: number; title: string; status?: string; createdAt?: string; answerCount?: number }[];
   directions?: { id: number; name: string }[];
   groups?: { id: number; name: string }[];
   roleOptions?: { key: string; name: string }[];
   participants?: ParticipantOption[];
-  onFormTab: (t: 'main' | 'versions') => void;
+  adminFetch?: (path: string, init?: RequestInit) => Promise<any>;
+  onFormTab: (t: 'main' | 'versions' | 'tagcloud') => void;
   onChange: (patch: Partial<QuestionDraft>) => void;
   onSaveDraft: () => void;
   onPublish: () => void;
@@ -54,6 +56,7 @@ export function QuestionForm({
   groups = [],
   roleOptions = [],
   participants = [],
+  adminFetch,
   onFormTab,
   onChange,
   onSaveDraft,
@@ -115,6 +118,11 @@ export function QuestionForm({
             История версий
           </button>
         )}
+        {!isNew && currentQuestionId != null && (answerCount ?? 0) > 0 && (
+          <button type="button" className={formTab === 'tagcloud' ? 'on' : ''} onClick={() => onFormTab('tagcloud')}>
+            Облако тегов
+          </button>
+        )}
       </div>
 
       {showPreview && previewSlot}
@@ -135,6 +143,12 @@ export function QuestionForm({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {formTab === 'tagcloud' && currentQuestionId != null && adminFetch && (
+        <div className="card adm-forum-block">
+          <QuestionTagCloudConstructor questionId={currentQuestionId} adminFetch={adminFetch} />
         </div>
       )}
 

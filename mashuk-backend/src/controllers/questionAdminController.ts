@@ -473,6 +473,29 @@ export const crudQuestions = {
     });
   },
 
+  /** Топ слов из ответов вопроса для конструктора облака тегов. */
+  wordCloud: async (req: AdminRequest, res: Response) => {
+    const id = Number(req.params.id);
+    const [question] = await db.select().from(questions).where(eq(questions.id, id)).limit(1);
+    if (!question) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    const limitRaw = Number(req.query.limit);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, Math.floor(limitRaw)), 80) : 50;
+    const rows = await db.select({ answerData: answers.answerData }).from(answers)
+      .where(eq(answers.questionId, id));
+    const { buildTagCloudTokens } = await import('../services/wordCloudTokens.js');
+    const tokens = buildTagCloudTokens(rows.map(r => r.answerData), limit);
+    res.json({
+      questionId: id,
+      title: question.title,
+      answerCount: rows.length,
+      tokens,
+      maxAvailable: tokens.length,
+    });
+  },
+
   listOptions: async (req: AdminRequest, res: Response) => {
     const questionId = Number(req.params.id);
     const opts = await db.select().from(questionOptions)
