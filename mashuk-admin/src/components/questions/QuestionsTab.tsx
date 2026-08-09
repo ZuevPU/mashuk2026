@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
 import { ADMIN_SHIFT_CHANGED_EVENT, adminDownloadBinary, getAdminEditingShiftId } from '../../admin/client';
 import { AdminPageHero } from '../admin/AdminPageHero';
@@ -54,6 +54,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
     open: false, title: '', loading: false, rows: [],
   });
   const [notifyModal, setNotifyModal] = useState<{ q: AdminQuestion; text: string } | null>(null);
+  const notifySendingRef = useRef(false);
 
   const [answerConfirmForm, setAnswerConfirmForm] = useState<AnswerConfirmForm>({
     enabled: true,
@@ -343,20 +344,28 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
   };
 
   const sendNotify = () => {
-    if (!notifyModal) return;
+    if (!notifyModal || notifySendingRef.current) return;
     const { q, text } = notifyModal;
     const trimmed = text.trim();
     if (!trimmed) {
       alert('Введите текст сообщения для участников');
       return;
     }
+    notifySendingRef.current = true;
+    setNotifyModal(null);
     act(async () => {
-      await adminFetch(`/questions/${q.id}/notify`, {
-        method: 'POST',
-        body: JSON.stringify({ text: trimmed }),
-      });
-      setNotifyModal(null);
-    }, 'Уведомление отправлено');
+      try {
+        const res = await adminFetch(`/questions/${q.id}/notify`, {
+          method: 'POST',
+          body: JSON.stringify({ text: trimmed }),
+        });
+        return typeof res?.message === 'string' && res.message
+          ? res.message
+          : 'Рассылка удалась';
+      } finally {
+        notifySendingRef.current = false;
+      }
+    }, 'Рассылка удалась');
   };
 
   const bulkCopy = () => {
