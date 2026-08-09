@@ -8,6 +8,7 @@ import {
 } from './dashboardUi';
 import { EnergyAverages } from './EnergyAverages';
 import { OrientableBarChart } from './orientableBars';
+import { ParticipantPathPanel } from './ParticipantPathPanel';
 import { TouchpointCoveragePanel } from './TouchpointCoveragePanel';
 
 function nLabel(v: unknown, count?: number | null): string {
@@ -379,6 +380,8 @@ export function ParticipantProfileView({ data }: { data: any }) {
             sub={feeling.mostFrequentZone ? `зона: ${feeling.mostFrequentZone}` : undefined}
           />
         </DashGrid>
+
+        <ParticipantPathPanel data={feeling.path} />
 
         <div style={{ marginTop: 16 }} className="adm-chart-frame">
           <div className="adm-dash-card-title">

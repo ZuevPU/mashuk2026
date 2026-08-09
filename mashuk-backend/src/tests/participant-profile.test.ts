@@ -10,6 +10,10 @@ import {
   themesFromBag,
   PROFILE_RULE_THRESHOLDS,
 } from '../services/analytics/participantProfileStats.js';
+import {
+  buildParticipantPathSeries,
+  resolvePathPhase,
+} from '../services/analytics/participantPathSeries.js';
 import { parseAnalyticsQuery, resolveDayRange } from '../services/analytics/analyticsQuery.js';
 
 describe('participantProfileStats', () => {
@@ -163,5 +167,76 @@ describe('participant-level energy aggregation', () => {
     assert.equal(cohort.min, 2);
     assert.equal(cohort.max, 10);
     assert.equal(cohort.count, 2);
+  });
+});
+
+describe('participantPathSeries', () => {
+  it('resolvePathPhase uses timePoint labels', () => {
+    assert.equal(resolvePathPhase({ timePoint: 'утро' }), 'morning');
+    assert.equal(resolvePathPhase({ timePoint: 'день' }), 'day');
+    assert.equal(resolvePathPhase({ timePoint: 'вечер' }), 'evening');
+  });
+
+  it('uniqueParticipants does not double-count same person on a step', () => {
+    const path = buildParticipantPathSeries([
+      { participantId: 1, energy: 7, emotion: 'joy', timePoint: 'утро' },
+      { participantId: 1, energy: 8, emotion: 'calm', timePoint: 'утро' },
+      { participantId: 2, energy: 5, emotion: 'joy', timePoint: 'утро' },
+    ]);
+    const morning = path.steps.find(s => s.key === 'morning')!;
+    assert.equal(morning.responses, 3);
+    assert.equal(morning.uniqueParticipants, 2);
+  });
+
+  it('energy avg and median per step from valid values', () => {
+    const path = buildParticipantPathSeries([
+      { participantId: 1, energy: 4, emotion: 'tired', timePoint: 'день' },
+      { participantId: 2, energy: 6, emotion: 'focus', timePoint: 'день' },
+      { participantId: 3, energy: 8, emotion: 'joy', timePoint: 'день' },
+      { participantId: 4, energy: null, emotion: 'calm', timePoint: 'день' },
+    ]);
+    const day = path.steps.find(s => s.key === 'day')!;
+    assert.equal(day.energy.count, 3);
+    assert.equal(day.energy.avg, 6);
+    assert.equal(day.energy.median, 6);
+  });
+
+  it('emotions are shares not averaged names', () => {
+    const path = buildParticipantPathSeries([
+      { participantId: 1, energy: 7, emotion: 'joy', timePoint: 'вечер' },
+      { participantId: 2, energy: 7, emotion: 'joy', timePoint: 'вечер' },
+      { participantId: 3, energy: 5, emotion: 'anxiety', timePoint: 'вечер' },
+      { participantId: 4, energy: 5, emotion: 'anxiety', timePoint: 'вечер' },
+    ]);
+    const evening = path.steps.find(s => s.key === 'evening')!;
+    const joy = evening.emotions.find(e => e.id === 'joy')!;
+    const anxiety = evening.emotions.find(e => e.id === 'anxiety')!;
+    assert.equal(joy.pct, 50);
+    assert.equal(anxiety.pct, 50);
+    assert.equal(evening.modeEmotion, 'Радость'); // first in tie by CHECKIN order with equal counts... actually sort by count then joy may win if equal - both 2. Sort is b.count - a.count, equal keeps array order from buildEmotionDistribution which is CHECKIN order - joy comes first so mode is Радость.
+    const seriesJoy = path.emotionSeries.find(e => e.emotion === 'joy')!;
+    assert.equal(seriesJoy.eveningPct, 50);
+    assert.equal(seriesJoy.morningPct, 0);
+  });
+
+  it('empty answers yield empty steps without NaN', () => {
+    const path = buildParticipantPathSeries([]);
+    assert.equal(path.steps.length, 3);
+    for (const s of path.steps) {
+      assert.equal(s.responses, 0);
+      assert.equal(s.energy.avg, null);
+      assert.ok(!Number.isNaN(s.riskFatiguePct as never));
+    }
+  });
+
+  it('dayFilter keeps only matching day', () => {
+    const path = buildParticipantPathSeries([
+      { participantId: 1, energy: 9, emotion: 'joy', timePoint: 'утро', day: 1 },
+      { participantId: 2, energy: 3, emotion: 'tired', timePoint: 'утро', day: 2 },
+    ], { dayFilter: 1 });
+    const morning = path.steps.find(s => s.key === 'morning')!;
+    assert.equal(morning.responses, 1);
+    assert.equal(morning.energy.avg, 9);
+    assert.equal(path.dayFilter, 1);
   });
 });

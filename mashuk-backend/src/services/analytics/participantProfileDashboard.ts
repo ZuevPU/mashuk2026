@@ -32,6 +32,7 @@ import {
   type EngagementSegmentId,
   type NumericSummary,
 } from './participantProfileStats.js';
+import { buildParticipantPathSeries, type PathAnswerInput } from './participantPathSeries.js';
 
 function pct(n: number, den: number): number | null {
   if (!den) return null;
@@ -170,7 +171,16 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       }[];
     };
     activity?: { submitted?: number; cohortSize?: number; fillRatePct?: number; uniqueParticipants?: number };
-    questions?: { answers?: { participantId: number; energy: number | null; emotion: string | null; answer?: string | null; day?: number | null }[] }[];
+    questions?: { answers?: {
+      participantId: number;
+      energy: number | null;
+      emotion: string | null;
+      emotionZone?: string | null;
+      timePoint?: string | null;
+      createdAt?: Date | null;
+      answer?: string | null;
+      day?: number | null;
+    }[] }[];
   });
 
   // Per-participant energy / emotion (participant-level first)
@@ -475,6 +485,23 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     ? energyByDay[energyByDay.length - 1]?.avg ?? energyStats.avg
     : energyStats.avg;
 
+  const pathAnswers: PathAnswerInput[] = [];
+  for (const q of scPulse.questions ?? []) {
+    for (const a of q.answers ?? []) {
+      pathAnswers.push({
+        participantId: a.participantId,
+        energy: a.energy,
+        emotion: a.emotion,
+        emotionZone: a.emotionZone ?? null,
+        timePoint: a.timePoint ?? null,
+        createdAt: a.createdAt ?? null,
+        day: a.day ?? null,
+      });
+    }
+  }
+  const dayFilterForPath = filters.mode === 'day' && filters.day != null ? filters.day : null;
+  const participantPath = buildParticipantPathSeries(pathAnswers, { dayFilter: dayFilterForPath });
+
   const highEnergyLowReflection = (
     energyStats.avg != null
     && energyStats.avg >= PROFILE_RULE_THRESHOLDS.highEnergy
@@ -696,6 +723,7 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       phaseCounts: pulseFeeling.phaseCounts ?? {},
       topReasons: pulseFeeling.topReasons ?? [],
       coveragePct: stateFillPct,
+      path: participantPath,
     },
     engagement: {
       slotsTotal,
