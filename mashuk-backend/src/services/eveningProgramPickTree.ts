@@ -47,22 +47,31 @@ function mapNode(
   };
 }
 
+function isRootEvent(e: LessonPickEvent): boolean {
+  return e.parentEventId == null || e.parentEventId === 0;
+}
+
 /**
  * Full program tree for evening questionnaire event pick:
  * large blocks + all nested sub-blocks (no «already conducted» filter).
+ *
+ * `allEvents` may include the whole shift so children missing day_number still nest.
+ * When `surveyDay` is set and there is no explicit link list, only roots of that day
+ * are offered (children still attach from the full set).
  */
 export function collectEveningProgramPickTree(
-  dayEvents: LessonPickEvent[],
+  allEvents: LessonPickEvent[],
   linkedEventIds: number[] | null | undefined,
   settings?: ForumScheduleSettings,
+  surveyDay?: number | null,
 ): {
   events: EveningProgramPickNode[];
   programBlockCount: number;
 } {
-  const byId = new Map(dayEvents.map(e => [e.id, e]));
+  const byId = new Map(allEvents.map(e => [e.id, e]));
   const byParent = new Map<number, LessonPickEvent[]>();
-  for (const e of dayEvents) {
-    if (e.parentEventId != null) {
+  for (const e of allEvents) {
+    if (e.parentEventId != null && e.parentEventId !== 0) {
       const list = byParent.get(e.parentEventId) || [];
       list.push(e);
       byParent.set(e.parentEventId, list);
@@ -80,15 +89,20 @@ export function collectEveningProgramPickTree(
       if (e && !isBreak(e)) roots.push(e);
     }
   } else {
-    roots = dayEvents
-      .filter(e => (e.parentEventId == null || e.parentEventId === 0) && !isBreak(e))
+    roots = allEvents
+      .filter(e => isRootEvent(e) && !isBreak(e))
+      .filter(e => (
+        surveyDay == null
+        || e.dayNumber == null
+        || e.dayNumber === surveyDay
+      ))
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id);
   }
 
   const rootIds = new Set(roots.map(r => r.id));
   roots = roots.filter(e => {
     let pid = e.parentEventId ?? null;
-    while (pid != null) {
+    while (pid != null && pid !== 0) {
       if (rootIds.has(pid)) return false;
       pid = byId.get(pid)?.parentEventId ?? null;
     }

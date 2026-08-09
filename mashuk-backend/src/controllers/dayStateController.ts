@@ -321,16 +321,16 @@ export async function loadDayContext(
     const shiftId = typeof (settings as { shiftId?: number }).shiftId === 'number'
       ? (settings as { shiftId: number }).shiftId
       : await resolveActiveShiftId();
-    const dayEv = await db.select().from(events).where(and(
-      eq(events.dayNumber, dayNumber),
-      eq(events.shiftId, shiftId),
-    ));
-    const published = dayEv.filter(e => e.isPublished !== false && e.dayPublished !== false);
+    // Load whole shift: nested sub-events sometimes inherit day visually but may
+    // miss day_number; tree builder still anchors roots to the survey day.
+    const shiftEv = await db.select().from(events).where(eq(events.shiftId, shiftId));
+    const published = shiftEv.filter(e => e.isPublished !== false && e.dayPublished !== false);
     for (const field of programEventFieldDefs) {
       const tree = collectEveningProgramPickTree(
         published,
         field.linkedEventIds,
         settings,
+        dayNumber,
       );
       programEventOptions[field.key] = {
         events: tree.events,

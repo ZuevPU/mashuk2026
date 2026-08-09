@@ -48,4 +48,18 @@ describe('collectEveningProgramPickTree', () => {
     assert.equal(events[0].children[0].title, 'Подблок');
     assert.equal(events[0].children[0].children[0].title, 'Тема');
   });
+
+  it('attaches children missing day_number when survey day filters roots', () => {
+    const all: LessonPickEvent[] = [
+      { id: 1, title: 'Презентации практик', parentEventId: null, dayNumber: 2, sortOrder: 1 },
+      { id: 2, title: 'Другой день', parentEventId: null, dayNumber: 3, sortOrder: 1 },
+      { id: 11, title: 'ИИ в классе', parentEventId: 1, dayNumber: null, sortOrder: 1 },
+      { id: 12, title: 'Молчаливый учитель', parentEventId: 1, dayNumber: null, sortOrder: 2 },
+    ];
+    const { events } = collectEveningProgramPickTree(all, null, undefined, 2);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].title, 'Презентации практик');
+    assert.equal(events[0].children.length, 2);
+    assert.equal(events[0].children[0].title, 'ИИ в классе');
+  });
 });

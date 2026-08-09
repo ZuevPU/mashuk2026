@@ -125,6 +125,12 @@ function fieldVisible(
   return v === expected;
 }
 
+/** Flatten nested sub-blocks to selectable leaves under a large program block. */
+function flattenSelectableLeaves(node: EveningProgramEventNode): EveningProgramEventNode[] {
+  if (!node.children?.length) return [node];
+  return node.children.flatMap(ch => flattenSelectableLeaves(ch));
+}
+
 function ProgramEventPicker({
   field,
   value,
@@ -138,156 +144,44 @@ function ProgramEventPicker({
   emptyReason?: string;
   onChange: (v: EveningProgramEventValue | null) => void;
 }) {
-  const [expanded, setExpanded] = useState<Record<number, boolean>>(() => {
-    const init: Record<number, boolean> = {};
-    for (const n of nodes) {
-      if (n.children?.length) init[n.id] = true;
-    }
-    return init;
-  });
+  const initialParentId = value?.parentEventId ?? (
+    value?.eventId && nodes.some(n => n.id === value.eventId) ? value.eventId : null
+  );
+  const [selectedParentId, setSelectedParentId] = useState<number | null>(initialParentId);
 
   useEffect(() => {
-    setExpanded(prev => {
-      const next = { ...prev };
-      for (const n of nodes) {
-        if (n.children?.length && next[n.id] === undefined) next[n.id] = true;
-      }
-      return next;
-    });
-  }, [nodes]);
+    if (!value) return;
+    const pid = value.parentEventId
+      ?? (nodes.some(n => n.id === value.eventId) ? value.eventId : null);
+    if (pid != null) setSelectedParentId(pid);
+  }, [value?.eventId, value?.parentEventId, nodes]);
 
-  const toggle = (id: number) => {
-    setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+  const selectedParent = nodes.find(n => n.id === selectedParentId) || null;
+  const subtopics = selectedParent ? flattenSelectableLeaves(selectedParent).filter(l => l.id !== selectedParent.id) : [];
+  const needsSubtopic = subtopics.length > 0;
+
+  const pickParent = (root: EveningProgramEventNode) => {
+    setSelectedParentId(root.id);
+    if (!root.children?.length) {
+      onChange({
+        eventId: root.id,
+        eventTitle: root.title,
+        parentEventId: root.id,
+        parentEventTitle: root.title,
+      });
+      return;
+    }
+    // Wait for subtopic pick — clear incomplete answer
+    if (value?.parentEventId !== root.id) onChange(null);
   };
 
-  const pickLeaf = (
-    leaf: EveningProgramEventNode,
-    root: EveningProgramEventNode,
-  ) => {
+  const pickSubtopic = (leaf: EveningProgramEventNode, root: EveningProgramEventNode) => {
     onChange({
       eventId: leaf.id,
       eventTitle: leaf.title,
       parentEventId: root.id,
       parentEventTitle: root.title,
     });
-  };
-
-  const renderChild = (
-    node: EveningProgramEventNode,
-    root: EveningProgramEventNode,
-    depth: number,
-  ) => {
-    const hasKids = (node.children?.length ?? 0) > 0;
-    const isOpen = !!expanded[node.id];
-    const selected = !hasKids && value?.eventId === node.id;
-    const ownTime = formatEventTimeRange(node.startTime, node.endTime);
-
-    return (
-      <React.Fragment key={node.id}>
-        <button
-          type="button"
-          onClick={() => {
-            if (hasKids) toggle(node.id);
-            else pickLeaf(node, root);
-          }}
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 8,
-            width: '100%',
-            textAlign: 'left',
-            marginLeft: Math.max(0, (depth - 1) * 10),
-            padding: '8px 10px',
-            borderRadius: 10,
-            border: selected ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
-            background: selected ? '#D8F3DC' : '#fff',
-            cursor: 'pointer',
-            fontSize: 13,
-          }}
-        >
-          <span style={{ color: '#888', minWidth: ownTime ? 72 : 14, fontSize: 12, fontWeight: 600 }}>
-            {ownTime || '·'}
-          </span>
-          <span style={{ flex: 1, lineHeight: 1.35 }}>
-            <span style={{ fontWeight: hasKids ? 600 : 500 }}>
-              {node.title}
-              {hasKids && !isOpen ? ` · ${countProgramLeaves(node.children)}` : ''}
-            </span>
-          </span>
-          <span style={{ color: '#888', fontSize: 12 }}>
-            {hasKids ? (isOpen ? '▼' : '▶') : '›'}
-          </span>
-        </button>
-        {hasKids && isOpen && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
-            {node.children.map(ch => renderChild(ch, root, depth + 1))}
-          </div>
-        )}
-      </React.Fragment>
-    );
-  };
-
-  const renderRoot = (root: EveningProgramEventNode) => {
-    const hasKids = (root.children?.length ?? 0) > 0;
-    const isOpen = !!expanded[root.id];
-    const selected = !hasKids && value?.eventId === root.id;
-    const timeRange = formatEventTimeRange(root.startTime, root.endTime);
-    const leafCount = countProgramLeaves(root.children);
-
-    return (
-      <div
-        key={root.id}
-        style={{
-          border: '1px solid #E8E2D6',
-          borderRadius: 12,
-          padding: 10,
-          background: '#FBF9F5',
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => {
-            if (hasKids) toggle(root.id);
-            else pickLeaf(root, root);
-          }}
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 10,
-            width: '100%',
-            textAlign: 'left',
-            border: selected ? '2px solid #2D6A4F' : 'none',
-            background: selected ? '#D8F3DC' : 'transparent',
-            borderRadius: 10,
-            padding: selected ? 8 : 0,
-            cursor: 'pointer',
-          }}
-        >
-          <div style={{ flex: 1 }}>
-            {timeRange && (
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#2D6A4F', marginBottom: 4 }}>
-                {timeRange}
-              </div>
-            )}
-            <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.35 }}>
-              {root.title}
-              {hasKids && !isOpen ? (
-                <span style={{ fontWeight: 500, color: '#888' }}> · {leafCount} тем</span>
-              ) : null}
-            </div>
-          </div>
-          <span style={{ color: '#666', fontSize: 13, marginTop: 2 }}>
-            {hasKids ? (isOpen ? '▼' : '▶') : '›'}
-          </span>
-        </button>
-
-        {hasKids && isOpen && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-            {root.children.map(ch => renderChild(ch, root, 1))}
-          </div>
-        )}
-      </div>
-    );
   };
 
   return (
@@ -300,14 +194,96 @@ function ProgramEventPicker({
         </div>
       ) : (
         <>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+            1. Событие программы
+          </div>
           <div style={{ fontSize: 11, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
-            Крупные блоки программы и темы внутри них — как в разделе «Программа». Выберите тему (›).
+            Выберите крупный блок — затем тему / подсобытие внутри него.
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {nodes.map(renderRoot)}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {nodes.map(root => {
+              const active = selectedParentId === root.id;
+              const timeRange = formatEventTimeRange(root.startTime, root.endTime);
+              const leafCount = countProgramLeaves(root.children);
+              const hasKids = (root.children?.length ?? 0) > 0;
+              return (
+                <button
+                  key={root.id}
+                  type="button"
+                  onClick={() => pickParent(root)}
+                  style={{
+                    textAlign: 'left',
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    border: active ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
+                    background: active ? '#D8F3DC' : '#FBF9F5',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {timeRange && (
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#2D6A4F', marginBottom: 4 }}>
+                      {timeRange}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.35 }}>
+                    {root.title}
+                    {hasKids ? (
+                      <span style={{ fontWeight: 500, color: '#666' }}> · {leafCount} тем</span>
+                    ) : null}
+                  </div>
+                  {hasKids && (
+                    <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                      {active ? '▼ выберите подсобытие ниже' : '▼ есть подсобытия'}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
+
+          {selectedParent && needsSubtopic && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                2. Подсобытие / тема
+              </div>
+              <div style={{ fontSize: 12, color: '#555', marginBottom: 8, lineHeight: 1.35 }}>
+                {selectedParent.title}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {subtopics.map(leaf => {
+                  const selected = value?.eventId === leaf.id;
+                  return (
+                    <button
+                      key={leaf.id}
+                      type="button"
+                      onClick={() => pickSubtopic(leaf, selectedParent)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 8,
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '8px 10px',
+                        borderRadius: 10,
+                        border: selected ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
+                        background: selected ? '#D8F3DC' : '#fff',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      <span style={{ color: '#888' }}>·</span>
+                      <span style={{ flex: 1 }}>{leaf.title}</span>
+                      <span style={{ color: '#888' }}>›</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {value && (
-            <div style={{ fontSize: 12, color: '#2D6A4F', marginTop: 10, fontWeight: 600 }}>
+            <div style={{ fontSize: 12, color: '#2D6A4F', marginTop: 12, fontWeight: 600 }}>
               Выбрано: {value.parentEventTitle && value.parentEventTitle !== value.eventTitle
                 ? `${value.parentEventTitle} → ${value.eventTitle}`
                 : value.eventTitle}
