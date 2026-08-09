@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Panel, PanelHeader, Group, Spinner, Button, Textarea, ModalRoot, ModalPage, ModalPageHeader, Snackbar, Input, Radio, Checkbox } from '@vkontakte/vkui';
 import { useActiveVkuiLocation } from '@vkontakte/vk-mini-apps-router';
 import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
