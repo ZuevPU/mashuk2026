@@ -19,6 +19,13 @@ export function describeDeliveryStatus(status: string): string {
   if (status === 'skipped_no_token' || status === 'skipped_no_service_token') {
     return 'Не отправлено: на сервере не заданы VK_SERVICE_TOKEN / VK_COMMUNITY_TOKEN';
   }
+  if (status === 'skipped_no_community_token') {
+    return 'ЛС сообщества недоступны: не задан VK_COMMUNITY_TOKEN';
+  }
+  if (status.startsWith('community_probe:')) {
+    const inner = status.slice('community_probe:'.length);
+    return `Проверка ЛС сообщества → ${describeDeliveryStatus(inner)}`;
+  }
   if (status === 'skipped_no_vk_id') {
     return 'Не отправлено: у участника нет vk_id';
   }

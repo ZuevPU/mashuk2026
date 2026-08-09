@@ -83,10 +83,27 @@ export async function vkBotCallback(req: Request, res: Response): Promise<void> 
   if (!vkId || vkId <= 0) return;
 
   const ref = extractRef(message);
-  if (!ref) return;
+  if (!ref) {
+    const text = (message?.text || '').trim().toLowerCase();
+    const isStart = !text
+      || text === 'начать'
+      || text === 'start'
+      || text === '/start'
+      || Boolean(message?.payload);
+    if (isStart) {
+      await safeReply(
+        vkId,
+        'Бот форума «Машук».\n\nЧтобы отметить посещение — отсканируйте QR события камерой телефона (откроется диалог с кодом события).\nИли откройте мини-приложение из сообщества.',
+      );
+    }
+    return;
+  }
 
   const parsed = parseEventAttendanceRef(ref);
-  if (!parsed) return;
+  if (!parsed) {
+    await safeReply(vkId, 'Не удалось разобрать QR события. Отсканируйте QR ещё раз или откройте мини-приложение.');
+    return;
+  }
 
   try {
     const participant = await findParticipantByVk(vkId);

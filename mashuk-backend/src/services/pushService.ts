@@ -33,25 +33,38 @@ function sleep(ms: number): Promise<void> {
 
 type VkApiResult = { ok: boolean; status: string; errorCode?: number };
 
-async function vkGet(
+async function vkCall(
   method: string,
   params: Record<string, string>,
   token: string,
   attempt = 0,
+  usePost = false,
 ): Promise<VkApiResult> {
   await throttleVk();
   const qs = new URLSearchParams({ ...params, access_token: token, v: VK_VERSION });
-  const res = await fetch(`${VK_API}/${method}?${qs}`);
+  const res = usePost
+    ? await fetch(`${VK_API}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: qs.toString(),
+    })
+    : await fetch(`${VK_API}/${method}?${qs}`);
   const data = await res.json() as { error?: { error_msg: string; error_code?: number }; response?: unknown };
   if (data.error?.error_code === 6 || data.error?.error_code === 9) {
     if (attempt < 1) {
       await sleep(1000);
-      return vkGet(method, params, token, attempt + 1);
+      return vkCall(method, params, token, attempt + 1, usePost);
     }
     return { ok: false, status: 'error: rate_limited', errorCode: data.error.error_code };
   }
   if (data.error) {
-    return { ok: false, status: `error: ${data.error.error_msg}`, errorCode: data.error.error_code };
+    const code = data.error.error_code;
+    const msg = data.error.error_msg || 'unknown';
+    return {
+      ok: false,
+      status: code != null ? `error: ${msg} (code_${code})` : `error: ${msg}`,
+      errorCode: code,
+    };
   }
   return { ok: true, status: 'ok' };
 }
@@ -148,14 +161,19 @@ export async function sendCommunityMessage(vkId: number, text: string): Promise<
   if (!env.VK_COMMUNITY_TOKEN) {
     return { ok: false, status: 'skipped_no_community_token' };
   }
+  if (!vkId || vkId <= 0) {
+    return { ok: false, status: 'skipped_no_vk_id' };
+  }
   const body = text.slice(0, 3900);
   const message = (body + pushAppLinkSuffix()).slice(0, 4090);
   try {
-    const r = await vkGet('messages.send', {
-      user_id: String(vkId),
+    // Community tokens: peer_id + POST (GET truncates long messages / tokens).
+    const r = await vkCall('messages.send', {
+      peer_id: String(vkId),
       random_id: String(Math.floor(Math.random() * 2_000_000_000)),
       message,
-    }, env.VK_COMMUNITY_TOKEN);
+      dont_parse_links: '0',
+    }, env.VK_COMMUNITY_TOKEN, 0, true);
     return r.ok ? { ok: true, status: 'sent_community' } : r;
   } catch (err) {
     return { ok: false, status: `error: ${String(err)}` };
@@ -462,8 +480,28 @@ export async function sendTestCampaignToParticipant(
   });
   const vkText = formatVkPushText(notification.pushTitle, personalizedBody);
   const triggerType = `admin_test_${notification.id}`;
+  // Normal path: mini-app first, community only if mini fails.
   const deliveryStatus = await sendPushNotification([participantId], vkText, triggerType) ?? 'unknown';
-  return { personalizedBody, deliveryStatus };
+
+  // Extra probe: always verify community ЛС on admin test (even if mini already delivered).
+  // Otherwise operators think community is broken when they only see sent_mini.
+  let status = deliveryStatus;
+  if (p.vkId && env.VK_COMMUNITY_TOKEN && deliveryStatus === 'sent_mini') {
+    const probeText = `[тест ЛС сообщества]\n${vkText}`;
+    const comm = await sendCommunityMessage(p.vkId, probeText);
+    status = `${deliveryStatus}; community_probe:${comm.status}`;
+    await db.insert(pushLog).values({
+      participantId,
+      text: probeText.slice(0, 500),
+      triggerType: `${triggerType}_community_probe`,
+      sentAt: new Date(),
+      deliveryStatus: clipDeliveryStatus(comm.status),
+    });
+  } else if (p.vkId && !env.VK_COMMUNITY_TOKEN) {
+    status = `${deliveryStatus}; community_probe:skipped_no_community_token`;
+  }
+
+  return { personalizedBody, deliveryStatus: status };
 }
 
 export async function refreshNotificationStats(notificationId: number): Promise<void> {
