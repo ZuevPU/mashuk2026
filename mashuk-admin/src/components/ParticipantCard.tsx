@@ -993,7 +993,7 @@ export function ParticipantCardModal({
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ reason: 'Отмена выполнения администратором' }),
                             }).then(() => { onReloadCard(); }),
-                            'Выполнение отменено',
+                            'Задание отменено: баллы сняты, можно пройти снова',
                           )}
                         >
                           Отменить

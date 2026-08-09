@@ -1218,12 +1218,20 @@ export const adminRevokeTaskSubmissionHandler = async (req: AdminRequest, res: R
     section: 'moderation',
     objectId: String(submissionId),
     newValue: {
-      participantId: result.submission.participantId,
-      submissionId,
+      participantId: result.participantId,
+      taskId: result.taskId,
+      submissionId: result.submissionId,
       revokedLogIds: result.revokedLogIds,
+      deleted: true,
       reason,
     },
     isCritical: true,
   });
-  res.json({ submission: result.submission, revokedLogIds: result.revokedLogIds });
+  res.json({
+    deleted: true,
+    participantId: result.participantId,
+    taskId: result.taskId,
+    submissionId: result.submissionId,
+    revokedLogIds: result.revokedLogIds,
+  });
 };

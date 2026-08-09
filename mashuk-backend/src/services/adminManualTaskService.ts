@@ -1,9 +1,16 @@
-import { and, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, gte, gt, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { participants, pointsLog, taskSubmissions, tasks } from '../db/schema.js';
-import { revokePointsLogEntry } from './pointsService.js';
+import {
+  participants,
+  pointsLog,
+  taskQrScans,
+  taskSubmissions,
+  taskTeamConfirmations,
+  tasks,
+  userMedals,
+} from '../db/schema.js';
+import { recalculateParticipantTotals, revokePointsLogEntry } from './pointsService.js';
 import { assertTaskSubmissionAllowed } from './taskEligibility.js';
-import { applyTaskModeration } from './taskModerationService.js';
 import { evaluateMedalsForParticipant } from './medalEvaluator.js';
 import {
   completeSubmissionRewards,
@@ -101,7 +108,14 @@ export async function adminCompleteParticipantTask(
 }
 
 export type RevokeSubmissionResult =
-  | { ok: true; submission: typeof taskSubmissions.$inferSelect; revokedLogIds: number[] }
+  | {
+    ok: true;
+    deleted: true;
+    participantId: number;
+    taskId: number;
+    submissionId: number;
+    revokedLogIds: number[];
+  }
   | { ok: false; error: string; status: number };
 
 const TASK_AWARD_ACTIONS = ['task_complete', 'admin_manual_task'] as const;
@@ -111,39 +125,56 @@ async function revokePointsForSubmission(
   task: typeof tasks.$inferSelect,
   reason: string,
 ): Promise<number[]> {
-  const pts = submission.pointsAwarded ?? 0;
-  if (pts <= 0 || submission.status !== 'approved') return [];
-
-  if (submission.pointsLogId) {
-    const r = await revokePointsLogEntry(submission.pointsLogId, submission.participantId, reason);
-    if (r.ok) return [submission.pointsLogId];
-  }
-
-  const since = submission.checkedAt ?? submission.submittedAt ?? new Date(0);
+  const revoked = new Set<number>();
   const participantIds = new Set<number>([submission.participantId]);
-  if (task.confirmationType === 'team') {
+  if (task.confirmationType === 'team' || Array.isArray(submission.teamMemberIds)) {
     const teamIds = (submission.teamMemberIds as number[]) || [];
     teamIds.forEach(id => participantIds.add(id));
   }
 
-  const revoked: number[] = [];
-  for (const pid of participantIds) {
-    const rows = await db.select().from(pointsLog).where(and(
-      eq(pointsLog.participantId, pid),
-      inArray(pointsLog.actionType, [...TASK_AWARD_ACTIONS]),
-      eq(pointsLog.points, pts),
-      isNull(pointsLog.revokedAt),
-      gte(pointsLog.createdAt, new Date(since.getTime() - 60_000)),
-    )).orderBy(desc(pointsLog.createdAt)).limit(3);
+  // Primary: awardPoints stores submissionId on points_log.
+  const bySubmission = await db.select().from(pointsLog).where(and(
+    eq(pointsLog.submissionId, submission.id),
+    isNull(pointsLog.revokedAt),
+    gt(pointsLog.points, 0),
+  ));
+  for (const row of bySubmission) {
+    const r = await revokePointsLogEntry(row.id, row.participantId, reason);
+    if (r.ok) revoked.add(row.id);
+  }
 
-    for (const row of rows) {
-      const r = await revokePointsLogEntry(row.id, pid, reason);
-      if (r.ok) revoked.push(row.id);
+  if (submission.pointsLogId && !revoked.has(submission.pointsLogId)) {
+    const r = await revokePointsLogEntry(submission.pointsLogId, submission.participantId, reason);
+    if (r.ok) revoked.add(submission.pointsLogId);
+  }
+
+  // Fallback for older rows without submissionId / pointsLogId.
+  const pts = submission.pointsAwarded ?? 0;
+  if (pts > 0 && (submission.status === 'approved' || revoked.size === 0)) {
+    const since = submission.checkedAt ?? submission.submittedAt ?? new Date(0);
+    for (const pid of participantIds) {
+      const rows = await db.select().from(pointsLog).where(and(
+        eq(pointsLog.participantId, pid),
+        inArray(pointsLog.actionType, [...TASK_AWARD_ACTIONS]),
+        eq(pointsLog.points, pts),
+        isNull(pointsLog.revokedAt),
+        gte(pointsLog.createdAt, new Date(since.getTime() - 60_000)),
+      )).orderBy(desc(pointsLog.createdAt)).limit(3);
+
+      for (const row of rows) {
+        if (revoked.has(row.id)) continue;
+        const r = await revokePointsLogEntry(row.id, pid, reason);
+        if (r.ok) revoked.add(row.id);
+      }
     }
   }
-  return revoked;
+
+  return [...revoked];
 }
 
+/**
+ * Admin «Отменить»: снять баллы, убрать сдачу/QR-скан и дать пройти задание снова.
+ */
 export async function adminRevokeTaskSubmission(
   submissionId: number,
   reason?: string,
@@ -155,23 +186,40 @@ export async function adminRevokeTaskSubmission(
   if (!task) return { ok: false, error: 'Task not found', status: 404 };
 
   const revokeReason = reason?.trim() || 'Отмена выполнения администратором';
-  let revokedLogIds: number[] = [];
+  const revokedLogIds = await revokePointsForSubmission(existing, task, revokeReason);
 
-  if (existing.status === 'approved' && (existing.pointsAwarded ?? 0) > 0) {
-    revokedLogIds = await revokePointsForSubmission(existing, task, revokeReason);
+  // Medals awarded for this submission must not stay after cancel.
+  await db.delete(userMedals).where(eq(userMedals.submissionId, submissionId));
+  if (existing.userMedalId) {
+    await db.delete(userMedals).where(eq(userMedals.id, existing.userMedalId));
   }
 
-  const mod = await applyTaskModeration(submissionId, 'rejected', revokeReason);
-  if (!mod.ok) {
-    return { ok: false, error: mod.error, status: mod.status };
+  // QR success rows block re-scan even after submission delete.
+  await db.delete(taskQrScans).where(and(
+    eq(taskQrScans.participantId, existing.participantId),
+    eq(taskQrScans.taskId, existing.taskId),
+    eq(taskQrScans.outcome, 'success'),
+  ));
+  await db.delete(taskQrScans).where(eq(taskQrScans.submissionId, submissionId));
+
+  await db.delete(taskTeamConfirmations).where(eq(taskTeamConfirmations.submissionId, submissionId));
+  await db.delete(taskSubmissions).where(eq(taskSubmissions.id, submissionId));
+
+  const affectedParticipants = new Set<number>([existing.participantId]);
+  const teamIds = (existing.teamMemberIds as number[]) || [];
+  teamIds.forEach(id => affectedParticipants.add(id));
+
+  for (const pid of affectedParticipants) {
+    await recalculateParticipantTotals(pid);
+    await evaluateMedalsForParticipant(pid);
   }
 
-  await db.update(taskSubmissions)
-    .set({ pointsAwarded: 0 })
-    .where(eq(taskSubmissions.id, submissionId));
-
-  await evaluateMedalsForParticipant(existing.participantId);
-
-  const [submission] = await db.select().from(taskSubmissions).where(eq(taskSubmissions.id, submissionId)).limit(1);
-  return { ok: true, submission: submission!, revokedLogIds };
+  return {
+    ok: true,
+    deleted: true,
+    participantId: existing.participantId,
+    taskId: existing.taskId,
+    submissionId,
+    revokedLogIds,
+  };
 }
