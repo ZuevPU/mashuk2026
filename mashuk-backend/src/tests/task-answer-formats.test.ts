@@ -32,4 +32,18 @@ describe('task answer formats', () => {
     assert.equal(validateTaskSubmissionPayload(task, {}).ok, false);
     assert.equal(validateTaskSubmissionPayload(task, { answerText: 'hi' }).ok, true);
   });
+
+  it('QR tasks accept only matching qrToken even with photo answerType', () => {
+    const task = {
+      answerType: 'text_and_photo',
+      answerOptions: [],
+      confirmationMethods: ['qr'],
+      confirmationType: 'qr',
+      autoConfirm: true,
+      qrToken: 'A7K2X9',
+    } as any;
+    assert.equal(validateTaskSubmissionPayload(task, {}).ok, false);
+    assert.equal(validateTaskSubmissionPayload(task, { qrToken: 'WRONG1' }).ok, false);
+    assert.equal(validateTaskSubmissionPayload(task, { qrToken: 'A7K2X9' }).ok, true);
+  });
 });

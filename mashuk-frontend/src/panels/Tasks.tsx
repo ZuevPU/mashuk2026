@@ -78,6 +78,7 @@ function taskMethodsFromMeta(meta: { confirmationMethods?: string[]; confirmatio
 
 function taskConfirmLabel(task: { confirmationMethods?: string[]; confirmationType?: string; answerType?: string | null }): string {
   const methods = taskMethodsFromMeta(task);
+  if (methods.includes('qr')) return 'QR · скан у организатора';
   const at = task.answerType || (methods.includes('photo') ? 'text_and_photo' : 'text');
   const formatMap: Record<string, string> = {
     text: 'Текст',
@@ -91,7 +92,6 @@ function taskConfirmLabel(task: { confirmationMethods?: string[]; confirmationTy
   const parts = methods.map(m => {
     if (m === 'photo') return 'Фото до 5 МБ';
     if (m === 'link') return 'Ссылка';
-    if (m === 'qr') return 'QR';
     if (m === 'volunteer') return 'Волонтёр';
     if (m === 'team') return 'Команда';
     if (m === 'moderator') return 'на проверке у играпрактика';
@@ -285,16 +285,15 @@ const TaskSubmitModal = ({
     return answerText.trim();
   }, [answerType, selectedChoice, selectedMulti, answerText]);
 
-  const needsFreeText = answerType === 'text' || answerType === 'text_and_photo';
-  const needsPhoto = answerType === 'photo' || answerType === 'text_and_photo';
-  const isChoice = answerType === 'choice';
-  const isMulti = answerType === 'multi';
   const isQr = methods.includes('qr');
-  // QR presence is proven by camera deep-link — do not show the old link/paste field.
-  const needsPostUrl = methods.includes('link') && !isQr;
-  const needsTeam = methods.includes('team');
+  // QR tasks: only the scanned code matters — no answer inputs (incl. old tasks with text/photo answerType).
+  const needsFreeText = !isQr && (answerType === 'text' || answerType === 'text_and_photo');
+  const needsPhoto = !isQr && (answerType === 'photo' || answerType === 'text_and_photo');
+  const isChoice = !isQr && answerType === 'choice';
+  const isMulti = !isQr && answerType === 'multi';
+  const needsPostUrl = !isQr && methods.includes('link');
+  const needsTeam = !isQr && methods.includes('team');
   const isAuto = methods.length === 0;
-  const needsAnswerFields = needsFreeText || needsPhoto || needsPostUrl || needsTeam || isChoice || isMulti;
 
   useEffect(() => {
     if (!needsTeam || teamSearch.trim().length < 2) {
@@ -328,7 +327,11 @@ const TaskSubmitModal = ({
 
   const handleSubmit = async () => {
     if (!taskId || submitting) return;
-    if (answerType === 'text' && !answerText.trim() && !(isQr && effectiveQr)) {
+    if (isQr && !effectiveQr) {
+      setFormError('Отсканируйте QR, который даст организатор');
+      return;
+    }
+    if (!isQr && answerType === 'text' && !answerText.trim()) {
       setFormError('Введите текст ответа');
       return;
     }
@@ -352,28 +355,28 @@ const TaskSubmitModal = ({
       setFormError('Добавьте участников команды');
       return;
     }
-    if (isQr && !effectiveQr) {
-      setFormError('Отсканируйте QR задания');
-      return;
-    }
     setSubmitting(true);
     setFormError(null);
     try {
       const teamIds = selectedTeam.map(p => p.id);
       const res = await apiPost<{ xpAwarded?: number; track?: 'path' | 'experience' }>(`/tasks/${taskId}/submit`, {
-        answerText: submitAnswerText() || (isAuto || isQr ? 'Готово' : undefined),
-        photoUrl,
-        postUrl: postUrl || undefined,
-        teamMemberIds: teamIds.length ? teamIds : undefined,
+        answerText: isQr ? 'Готово' : (submitAnswerText() || (isAuto ? 'Готово' : undefined)),
+        photoUrl: isQr ? null : photoUrl,
+        postUrl: isQr ? undefined : (postUrl || undefined),
+        teamMemberIds: !isQr && teamIds.length ? teamIds : undefined,
         qrToken: effectiveQr || undefined,
         deviceKey: isQr ? getDeviceKey() : undefined,
       });
       const xp = res.xpAwarded ?? 0;
-      const teamPending = methods.includes('team');
+      const teamPending = !isQr && methods.includes('team');
       finishSuccess({
         confirm: {
           ...TASK_SUBMIT_CONFIRM,
-          titleTemplate: teamPending ? 'Задание отправлено команде' : TASK_SUBMIT_CONFIRM.titleTemplate,
+          titleTemplate: teamPending
+            ? 'Задание отправлено команде'
+            : isQr
+              ? 'QR-задание выполнено'
+              : TASK_SUBMIT_CONFIRM.titleTemplate,
           showPoints: xp > 0,
         },
         xpAwarded: xp,
@@ -397,19 +400,19 @@ const TaskSubmitModal = ({
         <TaskDetailHeader task={meta} />
 
         <div className="tasks-answer-block">
-          <div className="tasks-answer-block-title">Ваш ответ</div>
+          {!isQr && (
+            <div className="tasks-answer-block-title">Ваш ответ</div>
+          )}
           {isAuto && (
             <div style={{ fontSize: 13, marginBottom: 8 }}>
               Нажмите «Подтвердить» — задание подтвердится автоматически.
             </div>
           )}
           {isQr && (
-            <div className="tasks-qr-status" style={{ fontSize: 13, marginBottom: 12, lineHeight: 1.45 }}>
+            <div className="tasks-qr-status" style={{ fontSize: 14, marginBottom: 12, lineHeight: 1.45 }}>
               {effectiveQr
-                ? (needsAnswerFields
-                  ? 'QR принят. Напишите ваш ответ ниже и нажмите «Отправить на проверку».'
-                  : 'QR принят. Нажмите «Отправить», чтобы завершить задание.')
-                : 'Напишите ваш ответ ниже. Чтобы отправить задание, отсканируйте обычной камерой телефона QR, который выдаст организатор на событии — без этого QR выполнить и отправить задание нельзя.'}
+                ? 'QR принят. Нажмите «Отправить задание» — и всё.'
+                : 'Отсканируйте обычной камерой телефона QR, который даст организатор на событии, и отправьте задание. Без этого QR отправить задание нельзя.'}
             </div>
           )}
           {isChoice && answerOptions.map(opt => (
@@ -497,14 +500,21 @@ const TaskSubmitModal = ({
             onClick={() => void handleSubmit()}
             style={{ marginTop: 12 }}
             loading={submitting}
-            disabled={submitting || (isChoice && !selectedChoice) || (isMulti && selectedMulti.length === 0) || (answerType === 'text' && !answerText.trim() && !(isQr && effectiveQr)) || (needsPhoto && !photoUrl) || (isQr && !effectiveQr)}
+            disabled={
+              submitting
+              || (isQr && !effectiveQr)
+              || (!isQr && isChoice && !selectedChoice)
+              || (!isQr && isMulti && selectedMulti.length === 0)
+              || (!isQr && answerType === 'text' && !answerText.trim())
+              || (needsPhoto && !photoUrl)
+            }
           >
             {submitting
               ? 'Отправляем…'
               : isAuto
                 ? 'Подтвердить'
-                : isQr && effectiveQr && !needsAnswerFields
-                  ? 'Отправить'
+                : isQr
+                  ? 'Отправить задание'
                   : 'Отправить на проверку'}
           </Button>
         </div>

@@ -57,8 +57,8 @@ export function ScanPanel({ id }: { id: string }) {
         setPendingTaskQr(token, res.taskId);
         setStatus('ok');
         setMessage(res.taskTitle
-          ? `QR принят · ${res.taskTitle}. Откройте задание и отправьте ответ.`
-          : 'QR принят. Откройте задание и отправьте ответ.');
+          ? `QR принят · ${res.taskTitle}. Откройте задание и нажмите «Отправить задание».`
+          : 'QR принят. Откройте задание и нажмите «Отправить задание».');
         void routeNavigator.push(`/tasks?task=${res.taskId}`);
       })
       .catch((err) => {

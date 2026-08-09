@@ -279,6 +279,16 @@ export function validateTaskSubmissionPayload(
   const methods = taskMethodsForParticipant(task);
   const answerType = task.answerType || 'text_and_photo';
   const options = normalizeTaskAnswerOptions(task.answerOptions);
+  const isQrMethod = methods.includes('qr');
+
+  // QR tasks: the only required proof is a valid task QR (works for old tasks too).
+  if (isQrMethod) {
+    if (!task.qrToken) return { ok: false, error: 'QR для задания ещё не сгенерирован' };
+    if (!taskQrMatches(task.qrToken, body.qrToken)) {
+      return { ok: false, error: 'Отсканируйте QR задания или дождитесь подтверждения волонтёра' };
+    }
+    return { ok: true };
+  }
 
   if (answerType === 'text' && !body.answerText?.trim()) {
     return { ok: false, error: 'Введите текст ответа' };
@@ -315,12 +325,6 @@ export function validateTaskSubmissionPayload(
   if (methods.includes('team')) {
     const teamIds = Array.isArray(body.teamMemberIds) ? body.teamMemberIds.map(Number).filter(Boolean) : [];
     if (teamIds.length < 1) return { ok: false, error: 'Укажите участников команды' };
-  }
-  if (methods.includes('qr')) {
-    if (!task.qrToken) return { ok: false, error: 'QR для задания ещё не сгенерирован' };
-    if (!taskQrMatches(task.qrToken, body.qrToken)) {
-      return { ok: false, error: 'Отсканируйте QR задания или дождитесь подтверждения волонтёра' };
-    }
   }
   if (methods.length === 0) return { ok: true };
   if (!methods.includes('photo') && !methods.includes('link') && !methods.includes('team') && !methods.includes('qr')) {
