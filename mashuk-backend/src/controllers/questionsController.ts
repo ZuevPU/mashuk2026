@@ -466,9 +466,29 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
         parentEventId?: unknown;
         parentEventTitle?: unknown;
         text?: unknown;
+        reflections?: unknown;
       };
-      const reflectionText = typeof payload.text === 'string' ? payload.text.trim() : '';
-      if (reflectionText.length < 20) {
+
+      const reflectionsRaw = Array.isArray(payload.reflections) ? payload.reflections : null;
+      const reflectionTextsFromMulti = reflectionsRaw
+        ? reflectionsRaw.map((raw) => {
+          if (!raw || typeof raw !== 'object') return '';
+          const t = (raw as { text?: unknown }).text;
+          return typeof t === 'string' ? t.trim() : '';
+        })
+        : [];
+      const reflectionText = typeof payload.text === 'string'
+        ? payload.text.trim()
+        : (reflectionTextsFromMulti[0] || '');
+
+      if (isAfterBlocks && reflectionsRaw && reflectionsRaw.length > 0) {
+        if (reflectionTextsFromMulti.some(t => t.length < 20)) {
+          res.status(400).json({
+            error: 'Напишите осмысленный ответ по каждой выбранной подтеме (хотя бы пару предложений)',
+          });
+          return;
+        }
+      } else if (reflectionText.length < 20) {
         res.status(400).json({
           error: isAfterBlocks
             ? 'Напишите осмысленный ответ (хотя бы пару предложений)'
@@ -495,17 +515,64 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
             return;
           }
           if (tree.allowedLeafIds.length > 0) {
-            const eventId = Number(payload.eventId);
             const parentEventIdRaw = payload.parentEventId;
             const parentEventId = parentEventIdRaw == null || parentEventIdRaw === ''
               ? null
               : Number(parentEventIdRaw);
 
+            type LeafPick = {
+              id: number;
+              title: string;
+              place?: string | null;
+              startTime?: Date | string | null;
+              endTime?: Date | string | null;
+            };
+
+            const resolveLeaf = (parentNode: typeof tree.events[number], eventId: number): LeafPick | undefined => (
+              parentNode.children.length > 0
+                ? parentNode.children.find(c => c.id === eventId)
+                : (parentNode.id === eventId
+                  ? {
+                    id: parentNode.id,
+                    title: parentNode.title,
+                    place: parentNode.place,
+                    startTime: parentNode.startTime,
+                    endTime: parentNode.endTime,
+                  }
+                  : undefined)
+            );
+
+            const requestedItems: { eventId: number; text: string }[] = reflectionsRaw && reflectionsRaw.length > 0
+              ? reflectionsRaw.map((raw, idx) => {
+                const o = raw && typeof raw === 'object' ? raw as { eventId?: unknown; text?: unknown } : {};
+                return {
+                  eventId: Number(o.eventId),
+                  text: reflectionTextsFromMulti[idx] || '',
+                };
+              })
+              : [{ eventId: Number(payload.eventId), text: reflectionText }];
+
+            if (requestedItems.some(item => !Number.isFinite(item.eventId))) {
+              res.status(400).json({
+                error: 'Выберите подтему из списка для этого события',
+              });
+              return;
+            }
+
+            const uniqueIds = new Set(requestedItems.map(i => i.eventId));
+            if (uniqueIds.size !== requestedItems.length) {
+              res.status(400).json({
+                error: 'Выберите разные подтемы без повторов',
+              });
+              return;
+            }
+
+            const firstEventId = requestedItems[0].eventId;
             const parentNode = parentEventId != null
               ? tree.events.find(e => e.id === parentEventId)
               : tree.events.find(e => (
-                e.id === eventId
-                || e.children.some(c => c.id === eventId)
+                e.id === firstEventId
+                || e.children.some(c => c.id === firstEventId)
               ));
 
             if (!parentNode) {
@@ -515,31 +582,30 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
               return;
             }
 
-            const leaf = parentNode.children.length > 0
-              ? parentNode.children.find(c => c.id === eventId)
-              : (parentNode.id === eventId
-                ? {
-                  id: parentNode.id,
-                  title: parentNode.title,
-                  place: parentNode.place,
-                  startTime: parentNode.startTime,
-                  endTime: parentNode.endTime,
-                }
-                : undefined);
-
-            if (!leaf || !tree.allowedLeafIds.includes(leaf.id)) {
-              res.status(400).json({
-                error: 'Выберите подтему из списка для этого события',
-              });
-              return;
+            const resolved: { leaf: LeafPick; text: string }[] = [];
+            for (const item of requestedItems) {
+              const leaf = resolveLeaf(parentNode, item.eventId);
+              if (!leaf || !tree.allowedLeafIds.includes(leaf.id)) {
+                res.status(400).json({
+                  error: 'Выберите подтему из списка для этого события',
+                });
+                return;
+              }
+              resolved.push({ leaf, text: item.text });
             }
 
+            const first = resolved[0];
             normalizedAnswer = {
               parentEventId: parentNode.id,
               parentEventTitle: parentNode.title,
-              eventId: leaf.id,
-              eventTitle: leaf.title,
-              text: reflectionText,
+              eventId: first.leaf.id,
+              eventTitle: first.leaf.title,
+              text: first.text,
+              reflections: resolved.map(r => ({
+                eventId: r.leaf.id,
+                eventTitle: r.leaf.title,
+                text: r.text,
+              })),
               slotIndex,
             };
           } else {
@@ -549,6 +615,9 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
               eventId: null,
               eventTitle: null,
               text: reflectionText,
+              reflections: reflectionText
+                ? [{ eventId: null, eventTitle: null, text: reflectionText }]
+                : [],
               slotIndex,
             };
           }

@@ -116,43 +116,70 @@ function extractAnswerText(data: unknown): string {
   return '';
 }
 
-function parseAfterBlocks(data: unknown): {
+type ParsedAfterBlocks = {
   text: string;
   eventTitle: string | null;
   eventId: number | null;
   parentEventTitle: string | null;
   parentEventId: number | null;
   pathLabel: string | null;
-} {
-  const text = extractAnswerText(data);
+};
+
+function parseAfterBlocksItems(data: unknown): ParsedAfterBlocks[] {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    return {
-      text,
-      eventTitle: null,
-      eventId: null,
-      parentEventTitle: null,
-      parentEventId: null,
-      pathLabel: null,
-    };
+    const text = extractAnswerText(data);
+    return text
+      ? [{
+        text,
+        eventTitle: null,
+        eventId: null,
+        parentEventTitle: null,
+        parentEventId: null,
+        pathLabel: null,
+      }]
+      : [];
   }
   const o = data as Record<string, unknown>;
-  const eventTitle = typeof o.eventTitle === 'string' ? o.eventTitle : null;
   const parentEventTitle = typeof o.parentEventTitle === 'string' ? o.parentEventTitle : null;
-  const eventId = typeof o.eventId === 'number' ? o.eventId : (o.eventId != null ? Number(o.eventId) : null);
   const parentEventId = typeof o.parentEventId === 'number'
     ? o.parentEventId
     : (o.parentEventId != null ? Number(o.parentEventId) : null);
-  const pathLabel = parentEventTitle && eventTitle && parentEventTitle !== eventTitle
-    ? `${parentEventTitle} → ${eventTitle}`
-    : (eventTitle || parentEventTitle);
-  return {
-    text,
-    eventTitle,
-    eventId: eventId != null && Number.isFinite(eventId) ? eventId : null,
-    parentEventTitle,
-    parentEventId: parentEventId != null && Number.isFinite(parentEventId) ? parentEventId : null,
-    pathLabel,
+  const parentId = parentEventId != null && Number.isFinite(parentEventId) ? parentEventId : null;
+
+  const toItem = (eventTitle: string | null, eventIdRaw: unknown, text: string): ParsedAfterBlocks => {
+    const eventId = typeof eventIdRaw === 'number'
+      ? eventIdRaw
+      : (eventIdRaw != null ? Number(eventIdRaw) : null);
+    const pathLabel = parentEventTitle && eventTitle && parentEventTitle !== eventTitle
+      ? `${parentEventTitle} → ${eventTitle}`
+      : (eventTitle || parentEventTitle);
+    return {
+      text,
+      eventTitle,
+      eventId: eventId != null && Number.isFinite(eventId) ? eventId : null,
+      parentEventTitle,
+      parentEventId: parentId,
+      pathLabel,
+    };
   };
+
+  if (Array.isArray(o.reflections) && o.reflections.length > 0) {
+    const items = o.reflections.map((raw) => {
+      if (!raw || typeof raw !== 'object') return null;
+      const r = raw as Record<string, unknown>;
+      const text = typeof r.text === 'string' ? r.text.trim() : '';
+      if (!text) return null;
+      const eventTitle = typeof r.eventTitle === 'string' ? r.eventTitle : null;
+      return toItem(eventTitle, r.eventId, text);
+    }).filter((x): x is ParsedAfterBlocks => Boolean(x));
+    if (items.length) return items;
+  }
+
+  const text = extractAnswerText(data);
+  const eventTitle = typeof o.eventTitle === 'string' ? o.eventTitle : null;
+  const item = toItem(eventTitle, o.eventId, text);
+  if (!item.text && !item.pathLabel) return [];
+  return [item];
 }
 
 function afterBlocksPathLabel(r: Pick<KindAnswerRow, 'parentEventTitle' | 'eventTitle'>): string | null {
@@ -227,29 +254,31 @@ export async function collectKindAnswerRows(
     const day = q.dayNumber ?? 0;
 
     if (mode === 'after_blocks') {
-      const parsed = parseAfterBlocks(r.a.answerData);
-      if (!parsed.text && !parsed.pathLabel) continue;
-      rows.push({
-        answerId: r.a.id,
-        participantId: r.p.id,
-        name: fullName(r.p),
-        direction,
-        group,
-        day,
-        questionId: q.id,
-        questionTitle: q.title || q.text || `Вопрос #${q.id}`,
-        answer: parsed.text,
-        eventTitle: parsed.eventTitle,
-        eventId: parsed.eventId,
-        parentEventTitle: parsed.parentEventTitle,
-        parentEventId: parsed.parentEventId,
-        emotion: null,
-        emotionZone: null,
-        energy: null,
-        timePoint: q.timePoint ?? null,
-        filledAt: r.a.createdAt ? formatTs(r.a.createdAt) : null,
-        createdAt: r.a.createdAt ?? null,
-      });
+      const parsedItems = parseAfterBlocksItems(r.a.answerData);
+      for (const parsed of parsedItems) {
+        if (!parsed.text && !parsed.pathLabel) continue;
+        rows.push({
+          answerId: r.a.id,
+          participantId: r.p.id,
+          name: fullName(r.p),
+          direction,
+          group,
+          day,
+          questionId: q.id,
+          questionTitle: q.title || q.text || `Вопрос #${q.id}`,
+          answer: parsed.text,
+          eventTitle: parsed.eventTitle,
+          eventId: parsed.eventId,
+          parentEventTitle: parsed.parentEventTitle,
+          parentEventId: parsed.parentEventId,
+          emotion: null,
+          emotionZone: null,
+          energy: null,
+          timePoint: q.timePoint ?? null,
+          filledAt: r.a.createdAt ? formatTs(r.a.createdAt) : null,
+          createdAt: r.a.createdAt ?? null,
+        });
+      }
       continue;
     }
 

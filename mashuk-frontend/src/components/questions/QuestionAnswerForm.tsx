@@ -78,6 +78,21 @@ function formatStoredAnswer(
   if (typeof data === 'string') return data.trim();
   if (typeof data === 'object') {
     const o = data as Record<string, unknown>;
+    if (Array.isArray(o.reflections) && o.reflections.length > 0) {
+      const parent = typeof o.parentEventTitle === 'string' ? o.parentEventTitle.trim() : '';
+      const parts = o.reflections.map((raw) => {
+        if (!raw || typeof raw !== 'object') return '';
+        const r = raw as Record<string, unknown>;
+        const topic = typeof r.eventTitle === 'string' ? r.eventTitle.trim() : '';
+        const text = typeof r.text === 'string' ? r.text.trim() : '';
+        if (!text) return '';
+        const where = parent && topic && parent !== topic
+          ? `${parent} · ${topic}`
+          : (topic || parent);
+        return where ? `${where}\n\n${text}` : text;
+      }).filter(Boolean);
+      if (parts.length) return parts.join('\n\n——\n\n');
+    }
     if (typeof o.text === 'string' && o.text.trim()) {
       const parent = typeof o.parentEventTitle === 'string' ? o.parentEventTitle.trim() : '';
       const topic = typeof o.eventTitle === 'string' ? o.eventTitle.trim() : '';
@@ -262,7 +277,7 @@ const PickCard: React.FC<{
   </div>
 );
 
-/** После блоков: событие программы → подтема → текст */
+/** После блоков: событие → (мульти)подтемы → текст по каждой выбранной */
 const AfterBlocksForm: React.FC<{
   question: QuestionAnswerFormProps['question'];
   events: AfterBlocksEventNode[];
@@ -270,47 +285,83 @@ const AfterBlocksForm: React.FC<{
   onSubmit: (data: unknown) => Promise<void>;
 }> = ({ question, events, lessonPickMeta, onSubmit }) => {
   const [parentId, setParentId] = useState<number | null>(null);
-  const [topicId, setTopicId] = useState<number | null>(null);
-  const [text, setText] = useState('');
+  const [topicIds, setTopicIds] = useState<number[]>([]);
+  const [texts, setTexts] = useState<Record<number, string>>({});
+  const [textIndex, setTextIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState<'event' | 'topic' | 'text'>('event');
 
   const parent = events.find(e => e.id === parentId) || null;
   const children = parent?.children || [];
   const topicPickNeeded = children.length > 1;
-  const topic = children.length > 0
-    ? children.find(c => c.id === topicId) || null
-    : parent;
+  const selectedTopics: LessonPickEvent[] = (() => {
+    if (!parent) return [];
+    if (children.length === 0) return [parent];
+    return topicIds
+      .map(id => children.find(c => c.id === id))
+      .filter((c): c is LessonPickEvent => Boolean(c));
+  })();
+  const currentTopic = selectedTopics[textIndex] || null;
+  const currentText = currentTopic ? (texts[currentTopic.id] || '') : '';
+  const textOk = currentText.trim().length >= MIN_LESSON_REFLECTION_CHARS;
+  const isLastText = textIndex >= selectedTopics.length - 1;
   const emptyReason = lessonPickMeta?.emptyReason;
   const waiting = events.length === 0 && emptyReason === 'none_conducted_yet';
-  const textOk = text.trim().length >= MIN_LESSON_REFLECTION_CHARS;
-  const stepIndex = step === 'event' ? 1 : step === 'topic' ? 2 : (topicPickNeeded ? 3 : 2);
-  const totalSteps = topicPickNeeded ? 3 : 2;
+
+  const topicStepsCount = topicPickNeeded ? 1 : 0;
+  const textStepsCount = Math.max(selectedTopics.length, 1);
+  const totalSteps = 1 + topicStepsCount + textStepsCount;
+  const stepIndex = step === 'event'
+    ? 1
+    : step === 'topic'
+      ? 2
+      : (1 + topicStepsCount + textIndex + 1);
 
   const goAfterEventPick = (ev: AfterBlocksEventNode) => {
     if (ev.children.length === 0) {
-      setTopicId(ev.id);
+      setTopicIds([ev.id]);
+      setTexts({});
+      setTextIndex(0);
       setStep('text');
       return;
     }
     if (ev.children.length === 1) {
-      setTopicId(ev.children[0].id);
+      setTopicIds([ev.children[0].id]);
+      setTexts({});
+      setTextIndex(0);
       setStep('text');
       return;
     }
+    setTopicIds([]);
+    setTexts({});
+    setTextIndex(0);
     setStep('topic');
   };
 
+  const toggleTopic = (id: number) => {
+    setTopicIds(prev => (
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    ));
+  };
+
   const handleSubmit = async () => {
-    if (!parent || !topic || !textOk) return;
+    if (!parent || selectedTopics.length === 0) return;
+    const reflections = selectedTopics.map(t => ({
+      eventId: t.id,
+      eventTitle: t.title,
+      text: (texts[t.id] || '').trim(),
+    }));
+    if (reflections.some(r => r.text.length < MIN_LESSON_REFLECTION_CHARS)) return;
     setSaving(true);
     try {
+      const first = reflections[0];
       await onSubmit({
         parentEventId: parent.id,
         parentEventTitle: parent.title,
-        eventId: topic.id,
-        eventTitle: topic.title,
-        text: text.trim(),
+        eventId: first.eventId,
+        eventTitle: first.eventTitle,
+        text: first.text,
+        reflections,
       });
     } finally {
       setSaving(false);
@@ -355,7 +406,9 @@ const AfterBlocksForm: React.FC<{
               selected={parentId === ev.id}
               onClick={() => {
                 setParentId(ev.id);
-                setTopicId(null);
+                setTopicIds([]);
+                setTexts({});
+                setTextIndex(0);
               }}
             />
           ))}
@@ -381,28 +434,33 @@ const AfterBlocksForm: React.FC<{
             Событие: <b>{parent.title}</b>
           </div>
           <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
-            Какая подтема?
+            На каких подтемах вы были?
           </div>
           <div style={{ fontSize: 11, color: '#666', marginBottom: 10, lineHeight: 1.4 }}>
-            Выберите конкретный урок, практику или тему внутри блока.
+            Можно выбрать несколько — например, две практики в одном блоке. Дальше ответите по каждой по очереди.
           </div>
           {children.map(ev => (
             <PickCard
               key={ev.id}
               title={ev.title}
               meta={metaLine(ev)}
-              selected={topicId === ev.id}
-              onClick={() => setTopicId(ev.id)}
+              selected={topicIds.includes(ev.id)}
+              onClick={() => toggleTopic(ev.id)}
             />
           ))}
+          <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>
+            Выбрано: {topicIds.length}
+          </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <Button size="l" mode="secondary" onClick={() => setStep('event')}>Назад</Button>
             <Button
               size="l"
               stretched
-              disabled={topicId == null}
+              disabled={topicIds.length === 0}
               onClick={() => {
-                if (topicId == null) return;
+                if (topicIds.length === 0) return;
+                setTexts({});
+                setTextIndex(0);
                 setStep('text');
               }}
             >
@@ -412,43 +470,68 @@ const AfterBlocksForm: React.FC<{
         </>
       )}
 
-      {step === 'text' && (
+      {step === 'text' && currentTopic && (
         <>
-          {(parent || topic) && (
+          {(parent || currentTopic) && (
             <div style={{ fontSize: 12, marginBottom: 8, color: '#2D6A4F', lineHeight: 1.4 }}>
-              {parent && topic && parent.id !== topic.id
-                ? <>Событие: <b>{parent.title}</b><br />Подтема: <b>{topic.title}</b></>
-                : <>Событие: <b>{(topic || parent)?.title}</b></>}
+              {parent && parent.id !== currentTopic.id
+                ? <>Событие: <b>{parent.title}</b><br />Подтема: <b>{currentTopic.title}</b></>
+                : <>Событие: <b>{currentTopic.title}</b></>}
+              {selectedTopics.length > 1 && (
+                <div style={{ marginTop: 4, color: '#666' }}>
+                  Ответ {textIndex + 1} из {selectedTopics.length}
+                </div>
+              )}
             </div>
           )}
           <FormItem top="Что вынесли из этого блока?">
             <Textarea
-              value={text}
-              onChange={e => setText(e.target.value)}
+              value={currentText}
+              onChange={e => {
+                const value = e.target.value;
+                setTexts(prev => ({ ...prev, [currentTopic.id]: value }));
+              }}
               placeholder="Своими словами: какая мысль запомнилась, что попробуете на практике…"
             />
           </FormItem>
           <div style={{ fontSize: 11, color: textOk ? '#888' : '#B8621A', marginBottom: 4 }}>
-            {text.trim().length < MIN_LESSON_REFLECTION_CHARS
-              ? `Ещё минимум ${MIN_LESSON_REFLECTION_CHARS - text.trim().length} символов`
-              : 'Можно отправлять'}
+            {currentText.trim().length < MIN_LESSON_REFLECTION_CHARS
+              ? `Ещё минимум ${MIN_LESSON_REFLECTION_CHARS - currentText.trim().length} символов`
+              : (isLastText ? 'Можно отправлять' : 'Можно перейти дальше')}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <Button
               size="l"
               mode="secondary"
-              onClick={() => setStep(topicPickNeeded ? 'topic' : 'event')}
+              onClick={() => {
+                if (textIndex > 0) {
+                  setTextIndex(i => i - 1);
+                  return;
+                }
+                setStep(topicPickNeeded ? 'topic' : 'event');
+              }}
             >
               Назад
             </Button>
-            <Button
-              size="l"
-              stretched
-              disabled={saving || !textOk || !parent || !topic}
-              onClick={handleSubmit}
-            >
-              Отправить
-            </Button>
+            {isLastText ? (
+              <Button
+                size="l"
+                stretched
+                disabled={saving || !textOk || !parent || selectedTopics.length === 0}
+                onClick={handleSubmit}
+              >
+                Отправить
+              </Button>
+            ) : (
+              <Button
+                size="l"
+                stretched
+                disabled={!textOk}
+                onClick={() => setTextIndex(i => i + 1)}
+              >
+                Далее
+              </Button>
+            )}
           </div>
         </>
       )}

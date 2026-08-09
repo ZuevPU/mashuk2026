@@ -17,6 +17,24 @@ describe('profile PDF fonts and Cyrillic', () => {
     assert.equal(participantAnswerSummary({ interests: ['спорт', 'медиа'] }), 'спорт, медиа');
   });
 
+  it('humanizes multi after_blocks reflections', () => {
+    const summary = participantAnswerSummary({
+      parentEventId: 1,
+      parentEventTitle: 'Практики',
+      eventId: 11,
+      eventTitle: 'Практика А',
+      text: 'Первый вывод достаточно длинный',
+      reflections: [
+        { eventId: 11, eventTitle: 'Практика А', text: 'Первый вывод достаточно длинный' },
+        { eventId: 12, eventTitle: 'Практика Б', text: 'Второй вывод тоже осмысленный' },
+      ],
+    });
+    assert.match(summary, /Практики → Практика А/);
+    assert.match(summary, /Практики → Практика Б/);
+    assert.match(summary, /Первый вывод/);
+    assert.match(summary, /Второй вывод/);
+  });
+
   it('humanizes evening questionnaire ratings instead of raw JSON', () => {
     const payload = {
       food: 5,

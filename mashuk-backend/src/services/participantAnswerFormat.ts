@@ -160,6 +160,22 @@ export function participantAnswerSummary(data: unknown, type?: string | null): s
     return `${o.masterChoice.trim()}${dep}`;
   }
 
+  if (Array.isArray(o.reflections) && o.reflections.length > 0) {
+    const parent = typeof o.parentEventTitle === 'string' ? o.parentEventTitle.trim() : '';
+    const parts = o.reflections.map((raw) => {
+      if (!raw || typeof raw !== 'object') return '';
+      const r = raw as Record<string, unknown>;
+      const topic = typeof r.eventTitle === 'string' ? r.eventTitle.trim() : '';
+      const text = typeof r.text === 'string' ? r.text.trim() : '';
+      if (!text) return '';
+      const where = parent && topic && parent !== topic
+        ? `${parent} → ${topic}`
+        : (topic || parent);
+      return where ? `${where}: ${text}` : text;
+    }).filter(Boolean);
+    if (parts.length) return parts.join(' · ');
+  }
+
   if (typeof o.text === 'string' && o.text.trim()) {
     const parent = typeof o.parentEventTitle === 'string' ? o.parentEventTitle.trim() : '';
     const topic = typeof o.eventTitle === 'string' ? o.eventTitle.trim() : '';
