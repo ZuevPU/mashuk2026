@@ -14,16 +14,49 @@ export function createApp() {
   
   app.set('trust proxy', 1);
 
-  const corsOrigins = env.CORS_ORIGIN.split(',').map(s => s.trim()).filter(Boolean);
+  const corsOrigins = env.CORS_ORIGIN
+    .split(',')
+    .map(s => s.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+
+  const allowAny = corsOrigins.length === 0 || (corsOrigins.length === 1 && corsOrigins[0] === '*');
+  const allowedExact = new Set(corsOrigins.filter(o => o !== '*'));
+
+  const isAllowedOrigin = (origin: string | undefined): boolean => {
+    if (!origin) return true; // same-origin / non-browser
+    if (allowAny) return true;
+    const o = origin.replace(/\/$/, '');
+    if (allowedExact.has(o)) return true;
+    // Timeweb Apps hosts for this project (frontend/admin can get new suffixes after redeploy)
+    if (/^https:\/\/zuevpu-mashuk2026-[a-z0-9]+\.twc1\.net$/i.test(o)) return true;
+    // VK shell occasionally surfaces as request Origin in desktop WebView debugging
+    if (o === 'https://vk.ru' || o === 'https://m.vk.ru' || o === 'https://vk.com' || o === 'https://m.vk.com') {
+      return true;
+    }
+    return false;
+  };
+
   app.use(cors({
-    origin: corsOrigins.length === 1 && corsOrigins[0] === '*'
-      ? true
-      : corsOrigins.length > 0
-        ? corsOrigins
-        : true,
+    origin(origin, callback) {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(null, false);
+    },
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Shift-Id'],
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Admin-Shift-Id',
+      'X-Test-Vk-Id',
+      'Accept',
+      'Origin',
+    ],
     exposedHeaders: ['Content-Disposition', 'Content-Type', 'Content-Length'],
+    optionsSuccessStatus: 204,
+    maxAge: 86400,
   }));
 
   app.use(express.json({ limit: '6mb' }));
