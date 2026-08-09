@@ -18,7 +18,7 @@ import { resolveEveningSurveyDayForParticipant } from '../services/eveningSurvey
 import { ROLE_KEYS, getRoleMeta } from '../services/roleService.js';
 import { EVENING_SCALE_KEYS } from '../services/touchpointTemplates.js';
 import { awardPoints } from '../services/pointsService.js';
-import { collectAfterBlocksTree } from '../services/afterBlocksEvents.js';
+import { collectEveningProgramPickTree } from '../services/eveningProgramPickTree.js';
 import { resolveActiveShiftId } from '../services/shiftService.js';
 
 const scaleField = z.coerce.number().int().min(1).max(5).optional();
@@ -314,21 +314,8 @@ export async function loadDayContext(
 
   const programEventFieldDefs = eveningProgramEventFields(config);
   let programEventOptions: Record<string, {
-    events: Array<{
-      id: number;
-      title: string;
-      place: string | null;
-      startTime: Date | null;
-      endTime: Date | null;
-      children: Array<{
-        id: number;
-        title: string;
-        place: string | null;
-        startTime: Date | null;
-        endTime: Date | null;
-      }>;
-    }>;
-    emptyReason: 'none' | 'none_in_program' | 'none_conducted_yet';
+    events: ReturnType<typeof collectEveningProgramPickTree>['events'];
+    emptyReason: 'none' | 'none_in_program';
   }> = {};
   if (programEventFieldDefs.length > 0) {
     const shiftId = typeof (settings as { shiftId?: number }).shiftId === 'number'
@@ -340,17 +327,14 @@ export async function loadDayContext(
     ));
     const published = dayEv.filter(e => e.isPublished !== false && e.dayPublished !== false);
     for (const field of programEventFieldDefs) {
-      const tree = collectAfterBlocksTree(
+      const tree = collectEveningProgramPickTree(
         published,
         field.linkedEventIds,
         settings,
-        now,
       );
       programEventOptions[field.key] = {
         events: tree.events,
-        emptyReason: tree.events.length > 0
-          ? 'none'
-          : (tree.programBlockCount > 0 ? 'none_conducted_yet' : 'none_in_program'),
+        emptyReason: tree.events.length > 0 ? 'none' : 'none_in_program',
       };
     }
   }

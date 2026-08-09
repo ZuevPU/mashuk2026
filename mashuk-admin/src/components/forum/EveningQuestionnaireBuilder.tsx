@@ -276,10 +276,15 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
     )
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id);
 
-  const childThemesOf = (rootId: number) =>
-    programEvents
+  const childThemesOf = (rootId: number): ProgramEventRow[] => {
+    const direct = programEvents
       .filter(ev => ev.parentEventId === rootId && String(ev.blockType || '').toLowerCase() !== 'break')
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id);
+    return direct.flatMap(ev => {
+      const nested = childThemesOf(ev.id);
+      return nested.length ? [ev, ...nested] : [ev];
+    });
+  };
 
   const fieldTypeOptions = EVENING_FIELD_TYPE_OPTIONS.filter(o => o.value !== 'point_b_cta');
 

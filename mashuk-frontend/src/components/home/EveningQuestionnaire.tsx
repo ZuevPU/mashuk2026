@@ -22,21 +22,13 @@ export type EveningStep = {
 
 type RoleOpt = { roleKey: string; name: string };
 
-export type EveningProgramEventChild = {
-  id: number;
-  title: string;
-  place?: string | null;
-  startTime?: string | Date | null;
-  endTime?: string | Date | null;
-};
-
 export type EveningProgramEventNode = {
   id: number;
   title: string;
   place?: string | null;
   startTime?: string | Date | null;
   endTime?: string | Date | null;
-  children: EveningProgramEventChild[];
+  children: EveningProgramEventNode[];
 };
 
 export type EveningProgramEventValue = {
@@ -45,6 +37,31 @@ export type EveningProgramEventValue = {
   parentEventId?: number | null;
   parentEventTitle?: string | null;
 };
+
+function formatEventTimeRange(
+  start?: string | Date | null,
+  end?: string | Date | null,
+): string {
+  const fmt = (v: string | Date | null | undefined) => {
+    if (!v) return '';
+    const d = typeof v === 'string' ? new Date(v) : v;
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('ru-RU', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Europe/Moscow',
+    });
+  };
+  const a = fmt(start);
+  const b = fmt(end);
+  if (a && b) return `${a}–${b}`;
+  return a || b || '';
+}
+
+function countProgramLeaves(nodes: EveningProgramEventNode[] | undefined): number {
+  if (!nodes?.length) return 0;
+  return nodes.reduce((n, ch) => n + (ch.children?.length ? countProgramLeaves(ch.children) : 1), 0);
+}
 
 export type EveningExperimentContext = {
   status?: string;
@@ -121,125 +138,176 @@ function ProgramEventPicker({
   emptyReason?: string;
   onChange: (v: EveningProgramEventValue | null) => void;
 }) {
-  const [parentId, setParentId] = useState<number | null>(value?.parentEventId ?? value?.eventId ?? null);
-  const parent = nodes.find(e => e.id === parentId) || null;
-  const children = parent?.children || [];
-  const topicPickNeeded = children.length > 1;
-  const selectedTopicId = value?.eventId ?? null;
+  const [expanded, setExpanded] = useState<Record<number, boolean>>(() => {
+    const init: Record<number, boolean> = {};
+    for (const n of nodes) {
+      if (n.children?.length) init[n.id] = true;
+    }
+    return init;
+  });
 
   useEffect(() => {
-    if (!value) {
-      setParentId(null);
-      return;
-    }
-    setParentId(value.parentEventId ?? value.eventId);
-  }, [value?.eventId, value?.parentEventId]);
+    setExpanded(prev => {
+      const next = { ...prev };
+      for (const n of nodes) {
+        if (n.children?.length && next[n.id] === undefined) next[n.id] = true;
+      }
+      return next;
+    });
+  }, [nodes]);
 
-  const pickParent = (ev: EveningProgramEventNode) => {
-    setParentId(ev.id);
-    if (ev.children.length === 0) {
-      onChange({
-        eventId: ev.id,
-        eventTitle: ev.title,
-        parentEventId: ev.id,
-        parentEventTitle: ev.title,
-      });
-      return;
-    }
-    if (ev.children.length === 1) {
-      const c = ev.children[0];
-      onChange({
-        eventId: c.id,
-        eventTitle: c.title,
-        parentEventId: ev.id,
-        parentEventTitle: ev.title,
-      });
-      return;
-    }
-    onChange(null);
+  const toggle = (id: number) => {
+    setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const pickChild = (child: EveningProgramEventChild) => {
-    if (!parent) return;
+  const pickLeaf = (
+    leaf: EveningProgramEventNode,
+    root: EveningProgramEventNode,
+  ) => {
     onChange({
-      eventId: child.id,
-      eventTitle: child.title,
-      parentEventId: parent.id,
-      parentEventTitle: parent.title,
+      eventId: leaf.id,
+      eventTitle: leaf.title,
+      parentEventId: root.id,
+      parentEventTitle: root.title,
     });
   };
 
-  const waiting = nodes.length === 0 && emptyReason === 'none_conducted_yet';
+  const renderChild = (
+    node: EveningProgramEventNode,
+    root: EveningProgramEventNode,
+    depth: number,
+  ) => {
+    const hasKids = (node.children?.length ?? 0) > 0;
+    const isOpen = !!expanded[node.id];
+    const selected = !hasKids && value?.eventId === node.id;
+    const ownTime = formatEventTimeRange(node.startTime, node.endTime);
+
+    return (
+      <React.Fragment key={node.id}>
+        <button
+          type="button"
+          onClick={() => {
+            if (hasKids) toggle(node.id);
+            else pickLeaf(node, root);
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 8,
+            width: '100%',
+            textAlign: 'left',
+            marginLeft: Math.max(0, (depth - 1) * 10),
+            padding: '8px 10px',
+            borderRadius: 10,
+            border: selected ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
+            background: selected ? '#D8F3DC' : '#fff',
+            cursor: 'pointer',
+            fontSize: 13,
+          }}
+        >
+          <span style={{ color: '#888', minWidth: ownTime ? 72 : 14, fontSize: 12, fontWeight: 600 }}>
+            {ownTime || '·'}
+          </span>
+          <span style={{ flex: 1, lineHeight: 1.35 }}>
+            <span style={{ fontWeight: hasKids ? 600 : 500 }}>
+              {node.title}
+              {hasKids && !isOpen ? ` · ${countProgramLeaves(node.children)}` : ''}
+            </span>
+          </span>
+          <span style={{ color: '#888', fontSize: 12 }}>
+            {hasKids ? (isOpen ? '▼' : '▶') : '›'}
+          </span>
+        </button>
+        {hasKids && isOpen && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+            {node.children.map(ch => renderChild(ch, root, depth + 1))}
+          </div>
+        )}
+      </React.Fragment>
+    );
+  };
+
+  const renderRoot = (root: EveningProgramEventNode) => {
+    const hasKids = (root.children?.length ?? 0) > 0;
+    const isOpen = !!expanded[root.id];
+    const selected = !hasKids && value?.eventId === root.id;
+    const timeRange = formatEventTimeRange(root.startTime, root.endTime);
+    const leafCount = countProgramLeaves(root.children);
+
+    return (
+      <div
+        key={root.id}
+        style={{
+          border: '1px solid #E8E2D6',
+          borderRadius: 12,
+          padding: 10,
+          background: '#FBF9F5',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            if (hasKids) toggle(root.id);
+            else pickLeaf(root, root);
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 10,
+            width: '100%',
+            textAlign: 'left',
+            border: selected ? '2px solid #2D6A4F' : 'none',
+            background: selected ? '#D8F3DC' : 'transparent',
+            borderRadius: 10,
+            padding: selected ? 8 : 0,
+            cursor: 'pointer',
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            {timeRange && (
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#2D6A4F', marginBottom: 4 }}>
+                {timeRange}
+              </div>
+            )}
+            <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.35 }}>
+              {root.title}
+              {hasKids && !isOpen ? (
+                <span style={{ fontWeight: 500, color: '#888' }}> · {leafCount} тем</span>
+              ) : null}
+            </div>
+          </div>
+          <span style={{ color: '#666', fontSize: 13, marginTop: 2 }}>
+            {hasKids ? (isOpen ? '▼' : '▶') : '›'}
+          </span>
+        </button>
+
+        {hasKids && isOpen && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+            {root.children.map(ch => renderChild(ch, root, 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <FormItem top={<span className="evening-q__label">{field.label}</span>}>
       {nodes.length === 0 ? (
         <div style={{ fontSize: 12, color: '#888', lineHeight: 1.4 }}>
-          {waiting
-            ? 'События ещё не начались — список появится после старта блоков.'
+          {emptyReason === 'none_in_program'
+            ? 'В программе дня пока нет блоков для выбора.'
             : 'В программе дня пока нет блоков для выбора.'}
         </div>
       ) : (
         <>
-          <div style={{ fontSize: 11, color: '#666', marginBottom: 8 }}>
-            Сначала блок программы, затем тема / подтема (если есть).
+          <div style={{ fontSize: 11, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
+            Крупные блоки программы и темы внутри них — как в разделе «Программа». Выберите тему (›).
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: topicPickNeeded ? 10 : 0 }}>
-            {nodes.map(ev => {
-              const selected = parentId === ev.id;
-              return (
-                <button
-                  key={ev.id}
-                  type="button"
-                  onClick={() => pickParent(ev)}
-                  style={{
-                    textAlign: 'left',
-                    padding: '8px 10px',
-                    borderRadius: 10,
-                    border: selected ? '2px solid #2D6A4F' : '1px solid #ddd',
-                    background: selected ? '#D8F3DC' : '#fff',
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    fontWeight: 600,
-                  }}
-                >
-                  {ev.title}
-                  {ev.children.length > 1 && (
-                    <span style={{ fontWeight: 400, color: '#888', marginLeft: 6 }}>
-                      · {ev.children.length} тем
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {nodes.map(renderRoot)}
           </div>
-          {topicPickNeeded && parent && (
-            <>
-              <div style={{ fontSize: 12, fontWeight: 600, margin: '4px 0 6px' }}>Тема / подтема</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {children.map(c => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => pickChild(c)}
-                    style={{
-                      textAlign: 'left',
-                      padding: '8px 10px',
-                      borderRadius: 10,
-                      border: selectedTopicId === c.id ? '2px solid #2D6A4F' : '1px solid #ddd',
-                      background: selectedTopicId === c.id ? '#D8F3DC' : '#fff',
-                      cursor: 'pointer',
-                      fontSize: 13,
-                    }}
-                  >
-                    {c.title}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
           {value && (
-            <div style={{ fontSize: 12, color: '#2D6A4F', marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: '#2D6A4F', marginTop: 10, fontWeight: 600 }}>
               Выбрано: {value.parentEventTitle && value.parentEventTitle !== value.eventTitle
                 ? `${value.parentEventTitle} → ${value.eventTitle}`
                 : value.eventTitle}
