@@ -332,8 +332,14 @@ export function resolveSubmissionOutcome(
   const methods = taskMethodsForParticipant(task);
   const isTeam = methods.includes('team') || task.scopeType === 'team';
   const needsMod = taskNeedsModeration(task);
-  const qrOnlyAuto = methods.includes('qr') && opts.qrToken && task.qrToken === opts.qrToken;
-  const forceAuto = !isTeam && !needsMod && (methods.length === 0 || qrOnlyAuto || (task.autoConfirm && !methods.includes('moderator')));
+  // Valid task QR always auto-confirms (that is the confirmation method itself).
+  // Previously `needsMod` blocked forceAuto and XP never awarded after a good scan.
+  const qrConfirmed = methods.includes('qr') && !!opts.qrToken && task.qrToken === opts.qrToken;
+  const forceAuto = !isTeam && (
+    qrConfirmed
+    || methods.length === 0
+    || (!needsMod && !!task.autoConfirm && !methods.includes('moderator'))
+  );
   if (isTeam) return { isTeam: true, forceAuto: false, status: 'pending_team' };
   if (forceAuto) return { isTeam: false, forceAuto: true, status: 'approved' };
   return { isTeam: false, forceAuto: false, status: 'pending' };

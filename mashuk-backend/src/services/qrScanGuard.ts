@@ -1,4 +1,4 @@
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Request } from 'express';
 import { db } from '../db/index.js';
 import { taskQrScans } from '../db/schema.js';
@@ -39,25 +39,10 @@ export async function assertQrScanAllowed(params: {
     };
   }
 
-  const [deviceHit] = await db.select({
-    id: taskQrScans.id,
-    participantId: taskQrScans.participantId,
-  })
-    .from(taskQrScans)
-    .where(and(
-      eq(taskQrScans.taskId, params.taskId),
-      eq(taskQrScans.deviceKey, params.deviceKey),
-      eq(taskQrScans.outcome, 'success'),
-      ne(taskQrScans.participantId, params.participantId),
-    ))
-    .limit(1);
-  if (deviceHit) {
-    return {
-      ok: false,
-      error: 'Это QR-задание уже выполнено с этого же устройства другим участником. Откройте мини-приложение со своего телефона или попросите волонтёра подтвердить задание.',
-      outcome: 'blocked_device',
-    };
-  }
+  // Device-share block disabled for live forum: shared Wi‑Fi / WebView storage
+  // produced false positives ("works on my phone, not on theirs"). Same participant
+  // still cannot claim the QR twice (blocked_duplicate above).
+  void params.deviceKey;
 
   return { ok: true };
 }

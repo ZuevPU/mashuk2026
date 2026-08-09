@@ -230,18 +230,28 @@ const TaskSubmitModal = ({
     autoQrSubmitRef.current = false;
   }, [taskId, meta?._scannedQr]);
 
+  /** Top-layer portal card (above VK ModalPage). Keep submit modal open unless closing. */
+  const showQrOverlay = useCallback((payload: SubmitSuccessPayload) => {
+    onSubmitSuccess(payload);
+  }, [onSubmitSuccess]);
+
   const applyScannedQr = useCallback((raw: string) => {
     const token = extractTaskQrToken(raw);
     if (!token) {
-      setSnackbar('Не удалось прочитать QR — нужна ссылка с параметром qr=…');
+      showQrOverlay({
+        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Не удалось прочитать QR', showPoints: false },
+        detail: 'Нужна ссылка задания с параметром qr=… или откройте QR обычной камерой телефона.',
+        tone: 'error',
+        xpAwarded: 0,
+        track: 'experience',
+      });
       return false;
     }
     setScannedQr(token);
     setQrPaste(raw.trim());
     setFormError(null);
-    setSnackbar('QR задания распознан');
     return true;
-  }, [setSnackbar]);
+  }, [showQrOverlay]);
 
   const finishSuccess = useCallback((payload: SubmitSuccessPayload) => {
     onClose();
@@ -257,6 +267,8 @@ const TaskSubmitModal = ({
         titleTemplate: message.includes('проверк') ? 'Задание уже на проверке' : 'Задание уже отправлено',
         showPoints: false,
       },
+      detail: message,
+      tone: 'info',
       xpAwarded: 0,
       track: 'experience',
     });
@@ -274,18 +286,28 @@ const TaskSubmitModal = ({
     setSubmitting(true);
     setFormError(null);
     try {
-      const res = await apiPost<{ xpAwarded?: number; track?: 'path' | 'experience' }>(`/tasks/${taskId}/submit`, {
+      const res = await apiPost<{
+        xpAwarded?: number;
+        track?: 'path' | 'experience';
+        submission?: { status?: string };
+      }>(`/tasks/${taskId}/submit`, {
         answerText: 'Готово',
         qrToken: qrValue,
         deviceKey: getDeviceKey(),
       });
       const xp = res.xpAwarded ?? 0;
+      const status = res.submission?.status || (xp > 0 ? 'approved' : 'pending');
+      const approved = status === 'approved' || xp > 0;
       finishSuccess({
         confirm: {
           ...TASK_SUBMIT_CONFIRM,
-          titleTemplate: 'QR-задание выполнено',
+          titleTemplate: approved ? 'QR-задание выполнено' : 'QR принят — на проверке',
           showPoints: xp > 0,
         },
+        detail: approved
+          ? (xp > 0 ? `Начислено +${xp} опыта` : 'Задание подтверждено')
+          : 'Организаторы проверят ответ. Баллы придут после подтверждения.',
+        tone: approved ? 'success' : 'info',
         xpAwarded: xp,
         track: res.track ?? 'experience',
       });
@@ -295,10 +317,17 @@ const TaskSubmitModal = ({
         finishAlreadySubmitted(msg);
         return;
       }
+      showQrOverlay({
+        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Сканирование не принято', showPoints: false },
+        detail: msg,
+        tone: 'error',
+        xpAwarded: 0,
+        track: 'experience',
+      });
       setFormError(msg);
       setSubmitting(false);
     }
-  }, [taskId, submitting, finishSuccess, finishAlreadySubmitted]);
+  }, [taskId, submitting, finishSuccess, finishAlreadySubmitted, showQrOverlay]);
 
   const needsFreeText = answerType === 'text' || answerType === 'text_and_photo';
   const needsPhoto = answerType === 'photo' || answerType === 'text_and_photo';
@@ -437,7 +466,17 @@ const TaskSubmitModal = ({
                   onClick={async () => {
                     const result = await readCodeWithVk();
                     if (!result.ok) {
-                      setSnackbar(codeReaderFailureMessage(result.reason));
+                      showQrOverlay({
+                        confirm: {
+                          ...TASK_SUBMIT_CONFIRM,
+                          titleTemplate: result.reason === 'cancelled' ? 'Сканирование отменено' : 'Сканер недоступен',
+                          showPoints: false,
+                        },
+                        detail: codeReaderFailureMessage(result.reason),
+                        tone: result.reason === 'cancelled' ? 'info' : 'error',
+                        xpAwarded: 0,
+                        track: 'experience',
+                      });
                       return;
                     }
                     applyScannedQr(result.code);
@@ -463,7 +502,13 @@ const TaskSubmitModal = ({
                 style={{ marginTop: 8 }}
                 onClick={() => {
                   if (!qrPaste.trim()) {
-                    setSnackbar('Вставьте ссылку или токен из QR');
+                    showQrOverlay({
+                      confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Вставьте ссылку QR', showPoints: false },
+                      detail: 'Скопируйте ссылку с QR (#/tasks?task=…&qr=…) или отсканируйте камерой VK.',
+                      tone: 'info',
+                      xpAwarded: 0,
+                      track: 'experience',
+                    });
                     return;
                   }
                   applyScannedQr(qrPaste);
@@ -593,12 +638,28 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
   const scanTaskQr = useCallback(async () => {
     const result = await readCodeWithVk();
     if (!result.ok) {
-      setSnackbar(codeReaderFailureMessage(result.reason));
+      setSuccessPayload({
+        confirm: {
+          ...TASK_SUBMIT_CONFIRM,
+          titleTemplate: result.reason === 'cancelled' ? 'Сканирование отменено' : 'Сканер недоступен',
+          showPoints: false,
+        },
+        detail: codeReaderFailureMessage(result.reason),
+        tone: result.reason === 'cancelled' ? 'info' : 'error',
+        xpAwarded: 0,
+        track: 'experience',
+      });
       return;
     }
     const parsed = parseTaskQrScan(result.code);
     if (!parsed) {
-      setSnackbar('QR не содержит задание — нужна ссылка #/tasks?task=…&qr=…');
+      setSuccessPayload({
+        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Это не QR задания', showPoints: false },
+        detail: 'Нужна ссылка вида #/tasks?task=…&qr=…',
+        tone: 'error',
+        xpAwarded: 0,
+        track: 'experience',
+      });
       return;
     }
     const task = data?.tasks?.find((t: { id: number }) => t.id === parsed.taskId);
@@ -607,11 +668,9 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
         window.location.hash = `#/tasks?task=${parsed.taskId}&qr=${encodeURIComponent(parsed.qrToken)}`;
       }
       openSubmit({ ...task, _scannedQr: parsed.qrToken });
-      setSnackbar('QR задания распознан');
       return;
     }
     window.location.hash = `#/tasks?task=${parsed.taskId}&qr=${encodeURIComponent(parsed.qrToken)}`;
-    setSnackbar('Открываем задание…');
   }, [data?.tasks, openSubmit]);
 
   const load = useCallback(() => {

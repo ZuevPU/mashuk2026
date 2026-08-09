@@ -1278,17 +1278,18 @@ body {
 .rq-from { font-size: 9px; color: #aaa; margin-top: 2px; }
 .rq-btn { display: inline-block; background: var(--m-accent); color: #fff; font-size: 10px; font-weight: 700; border-radius: 8px; padding: 6px 14px; margin-top: 7px; cursor: pointer; border: none; font-family: inherit; }
 
-/* Answer / submit success overlay (questions, exchange, tasks) */
+/* Answer / submit success overlay — portaled to body, above VKUI ModalRoot */
 .answer-success-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 10000;
-  background: rgba(0, 0, 0, 0.45);
+  z-index: 2147483000;
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 .answer-success-shell {
   width: 100%;
@@ -1296,32 +1297,56 @@ body {
   margin: auto;
 }
 .answer-success-card {
-  margin: 0;
-  padding: 16px;
+  margin: 0 !important;
+  padding: 20px 18px !important;
   text-align: center;
+  background: #ffffff !important;
+  color: #1A1714 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28) !important;
 }
 .answer-success-title {
-  font-weight: 700;
-  margin-bottom: 6px;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin-bottom: 8px;
+  color: #1A1714 !important;
+}
+.answer-success-detail {
+  font-size: 14px;
+  line-height: 1.4;
+  color: #4A5568 !important;
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .answer-success-points {
-  font-size: 14px;
-  color: #444;
+  font-size: 16px;
+  font-weight: 700;
+  color: #B8621A !important;
+  margin-top: 4px;
 }
 .answer-success-medal {
   font-size: 14px;
   margin-top: 8px;
   padding: 10px;
   background: #FFFAF0;
+  color: #1A1714 !important;
   border-radius: 8px;
   text-align: left;
 }
 .answer-success-next {
   display: block;
   width: 100%;
-  margin-top: 12px;
+  margin-top: 14px;
   text-align: center;
   box-sizing: border-box;
+  background: #FF5500 !important;
+  color: #fff !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  border-radius: 12px !important;
+  padding: 12px 16px !important;
 }
 .peer-item { color: var(--m-text-main); }
 .peer-dir { font-size: 9px; color: var(--m-accent); font-weight: 600; }

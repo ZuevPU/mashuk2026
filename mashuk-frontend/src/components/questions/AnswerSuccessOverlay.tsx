@@ -1,3 +1,6 @@
+import type React from 'react';
+import { createPortal } from 'react-dom';
+
 export type AnswerConfirmationConfig = {
   enabled: boolean;
   showPoints: boolean;
@@ -9,6 +12,9 @@ export type SubmitSuccessPayload = {
   track?: 'path' | 'experience';
   newMedals?: { id: number; name: string }[];
   confirm?: AnswerConfirmationConfig;
+  /** Optional subtitle under the title (status / error hint). */
+  detail?: string;
+  tone?: 'success' | 'error' | 'info';
 };
 
 type Props = {
@@ -22,17 +28,31 @@ function trackLabel(track?: string): string {
 
 export const AnswerSuccessOverlay: React.FC<Props> = ({ payload, onDone }) => {
   if (!payload || payload.confirm?.enabled === false) return null;
+  if (typeof document === 'undefined') return null;
 
-  const { confirm, xpAwarded, track, newMedals } = payload;
+  const { confirm, xpAwarded, track, newMedals, detail, tone = 'success' } = payload;
   const showPoints = confirm?.showPoints !== false && (xpAwarded ?? 0) > 0;
   const title = confirm?.titleTemplate || 'Ответ отправлен';
   const medals = newMedals?.length ? newMedals : [];
+  const titleColor = tone === 'error' ? '#9B2C2C' : tone === 'info' ? '#2B6CB0' : '#1A1714';
 
-  return (
-    <div className="answer-success-backdrop" onClick={onDone}>
+  return createPortal(
+    <div
+      className="answer-success-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onClick={onDone}
+    >
       <div className="answer-success-shell" onClick={e => e.stopPropagation()}>
         <div className="m-card answer-success-card">
-          <div className="answer-success-title">✓ {title}</div>
+          <div className="answer-success-title" style={{ color: titleColor }}>
+            {tone === 'error' ? '✕ ' : tone === 'info' ? 'ℹ ' : '✓ '}
+            {title}
+          </div>
+          {detail && (
+            <div className="answer-success-detail">{detail}</div>
+          )}
           {showPoints && (
             <div className="answer-success-points">
               +{xpAwarded} {trackLabel(track)}
@@ -48,6 +68,7 @@ export const AnswerSuccessOverlay: React.FC<Props> = ({ payload, onDone }) => {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
