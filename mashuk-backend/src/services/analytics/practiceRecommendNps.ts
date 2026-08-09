@@ -1,4 +1,6 @@
-/** NPS по практикам из итоговой анкеты: recommendScore × выбранная практика. */
+/** NPS по практикам из итоговой анкеты: program_event.items[].score (+ legacy recommendScore). */
+
+import { normalizeEveningProgramEventValue } from '../eveningQuestionnaireConfig.js';
 
 export type PracticeRecommendNpsRow = {
   practice: string;
@@ -26,22 +28,14 @@ function emptyScores(): Record<string, number> {
   return Object.fromEntries(SCORE_KEYS.map(k => [k, 0]));
 }
 
-function practiceTitleFromEvent(raw: unknown): string | null {
-  if (raw == null) return null;
-  if (typeof raw === 'string' && raw.trim()) return raw.trim();
-  if (typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const o = raw as {
-    eventTitle?: string;
-    parentEventTitle?: string;
-    title?: string;
-    name?: string;
-  };
-  const title = String(o.eventTitle || o.title || o.name || '').trim();
-  const parent = String(o.parentEventTitle || '').trim();
+function practiceTitle(item: {
+  eventTitle?: string;
+  parentEventTitle?: string;
+}): string {
+  const title = String(item.eventTitle || '').trim();
+  const parent = String(item.parentEventTitle || '').trim();
   if (title && parent && parent !== title) return `${parent} → ${title}`;
-  if (title) return title;
-  if (parent) return parent;
-  return null;
+  return title || parent || 'Практика (без названия)';
 }
 
 function coerceScore(raw: unknown): number | null {
@@ -54,41 +48,48 @@ function coerceScore(raw: unknown): number | null {
 
 type ScoreHit = { practice: string; score: number };
 
-/** Достаёт пары «практика → оценка» из одной сданной анкеты. */
+/**
+ * Достаёт пары «практика → оценка» из одной сданной анкеты.
+ * Основной путь: любое поле типа program_event → { items: [{ eventTitle, score }] }.
+ * Legacy: practiceEvent/practiceName + recommendScore.
+ */
 export function extractPracticeScores(ratings: Record<string, unknown> | null | undefined): ScoreHit[] {
   if (!ratings || typeof ratings !== 'object') return [];
 
   const hits: ScoreHit[] = [];
-  const pe = ratings.practiceEvent;
+  const push = (practice: string, score: number) => {
+    // В одной анкете одна практика учитывается один раз.
+    if (hits.some(h => h.practice === practice)) return;
+    hits.push({ practice, score });
+  };
 
-  // Мульти-выбор: items[{ eventTitle, score }]
-  if (pe && typeof pe === 'object' && !Array.isArray(pe)) {
-    const items = (pe as { items?: unknown }).items;
-    if (Array.isArray(items) && items.length) {
-      for (const it of items) {
-        if (!it || typeof it !== 'object') continue;
-        const row = it as Record<string, unknown>;
-        const practice = practiceTitleFromEvent(row);
-        const score = coerceScore(row.score);
-        if (practice && score != null) hits.push({ practice, score });
-      }
-      if (hits.length) return hits;
+  // 1) Все значения анкеты: форма program_event (ключ любой — «Цепочка: Да → темы + оценки»).
+  for (const value of Object.values(ratings)) {
+    const normalized = normalizeEveningProgramEventValue(value);
+    if (!normalized?.items.length) continue;
+    for (const item of normalized.items) {
+      if (item.score == null) continue;
+      const score = coerceScore(item.score);
+      if (score == null) continue;
+      push(practiceTitle(item), score);
     }
   }
+  if (hits.length) return hits;
 
+  // 2) Legacy: отдельная шкала recommendScore + название практики
   const score = coerceScore(ratings.recommendScore);
   if (score == null) return [];
+
+  const ry = ratings.recommendYes;
+  if (ry === false || ry === 'false' || ry === 'no' || ry === 0 || ry === '0') return [];
 
   const fromName = typeof ratings.practiceName === 'string' && ratings.practiceName.trim()
     ? ratings.practiceName.trim()
     : null;
-  const fromEvent = practiceTitleFromEvent(pe);
+  const pe = normalizeEveningProgramEventValue(ratings.practiceEvent);
+  const fromEvent = pe?.items[0] ? practiceTitle(pe.items[0]) : null;
   const practice = fromName || fromEvent;
   if (!practice) return [];
-
-  // Если recommendYes явно «нет» — оценку не учитываем
-  const ry = ratings.recommendYes;
-  if (ry === false || ry === 'false' || ry === 'no' || ry === 0 || ry === '0') return [];
 
   return [{ practice, score }];
 }
@@ -148,7 +149,7 @@ export function buildPracticeRecommendNps(
     available: byPracticeRows.length > 0,
     note: byPracticeRows.length > 0
       ? 'Эталонный NPS (1–10): промоутеры 9–10, нейтралы 7–8, детракторы 1–6. NPS = %промоутеров − %детракторов. Только практики с оценкой.'
-      : 'Таблица появится, когда участники выберут практику и поставят оценку 1–10.',
+      : 'Таблица появится, когда участники выберут практику/тему из программы и поставят оценку 1–10 под ней.',
     byPractice: byPracticeRows,
   };
 }

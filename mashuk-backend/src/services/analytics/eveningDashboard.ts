@@ -17,6 +17,13 @@ import { buildPracticeRecommendNps } from './practiceRecommendNps.js';
 /** Эти поля сворачиваем в таблицу NPS по практикам — не дублируем графиком. */
 const PRACTICE_NPS_FIELD_KEYS = new Set(['recommendYes', 'recommendScore', 'practiceEvent', 'practiceName']);
 
+function isPracticeNpsField(f: { key: string; type: string; label?: string }): boolean {
+  if (PRACTICE_NPS_FIELD_KEYS.has(f.key)) return true;
+  // Любое «События программы + оценка 1–10» — источник строк таблицы.
+  if (f.type === 'program_event') return true;
+  return false;
+}
+
 export type EveningAnswerRow = {
   participantId: number;
   name: string;
@@ -213,9 +220,9 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
     })
     .sort((a, b) => b.submitted - a.submitted || a.direction.localeCompare(b.direction, 'ru'));
 
-  // Skip CTA-only fields without answers; recommend/practice → отдельная таблица NPS
+  // Skip CTA-only fields without answers; program_event / recommend* → таблица NPS
   const questions = fields
-    .filter(f => f.type !== 'point_b_cta' && !PRACTICE_NPS_FIELD_KEYS.has(f.key))
+    .filter(f => f.type !== 'point_b_cta' && !isPracticeNpsField(f))
     .map(f => aggregateField(f, submittedRows))
     .filter(q => q.answered > 0 || fields.some(f => f.key === q.key));
 
@@ -224,7 +231,7 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
   );
 
   const scaleFields = fields.filter(
-    f => (f.type === 'scale_1_5' || f.type === 'scale_1_10') && !PRACTICE_NPS_FIELD_KEYS.has(f.key),
+    f => (f.type === 'scale_1_5' || f.type === 'scale_1_10') && !isPracticeNpsField(f),
   );
 
   function scaleStatsForRows(slice: EveningExportRow[]) {
