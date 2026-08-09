@@ -15,7 +15,6 @@ export type DashboardId =
   | 'direction'
   | 'evening'
   | 'after-blocks'
-  | 'state-checks'
   | 'portrait'
   | 'program'
   | 'activity'
@@ -25,6 +24,17 @@ export type DashboardId =
   | 'departure'
   | 'overview'
   | 'roles';
+
+/** Старый id «state-checks» слит в «pulse». */
+function normalizeDashboardId(id: string | undefined | null): DashboardId {
+  if (id === 'state-checks') return 'pulse';
+  const allowed: DashboardId[] = [
+    'pulse', 'direction', 'evening', 'after-blocks', 'portrait', 'program',
+    'activity', 'piggybank', 'semantic', 'clubs', 'departure', 'overview', 'roles',
+  ];
+  if (id && (allowed as string[]).includes(id)) return id as DashboardId;
+  return 'overview';
+}
 
 export type InsightsMeta = {
   currentForumDay?: number;
@@ -62,7 +72,7 @@ type InsightsContextValue = {
   activity: string;
   setActivity: (v: string) => void;
   activeDashboardId: DashboardId;
-  setActiveDashboardId: (id: DashboardId) => void;
+  setActiveDashboardId: (id: DashboardId | string) => void;
   meta: InsightsMeta | null;
   metaLoading: boolean;
   reloadMeta: () => void;
@@ -106,7 +116,7 @@ function readStored(): StoredFilters | null {
       group: String(p.group ?? ''),
       ageCategory: String(p.ageCategory ?? ''),
       activity: String(p.activity ?? ''),
-      dash: (p.dash as DashboardId) || 'overview',
+      dash: normalizeDashboardId(p.dash),
     };
   } catch {
     return null;
@@ -135,7 +145,9 @@ export function InsightsProvider({
   const [group, setGroupState] = useState(initial.group);
   const [ageCategory, setAgeCategoryState] = useState(initial.ageCategory);
   const [activity, setActivityState] = useState(initial.activity);
-  const [activeDashboardId, setActiveDashboardIdState] = useState<DashboardId>(initial.dash);
+  const [activeDashboardId, setActiveDashboardIdState] = useState<DashboardId>(
+    normalizeDashboardId(initial.dash),
+  );
   const [meta, setMeta] = useState<InsightsMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(true);
   /**
@@ -170,9 +182,10 @@ export function InsightsProvider({
   const setGroup = (v: string) => { setGroupState(v); persist({ group: v }); };
   const setAgeCategory = (v: string) => { setAgeCategoryState(v); persist({ ageCategory: v }); };
   const setActivity = (v: string) => { setActivityState(v); persist({ activity: v }); };
-  const setActiveDashboardId = (id: DashboardId) => {
-    setActiveDashboardIdState(id);
-    persist({ dash: id });
+  const setActiveDashboardId = (id: DashboardId | string) => {
+    const next = normalizeDashboardId(id);
+    setActiveDashboardIdState(next);
+    persist({ dash: next });
     setTab('analytics');
   };
 
@@ -188,8 +201,11 @@ export function InsightsProvider({
 
   useEffect(() => {
     if (!analyticsDashboardAllowlist?.length) return;
-    if (!analyticsDashboardAllowlist.includes(activeDashboardId)) {
-      setActiveDashboardIdState(analyticsDashboardAllowlist[0] as DashboardId);
+    const list = analyticsDashboardAllowlist
+      .map(normalizeDashboardId)
+      .filter((id, i, arr) => arr.indexOf(id) === i);
+    if (!list.includes(activeDashboardId)) {
+      setActiveDashboardIdState(list[0] ?? 'overview');
     }
   }, [analyticsDashboardAllowlist, activeDashboardId]);
 

@@ -27,7 +27,39 @@ export async function getAnalyticsMetaHandler(req: AdminRequest, res: Response):
 
 export async function getPulseDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
   const filters = await resolveAnalyticsFilters(req);
-  res.json(await buildPulseDashboard(filters, req));
+  const [pulse, stateCheckRaw] = await Promise.all([
+    buildPulseDashboard(filters, req),
+    buildStateCheckDashboard(filters, req),
+  ]);
+  const stateCheck = stateCheckRaw as typeof stateCheckRaw & {
+    emotionalPulse?: {
+      avgEnergy?: number | null;
+      riskFatiguePct?: number | null;
+      phaseCounts?: Record<string, number>;
+      topReasons?: { token: string; count: number }[];
+    };
+  };
+  const scPulse = stateCheck.emotionalPulse ?? {};
+  res.json({
+    ...pulse,
+    emotionalPulse: {
+      ...pulse.emotionalPulse,
+      avgEnergy: scPulse.avgEnergy ?? null,
+      riskFatiguePct: scPulse.riskFatiguePct ?? null,
+      phaseCounts: scPulse.phaseCounts ?? pulse.activity?.stateChecks ?? null,
+      topReasons: scPulse.topReasons ?? pulse.stateReasons?.topTokens ?? [],
+    },
+    /** Операционка проверки состояния (бывший отдельный дашборд) */
+    stateCheck: {
+      activity: stateCheck.activity,
+      byDirection: stateCheck.byDirection,
+      questions: stateCheck.questions,
+      exportPath: stateCheck.exportPath,
+      diagnostics: stateCheck.diagnostics,
+      daySeries: stateCheck.daySeries,
+      byDirectionDaySeries: stateCheck.byDirectionDaySeries,
+    },
+  });
 }
 
 export async function getEveningDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
@@ -40,9 +72,9 @@ export async function getAfterBlocksDashboardHandler(req: AdminRequest, res: Res
   res.json(await buildAfterBlocksDashboard(filters, req));
 }
 
+/** Совместимость: старый URL редиректит логику в объединённый пульс. */
 export async function getStateCheckDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
-  const filters = await resolveAnalyticsFilters(req);
-  res.json(await buildStateCheckDashboard(filters, req));
+  return getPulseDashboardHandler(req, res);
 }
 
 export async function getDirectionDashboardHandler(req: AdminRequest, res: Response): Promise<void> {

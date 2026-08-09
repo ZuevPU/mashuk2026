@@ -8,7 +8,6 @@ export const DASH_TAB_SHORT: Record<string, string> = {
   pulse: 'Пульс',
   evening: 'Анкета вечера',
   'after-blocks': 'После блоков',
-  'state-checks': 'Состояние',
   portrait: 'Портрет',
   program: 'Программа',
   activity: 'Рейтинг',

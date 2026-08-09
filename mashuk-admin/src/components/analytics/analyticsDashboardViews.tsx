@@ -10,9 +10,7 @@ import {
   ChartTooltipRu,
   formatEmotionName,
   formatForumDay,
-  formatTouchpointKey,
   formatZoneName,
-  PHASE_LABELS,
   ZONE_COLORS,
   ZONE_ORDER,
   zonesByDayRows,
@@ -63,14 +61,22 @@ function ZoneBarChart({ title, zones, hint }: { title: string; zones?: Record<st
   );
 }
 
-export function PulseView({ data }: { data: any }) {
+export function PulseView({
+  data,
+  onOpenCard,
+}: {
+  data: any;
+  onOpenCard: AnalyticsTabProps['onOpenCard'];
+}) {
+  const { forumDay, direction, group } = useInsights();
   const zones = data.emotionalPulse?.zonesPercent ?? {};
+  const sc = data.stateCheck ?? {};
+  const scActivity = sc.activity ?? {};
   const series = (data.activity?.activitySeries ?? []).map((row: { day: number; answers: number; touchpoints: number }) => ({
     ...row,
     dayLabel: formatForumDay(row.day),
   }));
   const tp = data.activity?.touchpoints ?? {};
-  const stateChecks = data.activity?.stateChecks ?? {};
   const zoneDayRows = zonesByDayRows(data.emotionalPulse?.byDay ?? data.emotionalPulse?.compareZones);
   const registered = data.activity?.registered;
   const activeToday = data.activity?.activeToday;
@@ -81,54 +87,100 @@ export function PulseView({ data }: { data: any }) {
   const dirRows = (data.activity?.completionByDirection ?? []) as {
     direction: string; registered: number; activeParticipants: number; activityRatePct: number;
   }[];
+  const byDirection = (sc.byDirection ?? scActivity.byDirection ?? []) as {
+    direction: string; submitted: number; registered: number; fillRatePct: number; answers?: number;
+  }[];
+  const questions = (sc.questions ?? []) as KindQuestionStat[];
+  const notes = (sc.diagnostics?.notes ?? []) as string[];
+  const phaseCounts = data.emotionalPulse?.phaseCounts ?? data.activity?.stateChecks ?? {};
+  const topReasons = (data.emotionalPulse?.topReasons?.length
+    ? data.emotionalPulse.topReasons
+    : data.stateReasons?.topTokens) ?? [];
+
+  const exportPath = (() => {
+    if (typeof sc.exportPath === 'string' && sc.exportPath) return sc.exportPath;
+    const u = new URLSearchParams();
+    u.set('mode', 'day');
+    if (forumDay) u.set('day', forumDay);
+    if (direction) u.set('direction', direction);
+    if (group) u.set('group', group);
+    return `/exports/state-checks?${u.toString()}`;
+  })();
+
+  const downloadStateChecks = async () => {
+    const { adminDownloadBinary } = await import('../../admin/client');
+    const dayMatch = exportPath.match(/[?&]day=(\d+)/);
+    const dayPart = dayMatch ? `d${dayMatch[1]}` : 'shift';
+    await adminDownloadBinary(exportPath, `state_checks_${dayPart}.xlsx`);
+  };
 
   return (
     <div className="adm-dash-stack">
       <DashScreenTitle
         title="Пульс форума"
-        hint="Краткий срез дня. Рейтинг и задания — в дашборде «Рейтинг»."
+        hint="Активность дня + проверка состояния: зоны, энергия, охват и ответы участников."
       />
       <DashGrid cols={4}>
         <DashKpi
           value={dashVal(activeToday)}
-          label="участников активны сегодня"
+          label="активны сегодня"
           sub={registered != null ? `из ${registered} зарегистрированных` : undefined}
           accent="var(--m-text)"
         />
         <DashKpi
-          value={coveragePct != null ? `${coveragePct}%` : '—'}
-          label="охват активности"
-          sub="доля активных от зарегистрированных"
+          value={scActivity.fillRatePct != null ? `${scActivity.fillRatePct}%` : (coveragePct != null ? `${coveragePct}%` : '—')}
+          label="охват проверки состояния"
+          sub={scActivity.submitted != null ? `${scActivity.submitted} ответили` : 'доля активных'}
           accent="#22c55e"
         />
         <DashKpi
+          value={dashVal(data.emotionalPulse?.avgEnergy)}
+          label="средняя энергия"
+          sub="шкала 1–10"
+          accent="#f59e0b"
+        />
+        <DashKpi
+          value={data.emotionalPulse?.riskFatiguePct != null ? `${data.emotionalPulse.riskFatiguePct}%` : '—'}
+          label="риск + усталость"
+          sub="доля зон"
+          accent="#ef4444"
+        />
+      </DashGrid>
+      <DashGrid cols={4}>
+        <DashKpi
           value={dashVal(eveningDone)}
           label="итоги дня"
-          sub={Object.keys(stateChecks).length
-            ? Object.entries(stateChecks).map(([k, v]) => `${PHASE_LABELS[k] ?? k}: ${String(v)}`).join(' · ')
-            : 'проверки состояния'}
           accent="#f59e0b"
         />
         <DashKpi
           value={dashVal(Object.keys(tp).length ? (tp.total ?? Object.values(tp).reduce((a: number, b) => a + Number(b || 0), 0)) : null)}
           label="точки осмысления"
-          sub={Object.keys(tp).length
-            ? Object.entries(tp).filter(([k]) => k !== 'total').slice(0, 2).map(([k, v]) => `${formatTouchpointKey(k)}: ${v}`).join(' · ')
-            : undefined}
           accent="var(--m-accent)"
+        />
+        <DashKpi value={dashVal(phaseCounts?.morning ?? phaseCounts?.утро)} label="состояние · утро" />
+        <DashKpi
+          value={`${dashVal(phaseCounts?.day ?? phaseCounts?.день)} / ${dashVal(phaseCounts?.evening ?? phaseCounts?.вечер)}`}
+          label="состояние · день / вечер"
         />
       </DashGrid>
 
       <DayComparisonPanel
-        title="Динамика по дням"
+        title="Динамика по дням · активность"
         series={data.activity?.daySeries}
         byDirectionDaySeries={data.activity?.byDirectionDaySeries}
         metrics={PULSE_DAY_METRICS}
         directionMetricKey="coveragePct"
       />
+      <DayComparisonPanel
+        title="Динамика по дням · проверка состояния"
+        series={sc.daySeries ?? scActivity.daySeries}
+        byDirectionDaySeries={sc.byDirectionDaySeries ?? scActivity.byDirectionDaySeries}
+        metrics={STATE_CHECK_DAY_METRICS}
+        directionMetricKey="submitted"
+      />
 
       <DashGrid cols={2}>
-        <DashCard title="Динамика активности">
+        <DashCard title="Динамика ответов и точек">
           {series.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={series}>
@@ -153,11 +205,14 @@ export function PulseView({ data }: { data: any }) {
         </DashCard>
       </DashGrid>
 
+      <DashGrid cols={3}>
+        <ZoneBarChart title="Зоны · утро" zones={data.emotionalPulse?.byPhase?.morning} />
+        <ZoneBarChart title="Зоны · день" zones={data.emotionalPulse?.byPhase?.day} />
+        <ZoneBarChart title="Зоны · вечер" zones={data.emotionalPulse?.byPhase?.evening} />
+      </DashGrid>
+
       {(data.emotionalPulse?.emotions ?? []).length > 0 && (
         <DashCard title="11 эмоций проверки состояния">
-          <p className="adm-muted" style={{ fontSize: 12, marginTop: -4 }}>
-            Как в форме участника: все 11 эмоций, даже с нулём.
-          </p>
           <SrcBars items={(data.emotionalPulse.emotions as { id?: string; label: string; count: number; pct: number }[]).map(d => ({
             label: `${d.label || formatEmotionName(d.id)} (${d.pct}%) · ${d.count}`,
             count: d.count,
@@ -165,11 +220,36 @@ export function PulseView({ data }: { data: any }) {
         </DashCard>
       )}
 
+      {topReasons.length > 0 && (
+        <DashCard title="Частые слова в причинах">
+          <TagPills
+            tone="accent"
+            items={(topReasons as { token: string; count: number }[]).map(t => ({
+              label: `${t.token} · ${t.count}`,
+            }))}
+          />
+          {(data.stateReasons?.byDay ?? []).map((d: { day: number; topTokens: { token: string; count: number }[] }) => (
+            <div key={d.day} style={{ fontSize: 12, marginTop: 6 }}>
+              <strong>{formatForumDay(d.day)}</strong>: {d.topTokens.map(t => t.token).join(', ')}
+            </div>
+          ))}
+        </DashCard>
+      )}
+
+      {notes.length > 0 && (
+        <DashCard title="Примечания">
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
+            {notes.map(n => <li key={n}>{n}</li>)}
+          </ul>
+        </DashCard>
+      )}
+
+      <KindDirectionChart byDirection={byDirection} subtitle="Сколько участников направления заполнили проверки состояния" />
+
       {dirRows.length > 0 && (
         <DashCard title="Сигналы по направлениям">
           <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
-            Охват активностей среза: ответы на вопросы + сданные вечерние анкеты.
-            Норма ≥70%, внимание 50–69%, флаг ниже 50%. Сначала слабые направления.
+            Охват активностей среза. Норма ≥70%, внимание 50–69%, флаг ниже 50%.
           </p>
           <table className="adm-table">
             <thead>
@@ -196,15 +276,9 @@ export function PulseView({ data }: { data: any }) {
         </DashCard>
       )}
 
-      <DashGrid cols={2}>
-        <ZoneBarChart title="Зоны · утро" zones={data.emotionalPulse?.byPhase?.morning} />
-        <ZoneBarChart title="Зоны · день" zones={data.emotionalPulse?.byPhase?.day} />
-      </DashGrid>
-      <ZoneBarChart title="Зоны · вечер" zones={data.emotionalPulse?.byPhase?.evening} />
-
       {zoneDayRows.length > 0 && (
         <DashCard title="Зоны по дням">
-          <p className="adm-muted" style={{ fontSize: 12 }}>Каждая линия — одна эмоциональная зона, ось Y — доля ответов в %.</p>
+          <p className="adm-muted" style={{ fontSize: 12 }}>Каждая линия — эмоциональная зона, ось Y — доля ответов в %.</p>
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={zoneDayRows}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -228,27 +302,63 @@ export function PulseView({ data }: { data: any }) {
         </DashCard>
       )}
 
-      {(data.emotionalPulse?.byDirection ?? []).map((row: { direction: string; zones: Record<string, number> }) => (
-        <DashCard key={row.direction} title={`Направление: ${row.direction}`}>
-          <ZoneBars zones={row.zones} />
+      <SectionLabel>Ответы проверки состояния</SectionLabel>
+      {questions.map(q => (
+        <DashCard key={q.key} title={`${q.label}${q.day != null ? ` · D${q.day}` : ''}`}>
+          <div className="adm-muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            Ответов: {q.answered} · участников: {q.uniqueParticipants}
+          </div>
+          {q.distribution?.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <SrcBars items={q.distribution.map(d => ({ label: `${d.label} (${d.pct}%)`, count: d.count }))} />
+            </div>
+          )}
+          {q.answers.length === 0 ? (
+            <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>Ответов по этому вопросу пока нет.</p>
+          ) : (
+            <div style={{ maxHeight: 280, overflow: 'auto' }}>
+              <table className="adm-table">
+                <thead>
+                  <tr>
+                    <th>Участник</th>
+                    <th>Направление</th>
+                    <th>Группа</th>
+                    <th>Фаза</th>
+                    <th>Эмоция</th>
+                    <th>Зона</th>
+                    <th>Энергия</th>
+                    <th>Причина</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {q.answers.map((a, idx) => (
+                    <tr key={`${q.key}-${a.participantId}-${idx}`}>
+                      <td>
+                        <button type="button" className="adm-link" onClick={() => onOpenCard(a.participantId)}>
+                          {a.name || `#${a.participantId}`}
+                        </button>
+                      </td>
+                      <td>{a.direction || '—'}</td>
+                      <td>{a.group || '—'}</td>
+                      <td>{a.timePoint || '—'}</td>
+                      <td>{formatEmotionName(a.emotion)}</td>
+                      <td>{a.emotionZone ? formatZoneName(a.emotionZone) : '—'}</td>
+                      <td>{a.energy ?? '—'}</td>
+                      <td style={{ whiteSpace: 'pre-wrap', maxWidth: 360 }}>{a.answer || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </DashCard>
       ))}
 
-      {data.stateReasons?.topTokens?.length > 0 && (
-        <DashCard title="Причины состояния">
-          <TagPills
-            items={(data.stateReasons.topTokens as { token: string; count: number }[]).map(t => ({
-              label: `${t.token} · ${t.count}`,
-              tone: 'accent' as const,
-            }))}
-          />
-          {(data.stateReasons.byDay ?? []).map((d: { day: number; topTokens: { token: string; count: number }[] }) => (
-            <div key={d.day} style={{ fontSize: 12, marginTop: 6 }}>
-              <strong>{formatForumDay(d.day)}</strong>: {d.topTokens.map(t => t.token).join(', ')}
-            </div>
-          ))}
-        </DashCard>
-      )}
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0 8px' }}>
+        <button type="button" className="adm-btn adm-btn-primary" onClick={() => { void downloadStateChecks(); }}>
+          Скачать данные проверки состояния (Excel)
+        </button>
+      </div>
     </div>
   );
 }
@@ -1688,174 +1798,6 @@ export function AfterBlocksView({
       <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0 8px' }}>
         <button type="button" className="adm-btn adm-btn-primary" onClick={() => { void downloadFull(); }}>
           Скачать полностью данные «После блоков» (Excel)
-        </button>
-      </div>
-    </div>
-  );
-}
-
-export function StateChecksView({
-  data,
-  onOpenCard,
-}: {
-  data: any;
-  onOpenCard: AnalyticsTabProps['onOpenCard'];
-}) {
-  const { forumDay, direction, group } = useInsights();
-  const submitted = data.activity?.submitted ?? 0;
-  const answerCount = data.activity?.answerCount ?? 0;
-  const cohortSize = data.activity?.cohortSize ?? 0;
-  const fillRatePct = data.activity?.fillRatePct;
-  const questions = (data.questions ?? []) as KindQuestionStat[];
-  const notes = (data.diagnostics?.notes ?? []) as string[];
-  const byDirection = (data.byDirection ?? data.activity?.byDirection ?? []) as {
-    direction: string; submitted: number; registered: number; fillRatePct: number; answers?: number;
-  }[];
-  const pulse = data.emotionalPulse ?? {};
-  const exportPath = (() => {
-    if (typeof data.exportPath === 'string' && data.exportPath) return data.exportPath;
-    const u = new URLSearchParams();
-    u.set('mode', 'day');
-    if (forumDay) u.set('day', forumDay);
-    if (direction) u.set('direction', direction);
-    if (group) u.set('group', group);
-    return `/exports/state-checks?${u.toString()}`;
-  })();
-
-  const downloadFull = async () => {
-    const { adminDownloadBinary } = await import('../../admin/client');
-    const dayMatch = exportPath.match(/[?&]day=(\d+)/);
-    const dayPart = dayMatch ? `d${dayMatch[1]}` : 'shift';
-    await adminDownloadBinary(exportPath, `state_checks_${dayPart}.xlsx`);
-  };
-
-  return (
-    <div className="adm-dash-stack">
-      <DashScreenTitle
-        title="Проверка состояния"
-        hint="Утро / день / вечер: зоны эмоций, энергия, охват по направлениям и полный список ответов по каждому вопросу."
-      />
-      <DashGrid cols={4}>
-        <DashKpi value={dashVal(submitted)} label="участников ответили" sub={cohortSize ? `из ${cohortSize} зарегистрированных` : undefined} accent="var(--m-accent)" />
-        <DashKpi value={fillRatePct != null ? `${fillRatePct}%` : '—'} label="охват заполнения" accent="#22c55e" />
-        <DashKpi value={dashVal(pulse.avgEnergy)} label="средняя энергия" sub="шкала 1–10" accent="#f59e0b" />
-        <DashKpi value={pulse.riskFatiguePct != null ? `${pulse.riskFatiguePct}%` : '—'} label="риск + усталость" sub="доля зон" accent="#ef4444" />
-      </DashGrid>
-
-      <DayComparisonPanel
-        title="Динамика по дням · проверка состояния"
-        series={data.daySeries ?? data.activity?.daySeries}
-        byDirectionDaySeries={data.byDirectionDaySeries ?? data.activity?.byDirectionDaySeries}
-        metrics={STATE_CHECK_DAY_METRICS}
-        directionMetricKey="submitted"
-      />
-
-      <DashGrid cols={3}>
-        <DashKpi value={dashVal(pulse.phaseCounts?.morning)} label="ответов · утро" />
-        <DashKpi value={dashVal(pulse.phaseCounts?.day)} label="ответов · день" />
-        <DashKpi value={dashVal(pulse.phaseCounts?.evening)} label="ответов · вечер" />
-      </DashGrid>
-
-      {notes.length > 0 && (
-        <DashCard title="Примечания">
-          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
-            {notes.map(n => <li key={n}>{n}</li>)}
-          </ul>
-        </DashCard>
-      )}
-
-      <KindDirectionChart byDirection={byDirection} subtitle="Сколько участников направления заполнили проверки состояния" />
-
-      <ZoneBarChart title="Зоны эмоций · всего" zones={pulse.zonesPercent} />
-      <DashGrid cols={3}>
-        <ZoneBarChart title="Зоны · утро" zones={pulse.byPhase?.morning} />
-        <ZoneBarChart title="Зоны · день" zones={pulse.byPhase?.day} />
-        <ZoneBarChart title="Зоны · вечер" zones={pulse.byPhase?.evening} />
-      </DashGrid>
-
-      {(pulse.emotions ?? []).length > 0 && (
-        <DashCard title="11 эмоций">
-          <p className="adm-muted" style={{ fontSize: 12, marginTop: -4 }}>
-            Как в форме участника: все 11 эмоций, даже с нулём.
-          </p>
-          <SrcBars items={(pulse.emotions as { id?: string; label: string; count: number; pct: number }[]).map(d => ({
-            label: `${d.label || formatEmotionName(d.id)} (${d.pct}%) · ${d.count}`,
-            count: d.count,
-          }))} />
-        </DashCard>
-      )}
-
-      {(pulse.topReasons ?? []).length > 0 && (
-        <DashCard title="Частые слова в причинах">
-          <TagPills items={(pulse.topReasons as { token: string; count: number }[]).map(t => ({
-            label: `${t.token} · ${t.count}`,
-          }))} />
-        </DashCard>
-      )}
-
-      {!questions.length && (
-        <DashCard title="Нет данных">
-          <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>
-            В выбранном срезе нет опубликованных проверок состояния или ответов ещё нет.
-          </p>
-        </DashCard>
-      )}
-
-      {questions.map(q => (
-        <DashCard key={q.key} title={`${q.label}${q.day != null ? ` · D${q.day}` : ''}`}>
-          <div className="adm-muted" style={{ fontSize: 12, marginBottom: 8 }}>
-            Ответов: {q.answered} · участников: {q.uniqueParticipants}
-            {answerCount ? ` · всего ответов в срезе: ${answerCount}` : ''}
-          </div>
-          {q.distribution?.length > 0 && (
-            <div style={{ marginBottom: 12 }}>
-              <SrcBars items={q.distribution.map(d => ({ label: `${d.label} (${d.pct}%)`, count: d.count }))} />
-            </div>
-          )}
-          {q.answers.length === 0 ? (
-            <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>Ответов по этому вопросу пока нет.</p>
-          ) : (
-            <div style={{ maxHeight: 280, overflow: 'auto' }}>
-              <table className="adm-table">
-                <thead>
-                  <tr>
-                    <th>Участник</th>
-                    <th>Направление</th>
-                    <th>Группа</th>
-                    <th>Фаза</th>
-                    <th>Эмоция</th>
-                    <th>Зона</th>
-                    <th>Энергия</th>
-                    <th>Причина</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {q.answers.map((a, idx) => (
-                    <tr key={`${q.key}-${a.participantId}-${idx}`}>
-                      <td>
-                        <button type="button" className="adm-link" onClick={() => onOpenCard(a.participantId)}>
-                          {a.name || `#${a.participantId}`}
-                        </button>
-                      </td>
-                      <td>{a.direction || '—'}</td>
-                      <td>{a.group || '—'}</td>
-                      <td>{a.timePoint || '—'}</td>
-                      <td>{formatEmotionName(a.emotion)}</td>
-                      <td>{a.emotionZone ? formatZoneName(a.emotionZone) : '—'}</td>
-                      <td>{a.energy ?? '—'}</td>
-                      <td style={{ whiteSpace: 'pre-wrap', maxWidth: 360 }}>{a.answer || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </DashCard>
-      ))}
-
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0 8px' }}>
-        <button type="button" className="adm-btn adm-btn-primary" onClick={() => { void downloadFull(); }}>
-          Скачать полностью данные «Проверка состояния» (Excel)
         </button>
       </div>
     </div>
