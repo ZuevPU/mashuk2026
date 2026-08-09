@@ -1560,6 +1560,12 @@ export const crudTasks = {
     const q = (req.query.q as string | undefined)?.trim();
     const includeHidden = req.query.includeHidden === 'true';
     const shiftId = await resolveAdminShiftId(req);
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limitRaw = req.query.limit;
+    /** Without `limit` — return all (dropdowns / legacy). With `limit` — page size 1…500. */
+    const limit = limitRaw == null || limitRaw === ''
+      ? null
+      : Math.max(1, Math.min(500, Number(limitRaw) || 50));
 
     const conditions: ReturnType<typeof eq>[] = [eq(tasks.shiftId, shiftId)];
     if (status) conditions.push(eq(tasks.status, status));
@@ -1583,13 +1589,20 @@ export const crudTasks = {
     }
 
     const where = conditions.length ? and(...conditions) : undefined;
-    const rows = await db.select({
+    const [totalRow] = await db.select({ cnt: count() }).from(tasks).where(where);
+    const totalCount = Number(totalRow?.cnt ?? 0);
+
+    const baseQuery = db.select({
       task: tasks,
       category: taskCategories,
     }).from(tasks)
       .leftJoin(taskCategories, eq(tasks.categoryId, taskCategories.id))
       .where(where)
       .orderBy(asc(tasks.id));
+
+    const rows = limit != null
+      ? await baseQuery.limit(limit).offset((page - 1) * limit)
+      : await baseQuery;
 
     const taskIds = rows.map(r => r.task.id);
     const statsMap = new Map<number, { completionCount: number; pendingCount: number }>();
@@ -1624,7 +1637,9 @@ export const crudTasks = {
         r.category,
         statsMap.get(r.task.id) ?? { completionCount: 0, pendingCount: 0 },
       )),
-      totalCount: rows.length,
+      totalCount,
+      page,
+      limit: limit ?? totalCount,
     });
   },
   create: async (req: AdminRequest, res: Response) => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
 import { adminFetchHtml, downloadDataUrl } from '../../admin/client';
 import { AdminPageHero } from '../admin/AdminPageHero';
+import { Pagination } from '../admin/Pagination';
 import type { AdminTabProps } from '../admin/types';
 import type { ProgramPlace } from '../program/types';
 import { TaskCategoriesBlock } from './TaskCategoriesBlock';
@@ -21,6 +22,9 @@ import {
 } from './types';
 
 type ListTab = 'active' | 'drafts' | 'archive';
+type PageSize = 50 | 100 | 500;
+
+const PAGE_SIZE_OPTIONS: PageSize[] = [50, 100, 500];
 
 function buildListQuery(params: {
   tab: ListTab;
@@ -28,12 +32,16 @@ function buildListQuery(params: {
   categoryId: string;
   day: string;
   confirmationMethod: string;
+  page: number;
+  limit: PageSize;
 }): string {
   const sp = new URLSearchParams();
   if (params.tab === 'active') sp.set('status', 'published');
   if (params.tab === 'drafts') sp.set('status', 'draft');
   if (params.tab === 'archive') sp.set('status', 'archived');
   sp.set('includeHidden', 'true');
+  sp.set('page', String(params.page));
+  sp.set('limit', String(params.limit));
   if (params.q.trim()) sp.set('q', params.q.trim());
   if (params.categoryId) sp.set('categoryId', params.categoryId);
   if (params.day) sp.set('day', params.day);
@@ -45,6 +53,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState<AdminTask[]>([]);
   const [totalAll, setTotalAll] = useState(0);
+  const [filteredTotal, setFilteredTotal] = useState(0);
   const [categories, setCategories] = useState<TaskCategory[]>([]);
   const [medals, setMedals] = useState<MedalOption[]>([]);
   const [places, setPlaces] = useState<ProgramPlace[]>([]);
@@ -56,6 +65,8 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [dayFilter, setDayFilter] = useState('');
   const [methodFilter, setMethodFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSize>(50);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [showCategories, setShowCategories] = useState(false);
 
@@ -67,8 +78,16 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const listQuery = useMemo(
-    () => buildListQuery({ tab, q: search, categoryId: categoryFilter, day: dayFilter, confirmationMethod: methodFilter }),
-    [tab, search, categoryFilter, dayFilter, methodFilter],
+    () => buildListQuery({
+      tab,
+      q: search,
+      categoryId: categoryFilter,
+      day: dayFilter,
+      confirmationMethod: methodFilter,
+      page,
+      limit: pageSize,
+    }),
+    [tab, search, categoryFilter, dayFilter, methodFilter, page, pageSize],
   );
 
   const listQueryHasFilters = useMemo(
@@ -127,7 +146,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       level: m.level ?? null,
     })));
     setPlaces((await adminFetch('/program-places')).places || []);
-    const allRes = await adminFetch('/tasks');
+    const allRes = await adminFetch('/tasks?limit=1&page=1');
     setTotalAll(allRes.totalCount ?? (allRes.tasks?.length || 0));
     return { td, cd };
   }, [adminFetch]);
@@ -135,6 +154,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const loadTasks = useCallback(async () => {
     const res = await adminFetch(`/tasks?${listQuery}`);
     setTasks(res.tasks || []);
+    setFilteredTotal(res.totalCount ?? (res.tasks?.length || 0));
   }, [adminFetch, listQuery]);
 
   const load = useCallback(async () => {
@@ -151,6 +171,15 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     load().catch(() => setLoading(false));
     setSelectedIds(new Set());
   }, [load, reloadKey]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [tab, search, categoryFilter, dayFilter, methodFilter, pageSize]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filteredTotal / pageSize) || 1);
+    if (page > maxPage) setPage(maxPage);
+  }, [filteredTotal, pageSize, page]);
 
   const openCreate = async () => {
     const meta = await loadMeta();
@@ -300,10 +329,10 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       <AdminPageHero
         title={
           listQueryHasFilters
-            ? `Задания · ${tasks.length} в списке · ${totalAll} всего`
-            : `Задания · ${totalAll} всего`
+            ? `Задания · ${filteredTotal} в фильтре · ${totalAll} всего`
+            : `Задания · ${filteredTotal} в списке · ${totalAll} всего`
         }
-        hint="Список заданий форума. Справочник категорий — ниже. Проверка ответов играпрактиком — в меню строки."
+        hint="Список заданий форума. Справочник категорий — ниже. Проверка ответов играпрактиком — в меню строки. Лимита на создание нет."
       >
         <div className="adm-seg" style={{ marginBottom: 12 }}>
           {tabs.map(t => (
@@ -312,7 +341,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             </button>
           ))}
         </div>
-        <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
           <input
             className="adm-input"
             value={search}
@@ -338,6 +367,18 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
               <option key={m.key} value={m.key}>{m.label}</option>
             ))}
           </select>
+          <div className="adm-seg" title="Сколько заданий показать на странице">
+            {PAGE_SIZE_OPTIONS.map(n => (
+              <button
+                key={n}
+                type="button"
+                className={pageSize === n ? 'on' : ''}
+                onClick={() => setPageSize(n)}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
           <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={openCreate}>
             + Создать задание
           </button>
@@ -374,6 +415,11 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       )}
 
       <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+          <span className="adm-muted" style={{ fontSize: 12 }}>
+            Показано {tasks.length} из {filteredTotal} · по {pageSize} на странице
+          </span>
+        </div>
         <TasksListTable
           tasks={tasks}
           categoriesById={categoriesById}
@@ -388,6 +434,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           onDelete={deleteTask}
           onModerate={setModeratingTask}
         />
+        <Pagination page={page} total={filteredTotal} limit={pageSize} setPage={setPage} />
       </div>
 
       {moderatingTask && (
