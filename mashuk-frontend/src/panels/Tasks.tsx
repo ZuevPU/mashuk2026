@@ -5,6 +5,7 @@ import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { uploadTaskPhoto } from '../utils/uploadPhoto';
 import { codeReaderFailureMessage, isVkEnvironment, readCodeWithVk } from '../utils/vkBridgeClient';
 import { extractTaskQrToken, parseTaskQrScan } from '../utils/qrDeepLink';
+import { decodeQrFromImageFile } from '../utils/decodeQrFromImage';
 import { getDeviceKey } from '../utils/deviceKey';
 import { useAppModal } from '../App';
 import { EmptyState } from '../components/EmptyState';
@@ -190,6 +191,7 @@ const TaskSubmitModal = ({
   onSuccess,
   onSubmitSuccess,
   setSnackbar,
+  onRequestVkScan,
 }: {
   taskId: number | null;
   meta: any;
@@ -197,6 +199,8 @@ const TaskSubmitModal = ({
   onSuccess: () => void;
   onSubmitSuccess: (p: SubmitSuccessPayload) => void;
   setSnackbar: (msg: string) => void;
+  /** Close modal first, then open VK CodeReader (iOS often fails if modal is open). */
+  onRequestVkScan: () => void;
 }) => {
   const [answerText, setAnswerText] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -209,8 +213,10 @@ const TaskSubmitModal = ({
   const [selectedChoice, setSelectedChoice] = useState('');
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [qrDecoding, setQrDecoding] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const autoQrSubmitRef = useRef(false);
+  const qrFileRef = useRef<HTMLInputElement>(null);
   const canNativeScan = isVkEnvironment();
   const methods = taskMethodsFromMeta(meta);
   const answerType = meta?.answerType || (methods.includes('photo') ? 'text_and_photo' : 'text');
@@ -456,38 +462,64 @@ const TaskSubmitModal = ({
             <div style={{ fontSize: 13, marginBottom: 8 }}>
               {effectiveQr
                 ? 'QR распознан — начисляем баллы…'
-                : 'Отсканируйте QR задания камерой VK, откройте ссылку с площадки или вставьте её ниже.'}
-              {canNativeScan ? (
-                <Button
-                  size="m"
-                  mode="secondary"
-                  stretched
-                  style={{ marginTop: 8 }}
-                  onClick={async () => {
-                    const result = await readCodeWithVk();
-                    if (!result.ok) {
+                : 'Сфотографируйте QR площадки или откройте его обычной камерой телефона. Сканер VK на части iPhone не открывается — это нормально.'}
+              <input
+                ref={qrFileRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0] || null;
+                  e.target.value = '';
+                  if (!file) return;
+                  setQrDecoding(true);
+                  try {
+                    const raw = await decodeQrFromImageFile(file);
+                    if (!raw) {
                       showQrOverlay({
-                        confirm: {
-                          ...TASK_SUBMIT_CONFIRM,
-                          titleTemplate: result.reason === 'cancelled' ? 'Сканирование отменено' : 'Сканер недоступен',
-                          showPoints: false,
-                        },
-                        detail: codeReaderFailureMessage(result.reason),
-                        tone: result.reason === 'cancelled' ? 'info' : 'error',
+                        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'QR на фото не найден', showPoints: false },
+                        detail: 'Снимите QR ближе и ровнее или вставьте ссылку из QR вручную.',
+                        tone: 'error',
                         xpAwarded: 0,
                         track: 'experience',
                       });
                       return;
                     }
-                    applyScannedQr(result.code);
-                  }}
+                    applyScannedQr(raw);
+                  } catch {
+                    showQrOverlay({
+                      confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Не удалось прочитать фото', showPoints: false },
+                      detail: 'Попробуйте ещё раз или вставьте ссылку с QR.',
+                      tone: 'error',
+                      xpAwarded: 0,
+                      track: 'experience',
+                    });
+                  } finally {
+                    setQrDecoding(false);
+                  }
+                }}
+              />
+              <Button
+                size="l"
+                mode="primary"
+                stretched
+                loading={qrDecoding}
+                style={{ marginTop: 8 }}
+                onClick={() => qrFileRef.current?.click()}
+              >
+                Сфотографировать QR
+              </Button>
+              {canNativeScan && (
+                <Button
+                  size="m"
+                  mode="secondary"
+                  stretched
+                  style={{ marginTop: 8 }}
+                  onClick={onRequestVkScan}
                 >
-                  Сканировать QR (VK)
+                  Сканер VK (если работает)
                 </Button>
-              ) : (
-                <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
-                  Встроенный сканер VK недоступен — откройте QR обычной камерой телефона или вставьте ссылку.
-                </div>
               )}
               <Input
                 style={{ marginTop: 8 }}
@@ -504,7 +536,7 @@ const TaskSubmitModal = ({
                   if (!qrPaste.trim()) {
                     showQrOverlay({
                       confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Вставьте ссылку QR', showPoints: false },
-                      detail: 'Скопируйте ссылку с QR (#/tasks?task=…&qr=…) или отсканируйте камерой VK.',
+                      detail: 'Скопируйте ссылку с QR или нажмите «Сфотографировать QR».',
                       tone: 'info',
                       xpAwarded: 0,
                       track: 'experience',
@@ -635,43 +667,78 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
     setSubmitTaskMeta(task);
   }, []);
 
+  const applyVkScanResult = useCallback((raw: string, reopenTask?: any) => {
+    const parsed = parseTaskQrScan(raw);
+    if (parsed) {
+      const task = data?.tasks?.find((t: { id: number }) => t.id === parsed.taskId) || reopenTask;
+      if (task) {
+        if (window.location.hash.split('?')[0] !== '#/tasks') {
+          window.location.hash = `#/tasks?task=${parsed.taskId}&qr=${encodeURIComponent(parsed.qrToken)}`;
+        }
+        openSubmit({ ...task, _scannedQr: parsed.qrToken });
+        return;
+      }
+      window.location.hash = `#/tasks?task=${parsed.taskId}&qr=${encodeURIComponent(parsed.qrToken)}`;
+      return;
+    }
+    const token = extractTaskQrToken(raw);
+    if (token && reopenTask) {
+      openSubmit({ ...reopenTask, _scannedQr: token });
+      return;
+    }
+    setSuccessPayload({
+      confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Это не QR задания', showPoints: false },
+      detail: 'Нужна ссылка вида #/tasks?task=…&qr=… — или нажмите «Сфотографировать QR» в задании.',
+      tone: 'error',
+      xpAwarded: 0,
+      track: 'experience',
+    });
+    if (reopenTask) openSubmit(reopenTask);
+  }, [data?.tasks, openSubmit]);
+
+  /** VK CodeReader must not run under ModalPage — close first (iOS). */
+  const requestVkScanForOpenTask = useCallback(async () => {
+    const task = submitTaskMeta;
+    if (!task) return;
+    setSubmitTaskId(null);
+    await new Promise<void>(resolve => { window.setTimeout(() => resolve(), 400); });
+    const result = await readCodeWithVk();
+    if (!result.ok) {
+      setSuccessPayload({
+        confirm: {
+          ...TASK_SUBMIT_CONFIRM,
+          titleTemplate: result.reason === 'cancelled' ? 'Сканирование отменено' : 'Сканер VK не открылся',
+          showPoints: false,
+        },
+        detail: `${codeReaderFailureMessage(result.reason)}\n\nОткройте задание снова и нажмите «Сфотографировать QR».`,
+        tone: result.reason === 'cancelled' ? 'info' : 'error',
+        xpAwarded: 0,
+        track: 'experience',
+      });
+      openSubmit(task);
+      return;
+    }
+    applyVkScanResult(result.code, task);
+  }, [submitTaskMeta, openSubmit, applyVkScanResult]);
+
   const scanTaskQr = useCallback(async () => {
     const result = await readCodeWithVk();
     if (!result.ok) {
       setSuccessPayload({
         confirm: {
           ...TASK_SUBMIT_CONFIRM,
-          titleTemplate: result.reason === 'cancelled' ? 'Сканирование отменено' : 'Сканер недоступен',
+          titleTemplate: result.reason === 'cancelled' ? 'Сканирование отменено' : 'Сканер VK не открылся',
           showPoints: false,
         },
-        detail: codeReaderFailureMessage(result.reason),
+        detail: `${codeReaderFailureMessage(result.reason)}\n\nОткройте задание и нажмите «Сфотографировать QR».`,
         tone: result.reason === 'cancelled' ? 'info' : 'error',
         xpAwarded: 0,
         track: 'experience',
       });
       return;
     }
-    const parsed = parseTaskQrScan(result.code);
-    if (!parsed) {
-      setSuccessPayload({
-        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Это не QR задания', showPoints: false },
-        detail: 'Нужна ссылка вида #/tasks?task=…&qr=…',
-        tone: 'error',
-        xpAwarded: 0,
-        track: 'experience',
-      });
-      return;
-    }
-    const task = data?.tasks?.find((t: { id: number }) => t.id === parsed.taskId);
-    if (task) {
-      if (window.location.hash.split('?')[0] !== '#/tasks') {
-        window.location.hash = `#/tasks?task=${parsed.taskId}&qr=${encodeURIComponent(parsed.qrToken)}`;
-      }
-      openSubmit({ ...task, _scannedQr: parsed.qrToken });
-      return;
-    }
-    window.location.hash = `#/tasks?task=${parsed.taskId}&qr=${encodeURIComponent(parsed.qrToken)}`;
-  }, [data?.tasks, openSubmit]);
+    applyVkScanResult(result.code);
+  }, [applyVkScanResult]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -719,13 +786,14 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
             onSuccess={load}
             onSubmitSuccess={setSuccessPayload}
             setSnackbar={setSnackbar}
+            onRequestVkScan={() => { void requestVkScanForOpenTask(); }}
           />
         </ModalRoot>
       );
     } else {
       setModal(null);
     }
-  }, [submitTaskId, submitTaskMeta, load, setModal, activePanel, id]);
+  }, [submitTaskId, submitTaskMeta, load, setModal, activePanel, id, requestVkScanForOpenTask]);
 
   useEffect(() => {
     return () => setModal(null);

@@ -94,11 +94,12 @@ export async function openCodeReader(): Promise<string | null> {
 export function codeReaderFailureMessage(reason: CodeReaderFailureReason): string {
   switch (reason) {
     case 'unavailable':
-      return 'Сканер VK недоступен на этом устройстве — вставьте ссылку с QR вручную или откройте QR камерой телефона';
+      return 'Встроенный сканер VK здесь недоступен. Нажмите «Сфотографировать QR» или откройте QR обычной камерой телефона.';
     case 'timeout':
-      return 'Сканер VK не ответил — попробуйте ещё раз или вставьте ссылку с QR вручную';
+      return 'Сканер VK не ответил. Нажмите «Сфотографировать QR» — это работает без сканера VK.';
     case 'error':
-      return 'Не удалось открыть сканер VK — проверьте доступ к камере или вставьте ссылку с QR вручную';
+      // Camera can be ON in iOS settings and CodeReader still fails (VK WebView / modal bug).
+      return 'Сканер VK на этом телефоне не открылся (это бывает даже при включённой камере). Нажмите «Сфотографировать QR» или вставьте ссылку с QR.';
     case 'cancelled':
     default:
       return 'Сканирование отменено';
