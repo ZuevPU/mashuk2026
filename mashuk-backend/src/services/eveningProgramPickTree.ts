@@ -51,6 +51,24 @@ function isRootEvent(e: LessonPickEvent): boolean {
   return e.parentEventId == null || e.parentEventId === 0;
 }
 
+type PublishFlags = {
+  parentEventId?: number | null;
+  isPublished?: boolean | null;
+  dayPublished?: boolean | null;
+};
+
+/**
+ * Roots need dayPublished; nested subtopics are kept even if dayPublished is false
+ * (common when admin adds themes under an already published block).
+ */
+export function filterEventsForEveningProgramPick<T extends PublishFlags>(rows: T[]): T[] {
+  return rows.filter(e => {
+    if (e.isPublished === false) return false;
+    if (e.parentEventId != null && e.parentEventId !== 0) return true;
+    return e.dayPublished !== false;
+  });
+}
+
 /**
  * Full program tree for evening questionnaire event pick:
  * large blocks + all nested sub-blocks (no «already conducted» filter).

@@ -1,24 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { EveningField, EveningQuestionnaireConfig, EveningStep } from './types';
-
-type ProgramEventRow = {
-  id: number;
-  title: string;
-  dayNumber: number;
-  blockType?: string | null;
-  parentEventId?: number | null;
-  sortOrder?: number | null;
-  startTime?: string | null;
-  endTime?: string | null;
-};
-
-type ProgramNode = {
-  id: number;
-  title: string;
-  startTime?: string | null;
-  endTime?: string | null;
-  children: ProgramNode[];
-};
+import {
+  buildEveningProgramPickNodes,
+  countProgramLeaves,
+  flattenSelectableLeaves,
+  type ProgramEventRow,
+  type ProgramPickNode,
+} from './programEventTree';
 
 type ProgramEventValue = {
   eventId: number;
@@ -38,10 +26,6 @@ const MOCK_ROLES = [
   { roleKey: 'facilitator', name: 'Фасилитатор' },
   { roleKey: 'mentor', name: 'Наставник' },
 ];
-
-function isBreak(ev: ProgramEventRow): boolean {
-  return String(ev.blockType || '').toLowerCase() === 'break';
-}
 
 function isValueSet(value: unknown): boolean {
   if (value == null) return false;
@@ -88,43 +72,6 @@ function formatTimeRange(start?: string | null, end?: string | null): string {
   return a || b || '';
 }
 
-function buildDayProgramTree(events: ProgramEventRow[], day: number, linkedIds?: number[]): ProgramNode[] {
-  const published = events.filter(e => !isBreak(e));
-  const byParent = new Map<number, ProgramEventRow[]>();
-  for (const e of published) {
-    if (e.parentEventId) {
-      const list = byParent.get(e.parentEventId) || [];
-      list.push(e);
-      byParent.set(e.parentEventId, list);
-    }
-  }
-  const sort = (arr: ProgramEventRow[]) =>
-    [...arr].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id);
-
-  const build = (e: ProgramEventRow): ProgramNode => ({
-    id: e.id,
-    title: e.title,
-    startTime: e.startTime,
-    endTime: e.endTime,
-    children: sort(byParent.get(e.id) || []).map(build),
-  });
-
-  const linked = (linkedIds || []).filter(Number.isFinite);
-  let roots: ProgramEventRow[];
-  if (linked.length) {
-    const byId = new Map(published.map(e => [e.id, e]));
-    roots = linked.map(id => byId.get(id)).filter((e): e is ProgramEventRow => !!e);
-  } else {
-    roots = sort(published.filter(e => !e.parentEventId && e.dayNumber === day));
-  }
-  return roots.map(build);
-}
-
-function flattenLeaves(node: ProgramNode): ProgramNode[] {
-  if (!node.children.length) return [node];
-  return node.children.flatMap(flattenLeaves);
-}
-
 function ChipBtn({
   active,
   onClick,
@@ -166,13 +113,13 @@ function ProgramEventPreviewField({
 }: {
   field: EveningField;
   value: ProgramEventValue | null;
-  nodes: ProgramNode[];
+  nodes: ProgramPickNode[];
   onChange: (v: ProgramEventValue | null) => void;
 }) {
   const [parentId, setParentId] = useState<number | null>(value?.parentEventId ?? null);
   const parent = nodes.find(n => n.id === parentId) || null;
   const subtopics = parent
-    ? flattenLeaves(parent).filter(l => l.id !== parent.id)
+    ? flattenSelectableLeaves(parent).filter(l => l.id !== parent.id)
     : [];
 
   return (
@@ -186,7 +133,7 @@ function ProgramEventPreviewField({
         {nodes.map(root => {
           const active = parentId === root.id;
           const time = formatTimeRange(root.startTime, root.endTime);
-          const leaves = flattenLeaves(root).filter(l => l.id !== root.id);
+          const leafCount = countProgramLeaves(root.children);
           return (
             <button
               key={root.id}
@@ -218,11 +165,11 @@ function ProgramEventPreviewField({
               )}
               <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.35 }}>
                 {root.title}
-                {leaves.length > 0 && (
-                  <span style={{ fontWeight: 500, color: '#666' }}> · {leaves.length} тем</span>
+                {leafCount > 0 && (
+                  <span style={{ fontWeight: 500, color: '#666' }}> · {leafCount} тем</span>
                 )}
               </div>
-              {leaves.length > 0 && (
+              {leafCount > 0 && (
                 <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
                   {active ? '▼ выберите подсобытие ниже' : '▼ есть подсобытия'}
                 </div>
@@ -406,7 +353,7 @@ export function EveningQuestionnaireParticipantPreview({ day, config, programEve
       );
     }
     if (field.type === 'program_event') {
-      const nodes = buildDayProgramTree(programEvents, day, field.linkedEventIds);
+      const nodes = buildEveningProgramPickNodes(programEvents, day, field.linkedEventIds);
       const current = isValueSet(form[field.key]) ? form[field.key] as ProgramEventValue : null;
       return (
         <ProgramEventPreviewField

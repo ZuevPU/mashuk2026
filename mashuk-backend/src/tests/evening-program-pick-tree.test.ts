@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { collectEveningProgramPickTree } from '../services/eveningProgramPickTree.js';
+import {
+  collectEveningProgramPickTree,
+  filterEventsForEveningProgramPick,
+} from '../services/eveningProgramPickTree.js';
 import type { LessonPickEvent } from '../services/lessonSlotEvents.js';
 
 describe('collectEveningProgramPickTree', () => {
@@ -61,5 +64,45 @@ describe('collectEveningProgramPickTree', () => {
     assert.equal(events[0].title, 'Презентации практик');
     assert.equal(events[0].children.length, 2);
     assert.equal(events[0].children[0].title, 'ИИ в классе');
+  });
+
+  it('keeps nested themes when dayPublished is false on children only', () => {
+    const rows = [
+      {
+        id: 1,
+        title: 'Презентации педагогических практик',
+        parentEventId: null,
+        isPublished: true,
+        dayPublished: true,
+        dayNumber: 1,
+        sortOrder: 1,
+      },
+      {
+        id: 11,
+        title: 'ИИ в классе',
+        parentEventId: 1,
+        isPublished: true,
+        dayPublished: false,
+        dayNumber: 1,
+        sortOrder: 1,
+      },
+      {
+        id: 12,
+        title: 'Молчаливый учитель',
+        parentEventId: 1,
+        isPublished: true,
+        dayPublished: false,
+        dayNumber: 1,
+        sortOrder: 2,
+      },
+    ];
+    const filtered = filterEventsForEveningProgramPick(rows);
+    assert.equal(filtered.length, 3);
+    const { events } = collectEveningProgramPickTree(filtered as LessonPickEvent[], [1], undefined, 1);
+    assert.equal(events[0].children.length, 2);
+    assert.deepEqual(events[0].children.map(c => c.title), [
+      'ИИ в классе',
+      'Молчаливый учитель',
+    ]);
   });
 });

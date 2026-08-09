@@ -157,8 +157,11 @@ function ProgramEventPicker({
   }, [value?.eventId, value?.parentEventId, nodes]);
 
   const selectedParent = nodes.find(n => n.id === selectedParentId) || null;
-  const subtopics = selectedParent ? flattenSelectableLeaves(selectedParent).filter(l => l.id !== selectedParent.id) : [];
+  const subtopics = selectedParent
+    ? flattenSelectableLeaves(selectedParent).filter(l => l.id !== selectedParent.id)
+    : [];
   const needsSubtopic = subtopics.length > 0;
+  const waitingForSubtopic = !!selectedParent && needsSubtopic && !value;
 
   const pickParent = (root: EveningProgramEventNode) => {
     setSelectedParentId(root.id);
@@ -249,6 +252,11 @@ function ProgramEventPicker({
               <div style={{ fontSize: 12, color: '#555', marginBottom: 8, lineHeight: 1.35 }}>
                 {selectedParent.title}
               </div>
+              {waitingForSubtopic && (
+                <div style={{ fontSize: 12, color: '#9B2C2C', marginBottom: 8 }}>
+                  Выберите тему внутри блока — без этого ответ не сохранится.
+                </div>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {subtopics.map(leaf => {
                   const selected = value?.eventId === leaf.id;
@@ -293,6 +301,21 @@ function ProgramEventPicker({
       )}
     </FormItem>
   );
+}
+
+function programEventAnswerComplete(
+  field: EveningField,
+  form: Record<string, unknown>,
+  options: EveningQuestionnaireProps['questionnaire']['programEventOptions'],
+): boolean {
+  const nodes = options?.[field.key]?.events || [];
+  const raw = form[field.key];
+  if (!isProgramEventValue(raw)) return false;
+  const parent = nodes.find(n => n.id === raw.parentEventId) || nodes.find(n => n.id === raw.eventId);
+  if (!parent) return true;
+  const leaves = flattenSelectableLeaves(parent).filter(l => l.id !== parent.id);
+  if (leaves.length === 0) return raw.eventId === parent.id;
+  return leaves.some(l => l.id === raw.eventId);
 }
 
 function stepHasVisibleFields(
@@ -381,6 +404,20 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     [currentStep, form],
   );
   const showExperimentBlock = currentStep && isExperimentStep(currentStep) && !!experiment;
+
+  const stepReady = useMemo(() => {
+    for (const f of visibleFields) {
+      if (f.type === 'program_event') {
+        const answered = programEventAnswerComplete(f, form, questionnaire.programEventOptions);
+        if (f.required && !answered) return false;
+        // Partial / invalid object must not pass
+        if (form[f.key] != null && !answered) return false;
+        continue;
+      }
+      if (f.required && f.type !== 'role_select' && !isFieldValueSet(form[f.key])) return false;
+    }
+    return true;
+  }, [visibleFields, form, questionnaire.programEventOptions]);
 
   const fieldTop = (label: string) => (
     <span className="evening-q__label">{label}</span>
@@ -594,9 +631,23 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
           <Button size="l" mode="secondary" onClick={() => setStep(s => s - 1)}>Назад</Button>
         )}
         {step < steps.length - 1 ? (
-          <Button size="l" stretched onClick={() => setStep(s => s + 1)}>Далее</Button>
+          <Button
+            size="l"
+            stretched
+            disabled={!stepReady}
+            onClick={() => { if (stepReady) setStep(s => s + 1); }}
+          >
+            Далее
+          </Button>
         ) : (
-          <Button size="l" stretched onClick={handleSubmit}>Сохранить</Button>
+          <Button
+            size="l"
+            stretched
+            disabled={!stepReady}
+            onClick={() => { if (stepReady) void handleSubmit(); }}
+          >
+            Сохранить
+          </Button>
         )}
       </div>
       <Button size="l" stretched mode="tertiary" style={{ marginTop: 8 }} onClick={onClose}>

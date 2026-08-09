@@ -18,7 +18,10 @@ import { resolveEveningSurveyDayForParticipant } from '../services/eveningSurvey
 import { ROLE_KEYS, getRoleMeta } from '../services/roleService.js';
 import { EVENING_SCALE_KEYS } from '../services/touchpointTemplates.js';
 import { awardPoints } from '../services/pointsService.js';
-import { collectEveningProgramPickTree } from '../services/eveningProgramPickTree.js';
+import {
+  collectEveningProgramPickTree,
+  filterEventsForEveningProgramPick,
+} from '../services/eveningProgramPickTree.js';
 import { resolveActiveShiftId } from '../services/shiftService.js';
 
 const scaleField = z.coerce.number().int().min(1).max(5).optional();
@@ -324,7 +327,7 @@ export async function loadDayContext(
     // Load whole shift: nested sub-events sometimes inherit day visually but may
     // miss day_number; tree builder still anchors roots to the survey day.
     const shiftEv = await db.select().from(events).where(eq(events.shiftId, shiftId));
-    const published = shiftEv.filter(e => e.isPublished !== false && e.dayPublished !== false);
+    const published = filterEventsForEveningProgramPick(shiftEv);
     for (const field of programEventFieldDefs) {
       const tree = collectEveningProgramPickTree(
         published,

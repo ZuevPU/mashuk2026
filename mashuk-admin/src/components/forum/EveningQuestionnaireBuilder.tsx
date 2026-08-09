@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   collectFieldKeys,
   EVENING_FIELD_TYPE_OPTIONS,
@@ -9,20 +9,17 @@ import {
   type EveningStep,
 } from './types';
 import { EveningQuestionnaireParticipantPreview } from './EveningQuestionnaireParticipantPreview';
+import {
+  buildEveningProgramPickNodes,
+  countProgramLeaves,
+  flattenProgramEvents,
+  type ProgramEventRow,
+  type ProgramPickNode,
+} from './programEventTree';
 
 type Props = {
   adminFetch: (path: string, opts?: RequestInit) => Promise<any>;
   act: (fn: () => Promise<void>, msg?: string) => void;
-};
-
-type ProgramEventRow = {
-  id: number;
-  title: string;
-  dayNumber: number;
-  blockType?: string | null;
-  parentEventId?: number | null;
-  sortOrder?: number | null;
-  startTime?: string | null;
 };
 
 const EMPTY_CONFIG: EveningQuestionnaireConfig = {
@@ -79,9 +76,17 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
 
   useEffect(() => {
     adminFetch('/events')
-      .then((res: { events?: ProgramEventRow[] }) => setProgramEvents(res.events || []))
+      .then((res: { events?: ProgramEventRow[] }) => {
+        // /events returns a nested tree — flatten so subtopics keep parentEventId.
+        setProgramEvents(flattenProgramEvents(res.events || []));
+      })
       .catch(() => setProgramEvents([]));
   }, [adminFetch]);
+
+  const dayProgramTrees = useMemo(
+    () => buildEveningProgramPickNodes(programEvents, day, null),
+    [programEvents, day],
+  );
 
   const updateStep = (index: number, patch: Partial<EveningStep>) => {
     setConfig(prev => {
@@ -269,25 +274,23 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
       f.key !== fieldKey && (f.type === 'yes_no' || f.type === 'choice' || f.type === 'program_event'),
     );
 
-  const dayProgramRoots = programEvents
-    .filter(ev =>
-      ev.dayNumber === day
-      && !ev.parentEventId
-      && String(ev.blockType || '').toLowerCase() !== 'break',
-    )
-    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id);
-
-  const childThemesOf = (rootId: number): ProgramEventRow[] => {
-    const direct = programEvents
-      .filter(ev => ev.parentEventId === rootId && String(ev.blockType || '').toLowerCase() !== 'break')
-      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id);
-    return direct.flatMap(ev => {
-      const nested = childThemesOf(ev.id);
-      return nested.length ? [ev, ...nested] : [ev];
-    });
-  };
-
   const fieldTypeOptions = EVENING_FIELD_TYPE_OPTIONS.filter(o => o.value !== 'point_b_cta');
+
+  const renderSubtopicLines = (nodes: ProgramPickNode[], depth = 0): ReactNode => (
+    nodes.map(n => (
+      <div key={n.id}>
+        <div style={{ marginLeft: 12 + depth * 14, fontSize: 12, color: '#555', padding: '2px 0' }}>
+          · {n.title}
+          {n.children.length > 0 ? (
+            <span style={{ color: '#888' }}> · {countProgramLeaves(n.children)} тем</span>
+          ) : (
+            <span style={{ color: '#aaa' }}> ›</span>
+          )}
+        </div>
+        {n.children.length > 0 && renderSubtopicLines(n.children, depth + 1)}
+      </div>
+    ))
+  );
 
   return (
     <div className="adm-forum-block">
@@ -598,26 +601,26 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
                 <div style={{ gridColumn: '1 / -1', marginTop: 6 }}>
                   <div className="adm-label">Связь с программой дня {day}</div>
                   <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 8px' }}>
-                    Отметьте блоки (корневые события). Если ничего не отмечено — участнику покажутся все блоки дня.
-                    Внутри блока он сможет выбрать подтему, если она есть в программе.
+                    Отметьте крупные блоки. Участник сначала выбирает блок, затем подтему внутри
+                    (как в «Программе»). Если ничего не отмечено — покажем все блоки дня с их подтемами.
                   </p>
                   <div style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: 6,
-                    maxHeight: 220,
+                    gap: 8,
+                    maxHeight: 280,
                     overflowY: 'auto',
                     padding: 10,
                     background: '#f9f9f9',
                     borderRadius: 8,
                     border: '1px solid #eee',
                   }}>
-                    {dayProgramRoots.map(ev => {
+                    {dayProgramTrees.map(ev => {
                       const linked = field.linkedEventIds || [];
                       const checked = linked.includes(ev.id);
-                      const kids = childThemesOf(ev.id);
+                      const leafCount = countProgramLeaves(ev.children);
                       return (
-                        <div key={ev.id}>
+                        <div key={ev.id} style={{ borderBottom: '1px solid #eee', paddingBottom: 6 }}>
                           <label className="adm-forum-check" style={{ display: 'flex', gap: 6, fontSize: 13, fontWeight: 600 }}>
                             <input
                               type="checkbox"
@@ -630,26 +633,27 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
                               }}
                             />
                             {ev.title}
+                            {leafCount > 0 && (
+                              <span style={{ fontWeight: 500, color: '#666' }}>· {leafCount} подтем</span>
+                            )}
                           </label>
-                          {kids.length > 0 && (
-                            <div style={{ marginLeft: 28, fontSize: 12, color: '#555' }}>
-                              {kids.map(c => (
-                                <div key={c.id}>· {c.title}</div>
-                              ))}
+                          {ev.children.length > 0 && (
+                            <div style={{ marginTop: 4 }}>
+                              {renderSubtopicLines(ev.children)}
                             </div>
                           )}
                         </div>
                       );
                     })}
-                    {dayProgramRoots.length === 0 && (
+                    {dayProgramTrees.length === 0 && (
                       <p className="adm-muted" style={{ fontSize: 12, margin: 0 }}>
-                        Нет событий программы на день {day}. Добавьте их во вкладке «Программа».
+                        Нет событий программы на день {day}. Добавьте крупный блок и подтемы во вкладке «Программа».
                       </p>
                     )}
                   </div>
                   {(field.linkedEventIds?.length || 0) > 0 && (
                     <p className="adm-muted" style={{ fontSize: 12, marginTop: 6 }}>
-                      Выбрано блоков: {field.linkedEventIds!.length}
+                      Выбрано крупных блоков: {field.linkedEventIds!.length}
                     </p>
                   )}
                 </div>
