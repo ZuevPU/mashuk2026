@@ -119,6 +119,30 @@ export async function exportAnswersHandler(req: AdminRequest, res: Response): Pr
   );
 }
 
+/** XLSX: все ответы за день + лист на каждый вопрос (участник · направление · ответ). */
+export async function exportQuestionsDayAnswersHandler(req: AdminRequest, res: Response): Promise<void> {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const { writeQuestionsDayAnswersExport } = await import('../services/exports/questionsDayAnswersExport.js');
+  const dayRaw = Number(req.query.day);
+  if (!Number.isFinite(dayRaw) || dayRaw < 1) {
+    res.status(400).json({ error: 'Укажите день: ?day=1…8' });
+    return;
+  }
+  const questionKind = typeof req.query.questionKind === 'string' && req.query.questionKind.trim()
+    && req.query.questionKind !== 'all'
+    && req.query.questionKind !== 'exchange'
+    && req.query.questionKind !== 'org_director'
+    ? req.query.questionKind.trim()
+    : null;
+  await writeQuestionsDayAnswersExport(res, {
+    day: Math.floor(dayRaw),
+    shiftId: await resolveAdminShiftId(req),
+    direction: typeof req.query.direction === 'string' ? req.query.direction : null,
+    group: typeof req.query.group === 'string' ? req.query.group : null,
+    questionKind,
+  });
+}
+
 export const exportDailySummaryHandler = async (req: AdminRequest, res: Response) => {
   const { resolveAdminShiftId } = await import('../services/shiftService.js');
   const shiftId = await resolveAdminShiftId(req);

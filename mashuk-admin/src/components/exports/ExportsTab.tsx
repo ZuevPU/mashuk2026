@@ -229,6 +229,33 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
               </td>
             </tr>
             <tr>
+              <td>Ответы на вопросы за день</td>
+              <td className="adm-muted">
+                Все ответы одним списком + сводка по направлениям + отдельный лист на каждый вопрос
+                (участник · направление · ответ)
+              </td>
+              <td>
+                <span className="adm-muted">D{forumDay}{direction ? ` · ${direction}` : ''}</span>
+              </td>
+              <td>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-primary"
+                  onClick={() =>
+                    downloadXlsx(
+                      `/exports/questions-day${buildQuery({
+                        day: String(forumDay),
+                        direction: direction || undefined,
+                      })}`,
+                      `questions_day${forumDay}.xlsx`,
+                    )
+                  }
+                >
+                  Скачать XLSX
+                </button>
+              </td>
+            </tr>
+            <tr>
               <td>Итоги дня (вопросы анкеты)</td>
               <td className="adm-muted">
                 Все, кто сдал итоговую анкету на главной (текущая смена): широкий лист + «Ответы по вопросам» + диагностика.

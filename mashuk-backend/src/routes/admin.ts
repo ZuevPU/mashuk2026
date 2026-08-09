@@ -205,6 +205,7 @@ router.get('/exports/participants', P('exports', 'export'), wrap(exportsCtrl.exp
 router.get('/exports/participant-profile', P('exports', 'export'), wrap(exportsCtrl.exportParticipantProfileHandler));
 router.get('/exports/participant-activity-wide', P('exports', 'export'), wrap(exportsCtrl.exportParticipantActivityWideHandler));
 router.get('/exports/answers', P('exports', 'export'), wrap(exportsCtrl.exportAnswersHandler));
+router.get('/exports/questions-day', P('exports', 'export'), wrap(exportsCtrl.exportQuestionsDayAnswersHandler));
 router.get('/exports/piggybank', P('exports', 'export'), wrap(exportsCtrl.exportPiggybankHandler));
 router.get('/exports/task-submissions', P('exports', 'export'), wrap(exportsCtrl.exportTaskSubmissionsHandler));
 router.get('/exports/tasks-catalog', P('exports', 'export'), wrap(exportsCtrl.exportTasksCatalogHandler));

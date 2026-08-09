@@ -574,6 +574,27 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
           <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
             <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setView('confirm')}>Подтверждение ответа</button>
             <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setView('tools')}>Инструменты</button>
+            {kindTab !== 'exchange' && kindTab !== 'org_director' && (
+              <button
+                type="button"
+                className="adm-btn adm-btn-primary adm-btn-sm"
+                title="Общий список ответов + отдельный лист на каждый вопрос (участник, направление, ответ)"
+                onClick={() => {
+                  const day = dayFilter || String(forumDay);
+                  const sp = new URLSearchParams({ day });
+                  if (kindTab !== 'all') sp.set('questionKind', kindTab);
+                  act(
+                    () => adminDownloadBinary(
+                      `/exports/questions-day?${sp.toString()}`,
+                      `questions_day${day}.xlsx`,
+                    ),
+                    'Файл скачан',
+                  );
+                }}
+              >
+                Выгрузить ответы за день {dayFilter || forumDay}
+              </button>
+            )}
             {kindTab === 'org_director' && (
               <button
                 type="button"
