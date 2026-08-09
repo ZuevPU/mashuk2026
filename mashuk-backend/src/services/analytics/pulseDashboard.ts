@@ -16,7 +16,11 @@ import {
   zonesToPercent,
   EMOTION_ZONE_LABELS,
 } from './zoneDistribution.js';
-import { buildEmotionDistribution } from '../emotionZones.js';
+import {
+  buildEmotionDistribution,
+  CHECKIN_EMOTION_IDS,
+  type EmotionZoneKey,
+} from '../emotionZones.js';
 import {
   activityByDaySeries,
   buildTouchpointThresholdCoverage,
@@ -262,6 +266,25 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
 
   const byDirection: { direction: string; zones: Record<string, number> }[] = [];
   const byGroup: { direction: string; group: string; zones: Record<string, number> }[] = [];
+  type PhaseKey = 'morning' | 'day' | 'evening';
+  type PhaseBucket = {
+    zones: ReturnType<typeof emptyZoneDistribution>;
+    emotions: Map<string, number>;
+    n: number;
+  };
+  const emptyPhaseBucket = (): PhaseBucket => ({
+    zones: emptyZoneDistribution(),
+    emotions: new Map(),
+    n: 0,
+  });
+  const byDirectionPhase: {
+    direction: string;
+    byPhase: Record<PhaseKey, {
+      zones: Record<EmotionZoneKey, number>;
+      emotions: Record<string, number>;
+      n: number;
+    }>;
+  }[] = [];
   if (!filters.direction) {
     const dirMap = new Map<string, typeof cohort>();
     for (const p of cohort) {
@@ -272,11 +295,47 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
     for (const [direction, list] of dirMap) {
       const z = emptyZoneDistribution();
       const pids = new Set(list.map(p => p.id));
+      const phaseBuckets: Record<PhaseKey, PhaseBucket> = {
+        morning: emptyPhaseBucket(),
+        day: emptyPhaseBucket(),
+        evening: emptyPhaseBucket(),
+      };
       for (const a of checkAns) {
         if (!pids.has(a.participantId)) continue;
         accumulateZoneFromAnswer(z, a.answerData);
+        const phase = stateCheckPhaseForAnswer(a.createdAt);
+        const bucket = phaseBuckets[phase];
+        accumulateZoneFromAnswer(bucket.zones, a.answerData);
+        bucket.n += 1;
+        const payload = parseCheckinPayload(a.answerData);
+        const emo = payload.emotion ? String(payload.emotion).trim().toLowerCase() : '';
+        if (emo) bucket.emotions.set(emo, (bucket.emotions.get(emo) || 0) + 1);
       }
       byDirection.push({ direction, zones: zonesToPercent(z) });
+      const phaseOut = {} as Record<PhaseKey, {
+        zones: Record<EmotionZoneKey, number>;
+        emotions: Record<string, number>;
+        n: number;
+      }>;
+      for (const phase of ['morning', 'day', 'evening'] as PhaseKey[]) {
+        const bucket = phaseBuckets[phase];
+        const emotionPct: Record<string, number> = {};
+        for (const id of CHECKIN_EMOTION_IDS) {
+          emotionPct[id] = bucket.n
+            ? Math.round(((bucket.emotions.get(id) || 0) / bucket.n) * 1000) / 10
+            : 0;
+        }
+        for (const [id, count] of bucket.emotions) {
+          if (id in emotionPct) continue;
+          emotionPct[id] = bucket.n ? Math.round((count / bucket.n) * 1000) / 10 : 0;
+        }
+        phaseOut[phase] = {
+          zones: zonesToPercent(bucket.zones),
+          emotions: emotionPct,
+          n: bucket.n,
+        };
+      }
+      byDirectionPhase.push({ direction, byPhase: phaseOut });
       const grpMap = new Map<string, typeof list>();
       for (const p of list) {
         const g = p.groupName || 'без группы';
@@ -293,6 +352,7 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
         byGroup.push({ direction, group, zones: zonesToPercent(zg) });
       }
     }
+    byDirectionPhase.sort((a, b) => a.direction.localeCompare(b.direction, 'ru'));
   }
 
   const reasonByDirection: { direction: string; topTokens: ReturnType<typeof topReasonTokens> }[] = [];
@@ -361,6 +421,7 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
       },
       byDay: zoneByDay,
       byDirection,
+      byDirectionPhase,
       byGroup,
       compareZones,
       emotions: buildEmotionDistribution(emotionCounts, checkAns.length),

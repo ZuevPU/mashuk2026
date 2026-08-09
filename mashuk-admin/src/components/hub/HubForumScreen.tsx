@@ -29,6 +29,7 @@ import { ExchangeAnalyticsPanel } from '../analytics/ExchangeAnalyticsPanel';
 import { TouchpointCoveragePanel } from '../analytics/TouchpointCoveragePanel';
 import { HubKpiRow } from './HubKpiRow';
 import { SignalsTable } from './SignalsTable';
+import { DirectionZonePhaseTable } from './DirectionZonePhaseTable';
 import { PiggybankDirectionMatrix } from './PiggybankDirectionMatrix';
 import { downloadAllHubExports, downloadHubExport, forumExportItems } from './hubExports';
 import { hubFilterParams } from './hubQuery';
@@ -264,6 +265,10 @@ export function HubForumScreen({
         <ZoneBars title="Зоны · день" zones={pulse.byPhase?.day} />
         <ZoneBars title="Зоны · вечер" zones={pulse.byPhase?.evening} />
       </DashGrid>
+      <DirectionZonePhaseTable
+        rows={pulse.byDirectionPhase}
+        onOpenDirection={openDirection}
+      />
       {(pulse.emotions ?? []).length > 0 && (
         <DashCard title="11 эмоций">
           <SrcBars items={(pulse.emotions as { label: string; count: number; pct: number }[]).map(d => ({
