@@ -22,6 +22,7 @@ import { DEFAULT_LEADERBOARD_FILTERS, type LeaderboardRow } from '../rating/lead
 import { HubKpiRow } from './HubKpiRow';
 import { WordDrilldown } from './WordDrilldown';
 import { downloadAllHubExports, downloadHubExport, directionExportItems } from './hubExports';
+import { PracticeRecommendNpsTable } from '../analytics/PracticeRecommendNpsTable';
 import { hubFilterParams, statePhaseOf, topWordTokens } from './hubQuery';
 
 type KindAnswer = {
@@ -440,6 +441,10 @@ export function HubDirectionScreen({ onOpenCard }: { onOpenCard: (id: number) =>
       )}
 
       <SectionLabel>Итоговая анкета · направление</SectionLabel>
+      <PracticeRecommendNpsTable
+        data={data.evening?.practiceRecommendNps}
+        title="Готов ли рекомендовать эту практику коллегам?"
+      />
       {eveningQuestions.length === 0 ? (
         <DashCard title="Итоговая анкета"><p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>Нет ответов в срезе.</p></DashCard>
       ) : eveningQuestions.map(q => (

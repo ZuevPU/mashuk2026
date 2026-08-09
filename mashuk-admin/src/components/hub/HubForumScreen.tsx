@@ -25,6 +25,7 @@ import {
 import { DayComparisonPanel, PULSE_DAY_METRICS } from '../analytics/DayComparisonPanel';
 import { EnergyAverages } from '../analytics/EnergyAverages';
 import { EveningScaleAverages } from '../analytics/EveningScaleAverages';
+import { PracticeRecommendNpsTable } from '../analytics/PracticeRecommendNpsTable';
 import { ExchangeAnalyticsPanel } from '../analytics/ExchangeAnalyticsPanel';
 import { TouchpointCoveragePanel } from '../analytics/TouchpointCoveragePanel';
 import { HubKpiRow } from './HubKpiRow';
@@ -411,6 +412,10 @@ export function HubForumScreen({
         overallAvg={data.evening?.scaleOverallAvg}
         byDay={data.evening?.scaleByDay}
         byDirectionDay={data.evening?.scaleByDirectionDay}
+      />
+      <PracticeRecommendNpsTable
+        data={data.evening?.practiceRecommendNps}
+        title="Готов ли рекомендовать эту практику коллегам?"
       />
 
       <SectionLabel>После блоков · сводка</SectionLabel>

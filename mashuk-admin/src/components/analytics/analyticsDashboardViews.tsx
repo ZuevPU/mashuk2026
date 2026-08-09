@@ -45,6 +45,7 @@ import { TouchpointCoveragePanel } from './TouchpointCoveragePanel';
 import { ExchangeAnalyticsPanel } from './ExchangeAnalyticsPanel';
 import { EveningScaleAverages } from './EveningScaleAverages';
 import { EnergyAverages } from './EnergyAverages';
+import { PracticeRecommendNpsTable } from './PracticeRecommendNpsTable';
 
 function ZoneBarChart({ title, zones, hint }: { title: string; zones?: Record<string, number>; hint?: string }) {
   const data = zonesToBarRows(zones ?? {});
@@ -615,28 +616,10 @@ export function ProgramView({ data }: { data: any }) {
         </DashCard>
       ))}
 
-      {data.nps?.available && (data.nps?.byPractice ?? []).length > 0 ? (
-        <DashCard title="NPS по педагогическим практикам">
-          <p className="adm-muted" style={{ fontSize: 12 }}>{data.nps.note}</p>
-          <table className="adm-table">
-            <thead>
-              <tr><th>Практика</th><th>Ответов</th><th>Средняя 1–10</th><th>NPS</th></tr>
-            </thead>
-            <tbody>
-              {(data.nps.byPractice as { practice: string; responses: number; avgScore: number; nps: number }[]).map(row => (
-                <tr key={row.practice}>
-                  <td>{row.practice}</td>
-                  <td>{row.responses}</td>
-                  <td>{row.avgScore}</td>
-                  <td>{row.nps}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </DashCard>
-      ) : data.nps?.note ? (
-        <p className="adm-muted">{data.nps.note}</p>
-      ) : null}
+      <PracticeRecommendNpsTable
+        data={data.practiceRecommendNps ?? data.nps}
+        title="Готов ли рекомендовать эту практику коллегам?"
+      />
     </div>
   );
 }
@@ -1515,6 +1498,11 @@ export function EveningView({
         overallAvg={data.scaleOverallAvg}
         byDay={data.scaleByDay}
         byDirectionDay={data.scaleByDirectionDay}
+      />
+
+      <PracticeRecommendNpsTable
+        data={data.practiceRecommendNps}
+        title="Готов ли рекомендовать эту практику коллегам?"
       />
 
       {notes.length > 0 && (

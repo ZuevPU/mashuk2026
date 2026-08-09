@@ -9,6 +9,7 @@ import type { AnalyticsFilters } from './analyticsQuery.js';
 import { resolveDayRange } from './analyticsQuery.js';
 import { getForumSettings } from '../helpers.js';
 import { topReasonTokens } from './zoneDistribution.js';
+import { buildPracticeRecommendNps } from './practiceRecommendNps.js';
 
 const SCALE_LABELS: Record<string, string> = {
   direction: 'Направление',
@@ -137,33 +138,9 @@ export async function buildProgramDashboard(filters: AnalyticsFilters, req?: Adm
     .filter(e => e.tags.some(t => t.toLowerCase().includes('практ') || t.toLowerCase().includes('workshop')))
     .slice(0, 20);
 
-  type PracticeAgg = { n: number; sum: number; promoters: number; detractors: number };
-  const byPractice = new Map<string, PracticeAgg>();
-  for (const st of states) {
-    const ratings = st.eveningRatings as Record<string, unknown> | null;
-    if (!ratings || ratings.practiceYes !== true) continue;
-    const score = ratings.recommendScore;
-    if (typeof score !== 'number' || score < 1 || score > 10) continue;
-    const name = typeof ratings.practiceName === 'string' && ratings.practiceName.trim()
-      ? ratings.practiceName.trim()
-      : 'Практика (без названия)';
-    const agg = byPractice.get(name) ?? { n: 0, sum: 0, promoters: 0, detractors: 0 };
-    agg.n += 1;
-    agg.sum += score;
-    if (score >= 9) agg.promoters += 1;
-    else if (score <= 6) agg.detractors += 1;
-    byPractice.set(name, agg);
-  }
-  const practiceNps = [...byPractice.entries()]
-    .map(([practice, agg]) => ({
-      practice,
-      responses: agg.n,
-      avgScore: agg.n ? Math.round((agg.sum / agg.n) * 10) / 10 : 0,
-      nps: agg.n ? Math.round(((agg.promoters - agg.detractors) / agg.n) * 100) : 0,
-      promoters: agg.promoters,
-      detractors: agg.detractors,
-    }))
-    .sort((a, b) => b.responses - a.responses);
+  const practiceRecommendNps = buildPracticeRecommendNps(
+    states.map(st => st.eveningRatings as Record<string, unknown> | null),
+  );
 
   const matRows = filters.shiftId != null
     ? await db.select().from(materials).where(eq(materials.shiftId, filters.shiftId))
@@ -192,12 +169,7 @@ export async function buildProgramDashboard(filters: AnalyticsFilters, req?: Adm
       top: eventsRanked.filter(e => e.dayNumber === day).slice(0, 5),
     })),
     practicesShiftRank: shiftPracticeRank,
-    nps: {
-      available: practiceNps.length > 0,
-      note: practiceNps.length > 0
-        ? 'NPS по шкале 1–10 из вечерней анкеты (recommendScore): промоутеры 9–10, детракторы 1–6.'
-        : 'NPS по практикам появится после ответов «Готов рекомендовать» + оценка практики в итогах дня.',
-      byPractice: practiceNps,
-    },
+    nps: practiceRecommendNps,
+    practiceRecommendNps,
   };
 }

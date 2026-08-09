@@ -12,6 +12,10 @@ import { resolveDayRange } from './analyticsQuery.js';
 import { loadCohortParticipants } from './cohort.js';
 import { getForumSettings } from '../helpers.js';
 import { buildEveningDaySeries, forumSeriesDays } from './dayComparison.js';
+import { buildPracticeRecommendNps } from './practiceRecommendNps.js';
+
+/** Эти поля сворачиваем в таблицу NPS по практикам — не дублируем графиком. */
+const PRACTICE_NPS_FIELD_KEYS = new Set(['recommendYes', 'recommendScore', 'practiceEvent', 'practiceName']);
 
 export type EveningAnswerRow = {
   participantId: number;
@@ -209,13 +213,19 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
     })
     .sort((a, b) => b.submitted - a.submitted || a.direction.localeCompare(b.direction, 'ru'));
 
-  // Skip CTA-only fields without answers
+  // Skip CTA-only fields without answers; recommend/practice → отдельная таблица NPS
   const questions = fields
-    .filter(f => f.type !== 'point_b_cta')
+    .filter(f => f.type !== 'point_b_cta' && !PRACTICE_NPS_FIELD_KEYS.has(f.key))
     .map(f => aggregateField(f, submittedRows))
     .filter(q => q.answered > 0 || fields.some(f => f.key === q.key));
 
-  const scaleFields = fields.filter(f => f.type === 'scale_1_5' || f.type === 'scale_1_10');
+  const practiceRecommendNps = buildPracticeRecommendNps(
+    submittedRows.map(r => r.ratings as Record<string, unknown>),
+  );
+
+  const scaleFields = fields.filter(
+    f => (f.type === 'scale_1_5' || f.type === 'scale_1_10') && !PRACTICE_NPS_FIELD_KEYS.has(f.key),
+  );
 
   function scaleStatsForRows(slice: EveningExportRow[]) {
     const byQuestion = scaleFields.map(f => {
@@ -347,6 +357,7 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
     byDirectionDaySeries,
     byDirection,
     questions,
+    practiceRecommendNps,
     scaleAverages,
     scaleOverallAvg,
     scaleByDay,

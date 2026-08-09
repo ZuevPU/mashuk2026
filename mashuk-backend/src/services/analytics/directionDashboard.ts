@@ -340,6 +340,7 @@ export async function buildDirectionDashboard(filters: AnalyticsFilters, req?: A
     evening: {
       activity: evening.activity,
       questions: evening.questions,
+      practiceRecommendNps: evening.practiceRecommendNps,
       diagnostics: evening.diagnostics,
       exportPath: evening.exportPath,
     },
