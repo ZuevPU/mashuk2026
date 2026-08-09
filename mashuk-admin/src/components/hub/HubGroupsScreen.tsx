@@ -228,13 +228,17 @@ export function HubGroupsScreen({
     const avgEngagementPct = sortedRows.length
       ? Math.round((sortedRows.reduce((s, r) => s + (r.avgEngagementPct ?? 0), 0) / sortedRows.length) * 10) / 10
       : 0;
-    const eveningByDay = days.map(day => ({
-      day,
-      submitted: sortedRows.reduce((s, r) => {
+    const eveningByDay = days.map(day => {
+      const submitted = sortedRows.reduce((s, r) => {
         const cell = r.eveningByDay?.find(c => c.day === day);
         return s + (cell?.submitted ?? 0);
-      }, 0),
-    }));
+      }, 0);
+      return {
+        day,
+        submitted,
+        fillRatePct: registered ? Math.round((submitted / registered) * 1000) / 10 : 0,
+      };
+    });
     const touchpointSlots = slotsMeta.map(s => {
       const completed = sortedRows.reduce((sum, r) => {
         return sum + (r.touchpointSlots?.find(c => c.index === s.index)?.completed ?? 0);
@@ -352,7 +356,7 @@ export function HubGroupsScreen({
       );
     }
     if (col.kind === 'heat' || col.kind === 'heatPct') {
-      const hv = col.heatValue?.(row) ?? Number(raw) || 0;
+      const hv = col.heatValue?.(row) ?? (Number(raw) || 0);
       const hb = col.heatBase?.(row) ?? 0;
       return (
         <td
@@ -464,11 +468,11 @@ export function HubGroupsScreen({
         </div>
 
         {showColPanel && (
-          <div className="card" style={{ padding: 10, marginBottom: 8, displayContent: 'flex-start' }}>
+          <div className="card" style={{ padding: 10, marginBottom: 8, justifyContent: 'flex-start' }}>
             <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Показать столбцы</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 12px' }}>
               {columns.map(c => (
-                <label key={c.id} style={{ fontSize: 12, displayItems: 'center', gap: 4, display: 'inline-flex' }}>
+                <label key={c.id} style={{ fontSize: 12, alignItems: 'center', gap: 4, display: 'inline-flex' }}>
                   <input
                     type="checkbox"
                     checked={!hiddenCols.has(c.id)}
@@ -494,7 +498,7 @@ export function HubGroupsScreen({
             <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Показать строки</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 12px', maxHeight: 160, overflow: 'auto' }}>
               {byGroupRaw.map(r => (
-                <label key={r.group} style={{ fontSize: 12, displayItems: 'center', gap: 4, display: 'inline-flex' }}>
+                <label key={r.group} style={{ fontSize: 12, alignItems: 'center', gap: 4, display: 'inline-flex' }}>
                   <input
                     type="checkbox"
                     checked={!hiddenRows.has(r.group)}
