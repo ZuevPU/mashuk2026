@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Panel, PanelHeader, Group, FormItem, Input, Button, Snackbar, Textarea } from '@vkontakte/vkui';
 import { apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { extractParticipantQrToken, extractTaskIdFromInput } from '../utils/qrDeepLink';
 import { codeReaderFailureMessage, isVkEnvironment, readCodeWithVk } from '../utils/vkBridgeClient';
 
-/** Панель волонтёра: VK CodeReader / deep-link / paste / file-input fallback */
+/** Панель волонтёра: VK CodeReader / deep-link / paste (для подтверждения участника). */
 export const VolunteerPanel: React.FC<{ id: string }> = ({ id }) => {
   const params = getHashSearchParams();
   const [qrInput, setQrInput] = useState(params.get('qr') || '');
@@ -13,7 +13,6 @@ export const VolunteerPanel: React.FC<{ id: string }> = ({ id }) => {
   const [scanning, setScanning] = useState(false);
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const canNativeScan = isVkEnvironment();
 
   useEffect(() => {
@@ -78,17 +77,12 @@ export const VolunteerPanel: React.FC<{ id: string }> = ({ id }) => {
     }
   };
 
-  const onImagePick = async (file: File | null) => {
-    if (!file) return;
-    setSnackbar('Вставьте ссылку из QR участника в поле ниже (#/volunteer?qr=…&task=…)');
-  };
-
   return (
     <Panel id={id}>
       <PanelHeader>Волонтёр</PanelHeader>
       <Group>
         <div className="m-card" style={{ fontSize: 13, marginBottom: 8 }}>
-          Отсканируйте QR участника сканером VK или вставьте ссылку / токен.
+          Отсканируйте QR бейджа участника (не QR задания на площадке) или вставьте ссылку / токен.
           Формат: <code>#/volunteer?qr=ТОКЕН&amp;task=ID</code>
         </div>
         <FormItem top="Ссылка или QR-токен участника">
@@ -103,22 +97,11 @@ export const VolunteerPanel: React.FC<{ id: string }> = ({ id }) => {
         </FormItem>
         {canNativeScan && (
           <Button size="l" stretched mode="secondary" style={{ marginBottom: 8 }} loading={scanning} onClick={scanNative}>
-            Сканировать QR (камера VK)
+            Сканировать QR участника (VK)
           </Button>
         )}
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          style={{ display: 'none' }}
-          onChange={e => onImagePick(e.target.files?.[0] || null)}
-        />
-        <Button size="l" stretched mode="tertiary" style={{ marginBottom: 8 }} onClick={() => fileRef.current?.click()}>
-          Открыть камеру / фото (fallback)
-        </Button>
         <Button size="l" stretched loading={loading} onClick={confirm}>
-          Подтвердить выполнение
+          Подтвердить задание
         </Button>
         {lastResult && (
           <div className="m-card" style={{ marginTop: 12, color: '#2F855A' }}>{lastResult}</div>

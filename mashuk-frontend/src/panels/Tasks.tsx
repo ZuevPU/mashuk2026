@@ -289,9 +289,10 @@ const TaskSubmitModal = ({
   const needsPhoto = answerType === 'photo' || answerType === 'text_and_photo';
   const isChoice = answerType === 'choice';
   const isMulti = answerType === 'multi';
-  const needsPostUrl = methods.includes('link');
-  const needsTeam = methods.includes('team');
   const isQr = methods.includes('qr');
+  // QR presence is proven by camera deep-link — do not show the old link/paste field.
+  const needsPostUrl = methods.includes('link') && !isQr;
+  const needsTeam = methods.includes('team');
   const isAuto = methods.length === 0;
   const needsAnswerFields = needsFreeText || needsPhoto || needsPostUrl || needsTeam || isChoice || isMulti;
 
@@ -403,12 +404,12 @@ const TaskSubmitModal = ({
             </div>
           )}
           {isQr && (
-            <div style={{ fontSize: 13, marginBottom: 12, lineHeight: 1.45 }}>
+            <div className="tasks-qr-status" style={{ fontSize: 13, marginBottom: 12, lineHeight: 1.45 }}>
               {effectiveQr
                 ? (needsAnswerFields
-                  ? 'Спасибо, QR принят. Вставьте ваш ответ и отправьте на проверку.'
+                  ? 'Спасибо, QR принят. Напишите ответ ниже и нажмите «Отправить на проверку».'
                   : 'Спасибо, QR принят. Нажмите «Отправить», чтобы завершить задание.')
-                : 'Отсканируйте QR обычной камерой телефона — откроется это задание, код применится сам (его не видно — так честнее). Затем отправьте ответ.'}
+                : 'Отсканируйте QR обычной камерой телефона — задание откроется само, код применится скрыто. Здесь не нужно сканировать, фотографировать QR или вставлять ссылку.'}
             </div>
           )}
           {isChoice && answerOptions.map(opt => (
