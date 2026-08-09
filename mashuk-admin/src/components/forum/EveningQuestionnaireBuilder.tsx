@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { adminDownloadBinary } from '../../admin/client';
 import {
   collectFieldKeys,
   EVENING_FIELD_TYPE_OPTIONS,
@@ -19,7 +20,7 @@ import {
 
 type Props = {
   adminFetch: (path: string, opts?: RequestInit) => Promise<any>;
-  act: (fn: () => Promise<void>, msg?: string) => void;
+  act: (fn: () => Promise<unknown>, msg?: string) => void;
 };
 
 const EMPTY_CONFIG: EveningQuestionnaireConfig = {
@@ -384,6 +385,20 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
         </button>
         <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setPreviewOpen(v => !v)}>
           {previewOpen ? 'Скрыть предпросмотр' : 'Предпросмотр'}
+        </button>
+        <button
+          type="button"
+          className="adm-btn adm-btn-primary adm-btn-sm"
+          title="Список участников (вопросы столбцами) + отдельный лист на каждый вопрос"
+          onClick={() => act(
+            () => adminDownloadBinary(
+              `/exports/evening-summary?day=${day}`,
+              `evening_summary_d${day}.xlsx`,
+            ),
+            'Файл скачан',
+          )}
+        >
+          Скачать ответы за день {day}
         </button>
         <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={save}>
           Сохранить анкету

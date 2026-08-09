@@ -5,14 +5,27 @@ import {
   type EveningExportFilters,
 } from './eveningExportData.js';
 import { addReadmeSheet, formatTs, fullName } from './exportCommon.js';
-import { roleLabel } from './exportLabels.js';
 import { createWorkbook, sendWorkbook } from './workbook.js';
 
 export type EveningSummaryExportFilters = EveningExportFilters;
 
+function safeSheetName(raw: string, used: Set<string>): string {
+  let base = raw.replace(/[\\/*?:\[\]]/g, ' ').replace(/\s+/g, ' ').trim() || 'Лист';
+  base = base.slice(0, 31);
+  let name = base;
+  let i = 2;
+  while (used.has(name)) {
+    const suffix = `~${i++}`;
+    name = `${base.slice(0, Math.max(1, 31 - suffix.length))}${suffix}`;
+  }
+  used.add(name);
+  return name;
+}
+
 /**
- * Аналитическая выгрузка «Итоги дня»: ответы участников на итоговую анкету вечера.
- * Листы: Описание, Итоги дня (широкий), Ответы по вопросам (1 строка = вопрос), Диагностика.
+ * Выгрузка итоговой анкеты вечера (как у вопросов):
+ * — «Все ответы»: 1 строка = участник, каждый вопрос — отдельный столбец;
+ * — далее отдельный лист на каждый вопрос: ФИО, направление, ответ.
  */
 export async function writeEveningSummaryExport(
   res: Response,
@@ -24,25 +37,21 @@ export async function writeEveningSummaryExport(
   const metaHeaders = [
     'ID участника',
     'ФИО',
-    'VK ID',
-    'Дата создания',
-    'Дата регистрации',
     'Направление',
     'Группа',
-    'Роль на входе',
     'День',
     'Время заполнения',
     'Статус',
-    'Источник',
   ];
 
   const wb = await createWorkbook();
   addReadmeSheet(wb, [
-    'Выгрузка «Итоги дня» — ответы на Итоговую анкету вечера (Форум).',
-    'Лист «Итоги дня»: 1 строка = участник × день, вопросы в колонках.',
-    'Лист «Ответы по вопросам»: 1 строка = один ответ на один вопрос (удобно для сводных).',
+    'Выгрузка ответов на Итоговую анкету вечера (Форум).',
+    'Лист «Все ответы»: полный список участников — каждый вопрос в отдельном столбце.',
+    'Далее — отдельный лист на каждый вопрос: кто и как ответил (ФИО, направление, ответ).',
     'Лист «Диагностика»: счётчики, если строк мало или файл казался пустым.',
-    `Строк с ответами: ${rows.length}.`,
+    `Участников с анкетой: ${rows.length}.`,
+    `Вопросов (полей): ${fields.length}.`,
     emptyReason || '',
     ...(diagnostics.notes || []),
     filters.day ? `Запрошен день: ${filters.day}.` : 'Фильтр дней: вся смена.',
@@ -51,57 +60,53 @@ export async function writeEveningSummaryExport(
     filters.shiftId != null ? `Смена админки #${filters.shiftId}.` : '',
   ].filter(Boolean));
 
-  const ws = wb.addWorksheet('Итоги дня');
-  ws.addRow([...metaHeaders, ...questionHeaders]);
+  const wsAll = wb.addWorksheet('Все ответы');
+  wsAll.addRow([...metaHeaders, ...questionHeaders]);
 
   for (const r of rows) {
-    const registeredAt = r.p.onboardingCompletedAt ?? r.p.createdAt;
-    ws.addRow([
+    wsAll.addRow([
       r.p.id,
       fullName(r.p),
-      r.p.vkId ?? '',
-      formatTs(r.p.createdAt),
-      formatTs(registeredAt),
       r.directionName ?? r.p.direction ?? '',
       r.p.groupName ?? '',
-      roleLabel(r.p.pedagogicalRole),
       r.dayNumber,
       formatTs(r.filledAt),
       r.status,
-      r.source,
       ...fields.map(f => formatEveningFieldValue(f, r.ratings, r.tomorrowRoleKey)),
     ]);
   }
 
-  // Главный лист для аналитики: каждый вопрос отдельной строкой
-  const byQ = wb.addWorksheet('Ответы по вопросам');
-  byQ.addRow([
-    'ID участника',
-    'ФИО',
-    'Направление',
-    'Группа',
-    'День',
-    'Время заполнения',
-    'Статус',
-    'Ключ вопроса',
-    'Вопрос',
-    'Ответ',
-  ]);
-  for (const r of rows) {
-    for (const field of fields) {
+  const usedNames = new Set<string>(['Описание', 'Все ответы', 'Диагностика']);
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    const label = (field.label || field.key || `Вопрос ${i + 1}`).trim();
+    const sheetName = safeSheetName(`Q${i + 1} ${label}`, usedNames);
+    const ws = wb.addWorksheet(sheetName);
+    ws.addRow(['Вопрос', label]);
+    ws.addRow(['Ключ', field.key]);
+    ws.addRow([]);
+    ws.addRow([
+      'ID участника',
+      'ФИО',
+      'Направление',
+      'Группа',
+      'День',
+      'Ответ',
+      'Время',
+      'Статус',
+    ]);
+    for (const r of rows) {
       const answer = formatEveningFieldValue(field, r.ratings, r.tomorrowRoleKey);
       if (answer === '' || answer == null) continue;
-      byQ.addRow([
+      ws.addRow([
         r.p.id,
         fullName(r.p),
         r.directionName ?? r.p.direction ?? '',
         r.p.groupName ?? '',
         r.dayNumber,
+        answer,
         formatTs(r.filledAt),
         r.status,
-        field.key,
-        field.label || field.key,
-        answer,
       ]);
     }
   }
