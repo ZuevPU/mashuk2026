@@ -1,5 +1,4 @@
 import jsQR from 'jsqr';
-import { BrowserMultiFormatReader } from '@zxing/browser';
 
 async function loadImageElement(file: File): Promise<HTMLImageElement> {
   // Prefer createImageBitmap — respects EXIF orientation on modern WebViews.
@@ -98,26 +97,17 @@ async function decodeWithBarcodeDetector(file: File): Promise<string | null> {
   }
 }
 
-async function decodeWithZxing(img: HTMLImageElement): Promise<string | null> {
-  try {
-    const reader = new BrowserMultiFormatReader();
-    const result = await reader.decodeFromImageElement(img);
-    const text = result?.getText?.()?.trim();
-    return text || null;
-  } catch {
-    return null;
-  }
-}
-
 function decodeWithJsQr(img: HTMLImageElement): string | null {
   const attempts: Array<{ maxSide: number; grayscale?: boolean; contrast?: number }> = [
     { maxSide: 1200 },
     { maxSide: 1600 },
     { maxSide: 800 },
     { maxSide: 2000 },
+    { maxSide: 640 },
     { maxSide: 1200, grayscale: true },
     { maxSide: 1600, grayscale: true, contrast: 1.4 },
     { maxSide: 800, grayscale: true, contrast: 1.6 },
+    { maxSide: 2000, grayscale: true, contrast: 1.3 },
   ];
   for (const attempt of attempts) {
     const imageData = drawScaled(img, attempt.maxSide, attempt);
@@ -137,9 +127,5 @@ export async function decodeQrFromImageFile(file: File): Promise<string | null> 
   if (fromDetector) return fromDetector;
 
   const img = await loadImageElement(file);
-
-  const fromZxing = await decodeWithZxing(img);
-  if (fromZxing) return fromZxing;
-
   return decodeWithJsQr(img);
 }
