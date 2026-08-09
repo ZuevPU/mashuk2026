@@ -108,7 +108,7 @@ function aggregateField(field: EveningField, rows: EveningExportRow[]): EveningQ
       continue;
     }
 
-    if (field.type === 'choice') {
+    if (field.type === 'choice' || field.type === 'program_event') {
       const label = String(row.answer);
       counts.set(label, (counts.get(label) || 0) + 1);
       continue;

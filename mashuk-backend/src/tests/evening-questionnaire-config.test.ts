@@ -4,6 +4,7 @@ import {
   DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
   getEveningOpensAtMsk,
   isEveningOpenForConfig,
+  isFieldVisible,
   resolveEveningConfigForDay,
   stripPointBFromEveningConfig,
   normalizeExperimentStep,
@@ -121,5 +122,29 @@ describe('eveningQuestionnaireConfig', () => {
     assert.equal(resolved.steps[0].fields.some(f => f.type === 'point_b_cta'), false);
     assert.equal(resolved.opensAtMsk, '21:30');
     assert.equal(stripPointBFromEveningConfig(withPointB).steps[0].fields.length, 1);
+  });
+
+  it('default conditional step links practice to program_event pick', () => {
+    const step = DEFAULT_EVENING_QUESTIONNAIRE_CONFIG.steps.find(s => s.id === 'conditional');
+    assert.ok(step);
+    const eventField = step!.fields.find(f => f.key === 'practiceEvent');
+    assert.equal(eventField?.type, 'program_event');
+    assert.deepEqual(eventField?.visibleWhen, { field: 'practiceYes', equals: true });
+    const recommend = step!.fields.find(f => f.key === 'recommendYes');
+    assert.deepEqual(recommend?.visibleWhen, { field: 'practiceEvent', equals: '__set__' });
+  });
+
+  it('isFieldVisible supports __set__ for program_event answers', () => {
+    const score = {
+      key: 'score',
+      type: 'scale_1_10' as const,
+      label: 'Score',
+      visibleWhen: { field: 'ev', equals: '__set__' as const },
+    };
+    assert.equal(isFieldVisible(score, {}), false);
+    assert.equal(isFieldVisible(score, { ev: null }), false);
+    assert.equal(isFieldVisible(score, {
+      ev: { eventId: 12, eventTitle: 'Практика А' },
+    }), true);
   });
 });

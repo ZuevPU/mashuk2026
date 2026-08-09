@@ -2,9 +2,12 @@ import { Response } from 'express';
 import { and, eq, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db/index.js';
-import { participantDayState, dayExperiments, pedagogicalRoles, questions, answers } from '../db/schema.js';
+import {
+  participantDayState, dayExperiments, pedagogicalRoles, questions, answers, events,
+} from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
+  eveningProgramEventFields,
   getEveningOpensAtMsk,
   isEveningOpenForConfig,
   resolveEveningConfigForDay,
@@ -15,17 +18,27 @@ import { resolveEveningSurveyDayForParticipant } from '../services/eveningSurvey
 import { ROLE_KEYS, getRoleMeta } from '../services/roleService.js';
 import { EVENING_SCALE_KEYS } from '../services/touchpointTemplates.js';
 import { awardPoints } from '../services/pointsService.js';
+import { collectAfterBlocksTree } from '../services/afterBlocksEvents.js';
+import { resolveActiveShiftId } from '../services/shiftService.js';
 
 const scaleField = z.coerce.number().int().min(1).max(5).optional();
 
+const programEventRatingValue = z.object({
+  eventId: z.coerce.number().int().positive(),
+  eventTitle: z.string().max(500),
+  parentEventId: z.coerce.number().int().positive().nullable().optional(),
+  parentEventTitle: z.string().max(500).nullable().optional(),
+});
+
 const eveningSchema = z.object({
   dayNumber: z.coerce.number().int().min(1).max(7).optional(),
-  // Dynamic keys from admin evening builder (choice / text / scales / yes_no).
+  // Dynamic keys from admin evening builder (choice / text / scales / yes_no / program_event).
   ratings: z.record(z.union([
     z.string().max(4000),
     z.number(),
     z.boolean(),
     z.null(),
+    programEventRatingValue,
   ])).default({}),
   tomorrowRoleKey: z.enum(ROLE_KEYS as unknown as [string, ...string[]]).optional(),
   experimentStatus: z.enum(['none', 'in_progress', 'done']).optional(),
@@ -299,6 +312,49 @@ export async function loadDayContext(
     tomorrowRoleKey?: string;
   } | null;
 
+  const programEventFieldDefs = eveningProgramEventFields(config);
+  let programEventOptions: Record<string, {
+    events: Array<{
+      id: number;
+      title: string;
+      place: string | null;
+      startTime: Date | null;
+      endTime: Date | null;
+      children: Array<{
+        id: number;
+        title: string;
+        place: string | null;
+        startTime: Date | null;
+        endTime: Date | null;
+      }>;
+    }>;
+    emptyReason: 'none' | 'none_in_program' | 'none_conducted_yet';
+  }> = {};
+  if (programEventFieldDefs.length > 0) {
+    const shiftId = typeof (settings as { shiftId?: number }).shiftId === 'number'
+      ? (settings as { shiftId: number }).shiftId
+      : await resolveActiveShiftId();
+    const dayEv = await db.select().from(events).where(and(
+      eq(events.dayNumber, dayNumber),
+      eq(events.shiftId, shiftId),
+    ));
+    const published = dayEv.filter(e => e.isPublished !== false && e.dayPublished !== false);
+    for (const field of programEventFieldDefs) {
+      const tree = collectAfterBlocksTree(
+        published,
+        field.linkedEventIds,
+        settings,
+        now,
+      );
+      programEventOptions[field.key] = {
+        events: tree.events,
+        emptyReason: tree.events.length > 0
+          ? 'none'
+          : (tree.programBlockCount > 0 ? 'none_conducted_yet' : 'none_in_program'),
+      };
+    }
+  }
+
   return {
     roleOfDay: showRoleOfDay ? {
       roleKey: activeRoleKey,
@@ -316,6 +372,7 @@ export async function loadDayContext(
       completed: eveningDone,
       askTomorrowRole,
       config,
+      programEventOptions,
       scales: EVENING_SCALE_KEYS.map(key => ({
         key,
         label: ({

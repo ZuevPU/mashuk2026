@@ -10,6 +10,7 @@ export type EveningField = {
   options?: string[];
   allowOther?: boolean;
   otherLabel?: string;
+  linkedEventIds?: number[];
   visibleWhen?: { field: string; equals: boolean | string | number };
 };
 
@@ -20,6 +21,30 @@ export type EveningStep = {
 };
 
 type RoleOpt = { roleKey: string; name: string };
+
+export type EveningProgramEventChild = {
+  id: number;
+  title: string;
+  place?: string | null;
+  startTime?: string | Date | null;
+  endTime?: string | Date | null;
+};
+
+export type EveningProgramEventNode = {
+  id: number;
+  title: string;
+  place?: string | null;
+  startTime?: string | Date | null;
+  endTime?: string | Date | null;
+  children: EveningProgramEventChild[];
+};
+
+export type EveningProgramEventValue = {
+  eventId: number;
+  eventTitle: string;
+  parentEventId?: number | null;
+  parentEventTitle?: string | null;
+};
 
 export type EveningExperimentContext = {
   status?: string;
@@ -40,11 +65,31 @@ export type EveningQuestionnaireProps = {
     savedDraft?: { step?: number; form?: Record<string, unknown>; tomorrowRoleKey?: string } | null;
     pointBQuestionId?: number | null;
     hasPointB?: boolean;
+    programEventOptions?: Record<string, {
+      events: EveningProgramEventNode[];
+      emptyReason?: 'none' | 'none_in_program' | 'none_conducted_yet';
+    }>;
   };
   experiment?: EveningExperimentContext;
   onClose: () => void;
   onSubmitted: () => void;
 };
+
+function isProgramEventValue(raw: unknown): raw is EveningProgramEventValue {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const o = raw as Record<string, unknown>;
+  return Number.isFinite(Number(o.eventId)) && Number(o.eventId) > 0;
+}
+
+function isFieldValueSet(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value === 'boolean') return true;
+  if (isProgramEventValue(value)) return true;
+  if (typeof value === 'object') return Object.keys(value as object).length > 0;
+  return false;
+}
 
 function fieldVisible(
   field: EveningField,
@@ -54,12 +99,156 @@ function fieldVisible(
   if (!field.visibleWhen) return true;
   const v = form[field.visibleWhen.field];
   const expected = field.visibleWhen.equals;
+  if (expected === '__set__') return isFieldValueSet(v);
   if (expected === '__other__') {
     const parent = allFields.find(f => f.key === field.visibleWhen!.field);
     const opts = parent?.options ?? [];
     return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v);
   }
   return v === expected;
+}
+
+function ProgramEventPicker({
+  field,
+  value,
+  nodes,
+  emptyReason,
+  onChange,
+}: {
+  field: EveningField;
+  value: EveningProgramEventValue | null;
+  nodes: EveningProgramEventNode[];
+  emptyReason?: string;
+  onChange: (v: EveningProgramEventValue | null) => void;
+}) {
+  const [parentId, setParentId] = useState<number | null>(value?.parentEventId ?? value?.eventId ?? null);
+  const parent = nodes.find(e => e.id === parentId) || null;
+  const children = parent?.children || [];
+  const topicPickNeeded = children.length > 1;
+  const selectedTopicId = value?.eventId ?? null;
+
+  useEffect(() => {
+    if (!value) {
+      setParentId(null);
+      return;
+    }
+    setParentId(value.parentEventId ?? value.eventId);
+  }, [value?.eventId, value?.parentEventId]);
+
+  const pickParent = (ev: EveningProgramEventNode) => {
+    setParentId(ev.id);
+    if (ev.children.length === 0) {
+      onChange({
+        eventId: ev.id,
+        eventTitle: ev.title,
+        parentEventId: ev.id,
+        parentEventTitle: ev.title,
+      });
+      return;
+    }
+    if (ev.children.length === 1) {
+      const c = ev.children[0];
+      onChange({
+        eventId: c.id,
+        eventTitle: c.title,
+        parentEventId: ev.id,
+        parentEventTitle: ev.title,
+      });
+      return;
+    }
+    onChange(null);
+  };
+
+  const pickChild = (child: EveningProgramEventChild) => {
+    if (!parent) return;
+    onChange({
+      eventId: child.id,
+      eventTitle: child.title,
+      parentEventId: parent.id,
+      parentEventTitle: parent.title,
+    });
+  };
+
+  const waiting = nodes.length === 0 && emptyReason === 'none_conducted_yet';
+
+  return (
+    <FormItem top={<span className="evening-q__label">{field.label}</span>}>
+      {nodes.length === 0 ? (
+        <div style={{ fontSize: 12, color: '#888', lineHeight: 1.4 }}>
+          {waiting
+            ? 'События ещё не начались — список появится после старта блоков.'
+            : 'В программе дня пока нет блоков для выбора.'}
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 11, color: '#666', marginBottom: 8 }}>
+            Сначала блок программы, затем тема / подтема (если есть).
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: topicPickNeeded ? 10 : 0 }}>
+            {nodes.map(ev => {
+              const selected = parentId === ev.id;
+              return (
+                <button
+                  key={ev.id}
+                  type="button"
+                  onClick={() => pickParent(ev)}
+                  style={{
+                    textAlign: 'left',
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    border: selected ? '2px solid #2D6A4F' : '1px solid #ddd',
+                    background: selected ? '#D8F3DC' : '#fff',
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                >
+                  {ev.title}
+                  {ev.children.length > 1 && (
+                    <span style={{ fontWeight: 400, color: '#888', marginLeft: 6 }}>
+                      · {ev.children.length} тем
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {topicPickNeeded && parent && (
+            <>
+              <div style={{ fontSize: 12, fontWeight: 600, margin: '4px 0 6px' }}>Тема / подтема</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {children.map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => pickChild(c)}
+                    style={{
+                      textAlign: 'left',
+                      padding: '8px 10px',
+                      borderRadius: 10,
+                      border: selectedTopicId === c.id ? '2px solid #2D6A4F' : '1px solid #ddd',
+                      background: selectedTopicId === c.id ? '#D8F3DC' : '#fff',
+                      cursor: 'pointer',
+                      fontSize: 13,
+                    }}
+                  >
+                    {c.title}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {value && (
+            <div style={{ fontSize: 12, color: '#2D6A4F', marginTop: 8 }}>
+              Выбрано: {value.parentEventTitle && value.parentEventTitle !== value.eventTitle
+                ? `${value.parentEventTitle} → ${value.eventTitle}`
+                : value.eventTitle}
+            </div>
+          )}
+        </>
+      )}
+    </FormItem>
+  );
 }
 
 function stepHasVisibleFields(
@@ -255,6 +444,20 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
             )}
           </div>
         </FormItem>
+      );
+    }
+    if (field.type === 'program_event') {
+      const pack = questionnaire.programEventOptions?.[field.key];
+      const current = isProgramEventValue(form[field.key]) ? form[field.key] as EveningProgramEventValue : null;
+      return (
+        <ProgramEventPicker
+          key={field.key}
+          field={field}
+          value={current}
+          nodes={pack?.events || []}
+          emptyReason={pack?.emptyReason}
+          onChange={v => setField(field.key, v)}
+        />
       );
     }
     if (field.type === 'text' || field.type === 'experiment_text') {

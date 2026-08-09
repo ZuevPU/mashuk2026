@@ -8,6 +8,7 @@ export type EveningFieldType =
   | 'text'
   | 'scale_1_10'
   | 'choice'
+  | 'program_event'
   | 'role_select'
   | 'experiment_text'
   | 'point_b_cta';
@@ -21,8 +22,43 @@ export type EveningField = {
   options?: string[];
   allowOther?: boolean;
   otherLabel?: string;
+  /**
+   * For type=program_event: root program block ids to offer (empty = all day roots).
+   * Participant picks block → theme/subtopic (same tree as «После блоков»).
+   */
+  linkedEventIds?: number[];
+  /**
+   * Show field when another field matches.
+   * Special equals:
+   * - `__other__` — choice «свой вариант»
+   * - `__set__` — parent has a non-empty value (e.g. event picked)
+   */
   visibleWhen?: { field: string; equals: boolean | string | number };
 };
+
+/** Stored shape for type=program_event answers inside evening_ratings. */
+export type EveningProgramEventValue = {
+  eventId: number;
+  eventTitle: string;
+  parentEventId?: number | null;
+  parentEventTitle?: string | null;
+};
+
+export function isEveningProgramEventValue(raw: unknown): raw is EveningProgramEventValue {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const o = raw as Record<string, unknown>;
+  return Number.isFinite(Number(o.eventId)) && Number(o.eventId) > 0;
+}
+
+export function isEveningFieldValueSet(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value === 'boolean') return true;
+  if (isEveningProgramEventValue(value)) return true;
+  if (typeof value === 'object') return Object.keys(value as object).length > 0;
+  return false;
+}
 
 export type EveningStep = {
   id: string;
@@ -118,8 +154,14 @@ export const DEFAULT_EVENING_QUESTIONNAIRE_CONFIG: EveningQuestionnaireConfig = 
         { key: 'tripYes', type: 'yes_no', label: 'Выезжал ли ты на полезную программу?', required: false },
         { key: 'tripScore', type: 'scale_1_5', label: 'Оцени выездную полезную программу', required: false, visibleWhen: { field: 'tripYes', equals: true } },
         { key: 'practiceYes', type: 'yes_no', label: 'Был ли ты на презентации педагогической практики?', required: false },
-        { key: 'practiceName', type: 'text', label: 'Напиши, на какой', required: false, visibleWhen: { field: 'practiceYes', equals: true } },
-        { key: 'recommendYes', type: 'yes_no', label: 'Готов ли рекомендовать эту практику коллегам?', required: false, visibleWhen: { field: 'practiceYes', equals: true } },
+        {
+          key: 'practiceEvent',
+          type: 'program_event',
+          label: 'Выбери блок / тему из программы',
+          required: false,
+          visibleWhen: { field: 'practiceYes', equals: true },
+        },
+        { key: 'recommendYes', type: 'yes_no', label: 'Готов ли рекомендовать эту практику коллегам?', required: false, visibleWhen: { field: 'practiceEvent', equals: '__set__' } },
         { key: 'recommendScore', type: 'scale_1_10', label: 'Оцени практику', required: false, visibleWhen: { field: 'recommendYes', equals: true } },
       ],
     },
@@ -227,10 +269,19 @@ export function isFieldVisible(
   if (!field.visibleWhen) return true;
   const v = form[field.visibleWhen.field];
   const expected = field.visibleWhen.equals;
+  if (expected === '__set__') {
+    return isEveningFieldValueSet(v);
+  }
   if (expected === '__other__') {
     const parent = allFields.find(f => f.key === field.visibleWhen!.field);
     const opts = parent?.options ?? [];
     return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v);
   }
   return v === expected;
+}
+
+/** Collect program_event fields that need a day program tree. */
+export function eveningProgramEventFields(config: EveningQuestionnaireConfig | null | undefined): EveningField[] {
+  if (!config?.steps?.length) return [];
+  return config.steps.flatMap(s => s.fields.filter(f => f.type === 'program_event'));
 }

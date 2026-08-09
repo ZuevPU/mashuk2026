@@ -151,6 +151,15 @@ export function formatEveningFieldValue(
   if (field.type === 'yes_no') return formatYesNo(raw);
   if (typeof raw === 'boolean') return formatYesNo(raw);
   if (typeof raw === 'number') return raw;
+  if (field.type === 'program_event' && typeof raw === 'object' && !Array.isArray(raw)) {
+    const o = raw as { eventTitle?: string; parentEventTitle?: string; eventId?: number };
+    const title = String(o.eventTitle || '').trim();
+    const parent = String(o.parentEventTitle || '').trim();
+    if (title && parent && parent !== title) return `${parent} → ${title}`;
+    if (title) return title;
+    if (o.eventId) return `#${o.eventId}`;
+    return '';
+  }
   if (typeof raw === 'object') return JSON.stringify(raw);
   return String(raw);
 }

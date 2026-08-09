@@ -14,6 +14,16 @@ type Props = {
   act: (fn: () => Promise<void>, msg?: string) => void;
 };
 
+type ProgramEventRow = {
+  id: number;
+  title: string;
+  dayNumber: number;
+  blockType?: string | null;
+  parentEventId?: number | null;
+  sortOrder?: number | null;
+  startTime?: string | null;
+};
+
 const EMPTY_CONFIG: EveningQuestionnaireConfig = {
   steps: [{ id: 'step_1', title: 'Новый шаг', fields: [] }],
 };
@@ -28,6 +38,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
   const [copyFromDay, setCopyFromDay] = useState(1);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [programEvents, setProgramEvents] = useState<ProgramEventRow[]>([]);
 
   const applyPublishState = (res: {
     opensAtMsk?: string;
@@ -64,6 +75,12 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
   useEffect(() => {
     loadDay(day).catch(() => {});
   }, [day]);
+
+  useEffect(() => {
+    adminFetch('/events')
+      .then((res: { events?: ProgramEventRow[] }) => setProgramEvents(res.events || []))
+      .catch(() => setProgramEvents([]));
+  }, [adminFetch]);
 
   const updateStep = (index: number, patch: Partial<EveningStep>) => {
     setConfig(prev => {
@@ -115,6 +132,43 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
     setConfig(prev => {
       const steps = prev.steps.map((s, si) =>
         si === stepIndex ? { ...s, fields: [...s.fields, field] } : s,
+      );
+      return { ...prev, steps };
+    });
+  };
+
+  /** Ready-made chain: Да/Нет → событие программы → оценка 1–10 */
+  const addProgramRateChain = (stepIndex: number) => {
+    const keys = collectFieldKeys(config);
+    const yesKey = slugKey('attended_block', keys);
+    const eventKey = slugKey('program_block', keys);
+    const scoreKey = slugKey('block_score', keys);
+    const chain: EveningField[] = [
+      {
+        key: yesKey,
+        type: 'yes_no',
+        label: 'Участвовал(а) в блоке программы сегодня?',
+        required: false,
+      },
+      {
+        key: eventKey,
+        type: 'program_event',
+        label: 'Выберите блок / тему из программы',
+        required: true,
+        linkedEventIds: [],
+        visibleWhen: { field: yesKey, equals: true },
+      },
+      {
+        key: scoreKey,
+        type: 'scale_1_10',
+        label: 'Оцените выбранный блок',
+        required: true,
+        visibleWhen: { field: eventKey, equals: '__set__' },
+      },
+    ];
+    setConfig(prev => {
+      const steps = prev.steps.map((s, si) =>
+        si === stepIndex ? { ...s, fields: [...s.fields, ...chain] } : s,
       );
       return { ...prev, steps };
     });
@@ -211,8 +265,21 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
 
   const conditionParentsInStep = (step: EveningStep, fieldKey: string) =>
     step.fields.filter(f =>
-      f.key !== fieldKey && (f.type === 'yes_no' || f.type === 'choice'),
+      f.key !== fieldKey && (f.type === 'yes_no' || f.type === 'choice' || f.type === 'program_event'),
     );
+
+  const dayProgramRoots = programEvents
+    .filter(ev =>
+      ev.dayNumber === day
+      && !ev.parentEventId
+      && String(ev.blockType || '').toLowerCase() !== 'break',
+    )
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id);
+
+  const childThemesOf = (rootId: number) =>
+    programEvents
+      .filter(ev => ev.parentEventId === rootId && String(ev.blockType || '').toLowerCase() !== 'break')
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id);
 
   const fieldTypeOptions = EVENING_FIELD_TYPE_OPTIONS.filter(o => o.value !== 'point_b_cta');
 
@@ -222,6 +289,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
       <p className="adm-forum-hint">
         Участники заполняют эту анкету вечером на главной (дни 1–7). Точка Б — отдельный вопрос в последний день смены (день 8), в эту анкету не входит.
         Поле «Эксперимент с ролью» лучше выносить в отдельный шаг — на главной оно показывается отдельным блоком с текстом эксперимента дня.
+        Тип «Событие / тема из программы» берёт блоки дня из раздела «Программа»; можно ограничить список галочками и собрать цепочку «Да → событие → оценка».
       </p>
       <div className="adm-seg adm-forum-day-seg">
         {Array.from({ length: 7 }, (_, i) => i + 1).map(d => (
@@ -371,6 +439,12 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
                     patch.allowOther = undefined;
                     patch.otherLabel = undefined;
                   }
+                  if (type === 'program_event' && !field.linkedEventIds) {
+                    patch.linkedEventIds = [];
+                  }
+                  if (type !== 'program_event') {
+                    patch.linkedEventIds = undefined;
+                  }
                   updateField(stepIndex, fieldIndex, patch);
                 }}
               >
@@ -400,7 +474,9 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
                       if (!dep) return;
                       const equals = dep.type === 'yes_no'
                         ? true
-                        : (dep.options?.filter(Boolean)[0] || '');
+                        : dep.type === 'program_event'
+                          ? '__set__'
+                          : (dep.options?.filter(Boolean)[0] || '');
                       updateField(stepIndex, fieldIndex, { visibleWhen: { field: dep.key, equals } });
                     }}
                   />
@@ -419,7 +495,9 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
                         const dep = parents.find(f => f.key === e.target.value);
                         const equals = dep?.type === 'yes_no'
                           ? true
-                          : (dep?.options?.filter(Boolean)[0] || '');
+                          : dep?.type === 'program_event'
+                            ? '__set__'
+                            : (dep?.options?.filter(Boolean)[0] || '');
                         updateField(stepIndex, fieldIndex, {
                           visibleWhen: { field: e.target.value, equals },
                         });
@@ -447,6 +525,8 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
                           <option value="true">= Да</option>
                           <option value="false">= Нет</option>
                         </>
+                      ) : parent?.type === 'program_event' ? (
+                        <option value="__set__">= событие выбрано</option>
                       ) : (
                         <>
                           {(parent?.options || []).filter(Boolean).map(opt => (
@@ -515,11 +595,81 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
                   </label>
                 </div>
               )}
+              {field.type === 'program_event' && (
+                <div style={{ gridColumn: '1 / -1', marginTop: 6 }}>
+                  <div className="adm-label">Связь с программой дня {day}</div>
+                  <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 8px' }}>
+                    Отметьте блоки (корневые события). Если ничего не отмечено — участнику покажутся все блоки дня.
+                    Внутри блока он сможет выбрать подтему, если она есть в программе.
+                  </p>
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                    maxHeight: 220,
+                    overflowY: 'auto',
+                    padding: 10,
+                    background: '#f9f9f9',
+                    borderRadius: 8,
+                    border: '1px solid #eee',
+                  }}>
+                    {dayProgramRoots.map(ev => {
+                      const linked = field.linkedEventIds || [];
+                      const checked = linked.includes(ev.id);
+                      const kids = childThemesOf(ev.id);
+                      return (
+                        <div key={ev.id}>
+                          <label className="adm-forum-check" style={{ display: 'flex', gap: 6, fontSize: 13, fontWeight: 600 }}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                const next = checked
+                                  ? linked.filter(id => id !== ev.id)
+                                  : [...linked, ev.id];
+                                updateField(stepIndex, fieldIndex, { linkedEventIds: next });
+                              }}
+                            />
+                            {ev.title}
+                          </label>
+                          {kids.length > 0 && (
+                            <div style={{ marginLeft: 28, fontSize: 12, color: '#555' }}>
+                              {kids.map(c => (
+                                <div key={c.id}>· {c.title}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {dayProgramRoots.length === 0 && (
+                      <p className="adm-muted" style={{ fontSize: 12, margin: 0 }}>
+                        Нет событий программы на день {day}. Добавьте их во вкладке «Программа».
+                      </p>
+                    )}
+                  </div>
+                  {(field.linkedEventIds?.length || 0) > 0 && (
+                    <p className="adm-muted" style={{ fontSize: 12, marginTop: 6 }}>
+                      Выбрано блоков: {field.linkedEventIds!.length}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           ))}
-          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => addField(stepIndex)}>
-            + Добавить вопрос
-          </button>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => addField(stepIndex)}>
+              + Добавить вопрос
+            </button>
+            <button
+              type="button"
+              className="adm-btn adm-btn-secondary adm-btn-sm"
+              onClick={() => addProgramRateChain(stepIndex)}
+              title="Да/нет → выбор из программы → оценка 1–10"
+            >
+              + Цепочка: Да → событие → 1–10
+            </button>
+          </div>
         </div>
       ))}
       <button type="button" className="adm-btn adm-btn-secondary" onClick={addStep} style={{ marginTop: 12 }}>
