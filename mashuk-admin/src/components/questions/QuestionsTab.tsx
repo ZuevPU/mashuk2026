@@ -482,7 +482,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
             if (!editingId) return;
             const ok = window.confirm(
               `Аннулировать баллы всем, кто ответил на вопрос «${draft.title || editingId}»?\n\n`
-              + 'Будут сняты начисления, сделанные при ответе на этот вопрос. Ответы сохранятся.',
+              + 'Снимутся ВСЕ начисления этого типа у ответивших (включая повторные накрутки). Ответы сохранятся.',
             );
             if (!ok) return;
             act(async () => {
