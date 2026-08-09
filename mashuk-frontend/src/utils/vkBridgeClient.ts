@@ -32,18 +32,75 @@ export function initVkBridge(): Promise<void> {
   return vkInitPromise;
 }
 
-/** Native QR / barcode scanner. Returns raw code string or null if unavailable/cancelled. */
-export async function openCodeReader(): Promise<string | null> {
+export type CodeReaderFailureReason = 'unavailable' | 'cancelled' | 'timeout' | 'error';
+
+export type CodeReaderResult =
+  | { ok: true; code: string }
+  | { ok: false; reason: CodeReaderFailureReason; detail?: string };
+
+function classifyBridgeError(err: unknown): CodeReaderFailureReason {
+  const raw = (() => {
+    if (!err) return '';
+    if (typeof err === 'string') return err;
+    if (err instanceof Error) return err.message;
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  })();
+  const text = raw.toLowerCase();
+
+  if (text.includes('timeout')) return 'timeout';
+  if (
+    text.includes('denied')
+    || text.includes('cancel')
+    || text.includes('closed')
+    || text.includes('user deny')
+    || text.includes('user_denied')
+  ) {
+    return 'cancelled';
+  }
+  return 'error';
+}
+
+/** Native QR / barcode scanner with a typed failure reason. */
+export async function readCodeWithVk(): Promise<CodeReaderResult> {
   await initVkBridge();
-  if (!isVkEnvironment() || typeof bridge.send !== 'function') return null;
+  if (!isVkEnvironment() || typeof bridge.send !== 'function') {
+    return { ok: false, reason: 'unavailable', detail: 'not_embedded' };
+  }
   try {
     const result = await withTimeout(
       bridge.send('VKWebAppOpenCodeReader') as Promise<{ code_data?: string; qr_code?: string }>,
       60_000,
     );
     const code = result?.code_data || result?.qr_code || null;
-    return typeof code === 'string' && code.trim() ? code.trim() : null;
-  } catch {
-    return null;
+    if (typeof code === 'string' && code.trim()) {
+      return { ok: true, code: code.trim() };
+    }
+    return { ok: false, reason: 'cancelled' };
+  } catch (err) {
+    return { ok: false, reason: classifyBridgeError(err), detail: err instanceof Error ? err.message : undefined };
+  }
+}
+
+/** @deprecated Prefer readCodeWithVk for distinct error copy. */
+export async function openCodeReader(): Promise<string | null> {
+  const result = await readCodeWithVk();
+  return result.ok ? result.code : null;
+}
+
+export function codeReaderFailureMessage(reason: CodeReaderFailureReason): string {
+  switch (reason) {
+    case 'unavailable':
+      return 'Сканер VK недоступен на этом устройстве — вставьте ссылку с QR вручную или откройте QR камерой телефона';
+    case 'timeout':
+      return 'Сканер VK не ответил — попробуйте ещё раз или вставьте ссылку с QR вручную';
+    case 'error':
+      return 'Не удалось открыть сканер VK — проверьте доступ к камере или вставьте ссылку с QR вручную';
+    case 'cancelled':
+    default:
+      return 'Сканирование отменено';
   }
 }

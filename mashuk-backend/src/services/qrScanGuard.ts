@@ -54,7 +54,7 @@ export async function assertQrScanAllowed(params: {
   if (deviceHit) {
     return {
       ok: false,
-      error: 'Это QR-задание уже выполнено с этого устройства другим участником',
+      error: 'Это QR-задание уже выполнено с этого же устройства другим участником. Откройте мини-приложение со своего телефона или попросите волонтёра подтвердить задание.',
       outcome: 'blocked_device',
     };
   }

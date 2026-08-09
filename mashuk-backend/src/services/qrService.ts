@@ -47,13 +47,25 @@ export async function buildQrDataUrl(text: string, size = 200): Promise<string> 
   });
 }
 
+const WEAK_CLIENT_DEVICE_KEYS = new Set(['', 'unknown', 'unknown-device']);
+
+/**
+ * Fingerprint for QR anti-share checks.
+ * Prefer the client install id only — venue Wi‑Fi NAT + similar VK WebView UAs
+ * made ip|ua|client collide across unrelated phones (especially when client was
+ * the shared fallback "unknown-device").
+ * Without a reliable client id, return an ephemeral key so device-block never
+ * false-positives; same-participant duplicates are still blocked separately.
+ */
 export function buildDeviceKey(input: {
   ip?: string | null;
   userAgent?: string | null;
   clientDeviceKey?: string | null;
 }): string {
-  const ip = (input.ip || 'unknown').trim().slice(0, 64);
-  const ua = (input.userAgent || 'unknown').trim().slice(0, 512);
   const client = (input.clientDeviceKey || '').trim().slice(0, 128);
-  return crypto.createHash('sha256').update(`${ip}|${ua}|${client}`).digest('hex').slice(0, 32);
+  if (client && !WEAK_CLIENT_DEVICE_KEYS.has(client.toLowerCase())) {
+    return crypto.createHash('sha256').update(`client:${client}`).digest('hex').slice(0, 32);
+  }
+  const nonce = crypto.randomBytes(16).toString('hex');
+  return crypto.createHash('sha256').update(`ephemeral:${nonce}`).digest('hex').slice(0, 32);
 }

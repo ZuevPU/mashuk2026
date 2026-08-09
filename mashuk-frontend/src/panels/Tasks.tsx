@@ -3,7 +3,7 @@ import { Panel, PanelHeader, Group, Spinner, Button, Textarea, ModalRoot, ModalP
 import { useActiveVkuiLocation } from '@vkontakte/vk-mini-apps-router';
 import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { uploadTaskPhoto } from '../utils/uploadPhoto';
-import { openCodeReader } from '../utils/vkBridgeClient';
+import { codeReaderFailureMessage, isVkEnvironment, readCodeWithVk } from '../utils/vkBridgeClient';
 import { extractTaskQrToken, parseTaskQrScan } from '../utils/qrDeepLink';
 import { getDeviceKey } from '../utils/deviceKey';
 import { useAppModal } from '../App';
@@ -84,13 +84,14 @@ function taskConfirmLabel(task: { confirmationMethods?: string[]; confirmationTy
 
 function isTaskAlreadySubmittedError(message: string): boolean {
   const m = message.toLowerCase();
+  // Do not match «с этого устройства другим участником» — that is a hard block, not "already done".
+  if (m.includes('другим участником') || m.includes('этого устройства')) return false;
   return m.includes('already submitted')
     || m.includes('уже выполн')
     || m.includes('уже на проверке')
     || m.includes('заявка уже')
     || m.includes('одноразовое')
-    || m.includes('лимит выполнений')
-    || m.includes('этого устройства');
+    || m.includes('лимит выполнений');
 }
 
 function repeatableProgressLabel(task: {
@@ -204,11 +205,13 @@ const TaskSubmitModal = ({
   const [teamResults, setTeamResults] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
   const [scannedQr, setScannedQr] = useState('');
+  const [qrPaste, setQrPaste] = useState('');
   const [selectedChoice, setSelectedChoice] = useState('');
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const autoQrSubmitRef = useRef(false);
+  const canNativeScan = isVkEnvironment();
   const methods = taskMethodsFromMeta(meta);
   const answerType = meta?.answerType || (methods.includes('photo') ? 'text_and_photo' : 'text');
   const answerOptions: Array<{ label: string; value: string }> = meta?.answerOptions || [];
@@ -217,6 +220,7 @@ const TaskSubmitModal = ({
 
   useEffect(() => {
     setScannedQr(meta?._scannedQr || '');
+    setQrPaste('');
     setSelectedChoice('');
     setSelectedMulti([]);
     setAnswerText('');
@@ -225,6 +229,19 @@ const TaskSubmitModal = ({
     setFormError(null);
     autoQrSubmitRef.current = false;
   }, [taskId, meta?._scannedQr]);
+
+  const applyScannedQr = useCallback((raw: string) => {
+    const token = extractTaskQrToken(raw);
+    if (!token) {
+      setSnackbar('Не удалось прочитать QR — нужна ссылка с параметром qr=…');
+      return false;
+    }
+    setScannedQr(token);
+    setQrPaste(raw.trim());
+    setFormError(null);
+    setSnackbar('QR задания распознан');
+    return true;
+  }, [setSnackbar]);
 
   const finishSuccess = useCallback((payload: SubmitSuccessPayload) => {
     onClose();
@@ -410,28 +427,49 @@ const TaskSubmitModal = ({
             <div style={{ fontSize: 13, marginBottom: 8 }}>
               {effectiveQr
                 ? 'QR распознан — начисляем баллы…'
-                : 'Отсканируйте QR задания камерой VK или откройте ссылку с площадки.'}
+                : 'Отсканируйте QR задания камерой VK, откройте ссылку с площадки или вставьте её ниже.'}
+              {canNativeScan ? (
+                <Button
+                  size="m"
+                  mode="secondary"
+                  stretched
+                  style={{ marginTop: 8 }}
+                  onClick={async () => {
+                    const result = await readCodeWithVk();
+                    if (!result.ok) {
+                      setSnackbar(codeReaderFailureMessage(result.reason));
+                      return;
+                    }
+                    applyScannedQr(result.code);
+                  }}
+                >
+                  Сканировать QR (VK)
+                </Button>
+              ) : (
+                <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
+                  Встроенный сканер VK недоступен — откройте QR обычной камерой телефона или вставьте ссылку.
+                </div>
+              )}
+              <Input
+                style={{ marginTop: 8 }}
+                value={qrPaste}
+                placeholder="Вставьте ссылку с QR (#/tasks?task=…&qr=…)"
+                onChange={e => setQrPaste(e.target.value)}
+              />
               <Button
                 size="m"
-                mode="secondary"
+                mode="tertiary"
                 stretched
                 style={{ marginTop: 8 }}
-                onClick={async () => {
-                  const raw = await openCodeReader();
-                  if (!raw) {
-                    setSnackbar('Сканирование отменено');
+                onClick={() => {
+                  if (!qrPaste.trim()) {
+                    setSnackbar('Вставьте ссылку или токен из QR');
                     return;
                   }
-                  const token = extractTaskQrToken(raw);
-                  if (!token) {
-                    setSnackbar('Не удалось прочитать QR');
-                    return;
-                  }
-                  setScannedQr(token);
-                  setSnackbar('QR задания распознан');
+                  applyScannedQr(qrPaste);
                 }}
               >
-                Сканировать QR (VK)
+                Подтвердить ссылку QR
               </Button>
             </div>
           )}
@@ -553,12 +591,12 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
   }, []);
 
   const scanTaskQr = useCallback(async () => {
-    const raw = await openCodeReader();
-    if (!raw) {
-      setSnackbar('Сканирование отменено');
+    const result = await readCodeWithVk();
+    if (!result.ok) {
+      setSnackbar(codeReaderFailureMessage(result.reason));
       return;
     }
-    const parsed = parseTaskQrScan(raw);
+    const parsed = parseTaskQrScan(result.code);
     if (!parsed) {
       setSnackbar('QR не содержит задание — нужна ссылка #/tasks?task=…&qr=…');
       return;

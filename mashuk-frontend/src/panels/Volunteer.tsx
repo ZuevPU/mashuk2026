@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Panel, PanelHeader, Group, FormItem, Input, Button, Snackbar, Textarea } from '@vkontakte/vkui';
 import { apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { extractParticipantQrToken, extractTaskIdFromInput } from '../utils/qrDeepLink';
-import { isVkEnvironment, openCodeReader } from '../utils/vkBridgeClient';
+import { codeReaderFailureMessage, isVkEnvironment, readCodeWithVk } from '../utils/vkBridgeClient';
 
 /** Панель волонтёра: VK CodeReader / deep-link / paste / file-input fallback */
 export const VolunteerPanel: React.FC<{ id: string }> = ({ id }) => {
@@ -33,12 +33,12 @@ export const VolunteerPanel: React.FC<{ id: string }> = ({ id }) => {
   const scanNative = async () => {
     setScanning(true);
     try {
-      const code = await openCodeReader();
-      if (!code) {
-        setSnackbar('Сканирование отменено или недоступно — вставьте ссылку вручную');
+      const result = await readCodeWithVk();
+      if (!result.ok) {
+        setSnackbar(codeReaderFailureMessage(result.reason));
         return;
       }
-      applyPaste(code);
+      applyPaste(result.code);
       setSnackbar('QR распознан');
     } catch {
       setSnackbar('Не удалось открыть сканер VK');
