@@ -44,6 +44,8 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   });
   const [groups, setGroups] = useState<any[]>([]);
   const [groupDrafts, setGroupDrafts] = useState<Record<number, { name: string; capacity: number }>>({});
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<number>>(() => new Set());
+  const [bulkCapacity, setBulkCapacity] = useState(30);
   const [directions, setDirections] = useState<any[]>([]);
   const [consents, setConsents] = useState<any[]>([]);
   const [scheduleVersions, setScheduleVersions] = useState<any[]>([]);
@@ -65,7 +67,12 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       setKbThreshold(fs?.kbUnlockThreshold ?? 4);
       setSectionsVis((fs?.sectionsVisibility as Record<string, boolean>) || {});
       setDayFocusList((await adminFetch('/day-focus')).focus || []);
-      setGroups((await adminFetch('/groups')).groups || []);
+      const nextGroups = (await adminFetch('/groups')).groups || [];
+      setGroups(nextGroups);
+      setSelectedGroupIds(prev => {
+        const alive = new Set(nextGroups.map((g: { id: number }) => g.id));
+        return new Set([...prev].filter(id => alive.has(id)));
+      });
       setConsents((await adminFetch('/consents')).consents || []);
       setDirections((await adminFetch('/directions')).directions || []);
       const sched = await adminFetch('/schedule/versions').catch(() => ({ days: [], versions: [] }));
@@ -444,18 +451,108 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                   directionId: newGroup.directionId ? Number(newGroup.directionId) : null,
                 }),
               });
-              setGroups((await adminFetch('/groups')).groups || []);
+              await load();
               setNewGroup({ name: '', capacity: 30, directionId: '' });
             }, 'Группа добавлена')}
           >
             Добавить группу
           </button>
         </div>
+        {groups.length > 0 && (
+          <div className="form-row" style={{ marginTop: 10, alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={groups.length > 0 && groups.every(g => selectedGroupIds.has(g.id))}
+                onChange={e => {
+                  if (e.target.checked) setSelectedGroupIds(new Set(groups.map(g => g.id)));
+                  else setSelectedGroupIds(new Set());
+                }}
+              />
+              Выбрать все ({selectedGroupIds.size})
+            </label>
+            <span className="adm-label" style={{ margin: 0 }}>Общие места для выбранных</span>
+            <input
+              type="number"
+              className="adm-input adm-input-narrow"
+              min={1}
+              value={bulkCapacity}
+              onChange={e => setBulkCapacity(Number(e.target.value))}
+              style={{ width: 90 }}
+              aria-label="Количество мест для выбранных групп"
+            />
+            <button
+              type="button"
+              className="adm-btn adm-btn-secondary"
+              disabled={selectedGroupIds.size === 0 || !Number.isFinite(bulkCapacity) || bulkCapacity < 1}
+              onClick={() => act(async () => {
+                const capacity = Math.max(1, Math.floor(Number(bulkCapacity) || 0));
+                const ids = [...selectedGroupIds];
+                await Promise.all(ids.map(async (id) => {
+                  const g = groups.find(x => x.id === id);
+                  if (!g) return;
+                  const name = groupDrafts[id]?.name ?? g.name;
+                  await adminFetch(`/groups/${id}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ name, capacity }),
+                  });
+                }));
+                setGroupDrafts(prev => {
+                  const next = { ...prev };
+                  for (const id of ids) {
+                    const g = groups.find(x => x.id === id);
+                    next[id] = {
+                      name: prev[id]?.name ?? g?.name ?? '',
+                      capacity,
+                    };
+                  }
+                  return next;
+                });
+                await load();
+              }, `Мест: ${bulkCapacity} для ${selectedGroupIds.size} групп`)}
+            >
+              Применить к выбранным
+            </button>
+          </div>
+        )}
         <table className="adm-table">
-          <thead><tr><th>Название</th><th>Мест</th><th>Участников</th><th></th></tr></thead>
+          <thead>
+            <tr>
+              <th style={{ width: 36 }}>
+                <input
+                  type="checkbox"
+                  checked={groups.length > 0 && groups.every(g => selectedGroupIds.has(g.id))}
+                  onChange={e => {
+                    if (e.target.checked) setSelectedGroupIds(new Set(groups.map(g => g.id)));
+                    else setSelectedGroupIds(new Set());
+                  }}
+                  aria-label="Выбрать все группы"
+                />
+              </th>
+              <th>Название</th>
+              <th>Мест</th>
+              <th>Участников</th>
+              <th></th>
+            </tr>
+          </thead>
           <tbody>
             {groups.map(g => (
               <tr key={g.id}>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={selectedGroupIds.has(g.id)}
+                    onChange={e => {
+                      setSelectedGroupIds(prev => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(g.id);
+                        else next.delete(g.id);
+                        return next;
+                      });
+                    }}
+                    aria-label={`Выбрать группу ${g.name}`}
+                  />
+                </td>
                 <td>
                   <input
                     className="adm-input"
@@ -488,7 +585,7 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                         method: 'PATCH',
                         body: JSON.stringify({ name: d.name, capacity: d.capacity }),
                       });
-                      setGroups((await adminFetch('/groups')).groups || []);
+                      await load();
                     })}
                   >
                     Сохранить
@@ -500,7 +597,12 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                       if (!confirmDelete('Удалить группу?')) return;
                       act(async () => {
                         await adminFetch(`/groups/${g.id}`, { method: 'DELETE' });
-                        setGroups((await adminFetch('/groups')).groups || []);
+                        setSelectedGroupIds(prev => {
+                          const next = new Set(prev);
+                          next.delete(g.id);
+                          return next;
+                        });
+                        await load();
                       });
                     }}
                   >
