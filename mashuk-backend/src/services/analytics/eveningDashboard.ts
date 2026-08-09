@@ -220,26 +220,30 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
   function scaleStatsForRows(slice: EveningExportRow[]) {
     const byQuestion = scaleFields.map(f => {
       const maxScale = f.type === 'scale_1_10' ? 10 : 5;
-      let sum = 0;
-      let n = 0;
+      const vals: number[] = [];
       for (const r of slice) {
         const raw = r.ratings[f.key];
         const num = typeof raw === 'number' ? raw : Number(raw);
-        if (Number.isFinite(num) && num >= 1 && num <= maxScale) {
-          sum += num;
-          n += 1;
-        }
+        if (Number.isFinite(num) && num >= 1 && num <= maxScale) vals.push(num);
       }
+      const n = vals.length;
+      const sorted = [...vals].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      const median = n
+        ? Math.round(((n % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]) * 10)) / 10
+        : null;
+      const sum = vals.reduce((s, v) => s + v, 0);
       return {
         key: f.key,
         label: f.label || f.key,
         avg: n ? Math.round((sum / n) * 10) / 10 : null as number | null,
+        median,
         answered: n,
         max: maxScale,
         type: f.type,
       };
     }).filter(q => q.answered > 0 && q.avg != null) as {
-      key: string; label: string; avg: number; answered: number; max: number; type: string;
+      key: string; label: string; avg: number; median: number | null; answered: number; max: number; type: string;
     }[];
 
     let allSum = 0;
@@ -254,6 +258,33 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
       answered: allN,
     };
   }
+
+  /** Нормированная оценка программы 0–100 на участника (только сданные анкеты). */
+  const participantProgramPct: { participantId: number; avgPct: number; answered: number }[] = (() => {
+    const byPid = new Map<number, { sumPct: number; n: number }>();
+    for (const r of submittedRows) {
+      let sumPct = 0;
+      let n = 0;
+      for (const f of scaleFields) {
+        const maxScale = f.type === 'scale_1_10' ? 10 : 5;
+        const raw = r.ratings[f.key];
+        const num = typeof raw === 'number' ? raw : Number(raw);
+        if (!Number.isFinite(num) || num < 1 || num > maxScale) continue;
+        sumPct += (num / maxScale) * 100;
+        n += 1;
+      }
+      if (!n) continue;
+      const prev = byPid.get(r.participantId) ?? { sumPct: 0, n: 0 };
+      prev.sumPct += sumPct;
+      prev.n += n;
+      byPid.set(r.participantId, prev);
+    }
+    return [...byPid.entries()].map(([participantId, v]) => ({
+      participantId,
+      avgPct: Math.round((v.sumPct / v.n) * 10) / 10,
+      answered: v.n,
+    }));
+  })();
 
   const scaleSlice = scaleStatsForRows(submittedRows);
   const scaleAverages = scaleSlice.byQuestion;
@@ -320,6 +351,7 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
     scaleOverallAvg,
     scaleByDay,
     scaleByDirectionDay,
+    participantProgramPct,
     diagnostics: {
       eveningOpenNow: diagnostics.eveningOpenNow,
       eveningForceUnpublished: diagnostics.eveningForceUnpublished,

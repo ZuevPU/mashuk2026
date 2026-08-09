@@ -173,3 +173,63 @@ export function normalizeScaleToPct(avg: number, max: number): number {
   if (!max) return 0;
   return Math.round((avg / max) * 1000) / 10;
 }
+
+export type CategoricalTheme = {
+  label: string;
+  count: number;
+  uniqueParticipants: number;
+  pct: number | null;
+  mode: boolean;
+};
+
+/**
+ * Категориальная тема: count = упоминания, uniqueParticipants = дедуп по participantId.
+ * pct считается только от uniqueParticipants / sampleSize (не от упоминаний).
+ */
+export function buildCategoricalThemes(
+  items: { label: string; count: number; uniqueParticipants: number }[],
+  sampleSize: number,
+): CategoricalTheme[] {
+  if (!items.length) return [];
+  const sorted = [...items].sort((a, b) => b.uniqueParticipants - a.uniqueParticipants || b.count - a.count);
+  const modeLabel = sorted[0]?.label;
+  return sorted.map(it => ({
+    label: it.label,
+    count: it.count,
+    uniqueParticipants: it.uniqueParticipants,
+    pct: sampleSize > 0
+      ? Math.round((it.uniqueParticipants / sampleSize) * 1000) / 10
+      : null,
+    mode: it.label === modeLabel,
+  }));
+}
+
+/** Агрегация тегов/токенов с дедупом участников: Map<label, {count, pids}>. */
+export function accumulateThemeMention(
+  bag: Map<string, { count: number; pids: Set<number> }>,
+  label: string,
+  participantId: number,
+): void {
+  const key = label.trim();
+  if (!key) return;
+  if (!bag.has(key)) bag.set(key, { count: 0, pids: new Set() });
+  const row = bag.get(key)!;
+  row.count += 1;
+  row.pids.add(participantId);
+}
+
+export function themesFromBag(
+  bag: Map<string, { count: number; pids: Set<number> }>,
+  sampleSize: number,
+  limit = 20,
+): CategoricalTheme[] {
+  const items = [...bag.entries()]
+    .map(([label, v]) => ({
+      label,
+      count: v.count,
+      uniqueParticipants: v.pids.size,
+    }))
+    .sort((a, b) => b.uniqueParticipants - a.uniqueParticipants || b.count - a.count)
+    .slice(0, limit);
+  return buildCategoricalThemes(items, sampleSize);
+}

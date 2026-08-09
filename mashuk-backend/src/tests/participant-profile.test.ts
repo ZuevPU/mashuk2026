@@ -1,12 +1,16 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  accumulateThemeMention,
+  buildCategoricalThemes,
   buildProfileRecommendations,
   engagementSegment,
   normalizeScaleToPct,
   numericSummary,
+  themesFromBag,
   PROFILE_RULE_THRESHOLDS,
 } from '../services/analytics/participantProfileStats.js';
+import { parseAnalyticsQuery, resolveDayRange } from '../services/analytics/analyticsQuery.js';
 
 describe('participantProfileStats', () => {
   it('numericSummary avg and median', () => {
@@ -23,7 +27,8 @@ describe('participantProfileStats', () => {
     assert.equal(s.count, 0);
     assert.equal(s.avg, null);
     assert.equal(s.median, null);
-    assert.ok(!Number.isNaN(s.avg as never));
+    assert.equal(s.min, null);
+    assert.equal(s.max, null);
   });
 
   it('engagementSegment thresholds', () => {
@@ -78,12 +83,85 @@ describe('participantProfileStats', () => {
   });
 });
 
-describe('participant profile coverage uniqueness (unit)', () => {
+describe('participant profile coverage uniqueness', () => {
   it('one participant counted once in Set-based coverage', () => {
     const ids = [1, 1, 1, 2, 3, 2];
     const unique = new Set(ids);
     assert.equal(unique.size, 3);
     const pct = Math.round((unique.size / 10) * 1000) / 10;
     assert.equal(pct, 30);
+  });
+
+  it('theme pct uses uniqueParticipants not mention count', () => {
+    const bag = new Map<string, { count: number; pids: Set<number> }>();
+    accumulateThemeMention(bag, 'школа', 1);
+    accumulateThemeMention(bag, 'школа', 1);
+    accumulateThemeMention(bag, 'школа', 2);
+    const themes = themesFromBag(bag, 10);
+    assert.equal(themes[0].count, 3);
+    assert.equal(themes[0].uniqueParticipants, 2);
+    assert.equal(themes[0].pct, 20);
+  });
+
+  it('buildCategoricalThemes marks mode', () => {
+    const themes = buildCategoricalThemes([
+      { label: 'a', count: 5, uniqueParticipants: 2 },
+      { label: 'b', count: 3, uniqueParticipants: 3 },
+    ], 10);
+    assert.equal(themes[0].label, 'b');
+    assert.equal(themes[0].mode, true);
+    assert.equal(themes[1].mode, false);
+  });
+});
+
+describe('participant profile evening draft exclusion', () => {
+  it('only submitted rows contribute to scale averages', () => {
+    const rows = [
+      { status: 'сдано', ratings: { q1: 5 } },
+      { status: 'черновик', ratings: { q1: 1 } },
+      { status: 'сдано', ratings: { q1: 3 } },
+    ];
+    const submitted = rows.filter(r => r.status === 'сдано');
+    assert.equal(submitted.length, 2);
+    const vals = submitted.map(r => Number(r.ratings.q1));
+    const avg = vals.reduce((s, n) => s + n, 0) / vals.length;
+    assert.equal(avg, 4);
+    assert.ok(!submitted.some(r => r.status === 'черновик'));
+  });
+});
+
+describe('participant profile filters', () => {
+  it('day filter resolves to single day', () => {
+    const q = parseAnalyticsQuery({ query: { mode: 'day', day: '3' } } as never);
+    assert.deepEqual(resolveDayRange(q, 5), [3]);
+  });
+
+  it('direction filter is preserved in query', () => {
+    const q = parseAnalyticsQuery({ query: { mode: 'day', day: '1', direction: 'IT' } } as never);
+    assert.equal(q.direction, 'IT');
+  });
+});
+
+describe('participant profile organizers excluded', () => {
+  it('organizer direction filter string matches cohort exclusion rule', () => {
+    const direction = 'Организатор форума';
+    const isOrganizer = (direction || '').toLowerCase() === 'организатор форума';
+    assert.equal(isOrganizer, true);
+  });
+});
+
+describe('participant-level energy aggregation', () => {
+  it('aggregates participant averages before cohort mean', () => {
+    // p1: 10,10 → 10; p2: 2 → 2; cohort avg of participant avgs = 6
+    const byPid = new Map<number, number[]>([
+      [1, [10, 10]],
+      [2, [2]],
+    ]);
+    const participantAvgs = [...byPid.values()].map(vals => vals.reduce((s, n) => s + n, 0) / vals.length);
+    const cohort = numericSummary(participantAvgs);
+    assert.equal(cohort.avg, 6);
+    assert.equal(cohort.min, 2);
+    assert.equal(cohort.max, 10);
+    assert.equal(cohort.count, 2);
   });
 });

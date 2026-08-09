@@ -25,6 +25,7 @@ import {
 } from '../services/exports/ancillaryExports.js';
 import { writeParticipantsArchiveZip, writeFinalProfilesZip } from '../services/exports/participantArchiveExport.js';
 import { writeParticipantActivityWideWorkbook } from '../services/exports/participantActivityWide.js';
+import { writeParticipantProfileExport } from '../services/exports/participantProfileExport.js';
 import {
   ANSWER_ROW_HEADERS_RU, buildAnswerRow, answerText,
 } from '../services/exports/exportCommon.js';
@@ -60,6 +61,10 @@ export async function exportDayStatsHandler(req: AdminRequest, res: Response): P
   const day = Number(req.query.day) || 1;
   const stats = await computeDayExportStats(day);
   res.json(stats);
+}
+
+export async function exportParticipantProfileHandler(req: AdminRequest, res: Response): Promise<void> {
+  await writeParticipantProfileExport(req, res);
 }
 
 export async function exportParticipantsFullHandler(req: AdminRequest, res: Response): Promise<void> {

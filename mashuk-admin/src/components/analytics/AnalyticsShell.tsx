@@ -48,7 +48,7 @@ function xlsxExportPath(dash: DashboardId): string | null {
   if (dash === 'evening') return '/exports/evening-summary';
   if (dash === 'after-blocks') return '/exports/after-blocks';
   if (dash === 'direction') return '/exports/direction-pack';
-  if (dash === 'participant-profile') return '/exports/participants';
+  if (dash === 'participant-profile') return '/exports/participant-profile';
   // pulse / activity / program / departure use slice CTAs only
   return null;
 }
@@ -57,7 +57,7 @@ function csvExportPath(dash: DashboardId): string | null {
   if (dash === 'piggybank') return '/exports/piggybank?format=csv';
   if (dash === 'departure') return '/exports/point-a-b-summary';
   if (dash === 'activity') return '/exports/rating/shift';
-  if (dash === 'roles' || dash === 'evening' || dash === 'after-blocks' || dash === 'direction') return null;
+  if (dash === 'roles' || dash === 'evening' || dash === 'after-blocks' || dash === 'direction' || dash === 'participant-profile') return null;
   if (dash === 'clubs') return '/exports/piggybank?format=csv';
   return '/exports/reflections?format=csv';
 }
@@ -124,8 +124,8 @@ function sliceExportCtas(
   if (dash === 'participant-profile') {
     return [
       {
-        label: 'Полный портрет · участники',
-        path: `/exports/participants${cohort}`,
+        label: 'Полный портрет (Excel)',
+        path: `/exports/participant-profile${cohort}`,
         file: `participant_profile_d${day}.xlsx`,
       },
       {
@@ -137,11 +137,6 @@ function sliceExportCtas(
         label: 'Итоговая анкета вечера',
         path: `/exports/evening-summary${qs({ mode: 'day', day })}`,
         file: `evening_summary_d${day}.xlsx`,
-      },
-      {
-        label: 'Рефлексии',
-        path: `/exports/reflections${cohort}`,
-        file: `reflections_d${day}.xlsx`,
       },
     ];
   }

@@ -1,5 +1,11 @@
+import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { db } from '../../db/index.js';
+import { piggybank, taskSubmissions } from '../../db/schema.js';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { getForumSettings } from '../helpers.js';
+import { getRoleMeta } from '../roleService.js';
+import { entryTags } from '../piggybankDict.js';
+import { topReasonTokens } from './zoneDistribution.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import { resolveDayRange } from './analyticsQuery.js';
 import { loadCohortParticipants } from './cohort.js';
@@ -17,10 +23,12 @@ import {
   ENGAGEMENT_THRESHOLDS,
   PROFILE_RULE_THRESHOLDS,
   SEGMENT_LABELS,
+  accumulateThemeMention,
   buildProfileRecommendations,
   engagementSegment,
   normalizeScaleToPct,
   numericSummary,
+  themesFromBag,
   type EngagementSegmentId,
   type NumericSummary,
 } from './participantProfileStats.js';
@@ -59,6 +67,8 @@ function sampleTitle(opts: {
     parts.push(`D${opts.filters.day}`);
   } else if (opts.filters.mode === 'shift') {
     parts.push('вся смена');
+  } else if (opts.filters.mode === 'compare' && opts.filters.compareDays?.length) {
+    parts.push(`D${opts.filters.compareDays.join('+')}`);
   } else {
     parts.push(`D${opts.currentDay}`);
   }
@@ -73,23 +83,6 @@ function sampleTitle(opts: {
   return parts.join(' · ');
 }
 
-function categoricalFromCountMap(
-  items: { key?: string; token?: string; label?: string; count: number }[],
-  sampleSize: number,
-  uniqueParticipants?: number,
-) {
-  return items.map(it => {
-    const label = it.label ?? it.key ?? it.token ?? '—';
-    const unique = uniqueParticipants ?? it.count;
-    return {
-      label,
-      count: it.count,
-      uniqueParticipants: unique,
-      pct: sampleSize ? Math.round((unique / sampleSize) * 1000) / 10 : 0,
-    };
-  });
-}
-
 export async function buildParticipantProfileDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
   const settings = await getForumSettings();
   const currentDay = settings.currentDay ?? 1;
@@ -98,6 +91,7 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
   const registered = cohort.filter(p => p.onboardingCompletedAt);
   const sampleSize = registered.length;
   const denominator = sampleSize;
+  const cohortIds = registered.map(p => p.id);
 
   const [
     pulse,
@@ -105,12 +99,14 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     evening,
     afterBlocks,
     activity,
-    piggybank,
+    piggybankDash,
     portrait,
-    program,
+    _program,
     exchange,
     touchpointThreshold,
     engagement,
+    approvedTaskRows,
+    piggyRows,
   ] = await Promise.all([
     buildPulseDashboard(filters, req),
     buildStateCheckDashboard(filters, req),
@@ -123,7 +119,28 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     buildExchangeAnalytics(filters, req),
     buildTouchpointThresholdCoverage(registered, days, filters.shiftId),
     buildParticipantTouchpointEngagement(registered, days, filters.shiftId),
+    cohortIds.length
+      ? db.select({
+        participantId: taskSubmissions.participantId,
+        status: taskSubmissions.status,
+      }).from(taskSubmissions).where(inArray(taskSubmissions.participantId, cohortIds))
+      : Promise.resolve([] as { participantId: number; status: string | null }[]),
+    cohortIds.length
+      ? db.select({
+        participantId: piggybank.participantId,
+        text: piggybank.text,
+        forumDay: piggybank.forumDay,
+        tags: piggybank.tags,
+        source: piggybank.source,
+      }).from(piggybank).where(and(
+        inArray(piggybank.participantId, cohortIds),
+        isNull(piggybank.deletedAt),
+        ...(filters.day != null ? [eq(piggybank.forumDay, filters.day)] : []),
+      ))
+      : Promise.resolve([] as { participantId: number; text: string | null; forumDay: number | null; tags: unknown; source: string | null }[]),
   ]);
+
+  void _program;
 
   const scPulse = (stateCheck as {
     emotionalPulse?: {
@@ -153,15 +170,37 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       }[];
     };
     activity?: { submitted?: number; cohortSize?: number; fillRatePct?: number; uniqueParticipants?: number };
-  }).emotionalPulse ?? {};
+    questions?: { answers?: { participantId: number; energy: number | null; emotion: string | null; answer?: string | null; day?: number | null }[] }[];
+  });
 
-  const energyStats: NumericSummary = {
-    avg: scPulse.avgEnergy ?? null,
-    median: scPulse.medianEnergy ?? null,
-    min: null,
-    max: null,
-    count: scPulse.energyCount ?? 0,
+  // Per-participant energy / emotion (participant-level first)
+  const energyByPid = new Map<number, number[]>();
+  const emotionByPid = new Map<number, Map<string, number>>();
+  for (const q of scPulse.questions ?? []) {
+    for (const a of q.answers ?? []) {
+      if (a.energy != null && Number.isFinite(a.energy)) {
+        if (!energyByPid.has(a.participantId)) energyByPid.set(a.participantId, []);
+        energyByPid.get(a.participantId)!.push(a.energy);
+      }
+      const emo = (a.emotion || '').trim();
+      if (emo) {
+        if (!emotionByPid.has(a.participantId)) emotionByPid.set(a.participantId, new Map());
+        const m = emotionByPid.get(a.participantId)!;
+        m.set(emo, (m.get(emo) || 0) + 1);
+      }
+    }
+  }
+  const participantEnergyAvgs = [...energyByPid.entries()].map(([, vals]) =>
+    vals.reduce((s, n) => s + n, 0) / vals.length,
+  );
+  const energyStats: NumericSummary = numericSummary(participantEnergyAvgs);
+  const avgEnergyFor = (pid: number): number | null => {
+    const vals = energyByPid.get(pid);
+    if (!vals?.length) return null;
+    return vals.reduce((s, n) => s + n, 0) / vals.length;
   };
+
+  const pulseFeeling = scPulse.emotionalPulse ?? {};
 
   const slotsTotal = engagement.slotsTotal || 7;
   const scoresWithData = engagement.scores.filter(s => s.hasData);
@@ -183,37 +222,45 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     drafts?: number;
   };
   const afterAct = (afterBlocks as { activity?: { submitted?: number; fillRatePct?: number; uniqueParticipants?: number } }).activity ?? {};
-  const stateAct = (stateCheck as { activity?: { submitted?: number; fillRatePct?: number; uniqueParticipants?: number } }).activity ?? {};
+  const stateAct = scPulse.activity ?? {};
 
   const eveningFillPct = eveningAct.fillRatePct ?? pct(eveningAct.submitted ?? 0, denominator);
   const stateFillPct = stateAct.fillRatePct ?? pct(stateAct.uniqueParticipants ?? stateAct.submitted ?? 0, denominator);
   const afterFillPct = afterAct.fillRatePct ?? pct(afterAct.uniqueParticipants ?? afterAct.submitted ?? 0, denominator);
 
-  const tasksApproved = activity.moderation?.approved ?? 0;
-  const tasksRejected = activity.moderation?.rejected ?? 0;
-  const tasksTotal = tasksApproved + tasksRejected + (activity.moderation?.pending ?? 0);
+  // Tasks per participant (approved)
+  const approvedTasksByPid = new Map<number, number>();
+  let tasksApproved = 0;
+  let tasksRejected = 0;
+  let tasksPending = 0;
+  for (const r of approvedTaskRows) {
+    const st = String(r.status || '');
+    if (st === 'approved') {
+      tasksApproved += 1;
+      approvedTasksByPid.set(r.participantId, (approvedTasksByPid.get(r.participantId) || 0) + 1);
+    } else if (st === 'rejected') tasksRejected += 1;
+    else if (st === 'pending' || st === 'pending_team') tasksPending += 1;
+  }
+  const tasksTotal = tasksApproved + tasksRejected + tasksPending;
   const taskApprovalPct = tasksApproved + tasksRejected
     ? Math.round((tasksApproved / (tasksApproved + tasksRejected)) * 1000) / 10
     : null;
-  const participantsWithTasks = activity.participants?.completedAtLeastOneTask ?? 0;
+  const participantsWithTasks = approvedTasksByPid.size;
   const avgPoints = (() => {
     const totalPts = (activity.pointsByDay ?? []).reduce((s: number, d: { points: number }) => s + d.points, 0);
     return denominator ? Math.round((totalPts / denominator) * 10) / 10 : null;
   })();
 
   const exchangeParticipants = exchange.kpi?.uniqueAskers ?? 0;
+  const piggyEntriesCount = piggyRows.length;
+  const nothingDoneCount = engagement.scores.filter(s => s.avgCompleted === 0 && !approvedTasksByPid.has(s.participantId)).length;
 
-  const piggyEntriesCount = (piggybank as { navigation?: { total?: number } }).navigation?.total
-    ?? Object.values((piggybank as { byTag?: Record<string, { count: number }> }).byTag ?? {})
-      .reduce((s, t) => s + (t?.count ?? 0), 0);
-
-  const nothingDoneCount = engagement.scores.filter(s => s.avgCompleted === 0).length;
-
-  // Scale averages with normalization
+  // Program scales + medians from evening
   const scaleRows = (evening.scaleAverages ?? []).map((q: {
-    key: string; label: string; avg: number; answered: number; max: number; type: string;
+    key: string; label: string; avg: number; median?: number | null; answered: number; max: number; type: string;
   }) => ({
     ...q,
+    median: q.median ?? null,
     avgPct: normalizeScaleToPct(q.avg, q.max),
     insufficient: q.answered < PROFILE_RULE_THRESHOLDS.minSample,
   }));
@@ -252,7 +299,7 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     day: number;
     overallAvg: number | null;
     answered: number;
-    byQuestion: { avg: number; answered: number; max: number; label: string; key: string }[];
+    byQuestion: { avg: number; median?: number | null; answered: number; max: number; label: string; key: string }[];
   }) => {
     let sum = 0;
     let n = 0;
@@ -272,7 +319,29 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     };
   });
 
-  // Question table with day-over-day delta (for latest day in filter)
+  const scaleByDirectionDay = (evening.scaleByDirectionDay ?? []).map((d: {
+    direction: string;
+    day: number;
+    overallAvg: number | null;
+    answered: number;
+    byQuestion: { avg: number; answered: number; max: number; label: string; key: string }[];
+  }) => {
+    let sum = 0;
+    let n = 0;
+    for (const q of d.byQuestion ?? []) {
+      sum += normalizeScaleToPct(q.avg, q.max) * q.answered;
+      n += q.answered;
+    }
+    return {
+      ...d,
+      overallPct: n ? Math.round((sum / n) * 10) / 10 : null,
+      byQuestion: (d.byQuestion ?? []).map(q => ({
+        ...q,
+        avgPct: normalizeScaleToPct(q.avg, q.max),
+      })),
+    };
+  });
+
   const focusDay = days.length === 1 ? days[0] : currentDay;
   const dayRow = scaleByDay.find((d: { day: number }) => d.day === focusDay);
   const prevRow = scaleByDay.find((d: { day: number }) => d.day === focusDay - 1);
@@ -286,7 +355,7 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       key: q.key,
       label: q.label,
       avg: q.avg,
-      median: null as number | null,
+      median: q.median,
       max: q.max,
       scale: `1–${q.max}`,
       avgPct: q.avgPct,
@@ -302,30 +371,10 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
   const highestScale = [...scaleRows].sort((a, b) => b.avgPct - a.avgPct)[0] ?? null;
   const lowestScale = [...scaleRows].sort((a, b) => a.avgPct - b.avgPct)[0] ?? null;
 
-  // Per-participant energy / emotion from state-check answers (one pass, no N+1)
-  const energyByPid = new Map<number, number[]>();
-  const emotionByPid = new Map<number, Map<string, number>>();
-  for (const q of (stateCheck as {
-    questions?: { answers?: { participantId: number; energy: number | null; emotion: string | null }[] }[];
-  }).questions ?? []) {
-    for (const a of q.answers ?? []) {
-      if (a.energy != null && Number.isFinite(a.energy)) {
-        if (!energyByPid.has(a.participantId)) energyByPid.set(a.participantId, []);
-        energyByPid.get(a.participantId)!.push(a.energy);
-      }
-      const emo = (a.emotion || '').trim();
-      if (emo) {
-        if (!emotionByPid.has(a.participantId)) emotionByPid.set(a.participantId, new Map());
-        const m = emotionByPid.get(a.participantId)!;
-        m.set(emo, (m.get(emo) || 0) + 1);
-      }
-    }
-  }
-  const avgEnergyFor = (pid: number): number | null => {
-    const vals = energyByPid.get(pid);
-    if (!vals?.length) return null;
-    return vals.reduce((s, n) => s + n, 0) / vals.length;
-  };
+  const programPctByPid = new Map<number, number>(
+    ((evening as { participantProgramPct?: { participantId: number; avgPct: number }[] }).participantProgramPct ?? [])
+      .map(r => [r.participantId, r.avgPct]),
+  );
 
   // Segments
   const segmentBuckets = new Map<EngagementSegmentId, typeof engagement.scores>();
@@ -337,8 +386,8 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     segmentBuckets.get(seg)!.push(s);
   }
 
-  const emotionMode = modeLabel(scPulse.emotions ?? []);
-  const zoneModeLabel = zoneMode(scPulse.zonesPercent, scPulse.zoneLabels);
+  const emotionMode = modeLabel(pulseFeeling.emotions ?? []);
+  const zoneModeLabel = zoneMode(pulseFeeling.zonesPercent, pulseFeeling.zoneLabels);
 
   const segments = (Object.keys(SEGMENT_LABELS) as EngagementSegmentId[]).map(id => {
     const list = segmentBuckets.get(id) ?? [];
@@ -349,6 +398,8 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       .slice(0, 5)
       .map(([direction, count]) => ({ direction, count }));
     const energies = list.map(s => avgEnergyFor(s.participantId)).filter((v): v is number => v != null);
+    const programPcts = list.map(s => programPctByPid.get(s.participantId)).filter((v): v is number => v != null);
+    const taskCounts = list.map(s => approvedTasksByPid.get(s.participantId) ?? 0);
     const emoAgg = new Map<string, number>();
     for (const s of list) {
       const m = emotionByPid.get(s.participantId);
@@ -368,8 +419,8 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       avgActivityPct: numericSummary(list.map(s => s.activityPct)).avg,
       topDirections,
       avgEnergy: numericSummary(energies).avg,
-      avgProgramPct: programScore.overallPct,
-      tasksApprox: null as number | null,
+      avgProgramPct: numericSummary(programPcts).avg,
+      tasksApprox: numericSummary(taskCounts).avg,
       topEmotions,
     };
   });
@@ -389,19 +440,19 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     const all7 = withData.filter(s => s.avgCompleted >= slotsTotal).length;
     const ev = eveningByDir.get(direction);
     const coverage = pct(withData.filter(s => s.avgCompleted >= 1).length, list.length);
+    const tasks = list.reduce((s, p) => s + (approvedTasksByPid.get(p.participantId) || 0), 0);
     return {
       direction,
       participants: list.length,
       avgTouchpoints: stats.avg,
       medianTouchpoints: stats.median,
       all7,
-      tasks: null as number | null,
+      tasks,
       eveningFillPct: ev?.fillRatePct ?? null,
       coveragePct: coverage,
     };
   }).sort((a, b) => (a.coveragePct ?? 0) - (b.coveragePct ?? 0) || a.direction.localeCompare(b.direction, 'ru'));
 
-  // Direction lag vs forum (coverage)
   const forumCoverage = pct(atLeast(1), denominator) ?? 0;
   let laggingDirection: string | null = null;
   let directionLagPp: number | null = null;
@@ -416,7 +467,7 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
   }
 
   const touchpointCoveragePct = pct(atLeast(1), denominator);
-  const energyByDay = scPulse.energyByDay ?? [];
+  const energyByDay = pulseFeeling.energyByDay ?? [];
   const energyPrev = energyByDay.length >= 2
     ? energyByDay[energyByDay.length - 2]?.avg ?? null
     : null;
@@ -432,7 +483,7 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
 
   const recommendations = buildProfileRecommendations({
     sampleSize,
-    riskFatiguePct: scPulse.riskFatiguePct ?? null,
+    riskFatiguePct: pulseFeeling.riskFatiguePct ?? null,
     energyAvg: energyLatest ?? null,
     energyPrevAvg: energyPrev,
     touchpointCoveragePct,
@@ -446,39 +497,91 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     highEnergyLowReflection,
   });
 
-  const interestTop = portrait.preStart?.interestTop ?? [];
-  const goalTop = portrait.preStart?.goalTopTokens ?? [];
-  const topInterestLabels = interestTop.slice(0, 3).map((i: { key: string }) => i.key).filter(Boolean);
+  // Meanings with proper uniqueParticipants
+  const interestBag = new Map<string, { count: number; pids: Set<number> }>();
+  const goalBag = new Map<string, { count: number; pids: Set<number> }>();
+  const roleBag = new Map<string, { count: number; pids: Set<number> }>();
+  for (const p of registered) {
+    const ints = Array.isArray(p.interests) ? (p.interests as string[]) : [];
+    for (const tag of ints) accumulateThemeMention(interestBag, String(tag), p.id);
+    const g = p.goalAnswers;
+    const goalTexts: string[] = [];
+    if (Array.isArray(g)) goalTexts.push(...g.map(String));
+    else if (g && typeof g === 'object') goalTexts.push(...Object.values(g as Record<string, unknown>).map(String));
+    for (const text of goalTexts) {
+      for (const token of topReasonTokens([text], 8)) {
+        accumulateThemeMention(goalBag, token.token, p.id);
+      }
+    }
+    const roleKey = p.pedagogicalRole || 'none';
+    const roleLabel = getRoleMeta(roleKey)?.name ?? roleKey;
+    accumulateThemeMention(roleBag, roleLabel, p.id);
+  }
 
+  const piggyBag = new Map<string, { count: number; pids: Set<number> }>();
+  const piggyByDayBag = new Map<number, Map<string, { count: number; pids: Set<number> }>>();
+  const vRabotaTexts: string[] = [];
+  for (const e of piggyRows) {
+    for (const token of topReasonTokens([e.text || ''], 6)) {
+      accumulateThemeMention(piggyBag, token.token, e.participantId);
+      const day = e.forumDay ?? 0;
+      if (!piggyByDayBag.has(day)) piggyByDayBag.set(day, new Map());
+      accumulateThemeMention(piggyByDayBag.get(day)!, token.token, e.participantId);
+    }
+    if (entryTags(e as never).includes('в работу') && e.text?.trim()) {
+      vRabotaTexts.push(e.text.trim());
+    }
+  }
+
+  // Reflection themes from after-blocks answers
+  const reflectionBag = new Map<string, { count: number; pids: Set<number> }>();
+  const reflectionByDayBag = new Map<number, Map<string, { count: number; pids: Set<number> }>>();
+  for (const q of (afterBlocks as {
+    questions?: { day?: number | null; answers?: { participantId: number; answer?: string | null }[] }[];
+  }).questions ?? []) {
+    const day = q.day ?? 0;
+    for (const a of q.answers ?? []) {
+      const text = (a.answer || '').trim();
+      if (!text) continue;
+      for (const token of topReasonTokens([text], 6)) {
+        accumulateThemeMention(reflectionBag, token.token, a.participantId);
+        if (!reflectionByDayBag.has(day)) reflectionByDayBag.set(day, new Map());
+        accumulateThemeMention(reflectionByDayBag.get(day)!, token.token, a.participantId);
+      }
+    }
+  }
+
+  const interests = themesFromBag(interestBag, sampleSize, 20);
+  const goals = themesFromBag(goalBag, sampleSize, 15);
+  const piggyThemes = themesFromBag(piggyBag, sampleSize, 15);
+  const reflectionThemes = themesFromBag(reflectionBag, sampleSize, 15);
+  const rolesOnEntry = themesFromBag(roleBag, sampleSize, 15);
+
+  const themesByDay = [...new Set([...piggyByDayBag.keys(), ...reflectionByDayBag.keys()])]
+    .filter(d => d > 0)
+    .sort((a, b) => a - b)
+    .map(day => ({
+      day,
+      piggy: themesFromBag(piggyByDayBag.get(day) ?? new Map(), sampleSize, 8),
+      reflections: themesFromBag(reflectionByDayBag.get(day) ?? new Map(), sampleSize, 8),
+    }));
+
+  const topInterestLabels = interests.slice(0, 3).map(i => i.label).filter(Boolean);
   const activityPctTypical = touchpointStats.avg != null && slotsTotal
     ? Math.round((touchpointStats.avg / slotsTotal) * 1000) / 10
     : null;
-
   const insufficientSample = sampleSize < PROFILE_RULE_THRESHOLDS.minSample;
 
   let typicalSummary: string | null = null;
   if (!insufficientSample) {
     const bits: string[] = [];
-    if (touchpointStats.avg != null) {
-      bits.push(`активен в ${touchpointStats.avg} из ${slotsTotal} точек дня`);
-    }
-    if (energyStats.avg != null) {
-      bits.push(`имеет среднюю энергию ${energyStats.avg}`);
-    }
-    if (zoneModeLabel) {
-      bits.push(`чаще находится в зоне «${zoneModeLabel}»`);
-    }
-    if (activityPctTypical != null) {
-      bits.push(`выполняет ${activityPctTypical}% доступных активностей (по точкам)`);
-    }
-    if (programScore.scale5?.avg != null) {
-      bits.push(`оценивает программу на ${programScore.scale5.avg} из 5`);
-    } else if (programScore.overallPct != null) {
-      bits.push(`оценивает программу на ${programScore.overallPct}% от максимума шкалы`);
-    }
-    if (topInterestLabels.length) {
-      bits.push(`чаще всего интересуется темами ${topInterestLabels.join(', ')}`);
-    }
+    if (touchpointStats.avg != null) bits.push(`активен в ${touchpointStats.avg} из ${slotsTotal} точек дня`);
+    if (energyStats.avg != null) bits.push(`имеет среднюю энергию ${energyStats.avg}`);
+    if (zoneModeLabel) bits.push(`чаще находится в зоне «${zoneModeLabel}»`);
+    if (activityPctTypical != null) bits.push(`выполняет ${activityPctTypical}% доступных активностей (по точкам)`);
+    if (programScore.scale5?.avg != null) bits.push(`оценивает программу на ${programScore.scale5.avg} из 5`);
+    else if (programScore.overallPct != null) bits.push(`оценивает программу на ${programScore.overallPct}% от максимума шкалы`);
+    if (topInterestLabels.length) bits.push(`чаще всего интересуется темами ${topInterestLabels.join(', ')}`);
     typicalSummary = bits.length
       ? `Типичный участник выбранной группы: ${bits.join(', ')}.`
       : 'Типичный участник выбранной группы: недостаточно согласованных метрик для текстового портрета.';
@@ -491,38 +594,35 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       (eveningAct.submitted ?? 0) > 0,
       (stateAct.submitted ?? 0) > 0,
     ];
-    const ok = signals.filter(Boolean).length;
-    return Math.round((ok / signals.length) * 1000) / 10;
+    return Math.round((signals.filter(Boolean).length / signals.length) * 1000) / 10;
   })();
 
   const activeParticipants = pulse.activity?.activeToday
     ?? activity.participants?.activeToday
     ?? scoresWithData.filter(s => s.avgCompleted >= 1).length;
 
-  const vRabota = (piggybank as { vRabota?: { total?: number; sample?: { text?: string }[]; byDirection?: unknown[] } }).vRabota;
-  const piggyThemes = (piggybank as { topThemes?: { token: string; count: number }[] }).topThemes ?? [];
+  const vRabota = (piggybankDash as { vRabota?: { total?: number; sample?: { text?: string }[]; byDirection?: unknown[] } }).vRabota;
 
   const meanings = {
-    goals: categoricalFromCountMap(goalTop.slice(0, 15), sampleSize),
-    interests: categoricalFromCountMap(
-      interestTop.slice(0, 20).map((i: { key: string; count: number }) => ({ key: i.key, count: i.count })),
-      sampleSize,
-    ),
-    piggyThemes: categoricalFromCountMap(
-      piggyThemes.slice(0, 15).map(t => ({ token: t.token, count: t.count })),
-      sampleSize,
-    ),
+    goals,
+    interests,
+    reflectionThemes,
+    piggyThemes,
+    themesByDay,
     vRabota: {
-      total: vRabota?.total ?? 0,
+      total: vRabota?.total ?? vRabotaTexts.length,
+      byDirection: vRabota?.byDirection ?? [],
       sample: (vRabota?.sample ?? []).slice(0, 5).map((e: { text?: string }) => e.text).filter(Boolean),
     },
-    exchangeTopQuestions: (exchange.topQuestions ?? []).slice(0, 8) as unknown[],
-    rolesOnEntry: categoricalFromCountMap(
-      (portrait.preStart?.roleDistribution ?? []).map((r: { key: string; count: number }) => ({
-        key: r.key, count: r.count,
-      })),
-      sampleSize,
-    ),
+    exchangeTopQuestions: (exchange.topQuestions ?? []).slice(0, 8).map((q: {
+      id?: number; text?: string; title?: string; answers?: number; answerCount?: number; engagement?: number;
+    }) => ({
+      id: q.id,
+      text: q.text ?? q.title ?? '—',
+      answers: q.answers ?? q.answerCount ?? 0,
+      engagement: q.engagement ?? null,
+    })),
+    rolesOnEntry,
     roleChanges: portrait.roleDynamics?.roleExitSummary ?? { changed: 0, same: 0 },
     pointAB: {
       completedBoth: portrait.departure?.completedBoth ?? 0,
@@ -531,18 +631,26 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       byDirection: portrait.departure?.byDirection ?? [],
     },
     quotes: {
-      goals: goalTop.slice(0, 3).map((t: { token: string }) => t.token),
-      piggy: (vRabota?.sample ?? []).slice(0, 3).map((e: { text?: string }) => e.text).filter(Boolean),
+      goals: goals.slice(0, 3).map(t => t.label),
+      reflections: reflectionThemes.slice(0, 3).map(t => t.label),
+      piggy: (vRabota?.sample ?? vRabotaTexts.slice(0, 3).map(text => ({ text }))).slice(0, 3)
+        .map((e: { text?: string } | string) => (typeof e === 'string' ? e : e.text)).filter(Boolean),
     },
   };
-
-  void program;
 
   return {
     filters,
     currentForumDay: currentDay,
     title: sampleTitle({ currentDay, filters, sampleSize }),
     subtitle: 'Целостный портрет выбранной группы: состояние, вовлечённость, обучение и интересы',
+    methodology: {
+      energy: 'Средняя/медиана по участникам: сначала среднее энергии участника, затем агрегат когорты.',
+      touchpoints: 'Слоты точек осмысления 0–7 на участника×день, затем avg/median по когорте.',
+      coverage: 'Охват считается по уникальным participantId.',
+      program: 'Шкалы 1–5 и 1–10 сравниваются только через % от максимума; черновики evening исключены.',
+      themes: 'pct тем = uniqueParticipants / размер выборки; count = упоминания.',
+      segments: `Пороги вовлечённости: ≥${ENGAGEMENT_THRESHOLDS.leaders}% / ≥${ENGAGEMENT_THRESHOLDS.stable}% / ≥${ENGAGEMENT_THRESHOLDS.selective}%.`,
+    },
     sample: {
       size: sampleSize,
       denominator,
@@ -577,16 +685,16 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     feeling: {
       energy: energyStats,
       energyByDay,
-      energyByDirectionDay: scPulse.energyByDirectionDay ?? [],
-      emotions: scPulse.emotions ?? [],
-      zonesPercent: scPulse.zonesPercent ?? {},
-      zoneLabels: scPulse.zoneLabels ?? {},
-      riskFatiguePct: scPulse.riskFatiguePct ?? null,
+      energyByDirectionDay: pulseFeeling.energyByDirectionDay ?? [],
+      emotions: pulseFeeling.emotions ?? [],
+      zonesPercent: pulseFeeling.zonesPercent ?? {},
+      zoneLabels: pulseFeeling.zoneLabels ?? {},
+      riskFatiguePct: pulseFeeling.riskFatiguePct ?? null,
       mostFrequentEmotion: emotionMode,
       mostFrequentZone: zoneModeLabel,
-      byPhase: scPulse.byPhase ?? {},
-      phaseCounts: scPulse.phaseCounts ?? {},
-      topReasons: scPulse.topReasons ?? [],
+      byPhase: pulseFeeling.byPhase ?? {},
+      phaseCounts: pulseFeeling.phaseCounts ?? {},
+      topReasons: pulseFeeling.topReasons ?? [],
       coveragePct: stateFillPct,
     },
     engagement: {
@@ -611,7 +719,7 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       tasks: {
         approved: tasksApproved,
         rejected: tasksRejected,
-        pending: activity.moderation?.pending ?? 0,
+        pending: tasksPending,
         total: tasksTotal,
         approvalPct: taskApprovalPct,
         participantsWithTasks,
@@ -631,7 +739,7 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       questions: questionTable,
       overall: programScore,
       byDay: scaleByDay,
-      byDirectionDay: evening.scaleByDirectionDay ?? [],
+      byDirectionDay: scaleByDirectionDay,
       highest: highestScale ? { label: highestScale.label, avg: highestScale.avg, avgPct: highestScale.avgPct, max: highestScale.max } : null,
       lowest: lowestScale ? { label: lowestScale.label, avg: lowestScale.avg, avgPct: lowestScale.avgPct, max: lowestScale.max } : null,
       submitted: eveningAct.submitted ?? 0,
@@ -651,7 +759,9 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       program: true,
       exchange: true,
     },
+    exportPath: '/exports/participant-profile',
     exportHints: {
+      fullPortrait: '/exports/participant-profile',
       participants: '/exports/participants',
       stateChecks: '/exports/state-checks',
       evening: '/exports/evening-summary',

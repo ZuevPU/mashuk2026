@@ -201,6 +201,7 @@ router.post('/rating/bonus-rules', P('levels', 'update'), wrap(admin.createRatin
 router.patch('/rating/bonus-rules/:id', P('levels', 'update'), wrap(admin.patchRatingBonusRule));
 
 router.get('/exports/participants', P('exports', 'export'), wrap(exportsCtrl.exportParticipantsFullHandler));
+router.get('/exports/participant-profile', P('exports', 'export'), wrap(exportsCtrl.exportParticipantProfileHandler));
 router.get('/exports/participant-activity-wide', P('exports', 'export'), wrap(exportsCtrl.exportParticipantActivityWideHandler));
 router.get('/exports/answers', P('exports', 'export'), wrap(exportsCtrl.exportAnswersHandler));
 router.get('/exports/piggybank', P('exports', 'export'), wrap(exportsCtrl.exportPiggybankHandler));
