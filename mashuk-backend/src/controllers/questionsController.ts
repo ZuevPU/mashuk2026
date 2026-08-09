@@ -739,9 +739,16 @@ export const listExchange = async (req: ParticipantRequest, res: Response): Prom
       answersByQuestion.get(qid)!.push(row);
     }
 
+    const sorted = [...visible].sort((a, b) => {
+      const ta = a.q.createdAt ? new Date(a.q.createdAt).getTime() : 0;
+      const tb = b.q.createdAt ? new Date(b.q.createdAt).getTime() : 0;
+      if (tb !== ta) return tb - ta;
+      return b.q.id - a.q.id;
+    });
+
     res.json({
       myParticipantId: me.id,
-      questions: visible.map(row => {
+      questions: sorted.map(row => {
         const answerRows = answersByQuestion.get(row.q.id) || [];
         const mapped = answerRows.map(ar => ({
           id: ar.a.id,
