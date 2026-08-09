@@ -233,3 +233,51 @@ export function themesFromBag(
     .slice(0, limit);
   return buildCategoricalThemes(items, sampleSize);
 }
+
+export type AnswerLengthDayPoint = {
+  day: number;
+  avg: number | null;
+  median: number | null;
+  min: number | null;
+  max: number | null;
+  responses: number;
+  uniqueParticipants: number;
+};
+
+/** Средняя длина текстовых ответов (символы) по дням 1…maxDay. */
+export function buildAnswerLengthByDay(
+  items: {
+    day: number | null | undefined;
+    text: string | null | undefined;
+    participantId?: number | null;
+  }[],
+  maxDay = 8,
+): AnswerLengthDayPoint[] {
+  const days = Array.from({ length: Math.min(Math.max(maxDay, 1), 8) }, (_, i) => i + 1);
+  const byDay = new Map<number, { lengths: number[]; pids: Set<number> }>();
+  for (const d of days) byDay.set(d, { lengths: [], pids: new Set() });
+
+  for (const item of items) {
+    const day = item.day;
+    if (day == null || day < 1 || day > days.length) continue;
+    const text = (item.text || '').trim();
+    if (!text) continue;
+    const bucket = byDay.get(day)!;
+    bucket.lengths.push([...text].length);
+    if (item.participantId != null) bucket.pids.add(item.participantId);
+  }
+
+  return days.map(day => {
+    const bucket = byDay.get(day)!;
+    const summary = numericSummary(bucket.lengths);
+    return {
+      day,
+      avg: summary.avg,
+      median: summary.median,
+      min: summary.min,
+      max: summary.max,
+      responses: summary.count,
+      uniqueParticipants: bucket.pids.size,
+    };
+  });
+}

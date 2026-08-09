@@ -6,6 +6,7 @@ import { ChartTooltipRu, formatForumDay, ZONE_COLORS, ZONE_LABELS } from './char
 import {
   DashCard, DashGrid, DashKpi, DashScreenTitle, SectionLabel, ZoneBars, dashVal,
 } from './dashboardUi';
+import { AnswerLengthPanel } from './AnswerLengthPanel';
 import { EmotionDynamicsPanel } from './EmotionDynamicsPanel';
 import { EnergyAverages } from './EnergyAverages';
 import { OrientableBarChart } from './orientableBars';
@@ -599,6 +600,8 @@ export function ParticipantProfileView({ data }: { data: any }) {
             initialKey="coverage"
           />
         </div>
+
+        <AnswerLengthPanel data={eng.answerLengths} />
       </Collapsible>
 
       <SectionLabel>Как оценивает программу</SectionLabel>

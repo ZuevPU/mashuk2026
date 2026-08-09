@@ -24,6 +24,7 @@ import {
   PROFILE_RULE_THRESHOLDS,
   SEGMENT_LABELS,
   accumulateThemeMention,
+  buildAnswerLengthByDay,
   buildProfileRecommendations,
   engagementSegment,
   normalizeScaleToPct,
@@ -616,6 +617,69 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     }
   }
 
+  // Character length of free-text answers by forum day
+  const answerLengthItems: {
+    day: number | null;
+    text: string;
+    participantId: number;
+  }[] = [];
+  for (const q of scPulse.questions ?? []) {
+    for (const a of q.answers ?? []) {
+      const text = (a.answer || '').trim();
+      if (!text) continue;
+      answerLengthItems.push({
+        day: a.day ?? null,
+        text,
+        participantId: a.participantId,
+      });
+    }
+  }
+  for (const q of (afterBlocks as {
+    questions?: { day?: number | null; answers?: { participantId: number; answer?: string | null }[] }[];
+  }).questions ?? []) {
+    for (const a of q.answers ?? []) {
+      const text = (a.answer || '').trim();
+      if (!text) continue;
+      answerLengthItems.push({
+        day: q.day ?? null,
+        text,
+        participantId: a.participantId,
+      });
+    }
+  }
+  for (const e of piggyRows) {
+    const text = (e.text || '').trim();
+    if (!text) continue;
+    answerLengthItems.push({
+      day: e.forumDay ?? null,
+      text,
+      participantId: e.participantId,
+    });
+  }
+  for (const q of (evening as {
+    questions?: {
+      type?: string;
+      answers?: { participantId: number; day?: number; answer?: string | number }[];
+    }[];
+  }).questions ?? []) {
+    if (q.type === 'scale_1_5' || q.type === 'scale_1_10' || q.type === 'yes_no') continue;
+    for (const a of q.answers ?? []) {
+      if (typeof a.answer !== 'string') continue;
+      const text = a.answer.trim();
+      if (!text) continue;
+      answerLengthItems.push({
+        day: a.day ?? null,
+        text,
+        participantId: a.participantId,
+      });
+    }
+  }
+  const answerLengths = {
+    byDay: buildAnswerLengthByDay(answerLengthItems, 8),
+    totalResponses: answerLengthItems.length,
+    note: 'Длина в символах по текстовым ответам: проверка состояния, после блоков, копилка, открытые поля evening. Шкалы и да/нет не входят.',
+  };
+
   const interests = themesFromBag(interestBag, sampleSize, 40);
   const goals = themesFromBag(goalBag, sampleSize, 40);
   const pointBThemes = themesFromBag(pointBBag, sampleSize, 40);
@@ -809,6 +873,7 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       byDirectionDay: touchpointThreshold.byDirectionDay,
       directionTable,
       pulseDaySeries: pulse.activity?.daySeries ?? [],
+      answerLengths,
     },
     programPerception: {
       questions: questionTable,

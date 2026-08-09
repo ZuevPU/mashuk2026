@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   accumulateThemeMention,
+  buildAnswerLengthByDay,
   buildCategoricalThemes,
   buildProfileRecommendations,
   engagementSegment,
@@ -34,6 +35,25 @@ describe('participantProfileStats', () => {
     assert.equal(s.median, null);
     assert.equal(s.min, null);
     assert.equal(s.max, null);
+  });
+
+  it('buildAnswerLengthByDay averages characters per day', () => {
+    const rows = buildAnswerLengthByDay([
+      { day: 1, text: 'abcd', participantId: 1 },
+      { day: 1, text: 'abcdefgh', participantId: 2 },
+      { day: 2, text: 'привет', participantId: 1 },
+      { day: 2, text: '', participantId: 3 },
+      { day: null, text: 'skip', participantId: 4 },
+    ], 8);
+    assert.equal(rows.length, 8);
+    const d1 = rows.find(r => r.day === 1)!;
+    const d2 = rows.find(r => r.day === 2)!;
+    assert.equal(d1.responses, 2);
+    assert.equal(d1.avg, 6);
+    assert.equal(d1.uniqueParticipants, 2);
+    assert.equal(d2.responses, 1);
+    assert.equal(d2.avg, 6); // «привет» = 6 code points
+    assert.equal(rows.find(r => r.day === 3)!.responses, 0);
   });
 
   it('engagementSegment thresholds', () => {
