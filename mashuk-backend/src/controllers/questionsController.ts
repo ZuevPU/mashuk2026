@@ -613,12 +613,12 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
           wordCount,
           questionTextSnapshot: question.text,
           pointsAwarded: 0,
-          pointsLogId: null,
           createdAt: new Date(),
         })
         .where(eq(answers.id, existingAnswer.id))
         .returning();
     } else {
+      // Omit pointsLogId on insert — column may be missing until migration repair runs.
       [answer] = await db.insert(answers).values({
         participantId: req.participant!.id,
         questionId,
@@ -626,7 +626,6 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
         wordCount,
         questionTextSnapshot: question.text,
         pointsAwarded: 0,
-        pointsLogId: null,
       }).returning();
     }
 
@@ -683,14 +682,28 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
     }
 
     const xpAwarded = (pointsResult?.awarded ?? 0) + reflectionBonus;
+    if (!pointsResult && (typeof question.points === 'number' ? question.points : 5) > 0) {
+      console.warn(
+        `submitAnswer: no points awarded for question=${questionId} participant=${req.participant!.id} action=${actionType}`,
+      );
+    }
     if (answer) {
-      [answer] = await db.update(answers)
-        .set({
-          pointsAwarded: xpAwarded,
-          pointsLogId: pointsResult?.logId ?? null,
-        })
-        .where(eq(answers.id, answer.id))
-        .returning();
+      try {
+        [answer] = await db.update(answers)
+          .set({
+            pointsAwarded: xpAwarded,
+            ...(pointsResult?.logId ? { pointsLogId: pointsResult.logId } : {}),
+          })
+          .where(eq(answers.id, answer.id))
+          .returning();
+      } catch (err) {
+        // Schema lag (answers.points_log_id): still persist awarded total so admin/card show XP.
+        console.warn('submitAnswer: pointsLogId update failed, falling back:', err);
+        [answer] = await db.update(answers)
+          .set({ pointsAwarded: xpAwarded })
+          .where(eq(answers.id, answer.id))
+          .returning();
+      }
     }
 
     const { newMedals, confirm } = await answerSubmitExtras(req.participant!.id, settings);

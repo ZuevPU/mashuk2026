@@ -596,6 +596,22 @@ export const copyQuestionsSelected = async (req: AdminRequest, res: Response): P
   res.json({ created: created.map(r => serializeAdminQuestion(r, 0)), count: created.length });
 };
 
+/** Пересчитать баллы по всем ответам: у кого уже есть — пропуск, у кого 0 — начислить. */
+export const backfillQuestionPoints = async (req: AdminRequest, res: Response): Promise<void> => {
+  const { backfillMissingAnswerPoints } = await import('../services/pointsService.js');
+  const result = await backfillMissingAnswerPoints();
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req,
+    actionType: 'question_points_backfill',
+    section: 'questions',
+    objectId: 'all',
+    newValue: result,
+    isCritical: true,
+  });
+  res.json(result);
+};
+
 /** Аннулировать баллы всем, кто ответил на этот вопрос (по логам рядом с ответом). */
 export const revokeQuestionPoints = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);

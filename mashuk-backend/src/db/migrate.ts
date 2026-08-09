@@ -129,6 +129,31 @@ async function ensurePiggybankPointsLogSchema(pool: ReturnType<typeof createPool
   await pool.query(sql);
 }
 
+/** Add points_log_id to answers if missing (0057) — without it submitAnswer 500s after award. */
+async function ensureAnswersPointsLogSchema(pool: ReturnType<typeof createPool>): Promise<void> {
+  const { rows } = await pool.query<{ ok: number }>(
+    `SELECT 1 AS ok FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'answers' AND column_name = 'points_log_id'
+     LIMIT 1`,
+  );
+  if (rows.length > 0) return;
+
+  const sqlPath = path.join(__dirname, '../../drizzle/0057_answers_points_log_id.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  console.warn('Repair: applying 0057_answers_points_log_id.sql (answers.points_log_id missing)');
+  await pool.query(sql);
+}
+
+/** Keep touchpoint awards from silently stopping when an old low max_accruals is in DB. */
+async function ensureQuestionAnswerAccrualCap(pool: ReturnType<typeof createPool>): Promise<void> {
+  await pool.query(`
+    UPDATE levels_config
+    SET max_accruals = 10000
+    WHERE action_type = 'question_answer'
+      AND (max_accruals IS NULL OR max_accruals < 10000)
+  `);
+}
+
 export async function runMigrations(): Promise<void> {
   const pool = createPool(process.env.DATABASE_URL!);
   const db = drizzle(pool);
@@ -145,6 +170,8 @@ export async function runMigrations(): Promise<void> {
     await ensureEventHideFromHomeSchema(pool);
     await ensurePracticesVoteSchema(pool);
     await ensurePiggybankPointsLogSchema(pool);
+    await ensureAnswersPointsLogSchema(pool);
+    await ensureQuestionAnswerAccrualCap(pool);
     await pool.end();
   }
 }

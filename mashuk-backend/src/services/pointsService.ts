@@ -1,4 +1,4 @@
-import { eq, and, sql, isNull, asc } from 'drizzle-orm';
+import { eq, and, sql, isNull, asc, gte, lte } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { pointsLog, levelsConfig, participants, answers, questions } from '../db/schema.js';
 import { env } from '../config/env.js';
@@ -167,6 +167,197 @@ export async function backfillPathPointsForAnswers(
   return awardedTotal;
 }
 
+async function updateAnswerAward(
+  answerId: number,
+  patch: { pointsAwarded: number; pointsLogId?: number | null },
+): Promise<void> {
+  try {
+    await db.update(answers).set(patch).where(eq(answers.id, answerId));
+  } catch (err) {
+    // Schema lag without answers.points_log_id — still store the awarded total.
+    console.warn('updateAnswerAward fallback without pointsLogId:', err);
+    await db.update(answers)
+      .set({ pointsAwarded: patch.pointsAwarded })
+      .where(eq(answers.id, answerId));
+  }
+}
+
+function isPracticesVoteQuestion(q: {
+  questionKind?: string | null;
+  answerType?: string | null;
+  type?: string | null;
+}): boolean {
+  return q.questionKind === 'practices_vote'
+    || q.answerType === 'practices_vote'
+    || q.type === 'practices_vote';
+}
+
+/**
+ * Admin tool: for every saved answer, keep existing awards; award only where
+ * the participant answered but points were never credited (points_awarded = 0).
+ */
+export async function backfillMissingAnswerPoints(): Promise<{
+  scanned: number;
+  alreadyOk: number;
+  linkedExisting: number;
+  newlyAwarded: number;
+  skippedZeroPoints: number;
+  participantsAffected: number;
+  pointsTotal: number;
+}> {
+  const rows = await db.select({
+    answerId: answers.id,
+    participantId: answers.participantId,
+    pointsAwarded: answers.pointsAwarded,
+    pointsLogId: answers.pointsLogId,
+    createdAt: answers.createdAt,
+    questionId: questions.id,
+    block: questions.block,
+    reflectionKind: questions.reflectionKind,
+    questionKind: questions.questionKind,
+    answerType: questions.answerType,
+    type: questions.type,
+    timePoint: questions.timePoint,
+    title: questions.title,
+    dayNumber: questions.dayNumber,
+    points: questions.points,
+  }).from(answers).innerJoin(questions, eq(answers.questionId, questions.id));
+
+  const usedLogIds = new Set<number>();
+  for (const row of rows) {
+    if (row.pointsLogId) usedLogIds.add(row.pointsLogId);
+  }
+
+  const levelByAction = new Map<string, number | null>();
+  for (const cfg of await db.select().from(levelsConfig)) {
+    if (cfg.actionType) levelByAction.set(cfg.actionType, cfg.pointsPerUnit ?? null);
+  }
+
+  let scanned = 0;
+  let alreadyOk = 0;
+  let linkedExisting = 0;
+  let newlyAwarded = 0;
+  let skippedZeroPoints = 0;
+  let pointsTotal = 0;
+  const affected = new Set<number>();
+
+  for (const row of rows) {
+    scanned += 1;
+    if (isPracticesVoteQuestion(row)) {
+      alreadyOk += 1;
+      continue;
+    }
+
+    const question = {
+      block: row.block,
+      reflectionKind: row.reflectionKind,
+      questionKind: row.questionKind,
+      type: row.type,
+      timePoint: row.timePoint,
+      title: row.title,
+    };
+    const actionType = pointsActionForQuestion(question);
+    const forumDay = row.dayNumber ?? undefined;
+    const isPointB = actionType === 'point_b_complete';
+    const override = isPointB
+      ? undefined
+      : (typeof row.points === 'number' ? row.points : undefined);
+
+    const catalog = ACTION_CATALOG.find(a => a.actionType === actionType);
+    const levelPts = levelByAction.get(actionType);
+    const expectedPts = isPointB
+      ? (levelPts ?? catalog?.pointsPerUnit ?? 0)
+      : (override !== undefined ? override : (levelPts ?? catalog?.pointsPerUnit ?? 0));
+
+    if (expectedPts <= 0) {
+      skippedZeroPoints += 1;
+      continue;
+    }
+
+    if (row.pointsLogId) {
+      const [log] = await db.select({
+        id: pointsLog.id,
+        points: pointsLog.points,
+        revokedAt: pointsLog.revokedAt,
+      }).from(pointsLog).where(eq(pointsLog.id, row.pointsLogId)).limit(1);
+      if (log && !log.revokedAt && log.points > 0) {
+        if ((row.pointsAwarded ?? 0) !== log.points) {
+          await updateAnswerAward(row.answerId, { pointsAwarded: log.points, pointsLogId: log.id });
+        }
+        alreadyOk += 1;
+        continue;
+      }
+    }
+
+    if ((row.pointsAwarded ?? 0) > 0) {
+      alreadyOk += 1;
+      continue;
+    }
+
+    // Points may already be in the log while answer.points_awarded stayed 0 (failed update).
+    const created = row.createdAt ?? new Date();
+    const orphanConds = [
+      eq(pointsLog.participantId, row.participantId),
+      eq(pointsLog.actionType, actionType),
+      isNull(pointsLog.revokedAt),
+      sql`${pointsLog.points} > 0`,
+      gte(pointsLog.createdAt, new Date(created.getTime() - 15 * 60_000)),
+      lte(pointsLog.createdAt, new Date(created.getTime() + 15 * 60_000)),
+    ];
+    if (forumDay != null) {
+      orphanConds.push(sql`(
+        ${pointsLog.forumDay} = ${forumDay}
+        OR ${pointsLog.forumDay} IS NULL
+      )`);
+    }
+    let orphans = await db.select({
+      id: pointsLog.id,
+      points: pointsLog.points,
+    }).from(pointsLog).where(and(...orphanConds)).orderBy(asc(pointsLog.createdAt));
+    orphans = orphans.filter(o => !usedLogIds.has(o.id));
+    if (orphans.some(o => o.points === expectedPts)) {
+      orphans = orphans.filter(o => o.points === expectedPts);
+    }
+
+    if (orphans[0]) {
+      const log = orphans[0];
+      usedLogIds.add(log.id);
+      await updateAnswerAward(row.answerId, { pointsAwarded: log.points, pointsLogId: log.id });
+      linkedExisting += 1;
+      affected.add(row.participantId);
+      continue;
+    }
+
+    const result = await awardPoints(row.participantId, actionType, override, forumDay);
+    if (!result) {
+      skippedZeroPoints += 1;
+      continue;
+    }
+    usedLogIds.add(result.logId);
+    await updateAnswerAward(row.answerId, {
+      pointsAwarded: result.awarded,
+      pointsLogId: result.logId,
+    });
+    newlyAwarded += 1;
+    pointsTotal += result.awarded;
+    affected.add(row.participantId);
+  }
+
+  for (const participantId of affected) {
+    await recalculateParticipantTotals(participantId);
+  }
+
+  return {
+    scanned,
+    alreadyOk,
+    linkedExisting,
+    newlyAwarded,
+    skippedZeroPoints,
+    participantsAffected: affected.size,
+    pointsTotal,
+  };
+}
+
 export async function awardPoints(
   participantId: number,
   actionType: string,
@@ -184,11 +375,22 @@ export async function awardPoints(
 
   const maxAccruals = config?.maxAccruals ?? catalog?.maxAccruals ?? null;
   if (maxAccruals) {
+    // Count only active awards — revoked rows used to silently block further touchpoint XP.
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(pointsLog)
-      .where(and(eq(pointsLog.participantId, participantId), eq(pointsLog.actionType, actionType)));
-    if (count >= maxAccruals) return null;
+      .where(and(
+        eq(pointsLog.participantId, participantId),
+        eq(pointsLog.actionType, actionType),
+        isNull(pointsLog.revokedAt),
+        sql`${pointsLog.points} > 0`,
+      ));
+    if (count >= maxAccruals) {
+      console.warn(
+        `awardPoints capped: participant=${participantId} action=${actionType} count=${count} max=${maxAccruals}`,
+      );
+      return null;
+    }
   }
 
   const [beforeRow] = await db.select({

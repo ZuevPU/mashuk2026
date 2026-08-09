@@ -1747,6 +1747,7 @@ export {
   publishPracticesResults,
   unpublishPracticesResults,
   revokeQuestionPoints,
+  backfillQuestionPoints,
 } from './questionAdminController.js';
 
 /** Скопировать вопросы с дня fromDay на toDay */

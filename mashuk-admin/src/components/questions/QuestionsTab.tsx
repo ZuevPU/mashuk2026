@@ -420,7 +420,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
             Слот «Итоговая анкета по дню» в списке вопросов — одно короткое
             текстовое поле-напоминание; основная форма открывается на главной по времени или сразу после публикации.
           </p>
-          <div className="form-row" style={{ marginBottom: 12 }}>
+          <div className="form-row" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
             <button
               type="button"
               className="adm-btn"
@@ -430,7 +430,34 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
             >
               Развернуть шаблон 7×7
             </button>
+            <button
+              type="button"
+              className="adm-btn adm-btn-primary"
+              onClick={() => {
+                const ok = window.confirm(
+                  'Пересчитать баллы по всем ответам на вопросы?\n\n'
+                  + 'У кого баллы уже есть — ничего не меняем.\n'
+                  + 'У кого ответ есть, а баллов не было — начислим в Путь.',
+                );
+                if (!ok) return;
+                act(async () => {
+                  const res = await adminFetch('/questions/backfill-points', { method: 'POST', body: '{}' });
+                  const awarded = res?.newlyAwarded ?? 0;
+                  const linked = res?.linkedExisting ?? 0;
+                  const okCount = res?.alreadyOk ?? 0;
+                  const pts = res?.pointsTotal ?? 0;
+                  const people = res?.participantsAffected ?? 0;
+                  return `Готово: начислено ${awarded} (+${pts} Путь), привязано ${linked}, уже ок ${okCount}, участников ${people}`;
+                });
+              }}
+            >
+              Пересчитать баллы
+            </button>
           </div>
+          <p className="adm-muted" style={{ fontSize: 12, marginBottom: 12, lineHeight: 1.4 }}>
+            «Пересчитать баллы» проверяет все ответы: если участник прошёл точку осмысления / проверку состояния,
+            но баллы не записались — доначисляет. Повторно тем, у кого уже учтено, не начисляет.
+          </p>
           <div className="form-row">
             <span>Скопировать день</span>
             <input type="number" className="adm-input" style={{ width: 70 }} value={copyDayForm.fromDay} onChange={e => setCopyDayForm({ ...copyDayForm, fromDay: Number(e.target.value) })} />

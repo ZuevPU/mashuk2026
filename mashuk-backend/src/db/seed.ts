@@ -229,7 +229,7 @@ export async function runSeed() {
     ]);
 
     await db.insert(levelsConfig).values([
-      { actionType: 'question_answer', pointsPerUnit: 5, maxAccruals: 100 },
+      { actionType: 'question_answer', pointsPerUnit: 5, maxAccruals: 10000 },
       { actionType: 'task_complete', pointsPerUnit: 20, maxAccruals: 100 },
       { actionType: 'exchange_answer', pointsPerUnit: 5, maxAccruals: 50 },
       { actionType: 'exchange_question', pointsPerUnit: 3, maxAccruals: 30 },
