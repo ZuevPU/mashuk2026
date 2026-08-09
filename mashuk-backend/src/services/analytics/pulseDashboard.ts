@@ -23,6 +23,7 @@ import {
 } from '../emotionZones.js';
 import {
   activityByDaySeries,
+  buildTouchpointSlotCoverage,
   buildTouchpointThresholdCoverage,
   countEveningCompleted,
   countStateChecksByPhase,
@@ -161,6 +162,11 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
     filters.shiftId,
   );
   const touchpointThreshold = await buildTouchpointThresholdCoverage(
+    cohort,
+    seriesDays,
+    filters.shiftId,
+  );
+  const touchpointSlotCoverage = await buildTouchpointSlotCoverage(
     cohort,
     seriesDays,
     filters.shiftId,
@@ -408,6 +414,7 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
       daySeries,
       byDirectionDaySeries,
       touchpointThreshold,
+      touchpointSlotCoverage,
       completionByDirection,
       completionByGroup,
     },

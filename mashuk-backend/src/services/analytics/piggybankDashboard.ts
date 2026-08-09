@@ -92,6 +92,13 @@ export async function buildPiggybankDashboard(filters: AnalyticsFilters, req?: A
     vRabotaByDirection.set(d, (vRabotaByDirection.get(d) || 0) + 1);
   }
 
+  const piggyByDirection = new Map<string, number>();
+  for (const e of rows) {
+    const p = cohort.find(c => c.id === e.participantId);
+    const d = p?.direction || '—';
+    piggyByDirection.set(d, (piggyByDirection.get(d) || 0) + 1);
+  }
+
   const offset = (filters.page - 1) * filters.limit;
   const pageEntries = entries.slice(offset, offset + filters.limit);
 
@@ -100,6 +107,9 @@ export async function buildPiggybankDashboard(filters: AnalyticsFilters, req?: A
     navigation: { total: entries.length, page: filters.page, limit: filters.limit },
     byTag,
     bySource,
+    byDirection: [...piggyByDirection.entries()]
+      .map(([direction, count]) => ({ direction, count }))
+      .sort((a, b) => b.count - a.count || a.direction.localeCompare(b.direction, 'ru')),
     topThemes: topReasonTokens(rows.map(e => e.text), 20),
     recurringTools: topReasonTokens(rows.map(e => e.text), 15),
     vRabota: {

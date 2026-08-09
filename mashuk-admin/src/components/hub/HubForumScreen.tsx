@@ -29,7 +29,14 @@ import { ExchangeAnalyticsPanel } from '../analytics/ExchangeAnalyticsPanel';
 import { TouchpointCoveragePanel } from '../analytics/TouchpointCoveragePanel';
 import { HubKpiRow } from './HubKpiRow';
 import { SignalsTable } from './SignalsTable';
+import { DirectionEmotionPulseChart } from './DirectionEmotionPulseChart';
 import { DirectionZonePhaseTable } from './DirectionZonePhaseTable';
+import { PhaseEmotionPulseChart } from './PhaseEmotionPulseChart';
+import { DirectionEnergyCompareChart } from './DirectionEnergyCompareChart';
+import { DirectionRadarCompare } from './DirectionRadarCompare';
+import { StateReasonsByDirectionTable } from './StateReasonsByDirectionTable';
+import { RoleDirectionHeatmap } from './RoleDirectionHeatmap';
+import { TouchpointSlotChart } from './TouchpointSlotChart';
 import { PiggybankDirectionMatrix } from './PiggybankDirectionMatrix';
 import { downloadAllHubExports, downloadHubExport, forumExportItems } from './hubExports';
 import { hubFilterParams } from './hubQuery';
@@ -265,6 +272,12 @@ export function HubForumScreen({
         <ZoneBars title="Зоны · день" zones={pulse.byPhase?.day} />
         <ZoneBars title="Зоны · вечер" zones={pulse.byPhase?.evening} />
       </DashGrid>
+      <PhaseEmotionPulseChart byPhase={pulse.byPhase} />
+      <DirectionEmotionPulseChart
+        byDirection={pulse.byDirection}
+        byDirectionPhase={pulse.byDirectionPhase}
+        onOpenDirection={openDirection}
+      />
       <DirectionZonePhaseTable
         rows={pulse.byDirectionPhase}
         onOpenDirection={openDirection}
@@ -310,8 +323,24 @@ export function HubForumScreen({
         byDirectionDay={pulse.energyByDirectionDay}
         title="Средняя энергия · 0–10"
       />
+      <DashGrid cols={2}>
+        <DirectionEnergyCompareChart byDirectionDay={pulse.energyByDirectionDay} />
+        <DirectionRadarCompare rows={data.directionMetrics} />
+      </DashGrid>
+      <StateReasonsByDirectionTable
+        rows={data.pulse?.stateReasons?.byDirection}
+        directions={(data.byDirection ?? []).map((r: { direction: string }) => r.direction)}
+        onOpenDirection={openDirection}
+      />
+      <RoleDirectionHeatmap
+        data={data.roleDirectionMatrix}
+        onOpenDirection={openDirection}
+      />
 
       <SectionLabel>Точки дня · охват</SectionLabel>
+      <TouchpointSlotChart
+        data={data.touchpointSlotCoverage ?? data.pulse?.activity?.touchpointSlotCoverage}
+      />
       <TouchpointCoveragePanel data={data.touchpointThreshold ?? data.pulse?.activity?.touchpointThreshold} />
 
       <DayComparisonPanel

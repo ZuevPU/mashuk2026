@@ -11,6 +11,7 @@ import { getMoscowPhase } from '../timePhase.js';
 import { TOUCHPOINT_SLOTS } from '../touchpointTemplates.js';
 import {
   isTouchpointQuestionForForumDay,
+  questionMatchesTouchpointSlot,
   touchpointCompletionRatio,
 } from '../touchpointProgress.js';
 
@@ -204,6 +205,137 @@ export async function buildTouchpointThresholdCoverage(
   byDirectionDay.sort((a, b) => a.day - b.day || a.direction.localeCompare(b.direction, 'ru'));
 
   return { slotsTotal, byDay, byDirectionDay };
+}
+
+/** Короткие подписи слотов для графика «по конкретному слоту». */
+export const TOUCHPOINT_SLOT_SHORT_LABELS: Record<number, string> = {
+  1: 'Утро · состояние',
+  2: 'Направление · осмысление',
+  3: 'День · состояние',
+  4: 'Уроки о важном',
+  5: 'Открытые уроки',
+  6: 'Вечер · состояние',
+  7: 'Итоги дня',
+};
+
+export type TouchpointSlotCoverageRow = {
+  index: number;
+  title: string;
+  shortLabel: string;
+  openMin: number;
+  closeMin: number;
+  hasQuestion: boolean;
+  completed: number;
+  coveragePct: number;
+};
+
+export type TouchpointSlotCoverageDay = {
+  day: number;
+  registered: number;
+  slots: TouchpointSlotCoverageRow[];
+};
+
+/**
+ * Охват каждого из 7 слотов: доля зарегистрированных, закрывших слот в день
+ * (уникальные участники с ответом на любой matching-вопрос слота).
+ */
+export async function buildTouchpointSlotCoverage(
+  cohort: { id: number; onboardingCompletedAt?: Date | null }[],
+  days: number[],
+  shiftId?: number | null,
+): Promise<{ slotsTotal: number; byDay: TouchpointSlotCoverageDay[] }> {
+  const slotsTotal = TOUCHPOINT_SLOTS.length;
+  const registered = cohort.filter(p => p.onboardingCompletedAt);
+  const ids = registered.map(p => p.id);
+
+  if (!days.length || !ids.length) {
+    return {
+      slotsTotal,
+      byDay: days.map(day => ({
+        day,
+        registered: registered.length,
+        slots: TOUCHPOINT_SLOTS.map(slot => ({
+          index: slot.index,
+          title: slot.title,
+          shortLabel: TOUCHPOINT_SLOT_SHORT_LABELS[slot.index] ?? slot.title,
+          openMin: slot.openMin,
+          closeMin: slot.closeMin,
+          hasQuestion: false,
+          completed: 0,
+          coveragePct: 0,
+        })),
+      })),
+    };
+  }
+
+  const qRows = shiftId != null
+    ? await db.select().from(questions).where(eq(questions.shiftId, shiftId))
+    : await db.select().from(questions);
+  const published = qRows.filter(q => isPublishedStatus(q.status));
+  const tpQs = published.filter(q => days.some(d => isTouchpointQuestionForForumDay(q, d)));
+  const tpQIds = tpQs.map(q => q.id);
+
+  const ans = tpQIds.length
+    ? await db.select({
+      participantId: answers.participantId,
+      questionId: answers.questionId,
+    }).from(answers).where(and(
+      inArray(answers.participantId, ids),
+      inArray(answers.questionId, tpQIds),
+    ))
+    : [];
+
+  const answeredByPid = new Map<number, Set<number>>();
+  for (const a of ans) {
+    if (!answeredByPid.has(a.participantId)) answeredByPid.set(a.participantId, new Set());
+    answeredByPid.get(a.participantId)!.add(a.questionId);
+  }
+
+  /** Вечерняя анкета часто лежит в day_state, не только в answers. */
+  const eveningStates = await db.select({
+    participantId: participantDayState.participantId,
+    dayNumber: participantDayState.dayNumber,
+    eveningRatings: participantDayState.eveningRatings,
+  }).from(participantDayState).where(inArray(participantDayState.participantId, ids));
+  const eveningDone = new Set(
+    eveningStates
+      .filter(s =>
+        days.includes(s.dayNumber)
+        && s.eveningRatings != null
+        && typeof s.eveningRatings === 'object')
+      .map(s => `${s.participantId}:${s.dayNumber}`),
+  );
+
+  const byDay: TouchpointSlotCoverageDay[] = days.map(day => {
+    const dayQs = tpQs.filter(q => isTouchpointQuestionForForumDay(q, day));
+    const slots = TOUCHPOINT_SLOTS.map(slot => {
+      const matched = dayQs.filter(q => questionMatchesTouchpointSlot(q, slot));
+      const qIds = new Set(matched.map(q => q.id));
+      let completed = 0;
+      for (const p of registered) {
+        const answeredIds = answeredByPid.get(p.id) ?? new Set<number>();
+        const answeredSlot = [...qIds].some(qid => answeredIds.has(qid));
+        const eveningSlot = slot.index === 7 && eveningDone.has(`${p.id}:${day}`);
+        if (answeredSlot || eveningSlot) completed += 1;
+      }
+      const coveragePct = registered.length
+        ? Math.round((completed / registered.length) * 1000) / 10
+        : 0;
+      return {
+        index: slot.index,
+        title: slot.title,
+        shortLabel: TOUCHPOINT_SLOT_SHORT_LABELS[slot.index] ?? slot.title,
+        openMin: slot.openMin,
+        closeMin: slot.closeMin,
+        hasQuestion: matched.length > 0 || slot.index === 7,
+        completed,
+        coveragePct,
+      };
+    });
+    return { day, registered: registered.length, slots };
+  });
+
+  return { slotsTotal, byDay };
 }
 
 export type ParticipantTouchpointScore = {

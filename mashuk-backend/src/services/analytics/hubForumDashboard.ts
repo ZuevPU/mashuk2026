@@ -12,6 +12,9 @@ import { buildActivityDashboard } from './activityDashboard.js';
 import { buildPiggybankDashboard } from './piggybankDashboard.js';
 import { buildPortraitDashboard } from './portraitDashboard.js';
 import { buildExchangeAnalytics } from './exchangeAnalytics.js';
+import { computeLeaderboardScores } from '../leaderboardService.js';
+import { buildRoleDirectionMatrix } from './roleDirectionMatrix.js';
+import { forumSeriesDays } from './dayComparison.js';
 
 async function loadCommunityQueueCounts() {
   const [[pendingExchange], [orgWaiting], [activeExchange]] = await Promise.all([
@@ -61,6 +64,11 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
     loadCommunityQueueCounts(),
   ]);
 
+  const roleDirectionMatrix = await buildRoleDirectionMatrix(
+    cohort,
+    forumSeriesDays(pulse.currentForumDay ?? 1),
+  );
+
   const stateCheck = stateCheckRaw as typeof stateCheckRaw & {
     emotionalPulse?: {
       avgEnergy?: number | null;
@@ -92,6 +100,64 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
   const touchpointCoveragePct = registered
     ? Math.round((activeToday / registered) * 1000) / 10
     : 0;
+
+  /** Метрики направлений для radar / сравнений (нормировка 0–100 на фронте по max). */
+  const energyRows = (scPulse.energyByDirectionDay ?? []) as {
+    direction: string; day: number; avg: number | null; responses: number;
+  }[];
+  const zoneByDir = new Map(
+    ((pulse.emotionalPulse?.byDirection ?? []) as { direction: string; zones: Record<string, number> }[])
+      .map(r => [r.direction, r.zones]),
+  );
+  const piggyByDir = new Map(
+    ((piggybank as { byDirection?: { direction: string; count: number }[] }).byDirection ?? [])
+      .map(r => [r.direction, r.count]),
+  );
+  const cohortIds = cohort.map(p => p.id);
+  const totalScores = cohortIds.length
+    ? await computeLeaderboardScores(cohortIds, { scope: 'shift', track: 'total' })
+    : new Map<number, number>();
+  const pointsByDir = new Map<string, { sum: number; n: number }>();
+  for (const p of cohort) {
+    const d = p.direction || '—';
+    const pts = totalScores.get(p.id) ?? 0;
+    const cur = pointsByDir.get(d) ?? { sum: 0, n: 0 };
+    cur.sum += pts;
+    cur.n += 1;
+    pointsByDir.set(d, cur);
+  }
+  const energyAgg = new Map<string, { sum: number; n: number }>();
+  for (const r of energyRows) {
+    if (r.avg == null || !r.responses) continue;
+    const cur = energyAgg.get(r.direction) ?? { sum: 0, n: 0 };
+    cur.sum += r.avg * r.responses;
+    cur.n += r.responses;
+    energyAgg.set(r.direction, cur);
+  }
+  const directionMetrics = byDirection.map(row => {
+    const zones = zoneByDir.get(row.direction) ?? {};
+    const engagementLiftPct = Math.round(
+      ((Number(zones.engagement) || 0) + (Number(zones.lift) || 0)) * 10,
+    ) / 10;
+    const eAgg = energyAgg.get(row.direction);
+    const energyAvg = eAgg && eAgg.n ? Math.round((eAgg.sum / eAgg.n) * 10) / 10 : null;
+    const pAgg = pointsByDir.get(row.direction);
+    const avgPoints = pAgg && pAgg.n ? Math.round((pAgg.sum / pAgg.n) * 10) / 10 : 0;
+    const piggyCount = piggyByDir.get(row.direction) ?? 0;
+    const piggyPerCapita = row.registered
+      ? Math.round((piggyCount / row.registered) * 100) / 100
+      : 0;
+    return {
+      direction: row.direction,
+      registered: row.registered,
+      coveragePct: row.activityRatePct,
+      energyAvg,
+      engagementLiftPct,
+      avgPoints,
+      piggyCount,
+      piggyPerCapita,
+    };
+  });
 
   const mergedPulse = {
     ...pulse,
@@ -143,8 +209,11 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
     exchange,
     community,
     byDirection,
+    directionMetrics,
     daySeries: pulse.activity.daySeries ?? [],
     byDirectionDaySeries: pulse.activity.byDirectionDaySeries ?? [],
     touchpointThreshold: pulse.activity.touchpointThreshold ?? null,
+    touchpointSlotCoverage: pulse.activity.touchpointSlotCoverage ?? null,
+    roleDirectionMatrix,
   };
 }
