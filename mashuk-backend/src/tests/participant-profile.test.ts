@@ -11,6 +11,7 @@ import {
   PROFILE_RULE_THRESHOLDS,
 } from '../services/analytics/participantProfileStats.js';
 import {
+  buildEmotionDayPhaseDynamics,
   buildParticipantPathSeries,
   resolvePathPhase,
 } from '../services/analytics/participantPathSeries.js';
@@ -238,5 +239,27 @@ describe('participantPathSeries', () => {
     assert.equal(morning.responses, 1);
     assert.equal(morning.energy.avg, 9);
     assert.equal(path.dayFilter, 1);
+  });
+});
+
+describe('emotionDayPhaseDynamics', () => {
+  it('tracks selected emotion across days and phases', () => {
+    const dyn = buildEmotionDayPhaseDynamics([
+      { participantId: 1, energy: 7, emotion: 'interest', timePoint: 'утро', day: 1 },
+      { participantId: 2, energy: 7, emotion: 'calm', timePoint: 'утро', day: 1 },
+      { participantId: 3, energy: 7, emotion: 'interest', timePoint: 'день', day: 1 },
+      { participantId: 4, energy: 7, emotion: 'interest', timePoint: 'вечер', day: 2 },
+      { participantId: 5, energy: 7, emotion: 'joy', timePoint: 'вечер', day: 2 },
+    ]);
+    assert.equal(dyn.days.length, 8);
+    const interest = dyn.emotions.find(e => e.id === 'interest')!;
+    const d1 = interest.byDay.find(d => d.day === 1)!;
+    const d2 = interest.byDay.find(d => d.day === 2)!;
+    assert.equal(d1.morningPct, 50);
+    assert.equal(d1.dayPct, 100);
+    assert.equal(d1.eveningPct, null);
+    assert.equal(d2.eveningPct, 50);
+    assert.equal(d2.eveningCount, 1);
+    assert.equal(d2.eveningTotal, 2);
   });
 });

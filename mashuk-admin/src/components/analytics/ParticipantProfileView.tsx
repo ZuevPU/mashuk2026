@@ -6,6 +6,7 @@ import { ChartTooltipRu, formatForumDay, ZONE_COLORS, ZONE_LABELS } from './char
 import {
   DashCard, DashGrid, DashKpi, DashScreenTitle, SectionLabel, ZoneBars, dashVal,
 } from './dashboardUi';
+import { EmotionDynamicsPanel } from './EmotionDynamicsPanel';
 import { EnergyAverages } from './EnergyAverages';
 import { OrientableBarChart } from './orientableBars';
 import { ParticipantPathPanel } from './ParticipantPathPanel';
@@ -153,36 +154,96 @@ type ThemeItem = {
   uniqueParticipants?: number;
 };
 
+const THEME_PREVIEW = 8;
+
 function ThemeList({
   items,
   mentionOnly,
+  initial = THEME_PREVIEW,
 }: {
   items?: ThemeItem[];
   /** true = нет дедупа участников: показываем только упоминания */
   mentionOnly?: boolean;
+  initial?: number;
 }) {
+  const [expanded, setExpanded] = useState(false);
   if (!items?.length) {
     return <p className="adm-muted" style={{ fontSize: 12, margin: 0 }}>Нет данных</p>;
   }
+  const visible = expanded ? items : items.slice(0, initial);
+  const hidden = Math.max(0, items.length - initial);
   return (
-    <ul style={{ margin: 0, paddingLeft: 0, listStyle: 'none', fontSize: 12 }}>
-      {items.slice(0, 10).map((it, i) => (
-        <li
-          key={`${it.label}-${i}`}
-          style={{
-            display: 'flex', justifyContent: 'space-between', gap: 8,
-            padding: '4px 0', borderBottom: '1px solid #f0f0f2',
-          }}
+    <div>
+      <ul style={{ margin: 0, paddingLeft: 0, listStyle: 'none', fontSize: 12 }}>
+        {visible.map((it, i) => (
+          <li
+            key={`${it.label}-${i}`}
+            style={{
+              display: 'flex', justifyContent: 'space-between', gap: 8,
+              padding: '4px 0', borderBottom: '1px solid #f0f0f2',
+            }}
+          >
+            <span>{it.label}</span>
+            <span className="adm-muted" style={{ whiteSpace: 'nowrap' }}>
+              {mentionOnly || it.uniqueParticipants == null
+                ? `${it.count} упом.`
+                : `${it.pct != null ? `${it.pct}% уч.` : '—'} · ${it.count} упом. · ${it.uniqueParticipants} чел.`}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {hidden > 0 ? (
+        <button
+          type="button"
+          className="adm-btn adm-btn-ghost adm-btn-sm"
+          style={{ marginTop: 8 }}
+          onClick={() => setExpanded(v => !v)}
         >
-          <span>{it.label}</span>
-          <span className="adm-muted">
-            {mentionOnly || it.uniqueParticipants == null
-              ? `${it.count} упом.`
-              : `${it.pct != null ? `${it.pct}% уч.` : '—'} · ${it.count} упом. · ${it.uniqueParticipants} чел.`}
-          </span>
-        </li>
-      ))}
-    </ul>
+          {expanded ? 'Свернуть' : `Показать ещё (${hidden})`}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ExpandableLines({
+  items,
+  initial = THEME_PREVIEW,
+  empty = 'Нет данных',
+  render,
+}: {
+  items?: unknown[];
+  initial?: number;
+  empty?: string;
+  render: (item: unknown, index: number) => ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const list = items ?? [];
+  if (!list.length) {
+    return <p className="adm-muted" style={{ fontSize: 12, margin: 0 }}>{empty}</p>;
+  }
+  const visible = expanded ? list : list.slice(0, initial);
+  const hidden = Math.max(0, list.length - initial);
+  return (
+    <div>
+      <ul style={{ margin: 0, paddingLeft: 0, listStyle: 'none', fontSize: 12 }}>
+        {visible.map((item, i) => (
+          <li key={i} style={{ padding: '4px 0', borderBottom: '1px solid #f0f0f2' }}>
+            {render(item, i)}
+          </li>
+        ))}
+      </ul>
+      {hidden > 0 ? (
+        <button
+          type="button"
+          className="adm-btn adm-btn-ghost adm-btn-sm"
+          style={{ marginTop: 8 }}
+          onClick={() => setExpanded(v => !v)}
+        >
+          {expanded ? 'Свернуть' : `Показать ещё (${hidden})`}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -410,7 +471,7 @@ export function ParticipantProfileView({ data }: { data: any }) {
 
         <div style={{ marginTop: 16 }}>
           <div className="adm-dash-card-title">
-            Эмоции
+            Эмоции · всего
             <MethodHint text="Категории не усредняются: доли и мода по ответам проверки состояния." />
           </div>
           <OrientableBarChart
@@ -421,6 +482,12 @@ export function ParticipantProfileView({ data }: { data: any }) {
             yAxisWidth={130}
           />
         </div>
+
+        <EmotionDynamicsPanel
+          intraDay={feeling.path?.emotionSeries}
+          dynamics={feeling.emotionDynamics}
+          defaultEmotion={feeling.mostFrequentEmotion}
+        />
 
         <div style={{ marginTop: 16 }}>
           <div className="adm-dash-card-title">Эмоциональные зоны</div>
@@ -535,78 +602,113 @@ export function ParticipantProfileView({ data }: { data: any }) {
       </Collapsible>
 
       <SectionLabel>Как оценивает программу</SectionLabel>
-      <Collapsible title="Восприятие программы" hint={methodology.program}>
-        <DashGrid cols={3}>
-          <DashKpi
-            value={program.overall?.overallPct != null ? `${program.overall.overallPct}%` : '—'}
-            label="общая средняя (норм.)"
-            sub={`N=${program.overall?.answered ?? 0} · шкалы не смешиваются без нормализации`}
-          />
-          <DashKpi
-            value={program.highest ? `${program.highest.avg}/${program.highest.max}` : '—'}
-            label="наивысшая"
-            sub={program.highest?.label}
-            accent="#16a34a"
-          />
-          <DashKpi
-            value={program.lowest ? `${program.lowest.avg}/${program.lowest.max}` : '—'}
-            label="наинизшая"
-            sub={program.lowest?.label}
-            accent={program.lowest && program.lowest.max === 5 && program.lowest.avg < 3.5 ? '#b91c1c' : undefined}
-          />
-        </DashGrid>
-        {program.draftsExcluded ? (
-          <p className="adm-muted" style={{ fontSize: 12 }}>Черновики исключены: {program.draftsExcluded}</p>
-        ) : null}
-        <p className="adm-muted" style={{ fontSize: 12 }}>
-          ⚠ у вопроса — меньше {sample.thresholds?.rules?.minSample ?? 5} ответов.
-        </p>
+      <Collapsible
+        title="Восприятие программы"
+        hint={methodology.program}
+        defaultOpen={(program.overall?.answered ?? 0) > 0 || (program.questions?.length ?? 0) > 0}
+      >
+        {(program.overall?.answered ?? 0) > 0 || (program.questions?.length ?? 0) > 0 ? (
+          <>
+            <DashGrid cols={3}>
+              <DashKpi
+                value={program.overall?.overallPct != null ? `${program.overall.overallPct}%` : '—'}
+                label="общая средняя (норм.)"
+                sub={`N=${program.overall?.answered ?? 0} · шкалы не смешиваются без нормализации`}
+              />
+              <DashKpi
+                value={program.highest ? `${program.highest.avg}/${program.highest.max}` : '—'}
+                label="наивысшая"
+                sub={program.highest?.label}
+                accent="#16a34a"
+              />
+              <DashKpi
+                value={program.lowest ? `${program.lowest.avg}/${program.lowest.max}` : '—'}
+                label="наинизшая"
+                sub={program.lowest?.label}
+                accent={program.lowest && program.lowest.max === 5 && program.lowest.avg < 3.5 ? '#b91c1c' : undefined}
+              />
+            </DashGrid>
+            {program.draftsExcluded ? (
+              <p className="adm-muted" style={{ fontSize: 12 }}>Черновики исключены: {program.draftsExcluded}</p>
+            ) : null}
+            {(program.questions ?? []).some((q: { insufficient?: boolean }) => q.insufficient) ? (
+              <p className="adm-muted" style={{ fontSize: 12 }}>
+                ⚠ у вопроса — меньше {sample.thresholds?.rules?.minSample ?? 5} ответов.
+              </p>
+            ) : null}
 
-        <div style={{ marginTop: 14 }}>
-          <div className="adm-dash-card-title">Средние по вопросам (% от максимума)</div>
-          <OrientableBarChart
-            data={questionBars}
-            categoryKey="name"
-            series={[{ dataKey: 'avgPct', name: '% от max', fill: '#1F3A5F' }]}
-            height={Math.max(200, questionBars.length * 30)}
-            yAxisWidth={160}
-          />
-        </div>
+            <div style={{ marginTop: 14 }}>
+              <div className="adm-dash-card-title">Средние по вопросам (% от максимума)</div>
+              <OrientableBarChart
+                data={questionBars}
+                categoryKey="name"
+                series={[{ dataKey: 'avgPct', name: '% от max', fill: '#1F3A5F' }]}
+                height={Math.max(200, questionBars.length * 30)}
+                yAxisWidth={160}
+              />
+            </div>
 
-        <div style={{ marginTop: 14 }} className="adm-chart-frame">
-          <div className="adm-dash-card-title">Общая средняя по дням (норм. %)</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={programDayLine}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5ea" />
-              <XAxis dataKey="dayLabel" tick={{ fontSize: 11, fill: '#86868b' }} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#86868b' }} width={36} />
-              <Tooltip content={<ChartTooltipRu />} />
-              <Line type="monotone" dataKey="overallPct" name="% от max" stroke="#1F3A5F" strokeWidth={2} connectNulls />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+            {programDayLine.some((d: { answered?: number; overallPct?: number | null }) =>
+              (d.answered ?? 0) > 0 || d.overallPct != null) ? (
+              <div style={{ marginTop: 14 }} className="adm-chart-frame">
+                <div className="adm-dash-card-title">Общая средняя по дням (норм. %)</div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={programDayLine}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e5ea" />
+                    <XAxis dataKey="dayLabel" tick={{ fontSize: 11, fill: '#86868b' }} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#86868b' }} width={36} />
+                    <Tooltip content={<ChartTooltipRu />} />
+                    <Line type="monotone" dataKey="overallPct" name="% от max" stroke="#1F3A5F" strokeWidth={2} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : null}
 
-        <div style={{ marginTop: 12 }}>
-          <SortTable
-            columns={[
-              { key: 'question', label: 'Вопрос' },
-              { key: 'avg', label: 'Средняя (N)' },
-              { key: 'median', label: 'Медиана' },
-              { key: 'pct', label: '% max' },
-              { key: 'scale', label: 'Шкала' },
-              { key: 'answered', label: 'Ответов', numeric: true },
-              { key: 'delta', label: 'Δ к пр. дню' },
-            ]}
-            rows={questionTable}
-            initialKey="answered"
-          />
-        </div>
+            <div style={{ marginTop: 12 }}>
+              <SortTable
+                columns={[
+                  { key: 'question', label: 'Вопрос' },
+                  { key: 'avg', label: 'Средняя (N)' },
+                  { key: 'median', label: 'Медиана' },
+                  { key: 'pct', label: '% max' },
+                  { key: 'scale', label: 'Шкала' },
+                  { key: 'answered', label: 'Ответов', numeric: true },
+                  { key: 'delta', label: 'Δ к пр. дню' },
+                ]}
+                rows={questionTable}
+                initialKey="answered"
+              />
+            </div>
+          </>
+        ) : (
+          <div style={{
+            padding: '14px 16px',
+            borderRadius: 10,
+            background: '#f5f5f7',
+            border: '1px solid #e5e5ea',
+          }}
+          >
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
+              Пока нет оценок программы
+            </p>
+            <p className="adm-muted" style={{ margin: '6px 0 0', fontSize: 13, lineHeight: 1.45 }}>
+              Этот блок появится после того, как участники <strong>сдадут</strong> вечернюю анкету
+              «Итоги дня» со шкалами (направление, уроки, питание и т.д.).
+              {(program.draftsExcluded ?? 0) > 0
+                ? ` Сейчас есть только черновики (${program.draftsExcluded}) — они в расчёт не входят.`
+                : ' Сданных анкет с оценками по шкалам пока нет.'}
+              {(program.submitted ?? 0) > 0
+                ? ` Сдано анкет: ${program.submitted}, но шкалы в них не заполнены.`
+                : null}
+            </p>
+          </div>
+        )}
       </Collapsible>
 
       <SectionLabel>Что важно участнику</SectionLabel>
       <Collapsible title="Смыслы, цели и интересы" hint={methodology.themes} defaultOpen={false}>
         <DashGrid cols={2}>
-          <DashCard title="Цели">
+          <DashCard title="Цели · слова">
             <ThemeList items={meanings.goals} />
           </DashCard>
           <DashCard title="Интересы">
@@ -615,10 +717,19 @@ export function ParticipantProfileView({ data }: { data: any }) {
         </DashGrid>
         <div style={{ height: 10 }} />
         <DashGrid cols={2}>
-          <DashCard title="Темы рефлексий">
+          <DashCard title="Точка Б · слова">
+            <ThemeList items={meanings.pointBThemes} />
+          </DashCard>
+          <DashCard title="Причины состояния · слова">
+            <ThemeList items={meanings.stateReasons} />
+          </DashCard>
+        </DashGrid>
+        <div style={{ height: 10 }} />
+        <DashGrid cols={2}>
+          <DashCard title="Темы рефлексий · слова">
             <ThemeList items={meanings.reflectionThemes} />
           </DashCard>
-          <DashCard title="Темы копилки">
+          <DashCard title="Темы копилки · слова">
             <ThemeList items={meanings.piggyThemes} />
           </DashCard>
         </DashGrid>
@@ -626,24 +737,24 @@ export function ParticipantProfileView({ data }: { data: any }) {
         <DashGrid cols={2}>
           <DashCard title="В работу">
             <p style={{ margin: '0 0 8px', fontSize: 13 }}>Записей: {dashVal(meanings.vRabota?.total)}</p>
-            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#3a3a3c' }}>
-              {(meanings.vRabota?.sample ?? []).slice(0, 5).map((t: string, i: number) => (
-                <li key={i} style={{ marginBottom: 4 }}>{t}</li>
-              ))}
-            </ul>
+            <ExpandableLines
+              items={meanings.vRabota?.sample ?? []}
+              render={(t) => <span style={{ color: '#3a3a3c' }}>{String(t)}</span>}
+            />
           </DashCard>
           <DashCard title="Обмен опытом · топ вопросов">
-            <ul style={{ margin: 0, paddingLeft: 0, listStyle: 'none', fontSize: 12 }}>
-              {(meanings.exchangeTopQuestions ?? []).slice(0, 6).map((q: { id?: number; text?: string; answers?: number }, i: number) => (
-                <li key={q.id ?? i} style={{ padding: '4px 0', borderBottom: '1px solid #f0f0f2' }}>
-                  {q.text || '—'}
-                  <span className="adm-muted"> · ответов {dashVal(q.answers)}</span>
-                </li>
-              ))}
-              {!meanings.exchangeTopQuestions?.length ? (
-                <li className="adm-muted">Нет данных</li>
-              ) : null}
-            </ul>
+            <ExpandableLines
+              items={meanings.exchangeTopQuestions ?? []}
+              render={(raw) => {
+                const q = raw as { text?: string; answers?: number };
+                return (
+                  <>
+                    {q.text || '—'}
+                    <span className="adm-muted"> · ответов {dashVal(q.answers)}</span>
+                  </>
+                );
+              }}
+            />
           </DashCard>
         </DashGrid>
         <div style={{ height: 10 }} />
@@ -658,32 +769,52 @@ export function ParticipantProfileView({ data }: { data: any }) {
             <p style={{ fontSize: 13, margin: '0 0 8px' }}>
               Роль изменилась: {dashVal(meanings.roleChanges?.changed)} · та же: {dashVal(meanings.roleChanges?.same)}
             </p>
-            {(meanings.pointAB?.byDirection ?? []).slice(0, 5).map((d: {
-              direction: string; total: number; bothPoints: number;
-            }) => (
-              <p key={d.direction} className="adm-muted" style={{ fontSize: 12, margin: '2px 0' }}>
-                {d.direction}: {d.bothPoints}/{d.total} с обеими точками
-              </p>
-            ))}
+            <ExpandableLines
+              items={meanings.pointAB?.byDirection ?? []}
+              initial={5}
+              render={(raw) => {
+                const d = raw as { direction: string; total: number; bothPoints: number };
+                return (
+                  <span className="adm-muted">
+                    {d.direction}: {d.bothPoints}/{d.total} с обеими точками
+                  </span>
+                );
+              }}
+            />
           </DashCard>
         </DashGrid>
 
-        {(meanings.quotes?.goals?.length || meanings.quotes?.piggy?.length || meanings.quotes?.reflections?.length) ? (
-          <div style={{ marginTop: 12 }}>
-            <div className="adm-dash-card-title">Обезличенные цитаты / темы</div>
-            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
-              {(meanings.quotes?.goals ?? []).slice(0, 2).map((t: string, i: number) => (
-                <li key={`g-${i}`} style={{ marginBottom: 4 }}>Цель: «{t}»</li>
-              ))}
-              {(meanings.quotes?.reflections ?? []).slice(0, 2).map((t: string, i: number) => (
-                <li key={`r-${i}`} style={{ marginBottom: 4 }}>Рефлексия: «{t}»</li>
-              ))}
-              {(meanings.quotes?.piggy ?? []).slice(0, 2).map((t: string, i: number) => (
-                <li key={`p-${i}`} style={{ marginBottom: 4 }}>Копилка: «{t}»</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
+        <div style={{ marginTop: 12 }}>
+          <DashGrid cols={2}>
+            <DashCard title="Цитаты · цели">
+              <ExpandableLines
+                items={meanings.quotes?.goals ?? []}
+                render={(t) => <>«{String(t)}»</>}
+              />
+            </DashCard>
+            <DashCard title="Цитаты · точка Б">
+              <ExpandableLines
+                items={meanings.quotes?.pointB ?? []}
+                render={(t) => <>«{String(t)}»</>}
+              />
+            </DashCard>
+          </DashGrid>
+          <div style={{ height: 10 }} />
+          <DashGrid cols={2}>
+            <DashCard title="Цитаты · рефлексии">
+              <ExpandableLines
+                items={meanings.quotes?.reflections ?? []}
+                render={(t) => <>«{String(t)}»</>}
+              />
+            </DashCard>
+            <DashCard title="Цитаты · копилка">
+              <ExpandableLines
+                items={meanings.quotes?.piggy ?? []}
+                render={(t) => <>«{String(t)}»</>}
+              />
+            </DashCard>
+          </DashGrid>
+        </div>
 
         {(meanings.themesByDay ?? []).length ? (
           <div style={{ marginTop: 12 }}>
@@ -700,8 +831,8 @@ export function ParticipantProfileView({ data }: { data: any }) {
                 reflections: ThemeItem[];
               }[]).map(d => ({
                 day: formatForumDay(d.day),
-                piggy: (d.piggy ?? []).slice(0, 3).map(t => t.label).join(', ') || '—',
-                reflections: (d.reflections ?? []).slice(0, 3).map(t => t.label).join(', ') || '—',
+                piggy: (d.piggy ?? []).slice(0, 8).map(t => t.label).join(', ') || '—',
+                reflections: (d.reflections ?? []).slice(0, 8).map(t => t.label).join(', ') || '—',
               }))}
               initialKey="day"
             />

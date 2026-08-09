@@ -191,3 +191,98 @@ export function buildParticipantPathSeries(
     note: 'Эмоция и энергия собираются в проверках состояния утро / день / вечер. Дневной шаг — после дневной программы.',
   };
 }
+
+export type EmotionDayPhasePoint = {
+  day: number;
+  morningPct: number | null;
+  dayPct: number | null;
+  eveningPct: number | null;
+  morningCount: number;
+  dayCount: number;
+  eveningCount: number;
+  morningTotal: number;
+  dayTotal: number;
+  eveningTotal: number;
+};
+
+export type EmotionDynamicsPayload = {
+  days: number[];
+  emotions: {
+    id: string;
+    label: string;
+    byDay: EmotionDayPhasePoint[];
+  }[];
+  note: string;
+};
+
+function normalizeEmotionId(raw: string | null | undefined): string | null {
+  const e = (raw || '').trim().toLowerCase();
+  if (!e) return null;
+  if ((CHECKIN_EMOTION_IDS as readonly string[]).includes(e)) return e;
+  for (const id of CHECKIN_EMOTION_IDS) {
+    if (CHECKIN_EMOTION_LABELS[id].toLowerCase() === e) return id;
+  }
+  return e;
+}
+
+function pctOf(count: number, total: number): number {
+  return total ? Math.round((count / total) * 1000) / 10 : 0;
+}
+
+/**
+ * Доля выбранной эмоции по дням 1…8 и фазам утро / день / вечер.
+ */
+export function buildEmotionDayPhaseDynamics(
+  answers: PathAnswerInput[],
+  opts?: { maxDay?: number },
+): EmotionDynamicsPayload {
+  const maxDay = Math.min(Math.max(opts?.maxDay ?? 8, 1), 8);
+  const days = Array.from({ length: maxDay }, (_, i) => i + 1);
+
+  const totals = new Map<string, number>();
+  const counts = new Map<string, number>();
+  for (const a of answers) {
+    if (a.day == null || a.day < 1 || a.day > maxDay) continue;
+    const phase = resolvePathPhase(a);
+    const emo = normalizeEmotionId(a.emotion);
+    const totalKey = `${a.day}::${phase}`;
+    totals.set(totalKey, (totals.get(totalKey) || 0) + 1);
+    if (!emo) continue;
+    const countKey = `${emo}::${a.day}::${phase}`;
+    counts.set(countKey, (counts.get(countKey) || 0) + 1);
+  }
+
+  const cell = (emotion: string, day: number, phase: PathPhase) => {
+    const total = totals.get(`${day}::${phase}`) || 0;
+    const count = counts.get(`${emotion}::${day}::${phase}`) || 0;
+    return { count, pct: total ? pctOf(count, total) : null, total };
+  };
+
+  const emotions = CHECKIN_EMOTION_IDS.map(id => ({
+    id,
+    label: CHECKIN_EMOTION_LABELS[id],
+    byDay: days.map(day => {
+      const morning = cell(id, day, 'morning');
+      const midday = cell(id, day, 'day');
+      const evening = cell(id, day, 'evening');
+      return {
+        day,
+        morningPct: morning.pct,
+        dayPct: midday.pct,
+        eveningPct: evening.pct,
+        morningCount: morning.count,
+        dayCount: midday.count,
+        eveningCount: evening.count,
+        morningTotal: morning.total,
+        dayTotal: midday.total,
+        eveningTotal: evening.total,
+      };
+    }),
+  }));
+
+  return {
+    days,
+    emotions,
+    note: 'Доля выбранной эмоции среди ответов проверки состояния в фазе (утро / день / вечер) каждого дня смены.',
+  };
+}

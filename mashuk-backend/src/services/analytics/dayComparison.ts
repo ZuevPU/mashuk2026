@@ -79,9 +79,9 @@ type CohortP = {
   onboardingCompletedAt?: Date | null;
 };
 
-/** Days D1…Dcurrent (cap 7) for always-on comparison charts. */
+/** Days D1…Dcurrent (cap 8) for always-on comparison charts. */
 export function forumSeriesDays(currentForumDay: number): number[] {
-  const n = Math.min(Math.max(1, currentForumDay || 1), 7);
+  const n = Math.min(Math.max(1, currentForumDay || 1), 8);
   return Array.from({ length: n }, (_, i) => i + 1);
 }
 

@@ -32,7 +32,11 @@ import {
   type EngagementSegmentId,
   type NumericSummary,
 } from './participantProfileStats.js';
-import { buildParticipantPathSeries, type PathAnswerInput } from './participantPathSeries.js';
+import {
+  buildEmotionDayPhaseDynamics,
+  buildParticipantPathSeries,
+  type PathAnswerInput,
+} from './participantPathSeries.js';
 
 function pct(n: number, den: number): number | null {
   if (!den) return null;
@@ -501,6 +505,7 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
   }
   const dayFilterForPath = filters.mode === 'day' && filters.day != null ? filters.day : null;
   const participantPath = buildParticipantPathSeries(pathAnswers, { dayFilter: dayFilterForPath });
+  const emotionDynamics = buildEmotionDayPhaseDynamics(pathAnswers, { maxDay: 8 });
 
   const highEnergyLowReflection = (
     energyStats.avg != null
@@ -527,7 +532,10 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
   // Meanings with proper uniqueParticipants
   const interestBag = new Map<string, { count: number; pids: Set<number> }>();
   const goalBag = new Map<string, { count: number; pids: Set<number> }>();
+  const pointBBag = new Map<string, { count: number; pids: Set<number> }>();
   const roleBag = new Map<string, { count: number; pids: Set<number> }>();
+  const goalQuoteSamples: string[] = [];
+  const pointBQuoteSamples: string[] = [];
   for (const p of registered) {
     const ints = Array.isArray(p.interests) ? (p.interests as string[]) : [];
     for (const tag of ints) accumulateThemeMention(interestBag, String(tag), p.id);
@@ -536,8 +544,21 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     if (Array.isArray(g)) goalTexts.push(...g.map(String));
     else if (g && typeof g === 'object') goalTexts.push(...Object.values(g as Record<string, unknown>).map(String));
     for (const text of goalTexts) {
-      for (const token of topReasonTokens([text], 8)) {
+      const trimmed = text.trim();
+      if (trimmed.length >= 12 && goalQuoteSamples.length < 40) goalQuoteSamples.push(trimmed.slice(0, 220));
+      for (const token of topReasonTokens([text], 14)) {
         accumulateThemeMention(goalBag, token.token, p.id);
+      }
+    }
+    const pb = p.pointBAnswers;
+    const pointBTexts: string[] = [];
+    if (Array.isArray(pb)) pointBTexts.push(...pb.map(String));
+    else if (pb && typeof pb === 'object') pointBTexts.push(...Object.values(pb as Record<string, unknown>).map(String));
+    for (const text of pointBTexts) {
+      const trimmed = text.trim();
+      if (trimmed.length >= 12 && pointBQuoteSamples.length < 40) pointBQuoteSamples.push(trimmed.slice(0, 220));
+      for (const token of topReasonTokens([text], 14)) {
+        accumulateThemeMention(pointBBag, token.token, p.id);
       }
     }
     const roleKey = p.pedagogicalRole || 'none';
@@ -548,8 +569,11 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
   const piggyBag = new Map<string, { count: number; pids: Set<number> }>();
   const piggyByDayBag = new Map<number, Map<string, { count: number; pids: Set<number> }>>();
   const vRabotaTexts: string[] = [];
+  const piggyQuoteSamples: string[] = [];
   for (const e of piggyRows) {
-    for (const token of topReasonTokens([e.text || ''], 6)) {
+    const raw = (e.text || '').trim();
+    if (raw.length >= 12 && piggyQuoteSamples.length < 40) piggyQuoteSamples.push(raw.slice(0, 220));
+    for (const token of topReasonTokens([e.text || ''], 12)) {
       accumulateThemeMention(piggyBag, token.token, e.participantId);
       const day = e.forumDay ?? 0;
       if (!piggyByDayBag.has(day)) piggyByDayBag.set(day, new Map());
@@ -563,6 +587,7 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
   // Reflection themes from after-blocks answers
   const reflectionBag = new Map<string, { count: number; pids: Set<number> }>();
   const reflectionByDayBag = new Map<number, Map<string, { count: number; pids: Set<number> }>>();
+  const reflectionQuoteSamples: string[] = [];
   for (const q of (afterBlocks as {
     questions?: { day?: number | null; answers?: { participantId: number; answer?: string | null }[] }[];
   }).questions ?? []) {
@@ -570,7 +595,8 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     for (const a of q.answers ?? []) {
       const text = (a.answer || '').trim();
       if (!text) continue;
-      for (const token of topReasonTokens([text], 6)) {
+      if (text.length >= 12 && reflectionQuoteSamples.length < 40) reflectionQuoteSamples.push(text.slice(0, 220));
+      for (const token of topReasonTokens([text], 12)) {
         accumulateThemeMention(reflectionBag, token.token, a.participantId);
         if (!reflectionByDayBag.has(day)) reflectionByDayBag.set(day, new Map());
         accumulateThemeMention(reflectionByDayBag.get(day)!, token.token, a.participantId);
@@ -578,19 +604,33 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     }
   }
 
-  const interests = themesFromBag(interestBag, sampleSize, 20);
-  const goals = themesFromBag(goalBag, sampleSize, 15);
-  const piggyThemes = themesFromBag(piggyBag, sampleSize, 15);
-  const reflectionThemes = themesFromBag(reflectionBag, sampleSize, 15);
-  const rolesOnEntry = themesFromBag(roleBag, sampleSize, 15);
+  // Reasons from state-check free text
+  const reasonBag = new Map<string, { count: number; pids: Set<number> }>();
+  for (const q of scPulse.questions ?? []) {
+    for (const a of q.answers ?? []) {
+      const text = (a.answer || '').trim();
+      if (!text) continue;
+      for (const token of topReasonTokens([text], 10)) {
+        accumulateThemeMention(reasonBag, token.token, a.participantId);
+      }
+    }
+  }
+
+  const interests = themesFromBag(interestBag, sampleSize, 40);
+  const goals = themesFromBag(goalBag, sampleSize, 40);
+  const pointBThemes = themesFromBag(pointBBag, sampleSize, 40);
+  const piggyThemes = themesFromBag(piggyBag, sampleSize, 40);
+  const reflectionThemes = themesFromBag(reflectionBag, sampleSize, 40);
+  const stateReasons = themesFromBag(reasonBag, sampleSize, 40);
+  const rolesOnEntry = themesFromBag(roleBag, sampleSize, 20);
 
   const themesByDay = [...new Set([...piggyByDayBag.keys(), ...reflectionByDayBag.keys()])]
     .filter(d => d > 0)
     .sort((a, b) => a - b)
     .map(day => ({
       day,
-      piggy: themesFromBag(piggyByDayBag.get(day) ?? new Map(), sampleSize, 8),
-      reflections: themesFromBag(reflectionByDayBag.get(day) ?? new Map(), sampleSize, 8),
+      piggy: themesFromBag(piggyByDayBag.get(day) ?? new Map(), sampleSize, 20),
+      reflections: themesFromBag(reflectionByDayBag.get(day) ?? new Map(), sampleSize, 20),
     }));
 
   const topInterestLabels = interests.slice(0, 3).map(i => i.label).filter(Boolean);
@@ -635,13 +675,18 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     interests,
     reflectionThemes,
     piggyThemes,
+    pointBThemes,
+    stateReasons,
     themesByDay,
     vRabota: {
       total: vRabota?.total ?? vRabotaTexts.length,
       byDirection: vRabota?.byDirection ?? [],
-      sample: (vRabota?.sample ?? []).slice(0, 5).map((e: { text?: string }) => e.text).filter(Boolean),
+      sample: [
+        ...(vRabota?.sample ?? []).map((e: { text?: string }) => e.text).filter(Boolean),
+        ...vRabotaTexts,
+      ].filter((t, i, arr) => t && arr.indexOf(t) === i).slice(0, 40) as string[],
     },
-    exchangeTopQuestions: (exchange.topQuestions ?? []).slice(0, 8).map((q: {
+    exchangeTopQuestions: (exchange.topQuestions ?? []).slice(0, 30).map((q: {
       id?: number; text?: string; title?: string; answers?: number; answerCount?: number; engagement?: number;
     }) => ({
       id: q.id,
@@ -658,10 +703,11 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       byDirection: portrait.departure?.byDirection ?? [],
     },
     quotes: {
-      goals: goals.slice(0, 3).map(t => t.label),
-      reflections: reflectionThemes.slice(0, 3).map(t => t.label),
-      piggy: (vRabota?.sample ?? vRabotaTexts.slice(0, 3).map(text => ({ text }))).slice(0, 3)
-        .map((e: { text?: string } | string) => (typeof e === 'string' ? e : e.text)).filter(Boolean),
+      goals: goalQuoteSamples.slice(0, 20),
+      pointB: pointBQuoteSamples.slice(0, 20),
+      reflections: reflectionQuoteSamples.slice(0, 20),
+      piggy: piggyQuoteSamples.slice(0, 20),
+      vRabota: vRabotaTexts.slice(0, 20),
     },
   };
 
@@ -724,6 +770,7 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       topReasons: pulseFeeling.topReasons ?? [],
       coveragePct: stateFillPct,
       path: participantPath,
+      emotionDynamics,
     },
     engagement: {
       slotsTotal,
