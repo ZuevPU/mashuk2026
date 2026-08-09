@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { initVkBridge } from './utils/vkBridgeClient';
-import { captureLaunchParamsEarly } from './utils/launchParams';
+import { captureLaunchParamsEarly, capturePendingTaskQrEarly } from './utils/launchParams';
 import { ConfigProvider, AdaptivityProvider, AppRoot } from '@vkontakte/vkui';
 import { RouterProvider } from '@vkontakte/vk-mini-apps-router';
 import '@vkontakte/vkui/dist/vkui.css';
@@ -11,8 +11,9 @@ import { router } from './router';
 
 const isIos = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-// Save VK launch params before hash router rewrites the URL.
+// Save VK launch params + pending task QR before hash router rewrites the URL.
 captureLaunchParamsEarly();
+capturePendingTaskQrEarly();
 
 const container = document.getElementById('root');
 const root = createRoot(container!);

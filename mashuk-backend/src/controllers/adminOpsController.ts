@@ -9,7 +9,15 @@ import {
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { hashPassword } from '../utils/password.js';
 import { logAdminAction } from '../services/adminActionsLog.js';
-import { generateQrToken, buildParticipantQrUrl, buildTaskQrUrl, buildEventQrUrl, resolveParticipantAppBase } from '../services/qrService.js';
+import {
+  allocateTaskQrCode,
+  generateQrToken,
+  buildParticipantQrUrl,
+  buildTaskQrUrl,
+  buildEventQrUrl,
+  formatTaskQrDisplayCode,
+  resolveParticipantAppBase,
+} from '../services/qrService.js';
 import { env } from '../config/env.js';
 import { sendPushNotification } from '../services/pushService.js';
 import { synthesizeOutcomes } from '../services/gigachatService.js';
@@ -477,13 +485,14 @@ export const awardMedal = async (req: AdminRequest, res: Response): Promise<void
 
 export const generateEntityQr = async (req: AdminRequest, res: Response): Promise<void> => {
   const { type, id } = req.body as { type: 'task' | 'event' | 'participant'; id: number };
-  const token = generateQrToken();
   const base = resolveParticipantAppBase();
   if (type === 'task') {
+    const token = await allocateTaskQrCode();
     await db.update(tasks).set({ qrToken: token }).where(eq(tasks.id, id));
-    res.json({ token, url: buildTaskQrUrl(base, id, token) });
+    res.json({ token, displayCode: formatTaskQrDisplayCode(token), url: buildTaskQrUrl(base, id, token) });
     return;
   }
+  const token = generateQrToken();
   if (type === 'event') {
     await db.update(events).set({ qrToken: token }).where(eq(events.id, id));
     res.json({ token, url: buildEventQrUrl(base, id, token) });

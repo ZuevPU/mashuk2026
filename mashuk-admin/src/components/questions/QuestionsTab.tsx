@@ -478,6 +478,25 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
               await loadQuestions();
             }, 'Снято с публикации');
           }}
+          onRevokePoints={() => {
+            if (!editingId) return;
+            const ok = window.confirm(
+              `Аннулировать баллы всем, кто ответил на вопрос «${draft.title || editingId}»?\n\n`
+              + 'Будут сняты начисления, сделанные при ответе на этот вопрос. Ответы сохранятся.',
+            );
+            if (!ok) return;
+            act(async () => {
+              const res = await adminFetch(`/questions/${editingId}/revoke-points`, {
+                method: 'POST',
+                body: JSON.stringify({
+                  reason: `Аннулирование баллов за вопрос #${editingId}`,
+                }),
+              });
+              const n = res?.participantsAffected ?? 0;
+              const pts = res?.pointsRevoked ?? 0;
+              return `Снято: ${pts} б. у ${n} уч. (${res?.revokedLogs ?? 0} записей)`;
+            });
+          }}
           onViewPracticesResults={() => {
             if (!editingId) return;
             setPracticesResultsId(editingId);

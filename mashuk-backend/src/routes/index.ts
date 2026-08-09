@@ -10,7 +10,7 @@ import { updateExperimentStatus, submitEveningQuestionnaire, patchEveningDraft }
 import {
   getProgram, getProgramSettings, getRecommendations, markAttendance, getKnowledgeBase, getKnowledgeBaseDays, saveMaterialToPiggybank,
 } from '../controllers/programController.js';
-import { listTasks, submitTask, teamConfirmSubmission, searchTeammates } from '../controllers/tasksController.js';
+import { listTasks, submitTask, scanTask, teamConfirmSubmission, searchTeammates } from '../controllers/tasksController.js';
 import {
   listForumQuestions, getQuestion, submitAnswer,
   listExchange, createExchangeQuestion, answerExchange, reactExchangeAnswer,
@@ -61,6 +61,7 @@ router.post('/program/materials/:id/piggybank', vkAuthMiddleware, requirePartici
 router.post('/program/events/:eventId/attendance', vkAuthMiddleware, requireParticipant, markAttendance);
 
 router.get('/tasks', vkAuthMiddleware, requireParticipant, listTasks);
+router.post('/tasks/scan', vkAuthMiddleware, requireParticipant, scanTask);
 router.post('/tasks/:id/submit', vkAuthMiddleware, requireParticipant, submitTask);
 router.post('/tasks/submissions/:submissionId/team-confirm', vkAuthMiddleware, requireParticipant, teamConfirmSubmission);
 router.get('/participants/teammates-search', vkAuthMiddleware, requireParticipant, searchTeammates);

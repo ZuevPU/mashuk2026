@@ -543,7 +543,9 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                             ? 'Скоро откроется'
                             : 'Доступно')}
                       </span>
-                      <span>+{q.pathPointsPreview ?? q.points ?? 5} 📍 Путь</span>
+                      {(q.pathPointsPreview ?? q.points ?? 0) > 0 && (
+                        <span>+{q.pathPointsPreview ?? q.points} 📍 Путь</span>
+                      )}
                     </div>
                     {canAnswer(q.status) && (
                       <div className="rq-btn" onClick={() => openQuestion(q.id)}>Ответить</div>

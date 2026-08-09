@@ -37,6 +37,9 @@ import {
   submissionCreatePatch,
   type EnrichedSubmission,
 } from '../services/submissionLifecycle.js';
+import { findTaskByQrCode, normalizeTaskQrCode } from '../services/qrService.js';
+import { resolveForumDayForNewEntry } from '../services/piggybankService.js';
+import { isUniqueViolation } from '../services/qrScanGuard.js';
 
 async function resolveTaskListState(
   task: typeof tasks.$inferSelect,
@@ -288,18 +291,23 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
       || null;
     const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null;
 
-    const recordBlockedQr = async (outcome: 'blocked_duplicate' | 'blocked_device') => {
+    const recordBlockedQr = async (outcome: 'blocked_duplicate' | 'blocked_device', forumDay: number) => {
       if (!requestDeviceKey) return;
       const { recordQrScan } = await import('../services/qrScanGuard.js');
-      await recordQrScan({
-        taskId,
-        participantId: req.participant!.id,
-        vkUserId: req.participant!.vkId ?? null,
-        deviceKey: requestDeviceKey,
-        ipAddress,
-        userAgent,
-        outcome,
-      });
+      try {
+        await recordQrScan({
+          taskId,
+          participantId: req.participant!.id,
+          vkUserId: req.participant!.vkId ?? null,
+          deviceKey: requestDeviceKey,
+          ipAddress,
+          userAgent,
+          outcome,
+          forumDay,
+        });
+      } catch {
+        /* duplicate blocked logs are fine to ignore */
+      }
     };
     if ((methods.includes('qr') || qrToken) && !isQrInValidWindow(task, now)) {
       res.status(400).json({ error: 'QR-код задания сейчас не активен' });
@@ -310,21 +318,28 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
       return;
     }
 
-    if (task.qrToken && qrToken && qrToken !== task.qrToken) {
+    const qrMatches = !!(task.qrToken && qrToken
+      && normalizeTaskQrCode(task.qrToken) === normalizeTaskQrCode(qrToken));
+    if (task.qrToken && qrToken && !qrMatches) {
       res.status(400).json({ error: 'Invalid QR token' });
       return;
     }
 
-    if (isQrSubmit && qrToken && task.qrToken === qrToken && requestDeviceKey) {
+    const forumDay = isQrSubmit
+      ? (await resolveForumDayForNewEntry())
+      : 0;
+
+    if (isQrSubmit && qrMatches && requestDeviceKey) {
       const { assertQrScanAllowed } = await import('../services/qrScanGuard.js');
       const qrGuard = await assertQrScanAllowed({
         taskId,
         participantId: req.participant!.id,
         deviceKey: requestDeviceKey,
+        forumDay,
       });
       if (!qrGuard.ok) {
         if (qrGuard.outcome === 'blocked_duplicate' || qrGuard.outcome === 'blocked_device') {
-          await recordBlockedQr(qrGuard.outcome);
+          await recordBlockedQr(qrGuard.outcome, forumDay);
         }
         res.status(400).json({ error: qrGuard.error });
         return;
@@ -436,18 +451,27 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
       xpAwarded = (await resolveTaskAwardPoints(task)) || 0;
       [submission] = await db.select().from(taskSubmissions).where(eq(taskSubmissions.id, submission.id)).limit(1);
       void rewards;
-      if (isQrSubmit && qrToken && requestDeviceKey) {
+      if (isQrSubmit && qrMatches && requestDeviceKey) {
         const { recordQrScan } = await import('../services/qrScanGuard.js');
-        await recordQrScan({
-          taskId,
-          participantId: req.participant!.id,
-          vkUserId: req.participant!.vkId ?? null,
-          deviceKey: requestDeviceKey,
-          ipAddress,
-          userAgent,
-          outcome: 'success',
-          submissionId: submission?.id ?? null,
-        });
+        try {
+          await recordQrScan({
+            taskId,
+            participantId: req.participant!.id,
+            vkUserId: req.participant!.vkId ?? null,
+            deviceKey: requestDeviceKey,
+            ipAddress,
+            userAgent,
+            outcome: 'success',
+            submissionId: submission?.id ?? null,
+            forumDay,
+          });
+        } catch (err) {
+          if (isUniqueViolation(err)) {
+            res.status(400).json({ error: 'Вы уже выполнили это QR-задание' });
+            return;
+          }
+          throw err;
+        }
       }
     } else if (submission && (status === 'pending' || status === 'pending_team')) {
       const pendingSubmissionId = submission.id;
@@ -483,6 +507,85 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
       return;
     }
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Camera / manual deep-link scan: body { qr } only.
+ * Identity comes from vkAuth launch-params HMAC (middleware), never from the body.
+ */
+export const scanTask = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const raw = typeof req.body?.qr === 'string' ? req.body.qr : '';
+    const code = normalizeTaskQrCode(raw);
+    if (!code) {
+      res.status(400).json({ error: 'Укажите код QR' });
+      return;
+    }
+
+    const task = await findTaskByQrCode(code);
+    if (!task) {
+      res.status(404).json({ error: 'QR-код не найден' });
+      return;
+    }
+
+    const methods = taskMethodsForParticipant(task);
+    if (!methods.includes('qr') && task.confirmationType !== 'qr') {
+      res.status(400).json({ error: 'Это задание не подтверждается QR' });
+      return;
+    }
+
+    req.params.id = String(task.id);
+    req.body = {
+      ...(typeof req.body === 'object' && req.body ? req.body : {}),
+      qrToken: task.qrToken,
+      deviceKey: typeof req.body?.deviceKey === 'string' ? req.body.deviceKey : undefined,
+    };
+
+    const originalJson = res.json.bind(res);
+    res.json = ((body: unknown) => {
+      if (res.statusCode >= 400) return originalJson(body);
+      const b = body as {
+        xpAwarded?: number;
+        submission?: { id?: number; pointsAwarded?: number | null } | null;
+      };
+      const points = b.xpAwarded ?? b.submission?.pointsAwarded ?? 0;
+      return originalJson({
+        points,
+        taskTitle: task.title,
+        taskId: task.id,
+        submissionId: b.submission?.id ?? null,
+        xpAwarded: points,
+        track: 'experience',
+      });
+    }) as typeof res.json;
+
+    await submitTask(req, res);
+  } catch (error) {
+    console.error('scanTask:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+};
+
+export const redirectTaskQr = async (req: { params: { code?: string } }, res: Response): Promise<void> => {
+  try {
+    const { buildTaskScanDeepLink } = await import('../services/qrService.js');
+    const code = normalizeTaskQrCode(String(req.params.code || ''));
+    if (!code) {
+      res.status(404).send('QR not found');
+      return;
+    }
+    const task = await findTaskByQrCode(code);
+    if (!task) {
+      res.status(404).send('QR not found');
+      return;
+    }
+    res.redirect(302, buildTaskScanDeepLink(task.qrToken || code));
+  } catch (error) {
+    console.error('redirectTaskQr:', error);
+    res.status(500).send('Error');
   }
 };
 

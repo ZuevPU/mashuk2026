@@ -596,6 +596,32 @@ export const copyQuestionsSelected = async (req: AdminRequest, res: Response): P
   res.json({ created: created.map(r => serializeAdminQuestion(r, 0)), count: created.length });
 };
 
+/** Аннулировать баллы всем, кто ответил на этот вопрос (по логам рядом с ответом). */
+export const revokeQuestionPoints = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: 'Invalid question id' });
+    return;
+  }
+  const reason = String(req.body?.reason || `Аннулирование баллов за вопрос #${id}`).trim().slice(0, 500);
+  const { revokePointsForQuestionAnswers } = await import('../services/pointsService.js');
+  const result = await revokePointsForQuestionAnswers(id, reason);
+  if (!result.ok) {
+    res.status(404).json({ error: result.error });
+    return;
+  }
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req,
+    actionType: 'question_points_revoke_all',
+    section: 'questions',
+    objectId: String(id),
+    newValue: result,
+    isCritical: true,
+  });
+  res.json({ ...result, reason });
+};
+
 export const getPracticesResults = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
   const [question] = await db.select().from(questions).where(eq(questions.id, id)).limit(1);

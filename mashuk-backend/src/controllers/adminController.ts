@@ -42,7 +42,7 @@ import {
   normalizeDayNumbers,
   taskMethodsForParticipant,
 } from '../services/taskAdminHelpers.js';
-import { generateQrToken } from '../services/qrService.js';
+import { allocateTaskQrCode, generateQrToken } from '../services/qrService.js';
 import { audienceWriteFields } from '../services/eventAudience.js';
 import {
   DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
@@ -1633,7 +1633,7 @@ export const crudTasks = {
     const shiftId = await resolveAdminShiftId(req);
     const values = await buildTaskInsertValues(parsed.data as Record<string, unknown>);
     if (values.status === 'published' && !values.qrToken && (values.confirmationMethods as string[] | undefined)?.includes('qr')) {
-      values.qrToken = generateQrToken();
+      values.qrToken = await allocateTaskQrCode();
     }
     const [t] = await db.insert(tasks).values({ ...values, shiftId }).returning();
     res.json({ task: t });
@@ -1657,7 +1657,7 @@ export const crudTasks = {
       (patch.confirmationMethods as string[] | undefined) ?? before.confirmationMethods ?? [],
     );
     if (methods.includes('qr') && !before.qrToken && !(patch as { qrToken?: string }).qrToken) {
-      patch.qrToken = generateQrToken();
+      patch.qrToken = await allocateTaskQrCode();
     }
     const [updated] = await db.update(tasks).set(patch).where(eq(tasks.id, id)).returning();
     const now = new Date();
@@ -1690,7 +1690,7 @@ export const crudTasks = {
       status: 'draft',
       publishTime: null,
       isHidden: false,
-      qrToken: methods.includes('qr') ? generateQrToken() : null,
+      qrToken: methods.includes('qr') ? await allocateTaskQrCode() : null,
       confirmationMethods: methods,
     }).returning();
     res.json({ task: copy });
@@ -1746,6 +1746,7 @@ export {
   getPracticesResults,
   publishPracticesResults,
   unpublishPracticesResults,
+  revokeQuestionPoints,
 } from './questionAdminController.js';
 
 /** Скопировать вопросы с дня fromDay на toDay */

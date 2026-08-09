@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'mashuk_vk_launch_params';
+const PENDING_QR_KEY = 'mashuk_pending_task_qr';
 
 /** Read VK launch params from URL before the hash router rewrites location.hash. */
 export function readLaunchParamsFromLocation(): string | null {
@@ -79,5 +80,55 @@ export function hasUsableLaunchParams(): boolean {
     return isValidLaunchParamsString(sessionStorage.getItem(STORAGE_KEY));
   } catch {
     return false;
+  }
+}
+
+/** Read task QR from hash before router rewrite (#/scan?qr= / #/tasks?…&qr=). */
+export function capturePendingTaskQrEarly(): string | null {
+  try {
+    const hash = window.location.hash.replace(/^#/, '');
+    let code: string | null = null;
+    const qIdx = hash.indexOf('?');
+    if (qIdx >= 0) {
+      code = new URLSearchParams(hash.slice(qIdx + 1)).get('qr');
+    }
+    if (!code) {
+      const m = hash.match(/(?:^|[?&/])qr=([^&\s]+)/i);
+      if (m?.[1]) code = decodeURIComponent(m[1]);
+    }
+    if (code) {
+      sessionStorage.setItem(PENDING_QR_KEY, code);
+      return code;
+    }
+    return sessionStorage.getItem(PENDING_QR_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function peekPendingTaskQr(): string | null {
+  try {
+    return sessionStorage.getItem(PENDING_QR_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Consume stashed QR once (clears storage). */
+export function takePendingTaskQr(): string | null {
+  try {
+    const v = sessionStorage.getItem(PENDING_QR_KEY);
+    if (v) sessionStorage.removeItem(PENDING_QR_KEY);
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingTaskQr(): void {
+  try {
+    sessionStorage.removeItem(PENDING_QR_KEY);
+  } catch {
+    /* ignore */
   }
 }

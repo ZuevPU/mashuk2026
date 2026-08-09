@@ -10,6 +10,50 @@ export function buildParticipantVolunteerUrl(qrToken: string, participantId?: nu
   return `${origin}#/volunteer?${params.toString()}`;
 }
 
+/**
+ * Normalize task QR input: МШК-XXXXXX, /q/XXXXXX, #/scan?qr=, legacy hex, raw code.
+ */
+export function normalizeTaskQrCode(input: string): string {
+  let s = (input || '').trim();
+  if (!s) return '';
+
+  s = s.replace(/^мшк[-–—\s]*/i, '').replace(/^mshk[-–—\s]*/i, '');
+
+  const pathMatch = s.match(/\/q\/([A-Za-z0-9]+)/i);
+  if (pathMatch?.[1]) s = pathMatch[1];
+
+  try {
+    if (s.includes('://') || s.startsWith('#') || s.includes('?')) {
+      const hashIdx = s.indexOf('#');
+      if (hashIdx >= 0) {
+        const after = s.slice(hashIdx + 1);
+        const qIdx = after.indexOf('?');
+        if (qIdx >= 0) {
+          const fromHash = new URLSearchParams(after.slice(qIdx + 1)).get('qr');
+          if (fromHash) s = fromHash;
+        }
+      }
+      try {
+        const u = new URL(s);
+        const fromSearch = u.searchParams.get('qr');
+        if (fromSearch) s = fromSearch;
+      } catch {
+        /* not a full URL */
+      }
+      const m = s.match(/[?&]qr=([^&\s#]+)/i);
+      if (m?.[1]) s = decodeURIComponent(m[1]);
+    }
+  } catch {
+    /* keep s */
+  }
+
+  s = s.replace(/^мшк[-–—\s]*/i, '').replace(/^mshk[-–—\s]*/i, '').trim();
+
+  if (/^[a-f0-9]{32}$/i.test(s)) return s.toLowerCase();
+  if (/^[A-Za-z0-9]{4,12}$/.test(s)) return s.toUpperCase();
+  return s;
+}
+
 /** Извлечь qr-токен из сырого токена или полной ссылки #/volunteer?qr=… */
 export function extractParticipantQrToken(input: string): string {
   const trimmed = input.trim();
@@ -41,15 +85,18 @@ export function extractParticipantQrToken(input: string): string {
     /* raw token */
   }
 
+  const pathMatch = trimmed.match(/\/q\/([A-Za-z0-9]+)/i);
+  if (pathMatch?.[1]) return pathMatch[1];
+
   const m = trimmed.match(/[?&]qr=([^&\s#]+)/i);
   if (m?.[1]) return decodeURIComponent(m[1]);
 
   return trimmed;
 }
 
-/** Токен QR из ссылки задания (#/tasks?task=ID&qr=TOKEN) или сырой код */
+/** Токен QR из ссылки задания, /q/CODE, МШК-CODE или сырой код */
 export function extractTaskQrToken(input: string): string {
-  return extractParticipantQrToken(input);
+  return normalizeTaskQrCode(input) || extractParticipantQrToken(input);
 }
 
 export function parseTaskQrScan(raw: string): { taskId: number; qrToken: string } | null {

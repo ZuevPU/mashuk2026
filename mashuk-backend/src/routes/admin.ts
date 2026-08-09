@@ -155,6 +155,7 @@ router.get('/questions/:id/answer-count', wrap(ops.getQuestionAnswerCount));
 router.get('/questions/:id/practices-results', wrap(admin.getPracticesResults));
 router.post('/questions/:id/practices-results/publish', requireAdminRole('settings'), wrap(admin.publishPracticesResults));
 router.post('/questions/:id/practices-results/unpublish', requireAdminRole('settings'), wrap(admin.unpublishPracticesResults));
+router.post('/questions/:id/revoke-points', requireAdminRole('settings'), wrap(admin.revokeQuestionPoints));
 router.post('/questions/copy-day', requireAdminRole('settings'), wrap(admin.copyQuestionsDay));
 router.post('/questions/seed-touchpoints', requireAdminRole('settings'), wrap(admin.seedTouchpointsTemplate));
 

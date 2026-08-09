@@ -22,12 +22,14 @@ export async function assertQrScanAllowed(params: {
   taskId: number;
   participantId: number;
   deviceKey: string;
+  forumDay: number;
 }): Promise<{ ok: true } | { ok: false; error: string; outcome: QrScanOutcome }> {
   const [ownSuccess] = await db.select({ id: taskQrScans.id })
     .from(taskQrScans)
     .where(and(
       eq(taskQrScans.taskId, params.taskId),
       eq(taskQrScans.participantId, params.participantId),
+      eq(taskQrScans.forumDay, params.forumDay),
       eq(taskQrScans.outcome, 'success'),
     ))
     .limit(1);
@@ -40,8 +42,7 @@ export async function assertQrScanAllowed(params: {
   }
 
   // Device-share block disabled for live forum: shared Wi‑Fi / WebView storage
-  // produced false positives ("works on my phone, not on theirs"). Same participant
-  // still cannot claim the QR twice (blocked_duplicate above).
+  // produced false positives. Same participant still cannot claim twice (above + DB unique).
   void params.deviceKey;
 
   return { ok: true };
@@ -56,6 +57,7 @@ export async function recordQrScan(params: {
   userAgent?: string | null;
   outcome: QrScanOutcome;
   submissionId?: number | null;
+  forumDay: number;
 }): Promise<void> {
   await db.insert(taskQrScans).values({
     taskId: params.taskId,
@@ -66,5 +68,11 @@ export async function recordQrScan(params: {
     userAgent: params.userAgent ?? null,
     outcome: params.outcome,
     submissionId: params.submissionId ?? null,
+    forumDay: params.forumDay,
   });
+}
+
+export function isUniqueViolation(err: unknown): boolean {
+  const e = err as { code?: string; cause?: { code?: string } };
+  return e?.code === '23505' || e?.cause?.code === '23505';
 }

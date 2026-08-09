@@ -10,6 +10,7 @@ export const PAGE_PROFILE = '/profile';
 export const PAGE_REGISTRATION = '/registration';
 export const PAGE_VOLUNTEER = '/volunteer';
 export const PAGE_DELAYED_SURVEY = '/delayed-survey';
+export const PAGE_SCAN = '/scan';
 
 export const router = createHashRouter([
   {
@@ -20,6 +21,11 @@ export const router = createHashRouter([
   {
     path: PAGE_PROGRAM,
     panel: 'program',
+    view: 'main',
+  },
+  {
+    path: PAGE_SCAN,
+    panel: 'scan',
     view: 'main',
   },
   {

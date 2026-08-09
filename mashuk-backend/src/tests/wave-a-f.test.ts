@@ -60,7 +60,7 @@ describe('admin role matrix', () => {
 });
 
 describe('qr and heuristics', () => {
-  it('generates qr token', () => {
+  it('generates legacy qr token', () => {
     assert.equal(generateQrToken().length, 32);
   });
   it('LLM client permanently disabled', () => {

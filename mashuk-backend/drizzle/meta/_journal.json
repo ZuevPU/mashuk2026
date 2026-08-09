@@ -386,6 +386,13 @@
       "when": 1834000000000,
       "tag": "0055_piggybank_points_log",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1835000000000,
+      "tag": "0056_task_qr_short_codes",
+      "breakpoints": true
     }
   ]
 }

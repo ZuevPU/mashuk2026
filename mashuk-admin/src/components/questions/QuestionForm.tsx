@@ -27,6 +27,7 @@ type Props = {
   onSaveDraft: () => void;
   onPublish: () => void;
   onUnpublish?: () => void;
+  onRevokePoints?: () => void;
   onViewPracticesResults?: () => void;
   onCancel: () => void;
   showPreview: boolean;
@@ -58,6 +59,7 @@ export function QuestionForm({
   onSaveDraft,
   onPublish,
   onUnpublish,
+  onRevokePoints,
   onViewPracticesResults,
   onCancel,
   showPreview,
@@ -743,6 +745,16 @@ export function QuestionForm({
             </button>
             {onUnpublish && draft.status === 'published' && (
               <button type="button" className="adm-btn adm-btn-danger" onClick={onUnpublish}>Снять с публикации</button>
+            )}
+            {onRevokePoints && !isNew && currentQuestionId && (
+              <button
+                type="button"
+                className="adm-btn adm-btn-danger"
+                onClick={onRevokePoints}
+                title="Снять у всех начисленные за этот вопрос баллы"
+              >
+                Аннулировать баллы
+              </button>
             )}
           </div>
         </>

@@ -1,4 +1,10 @@
 import type { tasks } from '../db/schema.js';
+import { normalizeTaskQrCode } from './qrService.js';
+
+function taskQrMatches(taskToken: string | null | undefined, submitted: string | null | undefined): boolean {
+  if (!taskToken || !submitted) return false;
+  return normalizeTaskQrCode(taskToken) === normalizeTaskQrCode(submitted);
+}
 
 export const TASK_ANSWER_TYPES = ['text', 'choice', 'multi', 'photo', 'text_and_photo'] as const;
 export type TaskAnswerType = (typeof TASK_ANSWER_TYPES)[number];
@@ -312,7 +318,7 @@ export function validateTaskSubmissionPayload(
   }
   if (methods.includes('qr')) {
     if (!task.qrToken) return { ok: false, error: 'QR для задания ещё не сгенерирован' };
-    if (!body.qrToken || body.qrToken !== task.qrToken) {
+    if (!taskQrMatches(task.qrToken, body.qrToken)) {
       return { ok: false, error: 'Отсканируйте QR задания или дождитесь подтверждения волонтёра' };
     }
   }
@@ -334,7 +340,7 @@ export function resolveSubmissionOutcome(
   const needsMod = taskNeedsModeration(task);
   // Valid task QR always auto-confirms (that is the confirmation method itself).
   // Previously `needsMod` blocked forceAuto and XP never awarded after a good scan.
-  const qrConfirmed = methods.includes('qr') && !!opts.qrToken && task.qrToken === opts.qrToken;
+  const qrConfirmed = methods.includes('qr') && taskQrMatches(task.qrToken, opts.qrToken);
   const forceAuto = !isTeam && (
     qrConfirmed
     || methods.length === 0

@@ -3,8 +3,7 @@ import { Panel, PanelHeader, Group, Spinner, Button, Textarea, ModalRoot, ModalP
 import { useActiveVkuiLocation } from '@vkontakte/vk-mini-apps-router';
 import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { uploadTaskPhoto } from '../utils/uploadPhoto';
-import { codeReaderFailureMessage, isVkEnvironment, readCodeWithVk } from '../utils/vkBridgeClient';
-import { extractTaskQrToken, parseTaskQrScan } from '../utils/qrDeepLink';
+import { extractTaskQrToken } from '../utils/qrDeepLink';
 import { decodeQrFromImageFile } from '../utils/decodeQrFromImage';
 import { getDeviceKey } from '../utils/deviceKey';
 import { useAppModal } from '../App';
@@ -191,7 +190,6 @@ const TaskSubmitModal = ({
   onSuccess,
   onSubmitSuccess,
   setSnackbar,
-  onRequestVkScan,
 }: {
   taskId: number | null;
   meta: any;
@@ -199,8 +197,6 @@ const TaskSubmitModal = ({
   onSuccess: () => void;
   onSubmitSuccess: (p: SubmitSuccessPayload) => void;
   setSnackbar: (msg: string) => void;
-  /** Close modal first, then open VK CodeReader (iOS often fails if modal is open). */
-  onRequestVkScan: () => void;
 }) => {
   const [answerText, setAnswerText] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -218,7 +214,6 @@ const TaskSubmitModal = ({
   const autoQrSubmitRef = useRef(false);
   const qrFileRef = useRef<HTMLInputElement>(null);
   const qrGalleryRef = useRef<HTMLInputElement>(null);
-  const canNativeScan = isVkEnvironment();
   const methods = taskMethodsFromMeta(meta);
   const answerType = meta?.answerType || (methods.includes('photo') ? 'text_and_photo' : 'text');
   const answerOptions: Array<{ label: string; value: string }> = meta?.answerOptions || [];
@@ -247,7 +242,7 @@ const TaskSubmitModal = ({
     if (!token) {
       showQrOverlay({
         confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Не удалось прочитать QR', showPoints: false },
-        detail: 'Нужна ссылка задания с параметром qr=… или откройте QR обычной камерой телефона.',
+        detail: 'Нужен код МШК-…… с таблички или ссылка /q/… — либо откройте QR обычной камерой телефона.',
         tone: 'error',
         xpAwarded: 0,
         track: 'experience',
@@ -491,8 +486,35 @@ const TaskSubmitModal = ({
           {isQr && (
             <div style={{ fontSize: 13, marginBottom: 8 }}>
               {effectiveQr
-                ? 'QR распознан — начисляем баллы…'
-                : 'Сфотографируйте QR площадки или откройте его обычной камерой телефона. Сканер VK на части iPhone не открывается — это нормально.'}
+                ? 'Код распознан — начисляем баллы…'
+                : 'Отсканируйте QR обычной камерой телефона — откроется мини-приложение и баллы начислятся сами. Не сканируется? Введите код с таблички (МШК-…).'}
+              <Input
+                style={{ marginTop: 10 }}
+                value={qrPaste}
+                placeholder="МШК-A7K2X9 или код с таблички"
+                onChange={e => setQrPaste(e.target.value)}
+              />
+              <Button
+                size="l"
+                mode="primary"
+                stretched
+                style={{ marginTop: 8 }}
+                onClick={() => {
+                  if (!qrPaste.trim()) {
+                    showQrOverlay({
+                      confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Введите код', showPoints: false },
+                      detail: 'Код напечатан под QR на табличке (вид МШК-……).',
+                      tone: 'info',
+                      xpAwarded: 0,
+                      track: 'experience',
+                    });
+                    return;
+                  }
+                  applyScannedQr(qrPaste);
+                }}
+              >
+                Подтвердить код
+              </Button>
               <input
                 ref={qrFileRef}
                 type="file"
@@ -517,62 +539,24 @@ const TaskSubmitModal = ({
                 }}
               />
               <Button
-                size="l"
-                mode="primary"
+                size="m"
+                mode="tertiary"
                 stretched
                 loading={qrDecoding}
                 style={{ marginTop: 8 }}
                 onClick={() => qrFileRef.current?.click()}
               >
-                Сфотографировать QR
+                Прочитать QR с фото
               </Button>
-              <Button
-                size="m"
-                mode="secondary"
-                stretched
-                loading={qrDecoding}
-                style={{ marginTop: 8 }}
-                onClick={() => qrGalleryRef.current?.click()}
-              >
-                Выбрать фото QR из галереи
-              </Button>
-              {canNativeScan && (
-                <Button
-                  size="m"
-                  mode="secondary"
-                  stretched
-                  style={{ marginTop: 8 }}
-                  onClick={onRequestVkScan}
-                >
-                  Сканер VK (если работает)
-                </Button>
-              )}
-              <Input
-                style={{ marginTop: 8 }}
-                value={qrPaste}
-                placeholder="Вставьте ссылку с QR (#/tasks?task=…&qr=…)"
-                onChange={e => setQrPaste(e.target.value)}
-              />
               <Button
                 size="m"
                 mode="tertiary"
                 stretched
-                style={{ marginTop: 8 }}
-                onClick={() => {
-                  if (!qrPaste.trim()) {
-                    showQrOverlay({
-                      confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Вставьте ссылку QR', showPoints: false },
-                      detail: 'Скопируйте ссылку с QR или нажмите «Сфотографировать QR».',
-                      tone: 'info',
-                      xpAwarded: 0,
-                      track: 'experience',
-                    });
-                    return;
-                  }
-                  applyScannedQr(qrPaste);
-                }}
+                loading={qrDecoding}
+                style={{ marginTop: 6 }}
+                onClick={() => qrGalleryRef.current?.click()}
               >
-                Подтвердить ссылку QR
+                Выбрать фото из галереи
               </Button>
             </div>
           )}
@@ -685,6 +669,9 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
   const [error, setError] = useState<string | null>(null);
   const [submitTaskId, setSubmitTaskId] = useState<number | null>(null);
   const [submitTaskMeta, setSubmitTaskMeta] = useState<any>(null);
+  const [codeEntryOpen, setCodeEntryOpen] = useState(false);
+  const [manualCode, setManualCode] = useState('');
+  const [manualSubmitting, setManualSubmitting] = useState(false);
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [successPayload, setSuccessPayload] = useState<SubmitSuccessPayload | null>(null);
 
@@ -692,79 +679,6 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
     setSubmitTaskId(task.id);
     setSubmitTaskMeta(task);
   }, []);
-
-  const applyVkScanResult = useCallback((raw: string, reopenTask?: any) => {
-    const parsed = parseTaskQrScan(raw);
-    if (parsed) {
-      const task = data?.tasks?.find((t: { id: number }) => t.id === parsed.taskId) || reopenTask;
-      if (task) {
-        if (window.location.hash.split('?')[0] !== '#/tasks') {
-          window.location.hash = `#/tasks?task=${parsed.taskId}&qr=${encodeURIComponent(parsed.qrToken)}`;
-        }
-        openSubmit({ ...task, _scannedQr: parsed.qrToken });
-        return;
-      }
-      window.location.hash = `#/tasks?task=${parsed.taskId}&qr=${encodeURIComponent(parsed.qrToken)}`;
-      return;
-    }
-    const token = extractTaskQrToken(raw);
-    if (token && reopenTask) {
-      openSubmit({ ...reopenTask, _scannedQr: token });
-      return;
-    }
-    setSuccessPayload({
-      confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Это не QR задания', showPoints: false },
-      detail: 'Нужна ссылка вида #/tasks?task=…&qr=… — или нажмите «Сфотографировать QR» в задании.',
-      tone: 'error',
-      xpAwarded: 0,
-      track: 'experience',
-    });
-    if (reopenTask) openSubmit(reopenTask);
-  }, [data?.tasks, openSubmit]);
-
-  /** VK CodeReader must not run under ModalPage — close first (iOS). */
-  const requestVkScanForOpenTask = useCallback(async () => {
-    const task = submitTaskMeta;
-    if (!task) return;
-    setSubmitTaskId(null);
-    await new Promise<void>(resolve => { window.setTimeout(() => resolve(), 400); });
-    const result = await readCodeWithVk();
-    if (!result.ok) {
-      setSuccessPayload({
-        confirm: {
-          ...TASK_SUBMIT_CONFIRM,
-          titleTemplate: result.reason === 'cancelled' ? 'Сканирование отменено' : 'Сканер VK не открылся',
-          showPoints: false,
-        },
-        detail: `${codeReaderFailureMessage(result.reason)}\n\nОткройте задание снова и нажмите «Сфотографировать QR».`,
-        tone: result.reason === 'cancelled' ? 'info' : 'error',
-        xpAwarded: 0,
-        track: 'experience',
-      });
-      openSubmit(task);
-      return;
-    }
-    applyVkScanResult(result.code, task);
-  }, [submitTaskMeta, openSubmit, applyVkScanResult]);
-
-  const scanTaskQr = useCallback(async () => {
-    const result = await readCodeWithVk();
-    if (!result.ok) {
-      setSuccessPayload({
-        confirm: {
-          ...TASK_SUBMIT_CONFIRM,
-          titleTemplate: result.reason === 'cancelled' ? 'Сканирование отменено' : 'Сканер VK не открылся',
-          showPoints: false,
-        },
-        detail: `${codeReaderFailureMessage(result.reason)}\n\nОткройте задание и нажмите «Сфотографировать QR».`,
-        tone: result.reason === 'cancelled' ? 'info' : 'error',
-        xpAwarded: 0,
-        track: 'experience',
-      });
-      return;
-    }
-    applyVkScanResult(result.code);
-  }, [applyVkScanResult]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -776,6 +690,48 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
       })
       .finally(() => setLoading(false));
   }, [filter]);
+
+  const submitManualCode = useCallback(async () => {
+    const code = extractTaskQrToken(manualCode);
+    if (!code) {
+      setSuccessPayload({
+        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Введите код', showPoints: false },
+        detail: 'Код напечатан под QR на табличке (вид МШК-……).',
+        tone: 'info',
+        xpAwarded: 0,
+        track: 'experience',
+      });
+      return;
+    }
+    setManualSubmitting(true);
+    try {
+      const res = await apiPost<{ points?: number; xpAwarded?: number; taskTitle?: string }>('/tasks/scan', {
+        qr: code,
+        deviceKey: getDeviceKey(),
+      });
+      const points = res.points ?? res.xpAwarded ?? 0;
+      setCodeEntryOpen(false);
+      setManualCode('');
+      setSuccessPayload({
+        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'QR засчитан', showPoints: points > 0 },
+        detail: res.taskTitle || undefined,
+        tone: 'success',
+        xpAwarded: points,
+        track: 'experience',
+      });
+      load();
+    } catch (err) {
+      setSuccessPayload({
+        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'QR не засчитан', showPoints: false },
+        detail: err instanceof ApiError ? err.message : 'Не удалось подтвердить код',
+        tone: 'error',
+        xpAwarded: 0,
+        track: 'experience',
+      });
+    } finally {
+      setManualSubmitting(false);
+    }
+  }, [manualCode, load]);
 
   useEffect(() => {
     const teamConfirm = getHashSearchParams().get('teamConfirm');
@@ -799,6 +755,7 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
   useEffect(() => {
     if (activePanel !== id) {
       if (submitTaskId) setSubmitTaskId(null);
+      if (codeEntryOpen) setCodeEntryOpen(false);
       setModal(null);
       return;
     }
@@ -812,14 +769,43 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
             onSuccess={load}
             onSubmitSuccess={setSuccessPayload}
             setSnackbar={setSnackbar}
-            onRequestVkScan={() => { void requestVkScanForOpenTask(); }}
           />
+        </ModalRoot>
+      );
+    } else if (codeEntryOpen) {
+      setModal(
+        <ModalRoot activeModal="qr-code-entry" onClose={() => setCodeEntryOpen(false)}>
+          <ModalPage id="qr-code-entry" settlingHeight={60} onClose={() => setCodeEntryOpen(false)}>
+            <ModalPageHeader>Ввести код QR</ModalPageHeader>
+            <Group>
+              <div style={{ fontSize: 13, marginBottom: 10, padding: '0 4px' }}>
+                Не сканируется? Введите код с таблички (МШК-……) — тот же, что под QR.
+              </div>
+              <Input
+                value={manualCode}
+                placeholder="МШК-A7K2X9"
+                onChange={e => setManualCode(e.target.value)}
+              />
+              <Button
+                size="l"
+                stretched
+                loading={manualSubmitting}
+                style={{ marginTop: 12 }}
+                onClick={() => { void submitManualCode(); }}
+              >
+                Подтвердить
+              </Button>
+            </Group>
+          </ModalPage>
         </ModalRoot>
       );
     } else {
       setModal(null);
     }
-  }, [submitTaskId, submitTaskMeta, load, setModal, activePanel, id, requestVkScanForOpenTask]);
+  }, [
+    submitTaskId, submitTaskMeta, codeEntryOpen, manualCode, manualSubmitting,
+    load, setModal, activePanel, id, submitManualCode,
+  ]);
 
   useEffect(() => {
     return () => setModal(null);
@@ -898,8 +884,12 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
                   {f.label}
                 </button>
               ))}
-              <button type="button" className="tasks-filter-chip tasks-filter-chip--scan" onClick={() => void scanTaskQr()}>
-                Скан QR
+              <button
+                type="button"
+                className="tasks-filter-chip tasks-filter-chip--scan"
+                onClick={() => { setCodeEntryOpen(true); setManualCode(''); }}
+              >
+                Ввести код
               </button>
             </div>
             {categories.length > 0 && (

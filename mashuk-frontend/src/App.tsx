@@ -16,8 +16,9 @@ import { ProfilePanel } from './panels/Profile';
 import { RegistrationPanel } from './panels/Registration';
 import { VolunteerPanel } from './panels/Volunteer';
 import { DelayedSurveyPanel } from './panels/DelayedSurvey';
+import { ScanPanel } from './panels/Scan';
 import { OpenInVkScreen } from './components/OpenInVkScreen';
-import { hasUsableLaunchParams } from './utils/launchParams';
+import { hasUsableLaunchParams, peekPendingTaskQr } from './utils/launchParams';
 import { apiGet, getApiUrl, getHashSearchParams, initAuth } from './api/client';
 
 export const ModalContext = createContext<{ setModal: (modal: ReactNode | null) => void }>({ setModal: () => {} });
@@ -142,8 +143,12 @@ export const App = () => {
         const params = getHashSearchParams();
         const q = params.get('q');
         const task = params.get('task');
+        const qr = params.get('qr') || peekPendingTaskQr();
         if (q) routeNavigator.push(`/questions?q=${q}`);
+        else if (qr && !task) routeNavigator.push(`/scan?qr=${encodeURIComponent(qr)}`);
+        else if (task && qr) routeNavigator.push(`/tasks?task=${task}&qr=${encodeURIComponent(qr)}`);
         else if (task) routeNavigator.push(`/tasks?task=${task}`);
+        else if (qr) routeNavigator.push(`/scan?qr=${encodeURIComponent(qr)}`);
       }
     } catch (error) {
       console.error('Init error', error);
@@ -361,6 +366,7 @@ export const App = () => {
         <RegistrationPanel id="registration" fetchedUser={fetchedUser} isRegistered={isRegistered} onRegistered={handleRegistered} />
         <VolunteerPanel id="volunteer" />
         <DelayedSurveyPanel id="delayed-survey" />
+        <ScanPanel id="scan" />
       </View>
     </Epic>
       </SplitCol>

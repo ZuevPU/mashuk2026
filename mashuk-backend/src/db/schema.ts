@@ -628,6 +628,7 @@ export const tasks = pgTable('tasks', {
   index('tasks_day_number_idx').on(table.dayNumber),
   index('tasks_status_idx').on(table.status),
   index('tasks_category_id_idx').on(table.categoryId),
+  // Partial unique on qr_token is enforced in SQL migration 0056 (WHERE NOT NULL)
 ]);
 
 export const taskSubmissions = pgTable('task_submissions', {
@@ -669,12 +670,14 @@ export const taskQrScans = pgTable('task_qr_scans', {
   userAgent: text('user_agent'),
   outcome: varchar('outcome', { length: 32 }).notNull(),
   submissionId: integer('submission_id').references(() => taskSubmissions.id, { onDelete: 'set null' }),
+  forumDay: smallint('forum_day'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('task_qr_scans_task_id_idx').on(table.taskId),
   index('task_qr_scans_participant_id_idx').on(table.participantId),
   index('task_qr_scans_device_key_idx').on(table.deviceKey),
   index('task_qr_scans_outcome_idx').on(table.outcome),
+  // Partial unique (participant_id, task_id, forum_day) WHERE outcome='success' — migration 0056
 ]);
 
 export const taskTeamConfirmations = pgTable('task_team_confirmations', {

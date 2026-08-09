@@ -122,7 +122,8 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
       const answered = answeredIds.has(q.id);
       const status = toTouchpointUiStatus(access, answered);
       const answeredAt = userAnswer?.createdAt ?? null;
-      const pathPointsPreview = q.points && q.points > 0 ? q.points : 5;
+      // Respect admin field as-is (0 = no points). Only fall back when points is null.
+      const pathPointsPreview = typeof q.points === 'number' ? q.points : 5;
       const preview = answered && userAnswer
         ? participantAnswerSummary(userAnswer.answerData, q.type)
         : '';
@@ -335,7 +336,8 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       question: {
         ...question,
         requiresLessonPick: isLessonRef || hasLinkedEvents || isAfterBlocks,
-        allowRetry: isPracticesVote ? true : (question.allowRetry ?? false),
+        // Practices vote is one-shot — never expose retry to the client.
+        allowRetry: isPracticesVote ? false : (question.allowRetry ?? false),
         practicesConfig: practicesVote,
       },
       options,
@@ -403,10 +405,15 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
         eq(answers.participantId, req.participant!.id),
         eq(answers.questionId, questionId),
       )).limit(1);
-    const canRetry = question.allowRetry
-      || question.questionKind === 'practices_vote'
+    const isPracticesVoteEarly = question.questionKind === 'practices_vote'
       || question.answerType === 'practices_vote'
       || question.type === 'practices_vote';
+    // One vote per participant — no edits after save (ignore allowRetry for practices).
+    if (existingAnswer && isPracticesVoteEarly) {
+      res.status(400).json({ error: 'Вы уже проголосовали' });
+      return;
+    }
+    const canRetry = !!question.allowRetry && !isPracticesVoteEarly;
     if (existingAnswer && !canRetry) {
       res.status(400).json({ error: 'Already answered' });
       return;
@@ -656,12 +663,14 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
 
     const actionType = pointsActionForQuestion(question);
     const forumDay = question.dayNumber ?? undefined;
+    // Pass numeric points including 0 so catalog default is not used when admin set 0.
+    const pointsOverride = typeof question.points === 'number' ? question.points : undefined;
     const pointsResult = actionType === 'point_b_complete'
       ? await awardPoints(req.participant!.id, 'point_b_complete', undefined, forumDay)
       : await awardPoints(
         req.participant!.id,
         actionType,
-        question.points && question.points > 0 ? question.points : undefined,
+        pointsOverride,
         forumDay,
       );
 

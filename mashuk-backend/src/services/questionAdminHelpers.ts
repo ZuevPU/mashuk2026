@@ -133,7 +133,8 @@ export function enrichQuestionWritePayload(
     out.questionKind = 'practices_vote';
     out.answerType = 'practices_vote';
     out.type = 'practices_vote';
-    if (out.allowRetry === undefined) out.allowRetry = true;
+    // Vote once — do not allow changing likes after submit.
+    out.allowRetry = false;
     if (out.practicesConfig !== undefined) {
       out.practicesConfig = normalizePracticesConfig(out.practicesConfig);
     }

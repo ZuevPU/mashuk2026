@@ -1,6 +1,6 @@
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, gte, lte, isNull, inArray, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { pointsLog, levelsConfig, participants } from '../db/schema.js';
+import { pointsLog, levelsConfig, participants, answers, questions } from '../db/schema.js';
 import { env } from '../config/env.js';
 import { ACTION_CATALOG } from './levelsActionCatalog.js';
 
@@ -117,7 +117,7 @@ export async function backfillPathPointsForAnswers(
       needed.set(key, {
         actionType,
         forumDay,
-        override: q.points && q.points > 0 ? q.points : undefined,
+        override: typeof q.points === 'number' ? q.points : undefined,
         count: 1,
       });
     }
@@ -144,8 +144,10 @@ export async function awardPoints(
 ): Promise<{ awarded: number; track: PointTrack | 'bonus'; logId: number } | null> {
   const [config] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, actionType)).limit(1);
   const catalog = ACTION_CATALOG.find(a => a.actionType === actionType);
-  // DB row may be missing on fresh/prod shifts — fall back to catalog defaults
-  const points = overridePoints ?? config?.pointsPerUnit ?? catalog?.pointsPerUnit ?? 0;
+  // Explicit override 0 must mean «no award» — `??` would treat 0 as missing and use catalog (e.g. 10).
+  const points = overridePoints !== undefined
+    ? overridePoints
+    : (config?.pointsPerUnit ?? catalog?.pointsPerUnit ?? 0);
   if (points <= 0) return null;
 
   const maxAccruals = config?.maxAccruals ?? catalog?.maxAccruals ?? null;
@@ -336,4 +338,83 @@ export async function revokePointsLogEntry(
   await syncForumPoints(participantId);
 
   return { ok: true, reversalId: reversal.id };
+}
+
+/**
+ * Revoke path/experience awards tied to answers on a forum question.
+ * Matches positive, non-revoked points_log rows for the answer's participant
+ * within a short time window of the answer (submit awards in the same request).
+ */
+export async function revokePointsForQuestionAnswers(
+  questionId: number,
+  reason: string,
+): Promise<{
+  ok: true;
+  answersCount: number;
+  revokedLogs: number;
+  participantsAffected: number;
+  pointsRevoked: number;
+} | { ok: false; error: string }> {
+  const [question] = await db.select().from(questions).where(eq(questions.id, questionId)).limit(1);
+  if (!question) return { ok: false, error: 'Question not found' };
+
+  const actionType = pointsActionForQuestion(question);
+  const actionTypes = actionType === 'question_answer'
+    ? ['question_answer']
+    : [actionType, 'question_answer'];
+
+  const answerRows = await db.select({
+    id: answers.id,
+    participantId: answers.participantId,
+    createdAt: answers.createdAt,
+  }).from(answers).where(eq(answers.questionId, questionId));
+
+  let revokedLogs = 0;
+  let pointsRevoked = 0;
+  const affected = new Set<number>();
+
+  for (const answer of answerRows) {
+    if (!answer.createdAt) continue;
+    const start = new Date(answer.createdAt.getTime() - 10_000);
+    const end = new Date(answer.createdAt.getTime() + 90_000);
+
+    const logs = await db.select({
+      id: pointsLog.id,
+      points: pointsLog.points,
+      actionType: pointsLog.actionType,
+    }).from(pointsLog).where(and(
+      eq(pointsLog.participantId, answer.participantId),
+      isNull(pointsLog.revokedAt),
+      sql`${pointsLog.points} > 0`,
+      inArray(pointsLog.actionType, actionTypes),
+      gte(pointsLog.createdAt, start),
+      lte(pointsLog.createdAt, end),
+    )).orderBy(asc(pointsLog.createdAt)).limit(3);
+
+    const ordered = [
+      ...logs.filter(l => l.actionType === actionType),
+      ...logs.filter(l => l.actionType !== actionType),
+    ].slice(0, 2);
+
+    for (const log of ordered) {
+      const result = await revokePointsLogEntry(log.id, answer.participantId, reason);
+      if (result.ok) {
+        revokedLogs += 1;
+        pointsRevoked += log.points;
+        affected.add(answer.participantId);
+      }
+    }
+
+    await db.update(answers)
+      .set({ pointsAwarded: 0 })
+      .where(eq(answers.id, answer.id));
+  }
+
+  return {
+    ok: true,
+    answersCount: answerRows.length,
+    revokedLogs,
+    participantsAffected: affected.size,
+    pointsRevoked,
+  };
 }

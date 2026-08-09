@@ -90,6 +90,16 @@ export function createApp() {
     }
   });
 
+  // Phone-camera short link → VK mini-app #/scan?qr=
+  app.get('/q/:code', async (req, res, next) => {
+    try {
+      const { redirectTaskQr } = await import('./controllers/tasksController.js');
+      await redirectTaskQr(req as never, res);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   app.use('/api', routes);
   app.use('/api/admin', adminRoutes);
 

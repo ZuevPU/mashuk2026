@@ -608,12 +608,14 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
     const initialLiked = Array.isArray((myAnswer?.answerData as { likedPracticeIds?: string[] } | undefined)?.likedPracticeIds)
       ? (myAnswer!.answerData as { likedPracticeIds: string[] }).likedPracticeIds
       : [];
+    const alreadyVoted = !!myAnswer;
     return (
       <Div>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{question.title}</div>
         <PracticesVoteForm
           config={cfg}
           initialLikedIds={initialLiked}
+          alreadyVoted={alreadyVoted}
           onSubmit={onSubmit}
         />
       </Div>

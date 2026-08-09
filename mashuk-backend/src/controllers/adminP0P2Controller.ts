@@ -12,7 +12,16 @@ import { getForumSettings } from '../services/helpers.js';
 import { deactivateOtherConsents } from './consentsController.js';
 import { evaluateAllMedals, getMedalRuleProgress, parseMedalRule } from '../services/medalEvaluator.js';
 import { clubMatchNightly, synthesizeOutcomes } from '../services/gigachatService.js';
-import { generateQrToken, buildTaskQrUrl, buildEventQrUrl, buildParticipantQrUrl, buildQrDataUrl, resolveParticipantAppBase } from '../services/qrService.js';
+import {
+  allocateTaskQrCode,
+  generateQrToken,
+  buildTaskQrUrl,
+  buildEventQrUrl,
+  buildParticipantQrUrl,
+  buildQrDataUrl,
+  formatTaskQrDisplayCode,
+  resolveParticipantAppBase,
+} from '../services/qrService.js';
 import { logAdminAction } from '../services/adminActionsLog.js';
 import { env } from '../config/env.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
@@ -804,19 +813,21 @@ export const getQrPack = async (req: AdminRequest, res: Response): Promise<void>
     ),
   ));
 
-  const items: { title: string; url: string; qrImageUrl: string }[] = [];
+  const items: { title: string; url: string; qrImageUrl: string; displayCode: string }[] = [];
   for (const t of dayTasks) {
     const methods = taskMethodsForParticipant(t);
     if (!methods.includes('qr') && t.confirmationType !== 'qr') continue;
     let token = t.qrToken;
-    if (!token) {
-      token = generateQrToken();
+    // Prefer short codes for print packs (legacy 32-hex still works until regenerated)
+    if (!token || /^[a-f0-9]{32}$/i.test(token)) {
+      token = await allocateTaskQrCode();
       await db.update(tasks).set({ qrToken: token }).where(eq(tasks.id, t.id));
     }
     const url = buildTaskQrUrl(base, t.id, token);
     items.push({
       title: t.title,
       url,
+      displayCode: formatTaskQrDisplayCode(token),
       qrImageUrl: await buildQrDataUrl(url, 200),
     });
   }
@@ -837,9 +848,13 @@ export const getQrPack = async (req: AdminRequest, res: Response): Promise<void>
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:20px;}
 .cell{background:#fff;border-radius:16px;padding:16px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.08);}
 .cell img{width:160px;height:160px;display:block;margin:0 auto 8px;} h1{font-size:18px;color:#1A1714;}
-.cell-title{font-size:12px;font-weight:700;line-height:1.35;word-break:break-word;}</style></head>
-<body><h1>QR задания · День ${day}</h1><div class="grid">${items.map(i =>
-    `<div class="cell"><img src="${i.qrImageUrl}" alt="QR ${i.title.replace(/"/g, '')}"/><div class="cell-title">${i.title.replace(/</g, '')}</div></div>`,
+.cell-title{font-size:12px;font-weight:700;line-height:1.35;word-break:break-word;}
+.cell-code{font-size:18px;font-weight:800;letter-spacing:.06em;margin-top:8px;color:#1A1714;}
+.cell-hint{font-size:10px;color:#666;margin-top:4px;}</style></head>
+<body><h1>QR задания · День ${day}</h1>
+<p style="font-size:13px;color:#444;max-width:640px;">Отсканируйте камерой телефона. Не сканируется? Введите код в разделе «Задания».</p>
+<div class="grid">${items.map(i =>
+    `<div class="cell"><img src="${i.qrImageUrl}" alt="QR ${i.title.replace(/"/g, '')}"/><div class="cell-title">${i.title.replace(/</g, '')}</div><div class="cell-code">${i.displayCode.replace(/</g, '')}</div><div class="cell-hint">Не сканируется? Введи код в «Задания»</div></div>`,
   ).join('')}</div><script>window.onload=()=>window.print()</script></body></html>`;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(html);
@@ -847,16 +862,21 @@ export const getQrPack = async (req: AdminRequest, res: Response): Promise<void>
 
 export const generateAndDownloadQr = async (req: AdminRequest, res: Response): Promise<void> => {
   const { type, id } = req.body as { type: 'task' | 'event' | 'participant'; id: number };
-  const token = generateQrToken();
   const base = resolveParticipantAppBase();
   let url = '';
+  let token = '';
+  let displayCode: string | undefined;
   if (type === 'task') {
+    token = await allocateTaskQrCode();
     await db.update(tasks).set({ qrToken: token }).where(eq(tasks.id, id));
     url = buildTaskQrUrl(base, id, token);
+    displayCode = formatTaskQrDisplayCode(token);
   } else if (type === 'event') {
+    token = generateQrToken();
     await db.update(events).set({ qrToken: token }).where(eq(events.id, id));
     url = buildEventQrUrl(base, id, token);
   } else if (type === 'participant') {
+    token = generateQrToken();
     await db.update(participants).set({ qrToken: token }).where(eq(participants.id, id));
     url = buildParticipantQrUrl(base, id, token);
   } else {
@@ -866,6 +886,7 @@ export const generateAndDownloadQr = async (req: AdminRequest, res: Response): P
   const qrImageUrl = await buildQrDataUrl(url, 300);
   res.json({
     token,
+    displayCode,
     url,
     downloadHint: 'QR встроен в data URL — можно сохранить картинку или распечатать.',
     qrImageUrl,
