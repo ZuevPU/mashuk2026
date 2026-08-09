@@ -95,11 +95,15 @@ export function DirectionEnergyCompareChart({
       const energy = b?.avg ?? null;
       const prev = a?.avg ?? null;
       const delta = energy != null && prev != null ? round1(energy - prev) : null;
+      const deltaLabel = delta == null
+        ? ''
+        : `${delta > 0 ? '+' : ''}${delta.toFixed(1).replace('.', ',')}`;
       return {
         direction,
         energy: energy ?? 0,
         prev,
         delta,
+        deltaLabel,
         hasData: energy != null && (b?.responses ?? 0) > 0,
       };
     }).filter(r => r.hasData);
@@ -179,13 +183,8 @@ export function DirectionEnergyCompareChart({
                 />
               ))}
               <LabelList
-                dataKey="delta"
+                dataKey="deltaLabel"
                 position="top"
-                formatter={(v: number | null) => {
-                  if (v == null) return '';
-                  const sign = v > 0 ? '+' : '';
-                  return `${sign}${v.toFixed(1).replace('.', ',')}`;
-                }}
                 style={{ fontSize: 11, fill: '#4b5563' }}
               />
             </Bar>
