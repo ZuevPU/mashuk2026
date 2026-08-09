@@ -725,6 +725,7 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
 export const listExchange = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const me = req.participant!;
+    const { getExchangeLimitsForParticipant } = await import('../services/exchangeLimits.js');
     const list = await db.select({
       q: exchangeQuestions,
       author: participants,
@@ -759,8 +760,11 @@ export const listExchange = async (req: ParticipantRequest, res: Response): Prom
       return b.q.id - a.q.id;
     });
 
+    const limits = await getExchangeLimitsForParticipant(me.id);
+
     res.json({
       myParticipantId: me.id,
+      limits,
       questions: sorted.map(row => {
         const answerRows = answersByQuestion.get(row.q.id) || [];
         const mapped = answerRows.map(ar => ({
@@ -797,6 +801,16 @@ export const createExchangeQuestion = async (req: ParticipantRequest, res: Respo
       return;
     }
 
+    const { getExchangeLimitsForParticipant } = await import('../services/exchangeLimits.js');
+    const limits = await getExchangeLimitsForParticipant(req.participant!.id);
+    if (limits.questionsLeft <= 0) {
+      res.status(400).json({
+        error: `Лимит вопросов исчерпан: можно задать не больше ${limits.questionsMax}`,
+        limits,
+      });
+      return;
+    }
+
     const aud = audience === 'direction' || audience === 'my_direction' ? 'direction' : 'all';
     const [q] = await db.insert(exchangeQuestions).values({
       participantId: req.participant!.id,
@@ -805,7 +819,8 @@ export const createExchangeQuestion = async (req: ParticipantRequest, res: Respo
       moderationStatus: 'pending',
     }).returning();
 
-    res.json({ question: q });
+    const nextLimits = await getExchangeLimitsForParticipant(req.participant!.id);
+    res.json({ question: q, limits: nextLimits });
   } catch (error) {
     console.error('createExchangeQuestion:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -855,6 +870,16 @@ export const answerExchange = async (req: ParticipantRequest, res: Response): Pr
       }
     }
 
+    const { getExchangeLimitsForParticipant } = await import('../services/exchangeLimits.js');
+    const limits = await getExchangeLimitsForParticipant(req.participant!.id);
+    if (limits.answersTodayLeft <= 0) {
+      res.status(400).json({
+        error: `Лимит ответов на сегодня исчерпан: не больше ${limits.answersPerDayMax} в день`,
+        limits,
+      });
+      return;
+    }
+
     const [answer] = await db.insert(exchangeAnswers).values({
       questionId,
       participantId: req.participant!.id,
@@ -890,12 +915,14 @@ export const answerExchange = async (req: ParticipantRequest, res: Response): Pr
       console.error('answerExchange side effects:', sideErr);
     }
 
+    const nextLimits = await getExchangeLimitsForParticipant(req.participant!.id);
     res.json({
       answer,
       xpAwarded: pointsResult?.awarded ?? 0,
       track: pointsResult?.track ?? 'path',
       newMedals,
       confirm,
+      limits: nextLimits,
     });
   } catch (error) {
     console.error('answerExchange:', error);

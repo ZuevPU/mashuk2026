@@ -51,6 +51,23 @@ function exchangeRepliesTo(parentId: number, answers: ExchangeAnswerRow[] | unde
   return (answers || []).filter(a => a.parentAnswerId === parentId).sort(byCreatedAtAsc);
 }
 
+function ruPlural(n: number, one: string, few: string, many: string): string {
+  const abs = Math.abs(n) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return many;
+  if (last === 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
+}
+
+function questionsWord(n: number): string {
+  return ruPlural(n, 'вопрос', 'вопроса', 'вопросов');
+}
+
+function answersWord(n: number): string {
+  return ruPlural(n, 'ответ', 'ответа', 'ответов');
+}
+
 function exchangeAnswerCountLabel(q: { answerCount?: number; answers?: ExchangeAnswerRow[] }): string {
   const top = q.answerCount ?? exchangeTopLevelAnswers(q.answers).length;
   const replies = (q.answers || []).filter(a => a.parentAnswerId).length;
@@ -75,15 +92,26 @@ function userDiscussed(reactions: ExchangeAnswerRow['reactions'], myId: number |
   return reactions.discussBy.includes(myId);
 }
 
+type ExchangeLimits = {
+  questionsMax: number;
+  questionsUsed: number;
+  questionsLeft: number;
+  answersPerDayMax: number;
+  answersTodayUsed: number;
+  answersTodayLeft: number;
+};
+
 const ExchangeThreadModal = ({
   question,
   myParticipantId,
+  limits,
   onClose,
   onRefresh,
   onSubmitSuccess,
 }: {
   question: any;
   myParticipantId: number | null;
+  limits: ExchangeLimits | null;
   onClose: () => void;
   onRefresh: () => void;
   onSubmitSuccess: (p: SubmitSuccessPayload) => void;
@@ -95,6 +123,8 @@ const ExchangeThreadModal = ({
   const parentPreview = parentAnswerId
     ? (question?.answers as ExchangeAnswerRow[] | undefined)?.find(a => a.id === parentAnswerId)
     : null;
+  const answersLeft = limits?.answersTodayLeft ?? 1;
+  const canAnswer = answersLeft > 0;
 
   const react = async (answerId: number, type: 'like' | 'discuss') => {
     try {
@@ -106,7 +136,7 @@ const ExchangeThreadModal = ({
   };
 
   const submit = async () => {
-    if (!question?.id || !replyText.trim() || submitting) return;
+    if (!question?.id || !replyText.trim() || submitting || !canAnswer) return;
     setSubmitting(true);
     try {
       const res = await apiPost<SubmitSuccessPayload>(`/exchange/${question.id}/answer`, {
@@ -188,26 +218,40 @@ const ExchangeThreadModal = ({
           <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
             {parentAnswerId ? 'Ваш комментарий к ответу' : 'Добавить свой ответ'}
           </div>
-          {parentPreview && (
-            <div style={{ fontSize: 12, color: '#666', marginBottom: 8, padding: '8px 10px', background: 'var(--m-surface)', borderRadius: 8 }}>
-              В ответ на: {parentPreview.authorName} — «{parentPreview.text.slice(0, 80)}{parentPreview.text.length > 80 ? '…' : ''}»
-              <button
-                type="button"
-                style={{ marginLeft: 8, border: 'none', background: 'none', color: 'var(--m-accent)', cursor: 'pointer', fontSize: 12 }}
-                onClick={() => setParentAnswerId(null)}
-              >
-                Отменить
-              </button>
+          {limits && (
+            <div style={{ fontSize: 12, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
+              У вас есть возможность дать {limits.answersTodayLeft} {answersWord(limits.answersTodayLeft)} сегодня
+              {' '}(из {limits.answersPerDayMax}).
             </div>
           )}
-          <Textarea
-            value={replyText}
-            onChange={e => setReplyText(e.target.value)}
-            placeholder={parentAnswerId ? 'Напишите уточнение...' : 'Поделитесь своим опытом...'}
-          />
-          <Button size="l" stretched loading={submitting} style={{ marginTop: 10 }} onClick={() => { void submit(); }}>
-            Отправить
-          </Button>
+          {!canAnswer ? (
+            <div style={{ fontSize: 13, color: '#9B2C2C' }}>
+              Лимит ответов на сегодня исчерпан. Завтра снова можно отвечать.
+            </div>
+          ) : (
+            <>
+              {parentPreview && (
+                <div style={{ fontSize: 12, color: '#666', marginBottom: 8, padding: '8px 10px', background: 'var(--m-surface)', borderRadius: 8 }}>
+                  В ответ на: {parentPreview.authorName} — «{parentPreview.text.slice(0, 80)}{parentPreview.text.length > 80 ? '…' : ''}»
+                  <button
+                    type="button"
+                    style={{ marginLeft: 8, border: 'none', background: 'none', color: 'var(--m-accent)', cursor: 'pointer', fontSize: 12 }}
+                    onClick={() => setParentAnswerId(null)}
+                  >
+                    Отменить
+                  </button>
+                </div>
+              )}
+              <Textarea
+                value={replyText}
+                onChange={e => setReplyText(e.target.value)}
+                placeholder={parentAnswerId ? 'Напишите уточнение...' : 'Поделитесь своим опытом...'}
+              />
+              <Button size="l" stretched loading={submitting} style={{ marginTop: 10 }} onClick={() => { void submit(); }}>
+                Отправить
+              </Button>
+            </>
+          )}
         </div>
       </Group>
     </ModalPage>
@@ -332,6 +376,14 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const [exchangeAudience, setExchangeAudience] = useState<'all' | 'direction'>('all');
   const [exchangeViewFilter, setExchangeViewFilter] = useState<'all' | 'direction'>('all');
   const [exchangeThreadId, setExchangeThreadId] = useState<number | null>(null);
+  const [exchangeLimits, setExchangeLimits] = useState<{
+    questionsMax: number;
+    questionsUsed: number;
+    questionsLeft: number;
+    answersPerDayMax: number;
+    answersTodayUsed: number;
+    answersTodayLeft: number;
+  } | null>(null);
   const [activeQuestion, setActiveQuestion] = useState<any>(null);
   const [questionOptions, setQuestionOptions] = useState<any[]>([]);
   const [dayEvents, setDayEvents] = useState<any[]>([]);
@@ -366,6 +418,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
         if (q.answerConfirm) setAnswerConfirmDefaults(q.answerConfirm);
         setExchange(ex.questions || []);
         if (typeof ex.myParticipantId === 'number') setMyParticipantId(ex.myParticipantId);
+        if (ex.limits && typeof ex.limits === 'object') setExchangeLimits(ex.limits);
         setMyQuestions((ex.questions || []).filter((item: any) => item.isMine));
         setOrgThreads(org.threads || []);
         const card = home?.eveningCard;
@@ -548,6 +601,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
             <ExchangeThreadModal
               question={threadQuestion}
               myParticipantId={myParticipantId}
+              limits={exchangeLimits}
               onClose={() => setExchangeThreadId(null)}
               onRefresh={loadAll}
               onSubmitSuccess={showSubmitSuccess}
@@ -558,7 +612,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
     } else {
       setModal(null);
     }
-  }, [activeQuestion, exchangeThreadId, exchange, myParticipantId, questionOptions, myAnswer, setModal, loadAll, orgThreadId, orgComposeOpen, dayEvents, afterBlocksEvents, lessonPickMeta, activePanel, id, showEveningFlow]);
+  }, [activeQuestion, exchangeThreadId, exchange, exchangeLimits, myParticipantId, questionOptions, myAnswer, setModal, loadAll, orgThreadId, orgComposeOpen, dayEvents, afterBlocksEvents, lessonPickMeta, activePanel, id, showEveningFlow]);
 
   useEffect(() => {
     return () => setModal(null);
@@ -728,12 +782,26 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
             </div>
 
             <div className="ask-btn m-card" style={{ marginBottom: 10 }}>
-              <Textarea value={newQuestion} onChange={e => setNewQuestion(e.target.value)} placeholder="Задайте вопрос участникам..." />
+              {exchangeLimits && (
+                <div style={{ fontSize: 12, color: '#666', marginBottom: 8, lineHeight: 1.45 }}>
+                  У вас есть возможность задать {exchangeLimits.questionsLeft} {questionsWord(exchangeLimits.questionsLeft)}
+                  {' '}и дать {exchangeLimits.answersTodayLeft} {answersWord(exchangeLimits.answersTodayLeft)} сегодня
+                  {' '}(лимит: {exchangeLimits.questionsMax} {questionsWord(exchangeLimits.questionsMax)},{' '}
+                  {exchangeLimits.answersPerDayMax} {answersWord(exchangeLimits.answersPerDayMax)} в день).
+                </div>
+              )}
+              <Textarea
+                value={newQuestion}
+                onChange={e => setNewQuestion(e.target.value)}
+                placeholder="Задайте вопрос участникам..."
+                disabled={!!exchangeLimits && exchangeLimits.questionsLeft <= 0}
+              />
               <div className="time-sw" style={{ marginTop: 8, marginBottom: 0 }}>
                 <button
                   type="button"
                   className={`time-btn ${exchangeAudience === 'all' ? 'on' : ''}`}
                   onClick={() => setExchangeAudience('all')}
+                  disabled={!!exchangeLimits && exchangeLimits.questionsLeft <= 0}
                 >
                   Всем участникам
                 </button>
@@ -741,11 +809,20 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                   type="button"
                   className={`time-btn ${exchangeAudience === 'direction' ? 'on' : ''}`}
                   onClick={() => setExchangeAudience('direction')}
+                  disabled={!!exchangeLimits && exchangeLimits.questionsLeft <= 0}
                 >
                   Своему направлению
                 </button>
               </div>
-              <Button style={{ marginTop: 8 }} onClick={submitExchange}>+ Задать новый вопрос</Button>
+              <Button
+                style={{ marginTop: 8 }}
+                disabled={!!exchangeLimits && exchangeLimits.questionsLeft <= 0}
+                onClick={submitExchange}
+              >
+                {exchangeLimits && exchangeLimits.questionsLeft <= 0
+                  ? 'Лимит вопросов исчерпан'
+                  : '+ Задать новый вопрос'}
+              </Button>
             </div>
 
             {myQuestionsSorted.length > 0 && (

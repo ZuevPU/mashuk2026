@@ -58,17 +58,23 @@ async function findParticipantByVk(vkId: number) {
 export async function vkBotCallback(req: Request, res: Response): Promise<void> {
   const body = req.body as VkCallbackBody;
 
+  // VK confirmation must return the exact plain-text code from community Callback settings.
+  // Handle it before secret checks so first-time setup is not blocked.
+  if (body.type === 'confirmation') {
+    const code = (env.VK_CALLBACK_CONFIRMATION || '').trim();
+    if (!code) {
+      console.error('vkBotCallback: VK_CALLBACK_CONFIRMATION is empty — set it in backend env');
+    }
+    res.status(200).type('text/plain').send(code || 'ok');
+    return;
+  }
+
   if (env.VK_CALLBACK_SECRET && body.secret && body.secret !== env.VK_CALLBACK_SECRET) {
     res.status(403).json({ error: 'Invalid secret' });
     return;
   }
 
-  if (body.type === 'confirmation') {
-    res.status(200).send(env.VK_CALLBACK_CONFIRMATION || 'ok');
-    return;
-  }
-
-  res.status(200).send('ok');
+  res.status(200).type('text/plain').send('ok');
 
   if (body.type !== 'message_new') return;
 
