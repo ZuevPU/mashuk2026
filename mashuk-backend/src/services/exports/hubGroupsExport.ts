@@ -4,12 +4,12 @@ import type { AnalyticsFilters } from '../analytics/analyticsQuery.js';
 import { buildHubGroupsDashboard } from '../analytics/hubGroupsDashboard.js';
 import { createWorkbook, sendWorkbook } from './workbook.js';
 
-/** Soft yellow (0%) → pleasant green (100%). */
+/** Soft red (0%) → pleasant green (100%). */
 function heatArgb(ratio: number): string {
   const t = Math.max(0, Math.min(1, ratio));
   const r = Math.round(254 + (134 - 254) * t);
-  const g = Math.round(243 + (239 - 243) * t);
-  const b = Math.round(199 + (172 - 199) * t);
+  const g = Math.round(202 + (239 - 202) * t);
+  const b = Math.round(202 + (172 - 202) * t);
   const hex = (n: number) => n.toString(16).padStart(2, '0').toUpperCase();
   return `FF${hex(r)}${hex(g)}${hex(b)}`;
 }
@@ -46,6 +46,7 @@ export async function writeHubGroupsExport(
     selectedDaySubmitted: number;
     selectedDayFillPct: number;
     touchpointSlots: { index: number; completed: number; coveragePct: number }[];
+    avgEngagementPct: number;
   }[];
   const touchpointTotals = data.touchpointTotals as {
     index: number;
@@ -53,6 +54,7 @@ export async function writeHubGroupsExport(
     coveragePct: number;
   }[];
   const selectedDay = data.selectedDay;
+  const avgEngagementTotal = data.kpi?.avgEngagementPct ?? 0;
 
   const wb = await createWorkbook();
   const ws = wb.addWorksheet('Группы', {
@@ -65,6 +67,7 @@ export async function writeHubGroupsExport(
   for (const s of slotsMeta) {
     header1.push(`Т${s.index}`, '');
   }
+  header1.push('Ср. вовлеч. %');
 
   const header2: (string | number)[] = ['', '', ''];
   for (const _d of days) header2.push('');
@@ -72,6 +75,7 @@ export async function writeHubGroupsExport(
   for (const s of slotsMeta) {
     header2.push('кол-во', '%');
   }
+  header2.push('');
 
   ws.addRow(header1);
   ws.addRow(header2);
@@ -85,6 +89,8 @@ export async function writeHubGroupsExport(
     cell.alignment = { horizontal: 'center', wrapText: true };
     col += 2;
   }
+  ws.getCell(1, col).value = 'Ср. вовлеч. %';
+  ws.getCell(1, col).alignment = { horizontal: 'center', wrapText: true };
 
   ws.getRow(1).font = { bold: true };
   ws.getRow(2).font = { bold: true, size: 9 };
@@ -111,6 +117,7 @@ export async function writeHubGroupsExport(
       paint(excelRow.getCell(c), slot?.coveragePct ?? 0, 100);
       c += 1;
     }
+    paint(excelRow.getCell(c), row.avgEngagementPct ?? 0, 100);
   }
 
   // Totals
@@ -140,18 +147,20 @@ export async function writeHubGroupsExport(
       paint(excelRow.getCell(c), tot?.coveragePct ?? 0, 100);
       c += 1;
     }
+    paint(excelRow.getCell(c), avgEngagementTotal, 100);
   }
 
   ws.getColumn(1).width = 22;
   ws.getColumn(2).width = 22;
   ws.getColumn(3).width = 10;
-  for (let i = 4; i <= 3 + days.length + 1 + slotsMeta.length * 2; i += 1) {
-    ws.getColumn(i).width = 9;
+  const lastCol = 3 + days.length + 1 + slotsMeta.length * 2 + 1;
+  for (let i = 4; i <= lastCol; i += 1) {
+    ws.getColumn(i).width = i === lastCol ? 12 : 9;
   }
 
   const legend = wb.addWorksheet('Легенда');
   legend.addRow(['Подсветка: доля от зарегистрированных в группе']);
-  legend.addRow(['0%', 'плохо · мягкий жёлтый']);
+  legend.addRow(['0%', 'плохо · мягкий красный']);
   legend.addRow(['100%', 'полное совпадение · зелёный']);
   legend.getCell(2, 1).fill = {
     type: 'pattern', pattern: 'solid', fgColor: { argb: heatArgb(0) },
@@ -159,6 +168,8 @@ export async function writeHubGroupsExport(
   legend.getCell(3, 1).fill = {
     type: 'pattern', pattern: 'solid', fgColor: { argb: heatArgb(1) },
   };
+  legend.addRow([]);
+  legend.addRow(['Ср. вовлеч. %', 'Среднее охвата по дням итоговой анкеты и 7 точкам активности']);
   legend.addRow([]);
   legend.addRow(['Точки активности']);
   for (const s of slotsMeta) {

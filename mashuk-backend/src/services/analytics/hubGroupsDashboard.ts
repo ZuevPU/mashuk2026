@@ -16,6 +16,29 @@ function groupOf(p: { groupName?: string | null }): string {
   return (p.groupName || 'без группы').trim() || 'без группы';
 }
 
+/** Служебные группы не показываем в сводке Штаба. */
+function isHiddenHubGroup(name: string): boolean {
+  const n = name.trim().toLowerCase().replace(/\s+/g, '');
+  if (!n) return true;
+  if (n.includes('организатор')) return true;
+  // «0А» / «0A» / «0 А» / «0а»
+  if (n === '0a' || n === '0а') return true;
+  return false;
+}
+
+function avgEngagementPct(
+  eveningByDay: { fillRatePct: number }[],
+  touchpointSlots: { coveragePct: number }[],
+): number {
+  const parts = [
+    ...eveningByDay.map(d => d.fillRatePct),
+    ...touchpointSlots.map(s => s.coveragePct),
+  ];
+  if (!parts.length) return 0;
+  const sum = parts.reduce((s, n) => s + n, 0);
+  return Math.round((sum / parts.length) * 10) / 10;
+}
+
 /**
  * Линза «Группы» для вкладки «Штаб».
  * Основная таблица: группа × итоговая анкета по дням (сдано / всего).
@@ -30,8 +53,6 @@ export async function buildHubGroupsDashboard(filters: AnalyticsFilters, req?: A
   const days = forumSeriesDays(Math.min(currentForumDay, 7));
 
   const cohort = await loadCohortParticipants(groupFilters, req);
-  const registeredPeople = cohort.filter(p => p.onboardingCompletedAt);
-  const registered = registeredPeople.length;
 
   const selectedDayRaw = filters.day ?? currentForumDay;
   const selectedDay = Math.min(Math.max(1, selectedDayRaw), 7);
@@ -131,6 +152,7 @@ export async function buildHubGroupsDashboard(filters: AnalyticsFilters, req?: A
   }));
 
   const byGroup = [...byGroupMap.values()]
+    .filter(row => !isHiddenHubGroup(row.group))
     .map(row => {
       const eveningByDay = days.map(day => ({
         day,
@@ -148,6 +170,7 @@ export async function buildHubGroupsDashboard(filters: AnalyticsFilters, req?: A
           coveragePct: s.coveragePct,
         }))
         : emptyTouchpointSlots;
+      const selectedDayFillPct = pct(selectedSubmitted, row.registered);
       return {
         group: row.group,
         direction: row.direction,
@@ -155,14 +178,17 @@ export async function buildHubGroupsDashboard(filters: AnalyticsFilters, req?: A
         registered: row.registered,
         eveningByDay,
         selectedDaySubmitted: selectedSubmitted,
-        selectedDayFillPct: pct(selectedSubmitted, row.registered),
+        selectedDayFillPct,
         touchpointSlots,
+        /** Среднее охвата: дни итоговой анкеты + 7 точек за выбранный день. */
+        avgEngagementPct: avgEngagementPct(eveningByDay, touchpointSlots),
       };
     })
     .sort((a, b) =>
       a.direction.localeCompare(b.direction, 'ru')
       || a.group.localeCompare(b.group, 'ru'));
 
+  const visibleRegistered = byGroup.reduce((s, g) => s + g.registered, 0);
   const groupsWithPeople = byGroup.filter(g => g.total > 0).length;
   const groupsFullToday = byGroup.filter(
     g => g.registered > 0 && g.selectedDaySubmitted >= g.registered,
@@ -185,6 +211,10 @@ export async function buildHubGroupsDashboard(filters: AnalyticsFilters, req?: A
     };
   });
 
+  const avgEngagementTotal = byGroup.length
+    ? Math.round((byGroup.reduce((s, r) => s + r.avgEngagementPct, 0) / byGroup.length) * 10) / 10
+    : 0;
+
   return {
     filters: groupFilters,
     currentForumDay,
@@ -196,12 +226,13 @@ export async function buildHubGroupsDashboard(filters: AnalyticsFilters, req?: A
     kpi: {
       groupsCount: byGroup.length,
       groupsWithPeople,
-      registered,
-      cohortSize: cohort.length,
+      registered: visibleRegistered,
+      cohortSize: cohort.filter(p => !isHiddenHubGroup(groupOf(p))).length,
       eveningSubmitted: todaySeries?.submitted ?? 0,
       eveningFillPct: todaySeries?.fillRatePct ?? 0,
       eveningDrafts: todaySeries?.drafts ?? 0,
       groupsFullToday,
+      avgEngagementPct: avgEngagementTotal,
     },
     byGroup,
     touchpointTotals,
