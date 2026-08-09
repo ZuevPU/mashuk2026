@@ -1170,13 +1170,17 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 .adm-dash-kpi-trend.down { color: #ef4444; }
 .adm-dash-kpi-trend.flat { color: var(--m-text-secondary); }
 .adm-dash-card {
-  background: var(--m-surface); border: 1px solid var(--m-border); border-radius: var(--adm-radius);
-  padding: 16px 18px; box-shadow: var(--adm-shadow); margin-bottom: 14px;
+  background: var(--m-surface);
+  border: none;
+  border-radius: 18px;
+  padding: 22px 24px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+  margin-bottom: 14px;
 }
 .adm-dash-grid .adm-dash-card { margin-bottom: 0; }
 .adm-dash-card-title {
-  font-size: 12px; font-weight: 700; color: var(--m-text-secondary); text-transform: uppercase;
-  letter-spacing: 0.4px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 13px; font-weight: 600; color: #1d1d1f; letter-spacing: -0.01em;
+  margin-bottom: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
 .adm-dash-badge-v2 {
   font-size: 10px; background: #FFF3E0; color: #E65100; border: 1px solid #ffcc80;
@@ -1189,13 +1193,13 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 .adm-dash-section-label::after { content: ''; flex: 1; height: 1px; background: var(--m-border); }
 .adm-dash-zone-bars { display: flex; flex-direction: column; gap: 8px; }
 .adm-dash-zone-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.adm-dash-zone-label { width: 90px; flex-shrink: 0; color: var(--m-text); }
+.adm-dash-zone-label { width: 90px; flex-shrink: 0; color: #86868b; }
 .adm-dash-zone-track { flex: 1; background: var(--m-bg); border-radius: 4px; height: 18px; overflow: hidden; }
 .adm-dash-zone-fill {
   height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px;
-  font-size: 11px; font-weight: 700; color: #fff; min-width: 0; transition: width 0.35s ease, height 0.35s ease;
+  font-size: 11px; font-weight: 600; color: #fff; min-width: 0; transition: width 0.35s ease, height 0.35s ease;
 }
-.adm-dash-zone-pct { width: 36px; text-align: right; font-weight: 700; font-size: 12px; }
+.adm-dash-zone-pct { width: 36px; text-align: right; font-weight: 600; font-size: 12px; color: #1d1d1f; }
 .adm-dash-zone-bars.is-vertical {
   flex-direction: row; align-items: flex-end; gap: 10px; min-height: 160px; padding-top: 4px;
 }
@@ -1215,10 +1219,10 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 .adm-dash-zone-bars.is-vertical .adm-dash-zone-pct { width: auto; text-align: center; font-size: 11px; }
 .adm-dash-src-bars { display: flex; flex-direction: column; gap: 6px; }
 .adm-dash-src-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.adm-dash-src-label { width: 120px; flex-shrink: 0; color: var(--m-text); }
+.adm-dash-src-label { width: 120px; flex-shrink: 0; color: #86868b; }
 .adm-dash-src-track { flex: 1; background: var(--m-bg); border-radius: 3px; height: 14px; overflow: hidden; }
-.adm-dash-src-fill { height: 100%; border-radius: 3px; background: var(--m-accent); transition: width 0.35s ease, height 0.35s ease; }
-.adm-dash-src-pct { width: 36px; text-align: right; font-weight: 700; font-size: 12px; }
+.adm-dash-src-fill { height: 100%; border-radius: 3px; background: #1F3A5F; transition: width 0.35s ease, height 0.35s ease; }
+.adm-dash-src-pct { width: 36px; text-align: right; font-weight: 600; font-size: 12px; color: #1d1d1f; }
 .adm-dash-src-bars.is-vertical {
   flex-direction: row; align-items: flex-end; gap: 8px; min-height: 170px; overflow-x: auto; padding-top: 4px;
 }
@@ -1234,9 +1238,37 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 }
 .adm-dash-src-bars.is-vertical .adm-dash-src-fill { width: 100%; }
 .adm-dash-src-bars.is-vertical .adm-dash-src-pct { width: auto; text-align: center; }
-.adm-bars-layout-toggle { display: inline-flex; gap: 4px; align-items: center; }
-.adm-bars-layout-toggle .adm-btn.is-active {
-  background: var(--m-bg); border-color: var(--m-accent); color: var(--m-text); font-weight: 600;
+.adm-chart-frame {
+  position: relative;
+  padding-top: 2px;
+  padding-right: 34px;
+}
+.adm-chart-orient-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #86868b;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.adm-chart-orient-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1d1d1f;
+}
+.adm-chart-orient-btn:focus-visible {
+  outline: 2px solid rgba(31, 58, 95, 0.35);
+  outline-offset: 1px;
 }
 .adm-dash-status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .adm-dash-flag { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }

@@ -142,16 +142,18 @@ export function ChartTooltipRu({
   return (
     <div
       style={{
-        background: '#fff',
-        border: '1px solid #E2E8F0',
+        background: 'rgba(255,255,255,0.92)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        border: '1px solid rgba(0,0,0,0.06)',
         borderRadius: 8,
-        padding: '8px 10px',
+        padding: '10px 12px',
         fontSize: 12,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+        boxShadow: '0 8px 28px rgba(0,0,0,0.08)',
         maxWidth: 260,
       }}
     >
-      <div style={{ fontWeight: 700, marginBottom: 4 }}>{formatChartLabel(label)}</div>
+      <div style={{ fontWeight: 600, marginBottom: 6, color: '#1d1d1f' }}>{formatChartLabel(label)}</div>
       {payload.map(p => {
         const dataKey = String(p.dataKey ?? '');
         const seriesName = p.name != null ? String(p.name) : '';
@@ -163,8 +165,10 @@ export function ChartTooltipRu({
         else if (seriesName && !seriesName.includes('_')) shownName = seriesName;
         else if (dataKey) shownName = roleName(dataKey);
         return (
-          <div key={`${dataKey}-${seriesName}`} style={{ color: p.color ?? '#333' }}>
-            {shownName}: {p.value}{isPercent ? '%' : ''}
+          <div key={`${dataKey}-${seriesName}`} style={{ color: '#86868b', marginTop: 2 }}>
+            <span style={{ color: p.color ?? '#1F3A5F' }}>{shownName}</span>
+            {': '}
+            {p.value}{isPercent ? '%' : ''}
           </div>
         );
       })}

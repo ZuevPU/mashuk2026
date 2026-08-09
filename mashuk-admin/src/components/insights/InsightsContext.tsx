@@ -26,9 +26,6 @@ export type DashboardId =
   | 'overview'
   | 'roles';
 
-/** horizontal = полосы слева направо; vertical = классические столбцы снизу вверх */
-export type BarsLayout = 'horizontal' | 'vertical';
-
 export type InsightsMeta = {
   currentForumDay?: number;
   forumDays?: { day: number; label: string; calendarDate: string | null }[];
@@ -64,8 +61,6 @@ type InsightsContextValue = {
   setAgeCategory: (v: string) => void;
   activity: string;
   setActivity: (v: string) => void;
-  barsLayout: BarsLayout;
-  setBarsLayout: (v: BarsLayout) => void;
   activeDashboardId: DashboardId;
   setActiveDashboardId: (id: DashboardId) => void;
   meta: InsightsMeta | null;
@@ -78,18 +73,8 @@ type InsightsContextValue = {
 };
 
 const STORAGE_KEY = 'mashuk_insights_filters';
-const BARS_LAYOUT_KEY = 'mashuk_insights_bars_layout';
 
 const InsightsContext = createContext<InsightsContextValue | null>(null);
-
-function readBarsLayout(): BarsLayout {
-  try {
-    const v = sessionStorage.getItem(BARS_LAYOUT_KEY);
-    return v === 'vertical' ? 'vertical' : 'horizontal';
-  } catch {
-    return 'horizontal';
-  }
-}
 
 type StoredFilters = {
   forumDay: string;
@@ -150,7 +135,6 @@ export function InsightsProvider({
   const [group, setGroupState] = useState(initial.group);
   const [ageCategory, setAgeCategoryState] = useState(initial.ageCategory);
   const [activity, setActivityState] = useState(initial.activity);
-  const [barsLayout, setBarsLayoutState] = useState<BarsLayout>(() => readBarsLayout());
   const [activeDashboardId, setActiveDashboardIdState] = useState<DashboardId>(initial.dash);
   const [meta, setMeta] = useState<InsightsMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(true);
@@ -186,10 +170,6 @@ export function InsightsProvider({
   const setGroup = (v: string) => { setGroupState(v); persist({ group: v }); };
   const setAgeCategory = (v: string) => { setAgeCategoryState(v); persist({ ageCategory: v }); };
   const setActivity = (v: string) => { setActivityState(v); persist({ activity: v }); };
-  const setBarsLayout = (v: BarsLayout) => {
-    setBarsLayoutState(v);
-    try { sessionStorage.setItem(BARS_LAYOUT_KEY, v); } catch { /* ignore */ }
-  };
   const setActiveDashboardId = (id: DashboardId) => {
     setActiveDashboardIdState(id);
     persist({ dash: id });
@@ -234,8 +214,6 @@ export function InsightsProvider({
     setAgeCategory,
     activity,
     setActivity,
-    barsLayout,
-    setBarsLayout,
     activeDashboardId,
     setActiveDashboardId,
     meta,
@@ -246,7 +224,7 @@ export function InsightsProvider({
     adminFetch,
     analyticsDashboardAllowlist,
   }), [
-    forumDay, setForumDay, direction, group, ageCategory, activity, barsLayout, activeDashboardId, meta, metaLoading,
+    forumDay, setForumDay, direction, group, ageCategory, activity, activeDashboardId, meta, metaLoading,
     reloadMeta, setTab, activeSection, adminFetch, analyticsDashboardAllowlist,
   ]);
 

@@ -19,7 +19,6 @@ import {
 } from './analyticsDashboardViews';
 import { CHART_HELP_RU, formatForumDay } from './chartRu';
 import { DashCard, DashScreenTitle, RoleMatrixGrid } from './dashboardUi';
-import { BarsLayoutToggle } from './orientableBars';
 import { roleName } from '../onboarding/roleOptions';
 
 type ViewMode = 'today' | 'day' | 'shift' | 'compare';
@@ -223,8 +222,6 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
     group,
     ageCategory,
     activity,
-    barsLayout,
-    setBarsLayout,
     activeDashboardId,
     meta,
     setTab,
@@ -399,7 +396,6 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
               {cta.label}
             </button>
           ))}
-          <BarsLayoutToggle value={barsLayout} onChange={setBarsLayout} />
           <button type="button" className="adm-btn adm-btn-ghost" onClick={() => setChartHelpOpen(v => !v)}>
             {chartHelpOpen ? 'Скрыть подсказку' : 'Как читать диаграммы'}
           </button>
