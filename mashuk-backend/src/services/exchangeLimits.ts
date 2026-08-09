@@ -12,7 +12,7 @@ function positiveInt(raw: string | undefined, fallback: number): number {
 
 /** Lifetime cap on exchange questions per participant. */
 export function exchangeMaxQuestionsTotal(): number {
-  return positiveInt(env.EXCHANGE_MAX_QUESTIONS_TOTAL, 5);
+  return positiveInt(env.EXCHANGE_MAX_QUESTIONS_TOTAL, 3);
 }
 
 /** Cap on exchange answers (incl. replies) per Moscow calendar day. */

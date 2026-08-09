@@ -26,7 +26,7 @@ export const env = {
   EXPORT_STORAGE_DIR: process.env.EXPORT_STORAGE_DIR || 'data/admin-exports',
   UNIFIED_RATING: process.env.UNIFIED_RATING !== 'false',
   /** Обмен опытом: лимит вопросов на участника за всю смену */
-  EXCHANGE_MAX_QUESTIONS_TOTAL: process.env.EXCHANGE_MAX_QUESTIONS_TOTAL || '5',
+  EXCHANGE_MAX_QUESTIONS_TOTAL: process.env.EXCHANGE_MAX_QUESTIONS_TOTAL || '3',
   /** Обмен опытом: лимит ответов на участника за календарный день (МСК) */
   EXCHANGE_MAX_ANSWERS_PER_DAY: process.env.EXCHANGE_MAX_ANSWERS_PER_DAY || '5',
 };
