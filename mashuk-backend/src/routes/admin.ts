@@ -236,6 +236,7 @@ router.get('/exports/medals', P('exports', 'export'), wrap(exportsCtrl.exportMed
 router.get('/exports/moderation-log', P('exports', 'export'), wrap(exportsCtrl.exportModerationLogHandler));
 router.get('/exports/points-manual', P('exports', 'export'), wrap(exportsCtrl.exportPointsManualHandler));
 router.get('/exports/activity', P('exports', 'export'), wrap(exportsCtrl.exportActivityHandler));
+router.get('/exports/hub-groups', P('exports', 'export'), wrap(exportsCtrl.exportHubGroupsHandler));
 router.get('/exports/point-a-b-summary', P('exports', 'export'), wrap(exportsCtrl.exportPointABHandler));
 router.get('/exports/delayed-measure-template', P('exports', 'export'), wrap(exportsCtrl.exportDelayedMeasureHandler));
 router.get('/exports/final-profiles.zip', P('exports', 'export'), wrap(exportsCtrl.exportFinalProfilesZipHandler));

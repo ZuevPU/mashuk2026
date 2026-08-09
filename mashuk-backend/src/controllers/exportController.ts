@@ -350,3 +350,10 @@ export async function exportShiftSummaryPdfHandler(_req: AdminRequest, res: Resp
   const { writeShiftSummaryPdf } = await import('../services/exports/shiftSummaryPdfBuilder.js');
   await writeShiftSummaryPdf(res);
 }
+
+export async function exportHubGroupsHandler(req: AdminRequest, res: Response): Promise<void> {
+  const { resolveAnalyticsFilters } = await import('../services/analytics/analyticsQuery.js');
+  const { writeHubGroupsExport } = await import('../services/exports/hubGroupsExport.js');
+  const filters = await resolveAnalyticsFilters(req);
+  await writeHubGroupsExport(res, filters, req);
+}

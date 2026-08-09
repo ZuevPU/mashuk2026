@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useInsights } from '../insights/InsightsContext';
 import {
   DashCard,
@@ -7,6 +7,7 @@ import {
   dashVal,
 } from '../analytics/dashboardUi';
 import { HubKpiRow } from './HubKpiRow';
+import { downloadHubExport } from './hubExports';
 import { hubFilterParams } from './hubQuery';
 import type { HubLens } from './HubTab';
 
@@ -27,7 +28,6 @@ type TouchpointSlotCell = {
 type GroupRow = {
   group: string;
   direction: string;
-  total: number;
   registered: number;
   eveningByDay: EveningDayCell[];
   selectedDaySubmitted: number;
@@ -40,6 +40,23 @@ type SlotMeta = {
   title: string;
   shortLabel: string;
 };
+
+/** 0% → мягкий жёлтый, 100% → приятный зелёный (доля от зарегистрированных). */
+function heatBg(ratio: number): string {
+  const t = Math.max(0, Math.min(1, ratio));
+  const r = Math.round(254 + (134 - 254) * t);
+  const g = Math.round(243 + (239 - 243) * t);
+  const b = Math.round(199 + (172 - 199) * t);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function heatStyle(value: number, registered: number): CSSProperties | undefined {
+  if (registered <= 0) return undefined;
+  return {
+    background: heatBg(value / registered),
+    textAlign: 'center' as const,
+  };
+}
 
 /**
  * Линза «Группы» — итоговая анкета по дням и 7 точек активности за выбранный день.
@@ -55,6 +72,7 @@ export function HubGroupsScreen({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -81,7 +99,6 @@ export function HubGroupsScreen({
 
   const totalsRow = useMemo(() => {
     if (!byGroup.length || !days.length) return null;
-    const totalPeople = byGroup.reduce((s, r) => s + (r.total ?? 0), 0);
     const registered = byGroup.reduce((s, r) => s + (r.registered ?? 0), 0);
     const byDay = days.map(day => {
       const submitted = byGroup.reduce((s, r) => {
@@ -90,7 +107,11 @@ export function HubGroupsScreen({
       }, 0);
       return { day, submitted };
     });
-    return { totalPeople, registered, byDay };
+    const selectedSubmitted = byGroup.reduce((s, r) => s + r.selectedDaySubmitted, 0);
+    const selectedPct = registered
+      ? Math.round((selectedSubmitted / registered) * 1000) / 10
+      : 0;
+    return { registered, byDay, selectedSubmitted, selectedPct };
   }, [byGroup, days]);
 
   function openDirection(dir: string) {
@@ -102,6 +123,27 @@ export function HubGroupsScreen({
 
   function slotCell(slots: TouchpointSlotCell[] | undefined, index: number) {
     return slots?.find(s => s.index === index);
+  }
+
+  async function downloadExcel() {
+    setExporting(true);
+    try {
+      const params = hubFilterParams({
+        mode: 'day',
+        forumDay,
+        direction,
+        ageCategory,
+        activity,
+      });
+      await downloadHubExport({
+        id: 'hub-groups',
+        label: 'Группы',
+        path: `/exports/hub-groups?${params.toString()}`,
+        filename: `hub_groups_d${selectedDay}.xlsx`,
+      });
+    } finally {
+      setExporting(false);
+    }
   }
 
   if (loading && !data) {
@@ -158,10 +200,20 @@ export function HubGroupsScreen({
 
       <SectionLabel>Группы · итоговая анкета и точки активности</SectionLabel>
       <DashCard title="Сводка по группам">
-        <p className="adm-muted" style={{ fontSize: 12, marginTop: 0, marginBottom: 8 }}>
-          Д1…ДN — сдача итоговой анкеты по дням.
-          Т1…Т7 — сколько человек закрыли точку активности за день {touchpointDay} (кол-во и % от зарег.).
-        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <p className="adm-muted" style={{ fontSize: 12, margin: 0, flex: '1 1 240px' }}>
+            Подсветка от зарегистрированных: жёлтый — 0%, зелёный — 100% (например 24 из 24).
+            Т1…Т7 — точки активности за день {touchpointDay}.
+          </p>
+          <button
+            type="button"
+            className="adm-btn adm-btn-primary adm-btn-sm"
+            disabled={exporting || byGroup.length === 0}
+            onClick={() => { void downloadExcel(); }}
+          >
+            {exporting ? 'Выгрузка…' : 'Скачать Excel'}
+          </button>
+        </div>
         {byGroup.length === 0 ? (
           <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>Нет групп в срезе.</p>
         ) : (
@@ -171,7 +223,6 @@ export function HubGroupsScreen({
                 <tr>
                   <th rowSpan={2}>Группа</th>
                   <th rowSpan={2}>Направление</th>
-                  <th rowSpan={2}>Всего</th>
                   <th rowSpan={2}>Зарег.</th>
                   {days.map(d => (
                     <th key={`e-${d}`} rowSpan={2}>Д{d}</th>
@@ -214,38 +265,40 @@ export function HubGroupsScreen({
                         row.direction || '—'
                       )}
                     </td>
-                    <td>{row.total}</td>
-                    <td>{row.registered}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 600 }}>{row.registered}</td>
                     {days.map(d => {
                       const cell = row.eveningByDay?.find(c => c.day === d);
                       const n = cell?.submitted ?? 0;
-                      const muted = row.registered > 0 && n === 0;
                       return (
                         <td
                           key={d}
-                          style={muted ? { color: 'var(--adm-muted, #94a3b8)' } : undefined}
-                          title={cell ? `${cell.fillRatePct}%` : undefined}
+                          style={heatStyle(n, row.registered)}
+                          title={cell ? `${n} из ${row.registered} · ${cell.fillRatePct}%` : undefined}
                         >
                           {n}
                         </td>
                       );
                     })}
-                    <td>{row.selectedDayFillPct}%</td>
+                    <td
+                      style={heatStyle(row.selectedDayFillPct, 100)}
+                      title={`${row.selectedDaySubmitted} из ${row.registered}`}
+                    >
+                      {row.selectedDayFillPct}%
+                    </td>
                     {slotsMeta.map(s => {
                       const cell = slotCell(row.touchpointSlots, s.index);
                       const n = cell?.completed ?? 0;
                       const p = cell?.coveragePct ?? 0;
-                      const muted = row.registered > 0 && n === 0;
                       return (
                         <Fragment key={`${row.group}-tp-${s.index}`}>
                           <td
-                            style={muted ? { color: 'var(--adm-muted, #94a3b8)' } : undefined}
-                            title={s.shortLabel}
+                            style={heatStyle(n, row.registered)}
+                            title={`${s.shortLabel}: ${n} из ${row.registered}`}
                           >
                             {n}
                           </td>
                           <td
-                            style={muted ? { color: 'var(--adm-muted, #94a3b8)' } : undefined}
+                            style={heatStyle(p, 100)}
                             title={s.title}
                           >
                             {p}%
@@ -259,22 +312,27 @@ export function HubGroupsScreen({
                   <tr style={{ fontWeight: 600 }}>
                     <td>Итого</td>
                     <td />
-                    <td>{totalsRow.totalPeople}</td>
-                    <td>{totalsRow.registered}</td>
+                    <td style={{ textAlign: 'center' }}>{totalsRow.registered}</td>
                     {totalsRow.byDay.map(c => (
-                      <td key={c.day}>{c.submitted}</td>
+                      <td
+                        key={c.day}
+                        style={heatStyle(c.submitted, totalsRow.registered)}
+                        title={`${c.submitted} из ${totalsRow.registered}`}
+                      >
+                        {c.submitted}
+                      </td>
                     ))}
-                    <td>
-                      {totalsRow.registered
-                        ? `${Math.round((byGroup.reduce((s, r) => s + r.selectedDaySubmitted, 0) / totalsRow.registered) * 1000) / 10}%`
-                        : '—'}
+                    <td style={heatStyle(totalsRow.selectedPct, 100)}>
+                      {totalsRow.selectedPct}%
                     </td>
                     {slotsMeta.map(s => {
                       const cell = touchpointTotals.find(t => t.index === s.index);
+                      const n = cell?.completed ?? 0;
+                      const p = cell?.coveragePct ?? 0;
                       return (
                         <Fragment key={`tot-tp-${s.index}`}>
-                          <td>{cell?.completed ?? 0}</td>
-                          <td>{cell?.coveragePct ?? 0}%</td>
+                          <td style={heatStyle(n, totalsRow.registered)}>{n}</td>
+                          <td style={heatStyle(p, 100)}>{p}%</td>
                         </Fragment>
                       );
                     })}
