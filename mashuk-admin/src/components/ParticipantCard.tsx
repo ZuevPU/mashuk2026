@@ -24,6 +24,8 @@ type CardData = {
 
     direction?: string;
 
+    groupId?: number | null;
+
     groupName?: string;
 
     pedagogicalRole?: string;
@@ -165,6 +167,7 @@ export function ParticipantCardModal({
   const p = card.participant!;
   const [taskCatalog, setTaskCatalog] = useState<{ id: number; title?: string }[]>([]);
   const [manualTaskId, setManualTaskId] = useState('');
+  const [registrationGroups, setRegistrationGroups] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
     if (tab !== 'tasks' || !p?.id) return;
@@ -174,6 +177,15 @@ export function ParticipantCardModal({
       })
       .catch(() => setTaskCatalog([]));
   }, [tab, p?.id, adminFetch]);
+
+  useEffect(() => {
+    if (tab !== 'profile') return;
+    adminFetch('/groups')
+      .then((res: { groups?: { id: number; name: string }[] }) => {
+        setRegistrationGroups(res.groups ?? []);
+      })
+      .catch(() => setRegistrationGroups([]));
+  }, [tab, adminFetch]);
 
   const avatarDisplayUrl = card.participant?.avatarUrl || card.avatarUrl || null;
   const leadingRole = p.strongRole || p.pedagogicalRole;
@@ -487,6 +499,27 @@ export function ParticipantCardModal({
 
                 </select>
 
+              </label>
+
+              <label className="adm-field">
+                <span className="adm-label">Группа при регистрации</span>
+                <select
+                  className="adm-input"
+                  value={p.groupId ?? ''}
+                  onChange={async e => {
+                    const v = e.target.value;
+                    await adminFetch(`/participants/${p.id}/group`, {
+                      method: 'PATCH',
+                      body: JSON.stringify({ groupId: v ? Number(v) : null }),
+                    });
+                    onReloadCard();
+                  }}
+                >
+                  <option value="">— без группы</option>
+                  {registrationGroups.map(g => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
               </label>
 
               <div className="adm-field-row">Сильная / рост: {p.strongRole || '—'} / {p.growthRole || '—'}</div>

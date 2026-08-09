@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { eq, desc, and, inArray, count, asc, isNull, isNotNull, sql, gte, lte, or, ilike, like } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  participants, directions, thematicTags, programPlaces, programBlockTypes, programSpeakers,
+  participants, directions, participantGroups, thematicTags, programPlaces, programBlockTypes, programSpeakers,
   forumSettings, dayFocus, scheduleDays,
   events, tasks, taskCategories, questions, questionOptions, taskSubmissions, taskTeamConfirmations, exchangeQuestions,
   exchangeAnswers, eventAttendance, materials, materialTypes, kbDayUnlocks,
@@ -113,6 +113,76 @@ export const updateParticipantDirection = async (req: AdminRequest, res: Respons
     .set({ directionId: dir.id, direction: dir.name })
     .where(eq(participants.id, id)).returning();
   if (!updated) { res.status(404).json({ error: 'Participant not found' }); return; }
+  res.json({ participant: updated });
+};
+
+/** Admin override: assign / clear registration group (capacity not enforced). */
+export const updateParticipantGroup = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: 'Invalid participant id' });
+    return;
+  }
+  const [existing] = await db.select({
+    id: participants.id,
+    shiftId: participants.shiftId,
+    groupId: participants.groupId,
+    groupName: participants.groupName,
+  }).from(participants).where(eq(participants.id, id)).limit(1);
+  if (!existing) {
+    res.status(404).json({ error: 'Participant not found' });
+    return;
+  }
+
+  const raw = req.body?.groupId;
+  if (raw === null || raw === '' || raw === undefined) {
+    const [updated] = await db.update(participants)
+      .set({ groupId: null, groupName: null })
+      .where(eq(participants.id, id))
+      .returning();
+    const { logAdminAction } = await import('../services/adminActionsLog.js');
+    await logAdminAction({
+      req,
+      actionType: 'participant_group_clear',
+      section: 'participants',
+      objectId: id,
+      oldValue: { groupId: existing.groupId, groupName: existing.groupName },
+      newValue: { groupId: null, groupName: null },
+      isCritical: true,
+    });
+    res.json({ participant: updated });
+    return;
+  }
+
+  const groupId = Number(raw);
+  if (!Number.isFinite(groupId) || groupId <= 0) {
+    res.status(400).json({ error: 'Invalid groupId' });
+    return;
+  }
+  const shiftId = existing.shiftId ?? await resolveAdminShiftId(req);
+  const [group] = await db.select().from(participantGroups).where(and(
+    eq(participantGroups.id, groupId),
+    eq(participantGroups.shiftId, shiftId),
+  )).limit(1);
+  if (!group) {
+    res.status(400).json({ error: 'Группа не найдена на этой смене' });
+    return;
+  }
+
+  const [updated] = await db.update(participants)
+    .set({ groupId: group.id, groupName: group.name })
+    .where(eq(participants.id, id))
+    .returning();
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req,
+    actionType: 'participant_group_set',
+    section: 'participants',
+    objectId: id,
+    oldValue: { groupId: existing.groupId, groupName: existing.groupName },
+    newValue: { groupId: group.id, groupName: group.name },
+    isCritical: true,
+  });
   res.json({ participant: updated });
 };
 

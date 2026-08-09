@@ -40,6 +40,7 @@ router.post('/participants/copy-to-shift', requireAdminRole('settings'), wrap(sh
 router.post('/participants/:id/points/adjust', requireAdminRole('moderate'), wrap(admin.adjustParticipantPoints));
 router.post('/participants', requireAdminRole('settings'), wrap(admin.createParticipant));
 router.patch('/participants/:id/direction', requireAdminRole('settings'), wrap(admin.updateParticipantDirection));
+router.patch('/participants/:id/group', requireAdminRole('settings'), wrap(admin.updateParticipantGroup));
 router.patch('/participants/:id/role', requireAdminRole('settings'), wrap(admin.updateParticipantRole));
 router.post('/participants/:id/restore', requireAdminRole('settings'), wrap(admin.restoreParticipantAccount));
 router.post('/participants/:id/remove-from-program', requireAdminRole('moderate'), wrap(admin.removeParticipantFromProgram));

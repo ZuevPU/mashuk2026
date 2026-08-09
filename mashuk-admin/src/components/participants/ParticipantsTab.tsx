@@ -23,6 +23,7 @@ type ParticipantRow = {
   lastName: string;
   directionId?: number | null;
   direction?: string;
+  groupId?: number | null;
   groupName?: string | null;
   region?: string | null;
   pedagogicalRole?: string | null;
@@ -124,7 +125,8 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
         setHiddenTotal(res.totalCount || 0);
       }
       setDirections((await adminFetch('/directions')).directions || []);
-      setGroups((await adminFetch('/participants/groups')).groups || []);
+      // Full shift catalog (not only groups that already have members)
+      setGroups((await adminFetch('/groups')).groups || []);
       setShiftOptions((await adminFetch('/shifts')).shifts || []);
     } finally {
       setLoading(false);
@@ -409,7 +411,22 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
                   {directions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </td>
-              <td>{p.groupName || '—'}</td>
+              <td onClick={e => e.stopPropagation()}>
+                <select
+                  className="adm-input adm-input-narrow"
+                  value={p.groupId ?? ''}
+                  onChange={e => {
+                    const v = e.target.value;
+                    act(() => adminFetch(`/participants/${p.id}/group`, {
+                      method: 'PATCH',
+                      body: JSON.stringify({ groupId: v ? Number(v) : null }),
+                    }).then(reloadPage), 'Группа обновлена');
+                  }}
+                >
+                  <option value="">—</option>
+                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+              </td>
               <td>{p.region || '—'}</td>
               <td onClick={e => e.stopPropagation()}>
                 <select
