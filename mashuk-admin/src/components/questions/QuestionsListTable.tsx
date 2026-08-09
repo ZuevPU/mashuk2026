@@ -14,6 +14,7 @@ type Props = {
   onEdit: (q: AdminQuestion) => void;
   onDuplicate: (id: number) => void;
   onViewAnswers: (q: AdminQuestion) => void;
+  onNotify?: (q: AdminQuestion) => void;
   onViewPracticesResults?: (q: AdminQuestion) => void;
   onCopyToDay: (id: number) => void;
   onHide: (id: number) => void;
@@ -35,6 +36,7 @@ function QuestionRows({
   onEdit,
   onDuplicate,
   onViewAnswers,
+  onNotify,
   onViewPracticesResults,
   onCopyToDay,
   onHide,
@@ -84,6 +86,16 @@ function QuestionRows({
                 )
               ) : (
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {onNotify && (
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-secondary adm-btn-sm"
+                      onClick={() => onNotify(q)}
+                      title="Отправить участникам уведомление со ссылкой на вопрос"
+                    >
+                      Оповестить
+                    </button>
+                  )}
                   {isPractices && onViewPracticesResults && (
                     <button
                       type="button"
@@ -96,6 +108,7 @@ function QuestionRows({
                   <RowActionsMenu
                     actions={[
                       { label: 'Редактировать', onClick: () => onEdit(q) },
+                      ...(onNotify ? [{ label: 'Оповестить участников', onClick: () => onNotify(q) }] : []),
                       { label: 'Дублировать', onClick: () => onDuplicate(q.id) },
                       { label: 'Просмотр ответов', onClick: () => onViewAnswers(q) },
                       ...(isPractices && onViewPracticesResults
@@ -170,6 +183,7 @@ export function QuestionsListTable({
   onEdit,
   onDuplicate,
   onViewAnswers,
+  onNotify,
   onViewPracticesResults,
   onCopyToDay,
   onHide,
@@ -216,6 +230,7 @@ export function QuestionsListTable({
     onEdit,
     onDuplicate,
     onViewAnswers,
+    onNotify,
     onViewPracticesResults,
     onCopyToDay,
     onHide,

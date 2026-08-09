@@ -143,6 +143,7 @@ router.post('/questions', requireAdminRole('settings'), wrap(admin.crudQuestions
 router.patch('/questions/:id', requireAdminRole('settings'), wrap(admin.crudQuestions.update));
 router.delete('/questions/:id', requireAdminRole('delete'), wrap(admin.crudQuestions.delete));
 router.post('/questions/:id/duplicate', requireAdminRole('settings'), wrap(admin.crudQuestions.duplicate));
+router.post('/questions/:id/notify', requireAdminRole('settings'), wrap(admin.crudQuestions.notify));
 router.post('/questions/:id/copy-to-day', requireAdminRole('settings'), wrap(admin.crudQuestions.copyToDay));
 router.post('/questions/copy-selected', requireAdminRole('settings'), wrap(admin.copyQuestionsSelected));
 router.get('/questions/:id/versions', wrap(admin.crudQuestions.listVersions));

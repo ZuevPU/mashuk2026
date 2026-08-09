@@ -150,14 +150,28 @@ export async function sendMiniAppNotification(vkId: number, text: string): Promi
   return map.get(vkId) ?? { ok: false, status: 'error: empty_response' };
 }
 
+export type PushDeliveryOpts = {
+  /** Deep link hash inside mini-app, e.g. `#/questions?q=12` */
+  appLinkHash?: string;
+};
+
 /** Ссылка на мини-приложение в конце ЛС (не PUBLIC_URL / backend). */
-export function pushAppLinkSuffix(): string {
+export function pushAppLinkSuffix(hashPath?: string): string {
   const url = (env.VK_MINI_APP_URL || 'https://vk.ru/app54662212').trim().replace(/\/+$/, '');
   if (!url) return '';
-  return `\n\nОткрыть приложение:\n${url}`;
+  let link = url;
+  if (hashPath?.trim()) {
+    const h = hashPath.trim();
+    link = `${url}${h.startsWith('#') ? h : `#${h}`}`;
+  }
+  return `\n\nОткрыть:\n${link}`;
 }
 
-export async function sendCommunityMessage(vkId: number, text: string): Promise<VkApiResult> {
+export async function sendCommunityMessage(
+  vkId: number,
+  text: string,
+  opts?: PushDeliveryOpts,
+): Promise<VkApiResult> {
   if (!env.VK_COMMUNITY_TOKEN) {
     return { ok: false, status: 'skipped_no_community_token' };
   }
@@ -165,7 +179,7 @@ export async function sendCommunityMessage(vkId: number, text: string): Promise<
     return { ok: false, status: 'skipped_no_vk_id' };
   }
   const body = text.slice(0, 3900);
-  const message = (body + pushAppLinkSuffix()).slice(0, 4090);
+  const message = (body + pushAppLinkSuffix(opts?.appLinkHash)).slice(0, 4090);
   try {
     // Community tokens: peer_id + POST (GET truncates long messages / tokens).
     const r = await vkCall('messages.send', {
@@ -205,12 +219,13 @@ async function finalizeDelivery(
   text: string,
   mini: VkApiResult,
   logContext?: string,
+  opts?: PushDeliveryOpts,
 ): Promise<string> {
   const parts: string[] = [];
   if (mini.ok) parts.push(mini.status);
 
   if (env.VK_COMMUNITY_TOKEN) {
-    const comm = await sendCommunityMessage(vkId, text);
+    const comm = await sendCommunityMessage(vkId, text, opts);
     parts.push(comm.status);
   } else if (!mini.ok) {
     // No community token: keep previous fallback semantics for diagnostics.
@@ -232,10 +247,15 @@ async function finalizeDelivery(
   return status;
 }
 
-export async function deliverToVkUser(vkId: number, text: string, logContext?: string): Promise<string> {
+export async function deliverToVkUser(
+  vkId: number,
+  text: string,
+  logContext?: string,
+  opts?: PushDeliveryOpts,
+): Promise<string> {
   if (!vkId) return 'skipped_no_vk_id';
   const mini = await sendMiniAppNotification(vkId, text);
-  return finalizeDelivery(vkId, text, mini, logContext);
+  return finalizeDelivery(vkId, text, mini, logContext, opts);
 }
 
 /** При одном participantId возвращает итоговый delivery_status. */
@@ -243,6 +263,7 @@ export async function sendPushNotification(
   participantIds: number[],
   text: string,
   triggerType: string,
+  opts?: PushDeliveryOpts,
 ): Promise<string | undefined> {
   const hasAnyToken = !!(env.VK_SERVICE_TOKEN || env.VK_COMMUNITY_TOKEN);
   let lastStatus: string | undefined;
@@ -310,6 +331,7 @@ export async function sendPushNotification(
       text,
       mini,
       `trigger=${triggerType}`,
+      opts,
     );
     lastStatus = deliveryStatus;
     await db.insert(pushLog).values({

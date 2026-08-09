@@ -8,7 +8,9 @@ import {
   adminActionsLog,
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
-import { notifyAllParticipants } from '../services/pushService.js';
+import { sendPushNotification } from '../services/pushService.js';
+import { resolveBroadcastParticipantIds } from '../services/pushAudienceResolve.js';
+import { questionAudienceAllowsParticipant } from '../services/questionEligibility.js';
 import {
   questionCreateSchema, questionUpdateSchema, parseBody,
   copyQuestionsSelectedSchema, copyQuestionToDaySchema, reorderQuestionOptionsSchema,
@@ -19,6 +21,49 @@ import {
 } from '../services/questionAdminHelpers.js';
 import { TOUCHPOINT_SLOTS, windowsForDay } from '../services/touchpointTemplates.js';
 import { formatQuestionTimeWindow } from '../services/reflectionTypeLabel.js';
+
+function buildQuestionNotifyText(title: string, adminText?: string | null): string {
+  const head = `Тебя ждёт новый вопрос: «${title}»`;
+  const extra = (adminText || '').trim();
+  if (extra) return `${head}\n\n${extra}`;
+  return `${head}\n\nОткройте приложение, чтобы ответить.`;
+}
+
+async function resolveQuestionNotifyAudience(
+  q: typeof questions.$inferSelect,
+): Promise<number[]> {
+  const baseIds = await resolveBroadcastParticipantIds(q.shiftId);
+  if (!baseIds.length) return [];
+  if ((q.audienceType || 'all') === 'all') return baseIds;
+
+  const rows = await db.select({
+    id: participants.id,
+    directionId: participants.directionId,
+    direction: participants.direction,
+    groupId: participants.groupId,
+    pedagogicalRole: participants.pedagogicalRole,
+    strongRole: participants.strongRole,
+  }).from(participants).where(inArray(participants.id, baseIds));
+
+  return rows
+    .filter(p => questionAudienceAllowsParticipant(q, p))
+    .map(p => p.id);
+}
+
+async function notifyQuestionAudience(
+  q: typeof questions.$inferSelect,
+  adminText?: string | null,
+  triggerType = 'question_notify',
+): Promise<{ sentTo: number; text: string }> {
+  const ids = await resolveQuestionNotifyAudience(q);
+  const text = buildQuestionNotifyText(q.title, adminText);
+  if (ids.length) {
+    await sendPushNotification(ids, text, triggerType, {
+      appLinkHash: `#/questions?q=${q.id}`,
+    });
+  }
+  return { sentTo: ids.length, text };
+}
 
 function participantDisplayName(p: typeof participants.$inferSelect | null): string | undefined {
   if (!p) return undefined;
@@ -228,8 +273,7 @@ export const crudQuestions = {
     if (!values.status) values.status = 'draft';
     const [q] = await db.insert(questions).values({ ...values, shiftId }).returning();
     if (q.pushOnPublish && q.status === 'published') {
-      const msg = q.pushTemplate?.trim() || `Новая точка: «${q.title}». Откройте в приложении.`;
-      await notifyAllParticipants(msg, 'question_publish');
+      await notifyQuestionAudience(q, q.pushTemplate, 'question_publish');
     }
     res.json({ question: serializeAdminQuestion(q, 0) });
   },
@@ -317,10 +361,41 @@ export const crudQuestions = {
     const wasPublished = before.status === 'published';
     const isPublished = updated?.status === 'published';
     if (updated?.pushOnPublish && isPublished && !wasPublished) {
-      const msg = updated.pushTemplate?.trim() || `Новая точка: «${updated.title}». Откройте в приложении.`;
-      await notifyAllParticipants(msg, 'question_publish');
+      await notifyQuestionAudience(updated, updated.pushTemplate, 'question_publish');
     }
     res.json({ question: serializeAdminQuestion(updated!, Number(answerCount)), versioned: false });
+  },
+
+  notify: async (req: AdminRequest, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id < 1) {
+      res.status(400).json({ error: 'Некорректный id вопроса' });
+      return;
+    }
+    const [q] = await db.select().from(questions).where(eq(questions.id, id)).limit(1);
+    if (!q) {
+      res.status(404).json({ error: 'Вопрос не найден' });
+      return;
+    }
+    const adminText = typeof req.body?.text === 'string' ? req.body.text : '';
+    const { sentTo, text } = await notifyQuestionAudience(q, adminText, `question_notify_${q.id}`);
+    const { logAdminAction } = await import('../services/adminActionsLog.js');
+    await logAdminAction({
+      req,
+      actionType: 'question_notify',
+      section: 'questions',
+      objectId: id,
+      newValue: { sentTo, preview: text.slice(0, 200) },
+    });
+    res.json({
+      ok: true,
+      sentTo,
+      previewText: text,
+      appLinkHash: `#/questions?q=${q.id}`,
+      message: sentTo
+        ? `Уведомление отправлено ${sentTo} участникам аудитории вопроса`
+        : 'Нет участников в аудитории вопроса для отправки',
+    });
   },
 
   delete: async (req: AdminRequest, res: Response) => {

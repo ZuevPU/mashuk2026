@@ -53,6 +53,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
   const [answersModal, setAnswersModal] = useState<{ open: boolean; title: string; loading: boolean; rows: any[] }>({
     open: false, title: '', loading: false, rows: [],
   });
+  const [notifyModal, setNotifyModal] = useState<{ q: AdminQuestion; text: string } | null>(null);
 
   const [answerConfirmForm, setAnswerConfirmForm] = useState<AnswerConfirmForm>({
     enabled: true,
@@ -335,6 +336,25 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
     adminFetch(`/questions/${q.id}/answers?limit=50`)
       .then(r => setAnswersModal(m => ({ ...m, loading: false, rows: r.answers || [] })))
       .catch(() => setAnswersModal(m => ({ ...m, loading: false, rows: [] })));
+  };
+
+  const openNotify = (q: AdminQuestion) => {
+    setNotifyModal({
+      q,
+      text: `Пожалуйста, ответьте на вопрос «${q.title}».`,
+    });
+  };
+
+  const sendNotify = () => {
+    if (!notifyModal) return;
+    const { q, text } = notifyModal;
+    act(async () => {
+      await adminFetch(`/questions/${q.id}/notify`, {
+        method: 'POST',
+        body: JSON.stringify({ text: text.trim() }),
+      });
+      setNotifyModal(null);
+    }, 'Уведомление отправлено');
   };
 
   const bulkCopy = () => {
@@ -747,6 +767,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
             onEdit={openEdit}
             onDuplicate={duplicateQuestion}
             onViewAnswers={viewAnswers}
+            onNotify={openNotify}
             onViewPracticesResults={(q) => {
               setPracticesResultsId(q.id);
               setPracticesResultsTitle(q.title);
@@ -757,6 +778,42 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
             onOpenModeration={setTab ? () => setTab('moderation') : undefined}
           />
         </>
+      )}
+
+      {notifyModal && (
+        <div className="adm-modal-backdrop" onClick={() => setNotifyModal(null)}>
+          <div className="card" style={{ maxWidth: 480, width: '100%' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Оповестить участников</h3>
+            <p className="adm-muted" style={{ fontSize: 13, marginTop: 0 }}>
+              Вопрос: <strong>{notifyModal.q.title}</strong>
+              <br />
+              Уйдёт аудитории этого вопроса + ссылка на него в мини-приложении.
+            </p>
+            <p className="adm-muted" style={{ fontSize: 12 }}>
+              В начале сообщения автоматически будет:
+              <br />
+              «Тебя ждёт новый вопрос: «{notifyModal.q.title}»»
+            </p>
+            <label className="adm-field">
+              <span className="adm-label">Текст от администратора</span>
+              <textarea
+                className="adm-input"
+                rows={4}
+                value={notifyModal.text}
+                onChange={e => setNotifyModal(m => (m ? { ...m, text: e.target.value } : m))}
+                placeholder="Ваш текст для участников"
+              />
+            </label>
+            <div className="form-row" style={{ marginTop: 12 }}>
+              <button type="button" className="adm-btn adm-btn-primary" onClick={sendNotify}>
+                Отправить
+              </button>
+              <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setNotifyModal(null)}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <QuestionAnswersModal
