@@ -247,6 +247,7 @@ body {
     display: block;
     position: fixed;
     inset: 0;
+    /* Below the drawer so the menu stays clickable; above workspace content */
     z-index: 45;
     border: none;
     background: rgba(0, 0, 0, 0.28);
@@ -256,6 +257,7 @@ body {
     position: fixed;
     left: 0;
     top: 0;
+    z-index: 50;
     transform: translateX(-105%);
     transition: transform 0.22s ease;
     box-shadow: 8px 0 32px rgba(0, 0, 0, 0.12);
@@ -263,6 +265,10 @@ body {
   }
   .admin-shell--nav-open .admin-sidebar {
     transform: translateX(0);
+  }
+  /* Keep hamburger above the dimmer so the menu can be closed without hunting the overlay */
+  .admin-shell--nav-open .admin-topbar {
+    z-index: 48;
   }
   .admin-main { padding: 20px 16px 48px; }
   .admin-topbar { padding: 10px 14px; }

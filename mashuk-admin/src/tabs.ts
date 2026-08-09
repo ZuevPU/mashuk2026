@@ -13,6 +13,7 @@ export type Tab =
   | 'moderation'
   | 'data'
   | 'levels'
+  | 'hub'
   | 'analytics'
   | 'exports'
   | 'push'
@@ -24,7 +25,7 @@ export type Tab =
 
 export const TAB_ORDER: Tab[] = [
   'participants', 'directions', 'onboarding', 'forum', 'shifts', 'events', 'speakers', 'knowledge', 'tasks', 'questions',
-  'moderation', 'piggybank', 'rating', 'data', 'levels', 'analytics', 'exports', 'push', 'recommendation-tags', 'admins', 'journal', 'medals',
+  'moderation', 'piggybank', 'rating', 'data', 'levels', 'hub', 'analytics', 'exports', 'push', 'recommendation-tags', 'admins', 'journal', 'medals',
 ];
 
 export const TAB_LABELS: Record<Tab, string> = {
@@ -43,6 +44,7 @@ export const TAB_LABELS: Record<Tab, string> = {
   piggybank: 'Копилка',
   data: 'Данные',
   levels: 'Система баллов',
+  hub: 'Штаб',
   analytics: 'Дашборды',
   exports: 'Выгрузки',
   push: 'Уведомления',
@@ -72,7 +74,7 @@ export const NAV_GROUPS: { id: string; label: string; tabs: Tab[] }[] = [
   {
     id: 'insights',
     label: 'Аналитика',
-    tabs: ['analytics', 'exports', 'data'],
+    tabs: ['hub', 'analytics', 'exports', 'data'],
   },
   {
     id: 'system',

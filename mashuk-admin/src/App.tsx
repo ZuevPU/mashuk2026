@@ -17,6 +17,7 @@ import { ExportsTab } from './components/exports/ExportsTab';
 import { InsightsChrome } from './components/insights/InsightsChrome';
 import { InsightsProvider } from './components/insights/InsightsContext';
 import { ForumTab } from './components/forum/ForumTab';
+import { HubTab } from './components/hub/HubTab';
 import { JournalTab } from './components/journal/JournalTab';
 import { KnowledgeTab } from './components/knowledge/KnowledgeTab';
 import { LevelsTab } from './components/levels/LevelsTab';
@@ -90,6 +91,23 @@ export const App = () => {
 
   useEffect(() => {
     if (getAdminToken()) setIsAuthenticated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNavOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navOpen]);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth > 960) setNavOpen(false);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   useEffect(() => {
@@ -341,6 +359,7 @@ export const App = () => {
           )}
           {tab === 'data' && <DataTab {...tabProps} />}
           {tab === 'levels' && <LevelsTab {...tabProps} />}
+          {tab === 'hub' && <HubTab {...tabProps} onOpenCard={openParticipantCard} />}
           {(tab === 'analytics' || tab === 'exports') && (
             <InsightsProvider
               adminFetch={adminFetch}

@@ -13,6 +13,7 @@ import * as piggyAdmin from '../controllers/adminPiggybankController.js';
 import { adminUploadImage } from '../controllers/pushBannerController.js';
 import { uploadAdminFile } from '../controllers/uploadController.js';
 import * as analyticsCtrl from '../controllers/analyticsController.js';
+import * as hubCtrl from '../controllers/hubController.js';
 import * as exportsCtrl from '../controllers/exportController.js';
 import * as exportCustomCtrl from '../controllers/exportCustomController.js';
 import * as shiftsCtrl from '../controllers/adminShiftController.js';
@@ -267,6 +268,9 @@ router.get('/analytics/forum-clubs', P('analytics', 'read'), wrap(analyticsCtrl.
 router.patch('/analytics/forum-clubs/:id', requireAdminRole('settings'), wrap(analyticsCtrl.patchForumClubHandler));
 router.post('/analytics/recalculate', requireAdminRole('settings'), wrap(admin.triggerAnalyticsRecalc));
 router.post('/analytics/refresh', requireAdminRole('settings'), wrap(analyticsCtrl.postAnalyticsRefreshHandler));
+router.get('/analytics/hub/forum', P('analytics', 'read'), wrap(hubCtrl.getHubForumHandler));
+router.get('/analytics/hub/piggybank-matrix', P('analytics', 'read'), wrap(hubCtrl.getHubPiggybankMatrixHandler));
+router.get('/analytics/hub/participant-feed', P('analytics', 'read'), wrap(hubCtrl.getHubParticipantFeedHandler));
 router.post('/push/send', requireAdminRole('settings'), wrap(admin.sendManualPush));
 router.get('/push/log', wrap(admin.listPushLog));
 router.get('/push/notifications', wrap(pushAdmin.listPushNotifications));
