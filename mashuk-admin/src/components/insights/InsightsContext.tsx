@@ -15,6 +15,7 @@ export type DashboardId =
   | 'direction'
   | 'evening'
   | 'after-blocks'
+  | 'participant-profile'
   | 'portrait'
   | 'program'
   | 'activity'
@@ -29,7 +30,7 @@ export type DashboardId =
 function normalizeDashboardId(id: string | undefined | null): DashboardId {
   if (id === 'state-checks') return 'pulse';
   const allowed: DashboardId[] = [
-    'pulse', 'direction', 'evening', 'after-blocks', 'portrait', 'program',
+    'pulse', 'direction', 'evening', 'after-blocks', 'participant-profile', 'portrait', 'program',
     'activity', 'piggybank', 'semantic', 'clubs', 'departure', 'overview', 'roles',
   ];
   if (id && (allowed as string[]).includes(id)) return id as DashboardId;

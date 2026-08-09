@@ -212,7 +212,7 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     assert.equal(meta.status, 200);
     assert.ok(meta.body.refreshMs);
     assert.ok(Array.isArray(meta.body.dashboardCatalog));
-    assert.equal(meta.body.dashboardCatalog.length, 13);
+    assert.equal(meta.body.dashboardCatalog.length, 14);
 
     const pulse = await request(app)
       .get('/api/admin/analytics/dashboards/pulse?mode=day&day=1')
@@ -220,6 +220,15 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     assert.equal(pulse.status, 200);
     assert.ok(pulse.body.activity);
     assert.ok(pulse.body.emotionalPulse);
+
+    const profile = await request(app)
+      .get('/api/admin/analytics/dashboards/participant-profile?mode=day&day=1')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(profile.status, 200);
+    assert.ok(profile.body.sample);
+    assert.ok(profile.body.typical);
+    assert.ok(Array.isArray(profile.body.segments));
+    assert.ok(Array.isArray(profile.body.recommendations));
   });
 
   it('GET /exports/meta and POST /exports/custom', async () => {

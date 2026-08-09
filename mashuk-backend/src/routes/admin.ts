@@ -249,6 +249,7 @@ router.get('/analytics/dashboards/after-blocks', P('analytics', 'read'), wrap(an
 router.get('/analytics/dashboards/state-checks', P('analytics', 'read'), wrap(analyticsCtrl.getStateCheckDashboardHandler));
 router.get('/analytics/dashboards/direction', P('analytics', 'read'), wrap(analyticsCtrl.getDirectionDashboardHandler));
 router.get('/analytics/dashboards/portrait', P('analytics', 'read'), wrap(analyticsCtrl.getPortraitDashboardHandler));
+router.get('/analytics/dashboards/participant-profile', P('analytics', 'read'), wrap(analyticsCtrl.getParticipantProfileDashboardHandler));
 router.get('/analytics/dashboards/program', P('analytics', 'read'), wrap(analyticsCtrl.getProgramDashboardHandler));
 router.get('/analytics/dashboards/activity', P('analytics', 'read'), wrap(analyticsCtrl.getActivityDashboardHandler));
 router.get('/analytics/dashboards/piggybank', P('analytics', 'read'), wrap(analyticsCtrl.getPiggybankDashboardHandler));

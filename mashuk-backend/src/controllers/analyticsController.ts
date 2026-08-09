@@ -16,6 +16,7 @@ import { buildDirectionDashboard } from '../services/analytics/directionDashboar
 import { buildActivityDashboard } from '../services/analytics/activityDashboard.js';
 import { buildPiggybankDashboard } from '../services/analytics/piggybankDashboard.js';
 import { buildSemanticDashboard, buildClubsDashboard } from '../services/analytics/semanticDashboard.js';
+import { buildParticipantProfileDashboard } from '../services/analytics/participantProfileDashboard.js';
 import { refreshAllAnalytics } from '../services/analytics/refreshScheduler.js';
 import { db } from '../db/index.js';
 import { forumClubs } from '../db/schema.js';
@@ -89,6 +90,11 @@ export async function getDirectionDashboardHandler(req: AdminRequest, res: Respo
 export async function getPortraitDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
   const filters = await resolveAnalyticsFilters(req);
   res.json(await buildPortraitDashboard(filters, req));
+}
+
+export async function getParticipantProfileDashboardHandler(req: AdminRequest, res: Response): Promise<void> {
+  const filters = await resolveAnalyticsFilters(req);
+  res.json(await buildParticipantProfileDashboard(filters, req));
 }
 
 export async function getProgramDashboardHandler(req: AdminRequest, res: Response): Promise<void> {

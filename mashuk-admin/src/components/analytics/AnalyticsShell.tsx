@@ -16,6 +16,7 @@ import {
   PulseView,
   SemanticView,
 } from './analyticsDashboardViews';
+import { ParticipantProfileView } from './ParticipantProfileView';
 import { CHART_HELP_RU, formatForumDay } from './chartRu';
 import { DashCard, DashScreenTitle, RoleMatrixGrid } from './dashboardUi';
 import { roleName } from '../onboarding/roleOptions';
@@ -47,6 +48,7 @@ function xlsxExportPath(dash: DashboardId): string | null {
   if (dash === 'evening') return '/exports/evening-summary';
   if (dash === 'after-blocks') return '/exports/after-blocks';
   if (dash === 'direction') return '/exports/direction-pack';
+  if (dash === 'participant-profile') return '/exports/participants';
   // pulse / activity / program / departure use slice CTAs only
   return null;
 }
@@ -116,6 +118,30 @@ function sliceExportCtas(
         label: 'Скачать полный пакет направления',
         path: `/exports/direction-pack${qs({ mode: 'day', day, direction, group: group || undefined })}`,
         file: `direction_d${day}.xlsx`,
+      },
+    ];
+  }
+  if (dash === 'participant-profile') {
+    return [
+      {
+        label: 'Полный портрет · участники',
+        path: `/exports/participants${cohort}`,
+        file: `participant_profile_d${day}.xlsx`,
+      },
+      {
+        label: 'Проверка состояния',
+        path: `/exports/state-checks${cohort}`,
+        file: `state_checks_d${day}.xlsx`,
+      },
+      {
+        label: 'Итоговая анкета вечера',
+        path: `/exports/evening-summary${qs({ mode: 'day', day })}`,
+        file: `evening_summary_d${day}.xlsx`,
+      },
+      {
+        label: 'Рефлексии',
+        path: `/exports/reflections${cohort}`,
+        file: `reflections_d${day}.xlsx`,
       },
     ];
   }
@@ -492,6 +518,7 @@ export function AnalyticsShell({ adminFetch, act, reloadKey, onOpenCard }: Analy
           {dash === 'direction' && <DirectionView data={data} onOpenCard={onOpenCard} />}
           {dash === 'evening' && <EveningView data={data} onOpenCard={onOpenCard} />}
           {dash === 'after-blocks' && <AfterBlocksView data={data} onOpenCard={onOpenCard} />}
+          {dash === 'participant-profile' && <ParticipantProfileView data={data} />}
           {dash === 'portrait' && <PortraitView data={data} onOpenCard={onOpenCard} />}
           {dash === 'program' && <ProgramView data={data} />}
           {dash === 'activity' && <ActivityView data={data} onOpenRating={() => setTab('rating')} />}

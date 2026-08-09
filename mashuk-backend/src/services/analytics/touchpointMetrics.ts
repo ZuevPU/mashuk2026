@@ -206,6 +206,92 @@ export async function buildTouchpointThresholdCoverage(
   return { slotsTotal, byDay, byDirectionDay };
 }
 
+export type ParticipantTouchpointScore = {
+  participantId: number;
+  direction: string;
+  /** Среднее число закрытых слотов за дни среза */
+  avgCompleted: number;
+  /** Доля от 7 слотов, 0–100 */
+  activityPct: number;
+  /** Есть ли хоть один день с ответами по точкам / зарегистрирован */
+  hasData: boolean;
+  dayScores: { day: number; completed: number }[];
+};
+
+/**
+ * Уровень участника: сколько из 7 точек закрыто по дням среза (без N+1).
+ */
+export async function buildParticipantTouchpointEngagement(
+  cohort: { id: number; direction?: string | null; onboardingCompletedAt?: Date | null }[],
+  days: number[],
+  shiftId?: number | null,
+): Promise<{ slotsTotal: number; scores: ParticipantTouchpointScore[] }> {
+  const slotsTotal = TOUCHPOINT_SLOTS.length;
+  const registered = cohort.filter(p => p.onboardingCompletedAt);
+  const ids = registered.map(p => p.id);
+
+  if (!days.length || !ids.length) {
+    return {
+      slotsTotal,
+      scores: registered.map(p => ({
+        participantId: p.id,
+        direction: (p.direction || '—').trim() || '—',
+        avgCompleted: 0,
+        activityPct: 0,
+        hasData: false,
+        dayScores: days.map(day => ({ day, completed: 0 })),
+      })),
+    };
+  }
+
+  const qRows = shiftId != null
+    ? await db.select().from(questions).where(eq(questions.shiftId, shiftId))
+    : await db.select().from(questions);
+  const published = qRows.filter(q => isPublishedStatus(q.status));
+  const tpQs = published.filter(q => days.some(d => isTouchpointQuestionForForumDay(q, d)));
+  const tpQIds = tpQs.map(q => q.id);
+
+  const ans = tpQIds.length
+    ? await db.select({
+      participantId: answers.participantId,
+      questionId: answers.questionId,
+    }).from(answers).where(and(
+      inArray(answers.participantId, ids),
+      inArray(answers.questionId, tpQIds),
+    ))
+    : [];
+
+  const answeredByPid = new Map<number, Set<number>>();
+  for (const a of ans) {
+    if (!answeredByPid.has(a.participantId)) answeredByPid.set(a.participantId, new Set());
+    answeredByPid.get(a.participantId)!.add(a.questionId);
+  }
+
+  const scores: ParticipantTouchpointScore[] = registered.map(p => {
+    const answeredIds = answeredByPid.get(p.id) ?? new Set<number>();
+    const dayScores = days.map(day => {
+      const { completed } = touchpointCompletionRatio(tpQs, answeredIds, day);
+      return { day, completed };
+    });
+    const sum = dayScores.reduce((s, d) => s + d.completed, 0);
+    const avgCompleted = days.length ? Math.round((sum / days.length) * 10) / 10 : 0;
+    const activityPct = slotsTotal
+      ? Math.round((avgCompleted / slotsTotal) * 1000) / 10
+      : 0;
+    const hasData = dayScores.some(d => d.completed > 0) || answeredIds.size > 0;
+    return {
+      participantId: p.id,
+      direction: (p.direction || '—').trim() || '—',
+      avgCompleted,
+      activityPct,
+      hasData,
+      dayScores,
+    };
+  });
+
+  return { slotsTotal, scores };
+}
+
 export async function activityByDaySeries(
   participantIds: number[],
   days: number[],
