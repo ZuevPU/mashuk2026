@@ -22,13 +22,6 @@ import {
 import { TOUCHPOINT_SLOTS, windowsForDay } from '../services/touchpointTemplates.js';
 import { formatQuestionTimeWindow } from '../services/reflectionTypeLabel.js';
 
-function buildQuestionNotifyText(title: string, adminText?: string | null): string {
-  const head = `Тебя ждёт новый вопрос: «${title}»`;
-  const extra = (adminText || '').trim();
-  if (extra) return `${head}\n\n${extra}`;
-  return `${head}\n\nОткройте приложение, чтобы ответить.`;
-}
-
 async function resolveQuestionNotifyAudience(
   q: typeof questions.$inferSelect,
 ): Promise<number[]> {
@@ -50,13 +43,15 @@ async function resolveQuestionNotifyAudience(
     .map(p => p.id);
 }
 
+/** Sends exactly `messageText` (+ deep link suffix in delivery). Empty text = no send. */
 async function notifyQuestionAudience(
   q: typeof questions.$inferSelect,
-  adminText?: string | null,
+  messageText?: string | null,
   triggerType = 'question_notify',
 ): Promise<{ sentTo: number; text: string }> {
+  const text = (messageText || '').trim();
+  if (!text) return { sentTo: 0, text: '' };
   const ids = await resolveQuestionNotifyAudience(q);
-  const text = buildQuestionNotifyText(q.title, adminText);
   if (ids.length) {
     await sendPushNotification(ids, text, triggerType, {
       appLinkHash: `#/questions?q=${q.id}`,
@@ -377,7 +372,11 @@ export const crudQuestions = {
       res.status(404).json({ error: 'Вопрос не найден' });
       return;
     }
-    const adminText = typeof req.body?.text === 'string' ? req.body.text : '';
+    const adminText = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+    if (!adminText) {
+      res.status(400).json({ error: 'Введите текст сообщения для участников' });
+      return;
+    }
     const { sentTo, text } = await notifyQuestionAudience(q, adminText, `question_notify_${q.id}`);
     const { logAdminAction } = await import('../services/adminActionsLog.js');
     await logAdminAction({

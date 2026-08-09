@@ -339,19 +339,21 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
   };
 
   const openNotify = (q: AdminQuestion) => {
-    setNotifyModal({
-      q,
-      text: `Пожалуйста, ответьте на вопрос «${q.title}».`,
-    });
+    setNotifyModal({ q, text: '' });
   };
 
   const sendNotify = () => {
     if (!notifyModal) return;
     const { q, text } = notifyModal;
+    const trimmed = text.trim();
+    if (!trimmed) {
+      alert('Введите текст сообщения для участников');
+      return;
+    }
     act(async () => {
       await adminFetch(`/questions/${q.id}/notify`, {
         method: 'POST',
-        body: JSON.stringify({ text: text.trim() }),
+        body: JSON.stringify({ text: trimmed }),
       });
       setNotifyModal(null);
     }, 'Уведомление отправлено');
@@ -787,21 +789,16 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
             <p className="adm-muted" style={{ fontSize: 13, marginTop: 0 }}>
               Вопрос: <strong>{notifyModal.q.title}</strong>
               <br />
-              Уйдёт аудитории этого вопроса + ссылка на него в мини-приложении.
-            </p>
-            <p className="adm-muted" style={{ fontSize: 12 }}>
-              В начале сообщения автоматически будет:
-              <br />
-              «Тебя ждёт новый вопрос: «{notifyModal.q.title}»»
+              Участникам уйдёт ровно ваш текст + ссылка на этот вопрос в мини-приложении.
             </p>
             <label className="adm-field">
-              <span className="adm-label">Текст от администратора</span>
+              <span className="adm-label">Текст сообщения</span>
               <textarea
                 className="adm-input"
-                rows={4}
+                rows={5}
                 value={notifyModal.text}
                 onChange={e => setNotifyModal(m => (m ? { ...m, text: e.target.value } : m))}
-                placeholder="Ваш текст для участников"
+                placeholder="Напишите сообщение, которое получат участники"
               />
             </label>
             <div className="form-row" style={{ marginTop: 12 }}>
