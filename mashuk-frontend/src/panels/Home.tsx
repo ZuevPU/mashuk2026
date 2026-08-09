@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Panel, PanelHeader, Group, Spinner, Snackbar, Div } from '@vkontakte/vkui';
+import {
+  Panel, PanelHeader, Group, Spinner, Snackbar, Div,
+  ModalRoot, ModalPage, ModalPageHeader,
+} from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
 import { useRouteNavigator, useActiveVkuiLocation } from '@vkontakte/vk-mini-apps-router';
 import { useAppModal } from '../App';
@@ -12,7 +15,7 @@ import {
   UnansweredAfterBlocksCard, PracticesHomeCard,
 } from '../components/home/DashboardCards';
 import { PushBanner, type PushBannerItem } from '../components/home/PushBanner';
-import { EveningQuestionnaire, type EveningQuestionnaireProps } from '../components/home/EveningQuestionnaire';
+import { EveningDaySummaryFlow } from '../components/questions/EveningDaySummaryFlow';
 import { apiGet, ApiError } from '../api/client';
 import { isEveningDaySummaryQuestion } from '../utils/eveningSummaryQuestion';
 
@@ -63,13 +66,14 @@ interface HomeData {
     status: string;
     roleName?: string;
   } | null;
-  eveningQuestionnaire: {
+  eveningQuestionnaire?: {
     available: boolean;
     open?: boolean;
     opensAt?: string | null;
     forcePublished?: boolean;
     completed: boolean;
-  } & EveningQuestionnaireProps['questionnaire'];
+    dayNumber?: number;
+  } | null;
   missedQuestions: { id: number; title: string; closeTime: string; expired?: boolean; overdue?: boolean }[];
   unansweredAfterBlocks?: { id: number; title: string; overdue?: boolean }[];
   practicesSection?: {
@@ -171,6 +175,33 @@ export const HomePanel: React.FC<{
     if (params.get('evening') === '1') setShowEvening(true);
   }, []);
 
+  /** Итоговая анкета — отдельное модальное окно (как на «Вопросах»), не в ленте главной. */
+  useEffect(() => {
+    if (activePanel !== id) {
+      if (showEvening) setShowEvening(false);
+      return;
+    }
+    if (!showEvening) return;
+
+    const closeEvening = () => setShowEvening(false);
+    setModal(
+      <ModalRoot activeModal="evening" onClose={closeEvening}>
+        <ModalPage id="evening" settlingHeight={100} onClose={closeEvening}>
+          <ModalPageHeader>Итоговая анкета</ModalPageHeader>
+          <EveningDaySummaryFlow
+            onClose={closeEvening}
+            onSubmitted={() => {
+              closeEvening();
+              setSnackbar('Итоговая анкета сохранена · +15 Путь');
+              reload();
+            }}
+          />
+        </ModalPage>
+      </ModalRoot>,
+    );
+    return () => setModal(null);
+  }, [showEvening, activePanel, id, setModal]);
+
   const piggyCaptureOpts = (onSaved?: () => void) => ({
     onSaved,
     onError: (message: string) => setSnackbar(message),
@@ -219,27 +250,6 @@ export const HomePanel: React.FC<{
     scheduleList = scheduleList.filter(ev => ev.kind !== 'soon');
   }
   const pushBanners = (d.activePushBanners ?? []).filter(b => !dismissedBanners.includes(b.id));
-
-  const eveningQuestionnaireBlock = showEvening ? (
-    d.eveningQuestionnaire?.available ? (
-      <EveningQuestionnaire
-        currentDay={d.eveningQuestionnaire?.dayNumber ?? d.currentDay}
-        questionnaire={d.eveningQuestionnaire}
-        experiment={d.experiment}
-        onClose={() => setShowEvening(false)}
-        onSubmitted={() => {
-          setShowEvening(false);
-          setSnackbar('Итоговая анкета сохранена · +15 Путь');
-          reload();
-        }}
-      />
-    ) : (
-      <div className="m-card" style={{ fontSize: 13 }}>
-        Итоговая анкета откроется в {d.eveningQuestionnaire?.opensAt || '22:00'} МСК.
-        {d.eveningQuestionnaire?.completed && ' Вы уже заполнили анкету за сегодня.'}
-      </div>
-    )
-  ) : null;
 
   return (
     <Panel id={id}>
@@ -349,8 +359,6 @@ export const HomePanel: React.FC<{
             onClick={() => setShowEvening(true)}
           />
         )}
-
-        {eveningQuestionnaireBlock}
 
         {showQuick && (
           <div className="m-card">
