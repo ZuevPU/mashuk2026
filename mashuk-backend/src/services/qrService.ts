@@ -107,17 +107,23 @@ export function resolveParticipantAppBase(): string {
   return 'https://vk.ru/app54662212';
 }
 
-/** Phone-camera URL: PUBLIC_URL/q/CODE → redirect into mini-app #/scan?qr= */
-export function buildTaskQrUrl(_baseUrl: string, _taskId: number, token: string): string {
+/** Phone-camera URL: PUBLIC_URL/q/CODE → redirect into mini-app task page with QR applied. */
+export function buildTaskQrUrl(_baseUrl: string, taskId: number, token: string): string {
   const code = normalizeTaskQrCode(token) || token;
   const pub = env.PUBLIC_URL?.trim();
   if (pub) return `${pub.replace(/\/$/, '')}/q/${encodeURIComponent(code)}`;
-  return `${resolveParticipantAppBase()}/#/scan?qr=${encodeURIComponent(code)}`;
+  return buildTaskScanDeepLink(code, taskId);
 }
 
-export function buildTaskScanDeepLink(code: string): string {
+/** Deep link after /q/:code redirect (or fallback). Opens task; QR is applied client-side, not shown. */
+export function buildTaskScanDeepLink(code: string, taskId?: number): string {
   const normalized = normalizeTaskQrCode(code) || code;
-  return `${resolveParticipantAppBase()}/#/scan?qr=${encodeURIComponent(normalized)}`;
+  const base = resolveParticipantAppBase();
+  if (taskId && Number.isFinite(taskId) && taskId > 0) {
+    return `${base}/#/tasks?task=${taskId}&qr=${encodeURIComponent(normalized)}`;
+  }
+  // Legacy: resolve task on #/scan without auto-submit
+  return `${base}/#/scan?qr=${encodeURIComponent(normalized)}`;
 }
 
 /**

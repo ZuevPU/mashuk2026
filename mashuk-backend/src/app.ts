@@ -90,7 +90,7 @@ export function createApp() {
     }
   });
 
-  // Phone-camera short link → VK mini-app #/scan?qr=
+  // Phone-camera short link → VK mini-app #/tasks?task=&qr= (code applied, not shown)
   app.get('/q/:code', async (req, res, next) => {
     try {
       const { redirectTaskQr } = await import('./controllers/tasksController.js');

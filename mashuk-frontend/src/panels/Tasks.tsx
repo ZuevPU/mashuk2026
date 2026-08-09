@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Panel, PanelHeader, Group, Spinner, Button, Textarea, ModalRoot, ModalPage, ModalPageHeader, Snackbar, Input, Radio, Checkbox } from '@vkontakte/vkui';
 import { useActiveVkuiLocation } from '@vkontakte/vk-mini-apps-router';
 import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { uploadTaskPhoto } from '../utils/uploadPhoto';
 import { extractTaskQrToken } from '../utils/qrDeepLink';
-import { decodeQrFromImageFile } from '../utils/decodeQrFromImage';
 import { getDeviceKey } from '../utils/deviceKey';
+import { clearPendingTaskQr, peekPendingTaskQr, setPendingTaskQr } from '../utils/launchParams';
 import { useAppModal } from '../App';
 import { EmptyState } from '../components/EmptyState';
 import {
@@ -13,6 +13,24 @@ import {
   type SubmitSuccessPayload,
   type AnswerConfirmationConfig,
 } from '../components/questions/AnswerSuccessOverlay';
+
+/** Strip ?qr= from hash so the code is not visible in the address bar. */
+function stripQrFromHash(): void {
+  try {
+    const hash = window.location.hash.replace(/^#/, '');
+    const qIdx = hash.indexOf('?');
+    if (qIdx < 0) return;
+    const path = hash.slice(0, qIdx);
+    const params = new URLSearchParams(hash.slice(qIdx + 1));
+    if (!params.has('qr')) return;
+    params.delete('qr');
+    const qs = params.toString();
+    const base = window.location.pathname + window.location.search;
+    window.history.replaceState(null, '', `${base}#${path}${qs ? `?${qs}` : ''}`);
+  } catch {
+    /* ignore */
+  }
+}
 
 const TASK_SUBMIT_CONFIRM: AnswerConfirmationConfig = {
   enabled: true,
@@ -205,92 +223,47 @@ const TaskSubmitModal = ({
   const [teamResults, setTeamResults] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<{ id: number; firstName: string; lastName: string }[]>([]);
   const [scannedQr, setScannedQr] = useState('');
-  const [qrPaste, setQrPaste] = useState('');
   const [selectedChoice, setSelectedChoice] = useState('');
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [qrDecoding, setQrDecoding] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const autoQrSubmitRef = useRef(false);
-  const qrFileRef = useRef<HTMLInputElement>(null);
-  const qrGalleryRef = useRef<HTMLInputElement>(null);
   const methods = taskMethodsFromMeta(meta);
   const answerType = meta?.answerType || (methods.includes('photo') ? 'text_and_photo' : 'text');
   const answerOptions: Array<{ label: string; value: string }> = meta?.answerOptions || [];
-  const qrFromHash = getHashSearchParams().get('qr');
-  const effectiveQr = scannedQr || qrFromHash || meta?._scannedQr || '';
+  const effectiveQr = scannedQr || meta?._scannedQr || '';
 
   useEffect(() => {
-    setScannedQr(meta?._scannedQr || '');
-    setQrPaste('');
+    const fromMeta = meta?._scannedQr || '';
+    const pending = peekPendingTaskQr();
+    const pendingForTask = pending && (!pending.taskId || pending.taskId === taskId)
+      ? extractTaskQrToken(pending.qr)
+      : '';
+    const fromHash = extractTaskQrToken(getHashSearchParams().get('qr') || '');
+    const token = fromMeta || pendingForTask || fromHash || '';
+    if (token) {
+      setScannedQr(token);
+      setPendingTaskQr(token, taskId || undefined);
+      stripQrFromHash();
+    } else {
+      setScannedQr('');
+    }
     setSelectedChoice('');
     setSelectedMulti([]);
     setAnswerText('');
     setPhotoUrl(null);
     setSubmitting(false);
     setFormError(null);
-    autoQrSubmitRef.current = false;
   }, [taskId, meta?._scannedQr]);
 
-  /** Top-layer portal card (above VK ModalPage). Keep submit modal open unless closing. */
-  const showQrOverlay = useCallback((payload: SubmitSuccessPayload) => {
-    onSubmitSuccess(payload);
-  }, [onSubmitSuccess]);
-
-  const applyScannedQr = useCallback((raw: string) => {
-    const token = extractTaskQrToken(raw);
-    if (!token) {
-      showQrOverlay({
-        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Не удалось прочитать QR', showPoints: false },
-        detail: 'Нужен код МШК-…… с таблички или ссылка /q/… — либо откройте QR обычной камерой телефона.',
-        tone: 'error',
-        xpAwarded: 0,
-        track: 'experience',
-      });
-      return false;
-    }
-    setScannedQr(token);
-    setQrPaste(raw.trim());
-    setFormError(null);
-    return true;
-  }, [showQrOverlay]);
-
-  const handleQrImageFile = useCallback(async (file: File | null) => {
-    if (!file) return;
-    setQrDecoding(true);
-    try {
-      const raw = await decodeQrFromImageFile(file);
-      if (!raw) {
-        showQrOverlay({
-          confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'QR на фото не найден', showPoints: false },
-          detail: 'Снимите QR крупнее при хорошем свете, без бликов. Или выберите чёткое фото из галереи / вставьте ссылку с QR.',
-          tone: 'error',
-          xpAwarded: 0,
-          track: 'experience',
-        });
-        return;
-      }
-      applyScannedQr(raw);
-    } catch {
-      showQrOverlay({
-        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Не удалось прочитать фото', showPoints: false },
-        detail: 'Попробуйте другое фото или вставьте ссылку с QR.',
-        tone: 'error',
-        xpAwarded: 0,
-        track: 'experience',
-      });
-    } finally {
-      setQrDecoding(false);
-    }
-  }, [applyScannedQr, showQrOverlay]);
-
   const finishSuccess = useCallback((payload: SubmitSuccessPayload) => {
+    clearPendingTaskQr();
     onClose();
     onSubmitSuccess(payload);
     onSuccess();
   }, [onClose, onSubmitSuccess, onSuccess]);
 
   const finishAlreadySubmitted = useCallback((message: string) => {
+    clearPendingTaskQr();
     onClose();
     onSubmitSuccess({
       confirm: {
@@ -312,54 +285,6 @@ const TaskSubmitModal = ({
     return answerText.trim();
   }, [answerType, selectedChoice, selectedMulti, answerText]);
 
-  const submitQrTask = useCallback(async (qrValue: string) => {
-    if (!taskId || !qrValue || submitting) return;
-    setSubmitting(true);
-    setFormError(null);
-    try {
-      const res = await apiPost<{
-        xpAwarded?: number;
-        track?: 'path' | 'experience';
-        submission?: { status?: string };
-      }>(`/tasks/${taskId}/submit`, {
-        answerText: 'Готово',
-        qrToken: qrValue,
-        deviceKey: getDeviceKey(),
-      });
-      const xp = res.xpAwarded ?? 0;
-      const status = res.submission?.status || (xp > 0 ? 'approved' : 'pending');
-      const approved = status === 'approved' || xp > 0;
-      finishSuccess({
-        confirm: {
-          ...TASK_SUBMIT_CONFIRM,
-          titleTemplate: approved ? 'QR-задание выполнено' : 'QR принят — на проверке',
-          showPoints: xp > 0,
-        },
-        detail: approved
-          ? (xp > 0 ? `Начислено +${xp} опыта` : 'Задание подтверждено')
-          : 'Организаторы проверят ответ. Баллы придут после подтверждения.',
-        tone: approved ? 'success' : 'info',
-        xpAwarded: xp,
-        track: res.track ?? 'experience',
-      });
-    } catch (err) {
-      const msg = err instanceof ApiError ? err.message : 'Ошибка отправки';
-      if (err instanceof ApiError && isTaskAlreadySubmittedError(msg)) {
-        finishAlreadySubmitted(msg);
-        return;
-      }
-      showQrOverlay({
-        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Сканирование не принято', showPoints: false },
-        detail: msg,
-        tone: 'error',
-        xpAwarded: 0,
-        track: 'experience',
-      });
-      setFormError(msg);
-      setSubmitting(false);
-    }
-  }, [taskId, submitting, finishSuccess, finishAlreadySubmitted, showQrOverlay]);
-
   const needsFreeText = answerType === 'text' || answerType === 'text_and_photo';
   const needsPhoto = answerType === 'photo' || answerType === 'text_and_photo';
   const isChoice = answerType === 'choice';
@@ -368,13 +293,7 @@ const TaskSubmitModal = ({
   const needsTeam = methods.includes('team');
   const isQr = methods.includes('qr');
   const isAuto = methods.length === 0;
-
-  useEffect(() => {
-    if (!isQr || !effectiveQr || needsPhoto || needsPostUrl || needsTeam || needsFreeText || isChoice || isMulti) return;
-    if (autoQrSubmitRef.current) return;
-    autoQrSubmitRef.current = true;
-    void submitQrTask(effectiveQr);
-  }, [isQr, effectiveQr, needsPhoto, needsPostUrl, needsTeam, needsFreeText, isChoice, isMulti, submitQrTask]);
+  const needsAnswerFields = needsFreeText || needsPhoto || needsPostUrl || needsTeam || isChoice || isMulti;
 
   useEffect(() => {
     if (!needsTeam || teamSearch.trim().length < 2) {
@@ -408,7 +327,7 @@ const TaskSubmitModal = ({
 
   const handleSubmit = async () => {
     if (!taskId || submitting) return;
-    if (answerType === 'text' && !answerText.trim()) {
+    if (answerType === 'text' && !answerText.trim() && !(isQr && effectiveQr)) {
       setFormError('Введите текст ответа');
       return;
     }
@@ -484,80 +403,12 @@ const TaskSubmitModal = ({
             </div>
           )}
           {isQr && (
-            <div style={{ fontSize: 13, marginBottom: 8 }}>
+            <div style={{ fontSize: 13, marginBottom: 12, lineHeight: 1.45 }}>
               {effectiveQr
-                ? 'Код распознан — начисляем баллы…'
-                : 'Отсканируйте QR обычной камерой телефона — откроется мини-приложение и баллы начислятся сами. Не сканируется? Введите код с таблички (МШК-…).'}
-              <Input
-                style={{ marginTop: 10 }}
-                value={qrPaste}
-                placeholder="МШК-A7K2X9 или код с таблички"
-                onChange={e => setQrPaste(e.target.value)}
-              />
-              <Button
-                size="l"
-                mode="primary"
-                stretched
-                style={{ marginTop: 8 }}
-                onClick={() => {
-                  if (!qrPaste.trim()) {
-                    showQrOverlay({
-                      confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Введите код', showPoints: false },
-                      detail: 'Код напечатан под QR на табличке (вид МШК-……).',
-                      tone: 'info',
-                      xpAwarded: 0,
-                      track: 'experience',
-                    });
-                    return;
-                  }
-                  applyScannedQr(qrPaste);
-                }}
-              >
-                Подтвердить код
-              </Button>
-              <input
-                ref={qrFileRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  const file = e.target.files?.[0] || null;
-                  e.target.value = '';
-                  void handleQrImageFile(file);
-                }}
-              />
-              <input
-                ref={qrGalleryRef}
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  const file = e.target.files?.[0] || null;
-                  e.target.value = '';
-                  void handleQrImageFile(file);
-                }}
-              />
-              <Button
-                size="m"
-                mode="tertiary"
-                stretched
-                loading={qrDecoding}
-                style={{ marginTop: 8 }}
-                onClick={() => qrFileRef.current?.click()}
-              >
-                Прочитать QR с фото
-              </Button>
-              <Button
-                size="m"
-                mode="tertiary"
-                stretched
-                loading={qrDecoding}
-                style={{ marginTop: 6 }}
-                onClick={() => qrGalleryRef.current?.click()}
-              >
-                Выбрать фото из галереи
-              </Button>
+                ? (needsAnswerFields
+                  ? 'Спасибо, QR принят. Вставьте ваш ответ и отправьте на проверку.'
+                  : 'Спасибо, QR принят. Нажмите «Отправить», чтобы завершить задание.')
+                : 'Отсканируйте QR обычной камерой телефона — откроется это задание, код применится сам (его не видно — так честнее). Затем отправьте ответ.'}
             </div>
           )}
           {isChoice && answerOptions.map(opt => (
@@ -645,13 +496,15 @@ const TaskSubmitModal = ({
             onClick={() => void handleSubmit()}
             style={{ marginTop: 12 }}
             loading={submitting}
-            disabled={submitting || (isChoice && !selectedChoice) || (isMulti && selectedMulti.length === 0) || (answerType === 'text' && !answerText.trim()) || (needsPhoto && !photoUrl) || (isQr && !effectiveQr)}
+            disabled={submitting || (isChoice && !selectedChoice) || (isMulti && selectedMulti.length === 0) || (answerType === 'text' && !answerText.trim() && !(isQr && effectiveQr)) || (needsPhoto && !photoUrl) || (isQr && !effectiveQr)}
           >
             {submitting
               ? 'Отправляем…'
-              : isAuto || (isQr && effectiveQr)
+              : isAuto
                 ? 'Подтвердить'
-                : 'Отправить на проверку'}
+                : isQr && effectiveQr && !needsAnswerFields
+                  ? 'Отправить'
+                  : 'Отправить на проверку'}
           </Button>
         </div>
       </Group>
@@ -669,15 +522,22 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
   const [error, setError] = useState<string | null>(null);
   const [submitTaskId, setSubmitTaskId] = useState<number | null>(null);
   const [submitTaskMeta, setSubmitTaskMeta] = useState<any>(null);
-  const [codeEntryOpen, setCodeEntryOpen] = useState(false);
-  const [manualCode, setManualCode] = useState('');
-  const [manualSubmitting, setManualSubmitting] = useState(false);
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [successPayload, setSuccessPayload] = useState<SubmitSuccessPayload | null>(null);
 
   const openSubmit = useCallback((task: any) => {
+    const pending = peekPendingTaskQr();
+    const fromHash = extractTaskQrToken(getHashSearchParams().get('qr') || '');
+    const pendingForTask = pending && (!pending.taskId || pending.taskId === task.id)
+      ? extractTaskQrToken(pending.qr)
+      : '';
+    const token = task._scannedQr || pendingForTask || fromHash || '';
+    if (token) {
+      setPendingTaskQr(token, task.id);
+      stripQrFromHash();
+    }
     setSubmitTaskId(task.id);
-    setSubmitTaskMeta(task);
+    setSubmitTaskMeta(token ? { ...task, _scannedQr: token } : task);
   }, []);
 
   const load = useCallback(() => {
@@ -691,48 +551,6 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
       .finally(() => setLoading(false));
   }, [filter]);
 
-  const submitManualCode = useCallback(async () => {
-    const code = extractTaskQrToken(manualCode);
-    if (!code) {
-      setSuccessPayload({
-        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'Введите код', showPoints: false },
-        detail: 'Код напечатан под QR на табличке (вид МШК-……).',
-        tone: 'info',
-        xpAwarded: 0,
-        track: 'experience',
-      });
-      return;
-    }
-    setManualSubmitting(true);
-    try {
-      const res = await apiPost<{ points?: number; xpAwarded?: number; taskTitle?: string }>('/tasks/scan', {
-        qr: code,
-        deviceKey: getDeviceKey(),
-      });
-      const points = res.points ?? res.xpAwarded ?? 0;
-      setCodeEntryOpen(false);
-      setManualCode('');
-      setSuccessPayload({
-        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'QR засчитан', showPoints: points > 0 },
-        detail: res.taskTitle || undefined,
-        tone: 'success',
-        xpAwarded: points,
-        track: 'experience',
-      });
-      load();
-    } catch (err) {
-      setSuccessPayload({
-        confirm: { ...TASK_SUBMIT_CONFIRM, titleTemplate: 'QR не засчитан', showPoints: false },
-        detail: err instanceof ApiError ? err.message : 'Не удалось подтвердить код',
-        tone: 'error',
-        xpAwarded: 0,
-        track: 'experience',
-      });
-    } finally {
-      setManualSubmitting(false);
-    }
-  }, [manualCode, load]);
-
   useEffect(() => {
     const teamConfirm = getHashSearchParams().get('teamConfirm');
     if (!teamConfirm) return;
@@ -745,8 +563,10 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
 
   useEffect(() => {
     const taskId = getHashSearchParams().get('task');
-    if (!taskId || !data?.tasks) return;
-    const task = data.tasks.find((t: { id: number }) => String(t.id) === taskId);
+    const pending = peekPendingTaskQr();
+    const targetId = taskId || (pending?.taskId ? String(pending.taskId) : null);
+    if (!targetId || !data?.tasks) return;
+    const task = data.tasks.find((t: { id: number }) => String(t.id) === targetId);
     if (task && (task.status === 'available' || task.canResubmit)) {
       openSubmit(task);
     }
@@ -755,7 +575,6 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
   useEffect(() => {
     if (activePanel !== id) {
       if (submitTaskId) setSubmitTaskId(null);
-      if (codeEntryOpen) setCodeEntryOpen(false);
       setModal(null);
       return;
     }
@@ -772,39 +591,12 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
           />
         </ModalRoot>
       );
-    } else if (codeEntryOpen) {
-      setModal(
-        <ModalRoot activeModal="qr-code-entry" onClose={() => setCodeEntryOpen(false)}>
-          <ModalPage id="qr-code-entry" settlingHeight={60} onClose={() => setCodeEntryOpen(false)}>
-            <ModalPageHeader>Ввести код QR</ModalPageHeader>
-            <Group>
-              <div style={{ fontSize: 13, marginBottom: 10, padding: '0 4px' }}>
-                Не сканируется? Введите код с таблички (МШК-……) — тот же, что под QR.
-              </div>
-              <Input
-                value={manualCode}
-                placeholder="МШК-A7K2X9"
-                onChange={e => setManualCode(e.target.value)}
-              />
-              <Button
-                size="l"
-                stretched
-                loading={manualSubmitting}
-                style={{ marginTop: 12 }}
-                onClick={() => { void submitManualCode(); }}
-              >
-                Подтвердить
-              </Button>
-            </Group>
-          </ModalPage>
-        </ModalRoot>
-      );
     } else {
       setModal(null);
     }
   }, [
-    submitTaskId, submitTaskMeta, codeEntryOpen, manualCode, manualSubmitting,
-    load, setModal, activePanel, id, submitManualCode,
+    submitTaskId, submitTaskMeta,
+    load, setModal, activePanel, id,
   ]);
 
   useEffect(() => {
@@ -884,13 +676,6 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
                   {f.label}
                 </button>
               ))}
-              <button
-                type="button"
-                className="tasks-filter-chip tasks-filter-chip--scan"
-                onClick={() => { setCodeEntryOpen(true); setManualCode(''); }}
-              >
-                Ввести код
-              </button>
             </div>
             {categories.length > 0 && (
               <div className="tasks-filter-row tasks-filter-row--cats">

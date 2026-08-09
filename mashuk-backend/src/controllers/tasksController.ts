@@ -511,7 +511,50 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
 };
 
 /**
- * Camera / manual deep-link scan: body { qr } only.
+ * Resolve QR → task without submitting. Used after phone-camera scan so the
+ * client can open the task form with the code applied invisibly.
+ */
+export const resolveTaskQr = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const raw = typeof req.body?.qr === 'string' ? req.body.qr : '';
+    const code = normalizeTaskQrCode(raw);
+    if (!code) {
+      res.status(400).json({ error: 'Укажите код QR' });
+      return;
+    }
+
+    const task = await findTaskByQrCode(code);
+    if (!task) {
+      res.status(404).json({ error: 'QR-код не найден' });
+      return;
+    }
+
+    const methods = taskMethodsForParticipant(task);
+    if (!methods.includes('qr') && task.confirmationType !== 'qr') {
+      res.status(400).json({ error: 'Это задание не подтверждается QR' });
+      return;
+    }
+
+    const now = new Date();
+    if (!isQrInValidWindow(task, now)) {
+      res.status(400).json({ error: 'QR-код задания сейчас не активен' });
+      return;
+    }
+
+    res.json({
+      taskId: task.id,
+      taskTitle: task.title,
+      /** Normalized token for client to send later on submit (never shown in UI). */
+      qrToken: task.qrToken || code,
+    });
+  } catch (error) {
+    console.error('resolveTaskQr:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Legacy instant-complete scan: body { qr }. Prefer resolve + submit with answer.
  * Identity comes from vkAuth launch-params HMAC (middleware), never from the body.
  */
 export const scanTask = async (req: ParticipantRequest, res: Response): Promise<void> => {
@@ -540,6 +583,7 @@ export const scanTask = async (req: ParticipantRequest, res: Response): Promise<
       ...(typeof req.body === 'object' && req.body ? req.body : {}),
       qrToken: task.qrToken,
       deviceKey: typeof req.body?.deviceKey === 'string' ? req.body.deviceKey : undefined,
+      answerText: typeof req.body?.answerText === 'string' ? req.body.answerText : 'Готово',
     };
 
     const originalJson = res.json.bind(res);
@@ -582,7 +626,7 @@ export const redirectTaskQr = async (req: { params: { code?: string } }, res: Re
       res.status(404).send('QR not found');
       return;
     }
-    res.redirect(302, buildTaskScanDeepLink(task.qrToken || code));
+    res.redirect(302, buildTaskScanDeepLink(task.qrToken || code, task.id));
   } catch (error) {
     console.error('redirectTaskQr:', error);
     res.status(500).send('Error');

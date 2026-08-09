@@ -143,11 +143,12 @@ export const App = () => {
         const params = getHashSearchParams();
         const q = params.get('q');
         const task = params.get('task');
-        const qr = params.get('qr') || peekPendingTaskQr();
+        const pending = peekPendingTaskQr();
+        const qr = params.get('qr') || pending?.qr || null;
+        const taskFromPending = task || (pending?.taskId ? String(pending.taskId) : null);
         if (q) routeNavigator.push(`/questions?q=${q}`);
-        else if (qr && !task) routeNavigator.push(`/scan?qr=${encodeURIComponent(qr)}`);
-        else if (task && qr) routeNavigator.push(`/tasks?task=${task}&qr=${encodeURIComponent(qr)}`);
-        else if (task) routeNavigator.push(`/tasks?task=${task}`);
+        else if (taskFromPending && qr) routeNavigator.push(`/tasks?task=${taskFromPending}&qr=${encodeURIComponent(qr)}`);
+        else if (taskFromPending) routeNavigator.push(`/tasks?task=${taskFromPending}`);
         else if (qr) routeNavigator.push(`/scan?qr=${encodeURIComponent(qr)}`);
       }
     } catch (error) {
