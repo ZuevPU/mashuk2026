@@ -44,6 +44,7 @@ import {
 import { TouchpointCoveragePanel } from './TouchpointCoveragePanel';
 import { ExchangeAnalyticsPanel } from './ExchangeAnalyticsPanel';
 import { EveningScaleAverages } from './EveningScaleAverages';
+import { EveningDirectionHeatmap } from './EveningDirectionHeatmap';
 import { EnergyAverages } from './EnergyAverages';
 import { PracticeRecommendNpsTable } from './PracticeRecommendNpsTable';
 
@@ -1498,6 +1499,12 @@ export function EveningView({
         overallAvg={data.scaleOverallAvg}
         byDay={data.scaleByDay}
         byDirectionDay={data.scaleByDirectionDay}
+      />
+
+      <EveningDirectionHeatmap
+        byDirection={data.scaleByDirection}
+        byDirectionDay={data.scaleByDirectionDay}
+        forumOverallAvg={data.scaleOverallAvg}
       />
 
       <PracticeRecommendNpsTable

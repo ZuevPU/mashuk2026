@@ -984,6 +984,21 @@ export const updateForumSettings = async (req: AdminRequest, res: Response): Pro
       ...(body.roleDiagnosticsConfig as Record<string, unknown>),
     });
   }
+  if (body.exchangeLimits !== undefined) {
+    const {
+      normalizeExchangeLimitsInput,
+      syncExchangePointsToLevelsConfig,
+    } = await import('../services/exchangeLimits.js');
+    const normalized = normalizeExchangeLimitsInput(body.exchangeLimits);
+    if (!normalized) {
+      res.status(400).json({
+        error: 'exchangeLimits: maxQuestionsTotal, maxAnswersForPoints, pointsPerQuestion, pointsPerAnswer required (0…10000)',
+      });
+      return;
+    }
+    body.exchangeLimits = normalized;
+    await syncExchangePointsToLevelsConfig(normalized);
+  }
   const shiftPatch = pickShiftOpPatch(body);
   const updated = Object.keys(shiftPatch).length
     ? await updateShift(shiftId, shiftPatch)
@@ -2081,7 +2096,15 @@ export const moderateExchange = async (req: AdminRequest, res: Response): Promis
 
   if (moderationStatus === 'approved' && before.moderationStatus !== 'approved' && updated) {
     const { awardPoints } = await import('../services/pointsService.js');
-    await awardPoints(updated.participantId, 'exchange_question');
+    const { getExchangeLimitsConfig } = await import('../services/exchangeLimits.js');
+    const exchangeCfg = await getExchangeLimitsConfig();
+    await awardPoints(
+      updated.participantId,
+      'exchange_question',
+      exchangeCfg.pointsPerQuestion,
+      undefined,
+      { ignoreMaxAccruals: true },
+    );
   }
 
   const { logAdminAction } = await import('../services/adminActionsLog.js');
@@ -2128,6 +2151,41 @@ export const deleteExchangeQuestion = async (req: AdminRequest, res: Response): 
   });
 
   res.json({ ok: true, id });
+};
+
+export const deleteExchangeAnswer = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.answerId);
+  if (!Number.isFinite(id) || id < 1) {
+    res.status(400).json({ error: 'Invalid answerId' });
+    return;
+  }
+
+  const [before] = await db.select().from(exchangeAnswers).where(eq(exchangeAnswers.id, id)).limit(1);
+  if (!before) {
+    res.status(404).json({ error: 'Answer not found' });
+    return;
+  }
+
+  // Удаляем вложенные комментарии к ответу, затем сам ответ
+  await db.delete(exchangeAnswers).where(eq(exchangeAnswers.parentAnswerId, id));
+  await db.delete(exchangeAnswers).where(eq(exchangeAnswers.id, id));
+
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req,
+    actionType: 'exchange_answer_delete',
+    section: 'moderation',
+    objectId: id,
+    oldValue: {
+      text: before.text,
+      participantId: before.participantId,
+      questionId: before.questionId,
+      parentAnswerId: before.parentAnswerId ?? null,
+    },
+    isCritical: true,
+  });
+
+  res.json({ ok: true, id, questionId: before.questionId });
 };
 
 async function mapExchangeAdminRows(

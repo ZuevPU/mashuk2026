@@ -166,6 +166,7 @@ router.post('/questions/backfill-points', requireAdminRole('settings'), wrap(adm
 router.get('/exchange', wrap(admin.listAllExchange));
 router.get('/exchange/pending', wrap(admin.listPendingExchange));
 router.get('/exchange-answers', wrap(admin.listExchangeAnswers));
+router.delete('/exchange/answers/:answerId', requireAdminRole('moderate'), wrap(admin.deleteExchangeAnswer));
 router.patch('/exchange/:id', requireAdminRole('moderate'), wrap(admin.moderateExchange));
 router.delete('/exchange/:id', requireAdminRole('moderate'), wrap(admin.deleteExchangeQuestion));
 

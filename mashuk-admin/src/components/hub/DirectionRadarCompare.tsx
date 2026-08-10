@@ -32,6 +32,16 @@ const METRICS = [
 
 type MetricKey = (typeof METRICS)[number]['key'];
 
+const DIR_PALETTE = [
+  '#C53030', '#276749', '#2B6CB0', '#B7791F', '#6B46C1',
+  '#DD6B20', '#319795', '#C05621', '#2C5282', '#9B2C2C',
+  '#553C9A', '#285E61', '#744210', '#1A365D', '#97266D',
+];
+
+function isOrganizerDirection(name: string): boolean {
+  return name.trim().toLowerCase() === 'организатор форума';
+}
+
 function normalizePack(rows: DirectionMetricRow[]): Map<string, Record<MetricKey, number>> {
   const maxPoints = Math.max(1, ...rows.map(r => r.avgPoints || 0));
   const maxPiggy = Math.max(1, ...rows.map(r => r.piggyPerCapita || 0));
@@ -66,22 +76,25 @@ function RadarTooltip({
       padding: '8px 10px',
       fontSize: 12,
       boxShadow: '0 4px 12px rgba(0,0,0,.08)',
+      maxWidth: 320,
     }}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
-      {payload.map(p => (
-        <div key={String(p.name)} style={{ display: 'flex', gap: 8 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color, marginTop: 4 }} />
-          <span>{p.name}</span>
-          <span style={{ marginLeft: 'auto' }}>{Math.round(Number(p.value) || 0)}</span>
-        </div>
-      ))}
+      {[...payload]
+        .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+        .map(p => (
+          <div key={String(p.name)} style={{ display: 'flex', gap: 8 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color, marginTop: 4, flexShrink: 0 }} />
+            <span style={{ minWidth: 0 }}>{p.name}</span>
+            <span style={{ marginLeft: 'auto' }}>{Math.round(Number(p.value) || 0)}</span>
+          </div>
+        ))}
     </div>
   );
 }
 
 /**
- * Паутинка: прямое сравнение двух направлений по 5 ключевым метрикам (0–100).
- * Данные: hub directionMetrics.
+ * Паутинка: сравнение направлений по 5 ключевым метрикам (0–100).
+ * Все направления (кроме «Организатор форума») — чекбоксами; по умолчанию все включены.
  */
 export function DirectionRadarCompare({
   rows,
@@ -89,37 +102,62 @@ export function DirectionRadarCompare({
   rows?: DirectionMetricRow[] | null;
 }) {
   const list = useMemo(
-    () => [...(rows ?? [])].sort((a, b) => a.direction.localeCompare(b.direction, 'ru')),
+    () => [...(rows ?? [])]
+      .filter(r => r.direction && !isOrganizerDirection(r.direction))
+      .sort((a, b) => a.direction.localeCompare(b.direction, 'ru')),
     [rows],
   );
-  const [dirA, setDirA] = useState('');
-  const [dirB, setDirB] = useState('');
+
+  const allDirs = useMemo(() => list.map(r => r.direction), [list]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!list.length) return;
-    setDirA(prev => (list.some(r => r.direction === prev) ? prev : list[0].direction));
-    setDirB(prev => (
-      list.some(r => r.direction === prev)
-        ? prev
-        : (list[1]?.direction ?? list[0].direction)
-    ));
-  }, [list]);
+    setSelected(new Set(allDirs));
+  }, [allDirs.join('\u0001')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const visibleDirs = useMemo(
+    () => allDirs.filter(d => selected.has(d)),
+    [allDirs, selected],
+  );
 
   const norm = useMemo(() => normalizePack(list), [list]);
 
-  const chartData = useMemo(() => {
-    const na = norm.get(dirA);
-    const nb = norm.get(dirB);
-    return METRICS.map(m => ({
-      metric: m.label,
-      A: na ? Math.round(na[m.key]) : 0,
-      B: nb ? Math.round(nb[m.key]) : 0,
-    }));
-  }, [norm, dirA, dirB]);
+  const chartData = useMemo(() => METRICS.map(m => {
+    const row: Record<string, string | number> = { metric: m.label };
+    for (const dir of visibleDirs) {
+      const n = norm.get(dir);
+      row[dir] = n ? Math.round(n[m.key]) : 0;
+    }
+    return row;
+  }), [norm, visibleDirs]);
+
+  const colorByDir = useMemo(() => {
+    const map = new Map<string, string>();
+    allDirs.forEach((d, i) => map.set(d, DIR_PALETTE[i % DIR_PALETTE.length]));
+    return map;
+  }, [allDirs]);
+
+  const toggle = (dir: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(dir)) {
+        if (next.size <= 1) return next;
+        next.delete(dir);
+      } else {
+        next.add(dir);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => setSelected(new Set(allDirs));
+  const keepOne = () => {
+    if (allDirs[0]) setSelected(new Set([allDirs[0]]));
+  };
 
   if (list.length === 0) {
     return (
-      <DashCard title="Прямое сравнение двух направлений">
+      <DashCard title="Сравнение направлений">
         <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>
           Нет направлений для сравнения в текущем срезе.
         </p>
@@ -127,67 +165,94 @@ export function DirectionRadarCompare({
     );
   }
 
+  const chartHeight = Math.max(520, Math.min(720, 420 + visibleDirs.length * 12));
+
   return (
-    <DashCard title="Прямое сравнение двух направлений">
-      <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
-        5 показателей, нормировано 0–100
+    <DashCard title="Сравнение направлений">
+      <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 10, lineHeight: 1.45 }}>
+        5 показателей, нормировано 0–100. Снимите галочку, чтобы убрать направление с графика.
       </p>
-      <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 10, marginBottom: 8 }}>
-        <label className="adm-insights-filter">
-          A
-          <select
-            className="adm-input"
-            value={dirA}
-            onChange={e => setDirA(e.target.value)}
-          >
-            {list.map(r => (
-              <option key={r.direction} value={r.direction}>{r.direction}</option>
-            ))}
-          </select>
-        </label>
-        <label className="adm-insights-filter">
-          Б
-          <select
-            className="adm-input"
-            value={dirB}
-            onChange={e => setDirB(e.target.value)}
-          >
-            {list.map(r => (
-              <option key={r.direction} value={r.direction}>{r.direction}</option>
-            ))}
-          </select>
-        </label>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600 }}>Направления</span>
+        <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={selectAll}>Все</button>
+        <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={keepOne}>Сбросить</button>
+        <span className="adm-muted" style={{ fontSize: 12 }}>
+          выбрано {visibleDirs.length} из {allDirs.length}
+        </span>
       </div>
-      <ResponsiveContainer width="100%" height={300}>
-        <RadarChart data={chartData} cx="50%" cy="50%" outerRadius="70%">
-          <PolarGrid stroke="#e5e5ea" />
-          <PolarAngleAxis dataKey="metric" tick={{ fontSize: 11, fill: '#4b5563' }} />
-          <PolarRadiusAxis
-            angle={90}
-            domain={[0, 100]}
-            tick={{ fontSize: 10, fill: '#9ca3af' }}
-            axisLine={false}
-          />
-          <Tooltip content={<RadarTooltip />} />
-          <Radar
-            name={dirA || 'A'}
-            dataKey="A"
-            stroke="#C53030"
-            fill="#C53030"
-            fillOpacity={0.28}
-            isAnimationActive={false}
-          />
-          <Radar
-            name={dirB || 'Б'}
-            dataKey="B"
-            stroke="#276749"
-            fill="#276749"
-            fillOpacity={0.18}
-            isAnimationActive={false}
-          />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
-        </RadarChart>
-      </ResponsiveContainer>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+        {allDirs.map(dir => {
+          const on = selected.has(dir);
+          const color = colorByDir.get(dir) || '#64748b';
+          return (
+            <label
+              key={dir}
+              className="adm-forum-check"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 10px',
+                borderRadius: 8,
+                border: `1px solid ${on ? color : '#e5e5ea'}`,
+                background: on ? `${color}14` : '#fafafa',
+                cursor: 'pointer',
+                fontSize: 13,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={on}
+                onChange={() => toggle(dir)}
+                style={{ accentColor: color }}
+              />
+              <span style={{
+                width: 8,
+                height: 8,
+                borderRadius: 2,
+                background: color,
+                flexShrink: 0,
+              }}
+              />
+              {dir}
+            </label>
+          );
+        })}
+      </div>
+
+      <div style={{ width: '100%', minHeight: chartHeight }}>
+        <ResponsiveContainer width="100%" height={chartHeight}>
+          <RadarChart data={chartData} cx="50%" cy="50%" outerRadius="78%">
+            <PolarGrid stroke="#e5e5ea" />
+            <PolarAngleAxis dataKey="metric" tick={{ fontSize: 13, fill: '#374151' }} />
+            <PolarRadiusAxis
+              angle={90}
+              domain={[0, 100]}
+              tick={{ fontSize: 11, fill: '#9ca3af' }}
+              axisLine={false}
+            />
+            <Tooltip content={<RadarTooltip />} />
+            {visibleDirs.map(dir => {
+              const color = colorByDir.get(dir) || '#64748b';
+              return (
+                <Radar
+                  key={dir}
+                  name={dir}
+                  dataKey={dir}
+                  stroke={color}
+                  fill={color}
+                  fillOpacity={Math.max(0.06, 0.22 / Math.max(1, visibleDirs.length * 0.35))}
+                  strokeWidth={2}
+                  isAnimationActive={false}
+                />
+              );
+            })}
+            <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+          </RadarChart>
+        </ResponsiveContainer>
+      </div>
     </DashCard>
   );
 }

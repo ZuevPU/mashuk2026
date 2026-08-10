@@ -349,7 +349,7 @@ export const App = () => {
           {tab === 'knowledge' && <KnowledgeTab {...tabProps} onOpenCard={openParticipantCard} />}
           {tab === 'tasks' && <TasksTab {...tabProps} />}
           {tab === 'questions' && (
-            <QuestionsTab {...tabProps} />
+            <QuestionsTab {...tabProps} onOpenCard={openParticipantCard} />
           )}
           {tab === 'moderation' && (
             <ModerationTab {...tabProps} onOpenCard={openParticipantCard} />

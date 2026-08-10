@@ -111,20 +111,46 @@ export async function loadPublishedTouchpointQuestions(currentDay: number, shift
   });
 }
 
+/** Slot 7 «Итоговая анкета по дню» — может закрываться через eveningRatings без вопроса-маркера. */
+export function isEveningTouchpointSlot(slot: TouchpointSlot): boolean {
+  return slot.index === 7 || slot.title === 'Итоговая анкета по дню';
+}
+
+export type TouchpointEveningOpts = {
+  /**
+   * Сдана итоговая анкета вечера (participant_day_state.evening_ratings).
+   * Засчитывает слот 7 даже без ответа на вопрос-маркер.
+   */
+  eveningDone?: boolean;
+};
+
+export type TouchpointEveningCumulativeOpts = {
+  /** Дни (1–7), за которые есть eveningRatings */
+  eveningDoneDays?: Set<number>;
+};
+
 export function buildTouchpointItemsForDay(
   dayQuestions: typeof questions.$inferSelect[],
   answeredIds: Set<number>,
   currentDay: number,
   dayNumber: number,
   now = new Date(),
+  opts?: TouchpointEveningOpts,
 ): TouchpointItem[] {
   const dayQs = dayQuestions.filter(q => questionMatchesDay(q, dayNumber));
+  const eveningDone = opts?.eveningDone === true;
   return TOUCHPOINT_SLOTS.map(slot => {
     const matched = dayQs.filter(q => questionMatchesTouchpointSlot(q, slot));
+    const eveningSlotDone = eveningDone && isEveningTouchpointSlot(slot);
     if (matched.length === 0) {
-      return { id: slot.index, title: slot.title, state: 'pending' as const, block: slot.block };
+      return {
+        id: slot.index,
+        title: slot.title,
+        state: eveningSlotDone ? 'done' as const : 'pending' as const,
+        block: slot.block,
+      };
     }
-    const done = matched.some(q => answeredIds.has(q.id));
+    const done = eveningSlotDone || matched.some(q => answeredIds.has(q.id));
     const q = findTouchpointQuestionForSlot(dayQs, slot, { answeredIds, currentDay, now })!;
     const access = getQuestionAccess(q, currentDay, now);
     let state: TouchpointItem['state'] = 'pending';
@@ -141,13 +167,17 @@ export function touchpointCompletionRatio(
   dayQuestions: QuestionRow[],
   answeredIds: Set<number>,
   dayNumber: number,
+  opts?: TouchpointEveningOpts,
 ): { completed: number; expected: number } {
   const dayQs = dayQuestions.filter(q => questionMatchesDay(q, dayNumber));
+  const eveningDone = opts?.eveningDone === true;
   let completed = 0;
   for (const slot of TOUCHPOINT_SLOTS) {
     // Any matching twin counts (user may have answered an older id than the newest publish)
     const matched = dayQs.filter(q => questionMatchesTouchpointSlot(q, slot));
-    if (matched.some(q => answeredIds.has(q.id))) completed += 1;
+    const byAnswer = matched.some(q => answeredIds.has(q.id));
+    const byEvening = eveningDone && isEveningTouchpointSlot(slot);
+    if (byAnswer || byEvening) completed += 1;
   }
   return { completed, expected: TOUCHPOINT_SLOTS.length };
 }
@@ -157,12 +187,15 @@ export function touchpointCompletionRatioCumulative(
   dayQuestions: QuestionRow[],
   answeredIds: Set<number>,
   throughDay: number,
+  opts?: TouchpointEveningCumulativeOpts,
 ): { completed: number; expected: number } {
   const last = Math.min(Math.max(1, throughDay), 7);
   let completed = 0;
   let expected = 0;
   for (let d = 1; d <= last; d++) {
-    const r = touchpointCompletionRatio(dayQuestions, answeredIds, d);
+    const r = touchpointCompletionRatio(dayQuestions, answeredIds, d, {
+      eveningDone: opts?.eveningDoneDays?.has(d) === true,
+    });
     completed += r.completed;
     expected += r.expected;
   }

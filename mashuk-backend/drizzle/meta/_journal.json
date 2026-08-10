@@ -407,6 +407,13 @@
       "when": 1837000000000,
       "tag": "0058_rename_edu_task_category",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1838000000000,
+      "tag": "0059_exchange_limits",
+      "breakpoints": true
     }
   ]
 }

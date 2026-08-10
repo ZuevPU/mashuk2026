@@ -75,6 +75,7 @@ export const updateAdminShift = async (req: AdminRequest, res: Response): Promis
     'kbUnlockThreshold', 'kbUnlockDisabled', 'kbPastDaysPolicy',
     'pushBlockTypes', 'pushNightSlotEnabled', 'teamConfirmHoursDefault',
     'eveningQuestionnaireConfig', 'eveningQuestionnaireByDay', 'answerConfirmation',
+    'exchangeLimits',
     'profileProgressWeights', 'pdfTemplate', 'recommendationTemplates',
     'roleDiagnosticsConfig', 'leaderboardScopes',
   ]) {

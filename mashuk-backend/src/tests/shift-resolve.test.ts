@@ -25,6 +25,7 @@ describe('shiftOpsToForumShape', () => {
       eveningQuestionnaireConfig: null,
       eveningQuestionnaireByDay: null,
       answerConfirmation: null,
+      exchangeLimits: null,
       profileProgressWeights: null,
       shiftLabel: 'Смена 1',
       pdfTemplate: null,

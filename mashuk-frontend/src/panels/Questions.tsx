@@ -96,10 +96,38 @@ type ExchangeLimits = {
   questionsMax: number;
   questionsUsed: number;
   questionsLeft: number;
-  answersPerDayMax: number;
-  answersTodayUsed: number;
-  answersTodayLeft: number;
+  pointsPerQuestion?: number;
+  answersForPointsMax: number;
+  answersForPointsUsed: number;
+  answersForPointsLeft: number;
+  pointsPerAnswer?: number;
+  /** @deprecated aliases from API */
+  answersPerDayMax?: number;
+  answersTodayUsed?: number;
+  answersTodayLeft?: number;
 };
+
+function normalizeExchangeLimits(raw: Partial<ExchangeLimits> | null | undefined): ExchangeLimits | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const answersForPointsMax = Number(raw.answersForPointsMax ?? raw.answersPerDayMax ?? 0);
+  const answersForPointsUsed = Number(raw.answersForPointsUsed ?? raw.answersTodayUsed ?? 0);
+  const answersForPointsLeft = Number(
+    raw.answersForPointsLeft ?? raw.answersTodayLeft ?? Math.max(0, answersForPointsMax - answersForPointsUsed),
+  );
+  return {
+    questionsMax: Number(raw.questionsMax ?? 0),
+    questionsUsed: Number(raw.questionsUsed ?? 0),
+    questionsLeft: Number(raw.questionsLeft ?? 0),
+    pointsPerQuestion: raw.pointsPerQuestion != null ? Number(raw.pointsPerQuestion) : undefined,
+    answersForPointsMax,
+    answersForPointsUsed,
+    answersForPointsLeft,
+    pointsPerAnswer: raw.pointsPerAnswer != null ? Number(raw.pointsPerAnswer) : undefined,
+    answersPerDayMax: answersForPointsMax,
+    answersTodayUsed: answersForPointsUsed,
+    answersTodayLeft: answersForPointsLeft,
+  };
+}
 
 const ExchangeThreadModal = ({
   question,
@@ -123,8 +151,8 @@ const ExchangeThreadModal = ({
   const parentPreview = parentAnswerId
     ? (question?.answers as ExchangeAnswerRow[] | undefined)?.find(a => a.id === parentAnswerId)
     : null;
-  const answersLeft = limits?.answersTodayLeft ?? 1;
-  const canAnswer = answersLeft > 0;
+  const answersForPointsLeft = limits?.answersForPointsLeft ?? 0;
+  const pointsPerAnswer = limits?.pointsPerAnswer;
 
   const react = async (answerId: number, type: 'like' | 'discuss') => {
     try {
@@ -136,7 +164,7 @@ const ExchangeThreadModal = ({
   };
 
   const submit = async () => {
-    if (!question?.id || !replyText.trim() || submitting || !canAnswer) return;
+    if (!question?.id || !replyText.trim() || submitting) return;
     setSubmitting(true);
     try {
       const res = await apiPost<SubmitSuccessPayload>(`/exchange/${question.id}/answer`, {
@@ -220,38 +248,37 @@ const ExchangeThreadModal = ({
           </div>
           {limits && (
             <div style={{ fontSize: 12, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
-              У вас есть возможность дать {limits.answersTodayLeft} {answersWord(limits.answersTodayLeft)} сегодня
-              {' '}(из {limits.answersPerDayMax}).
+              {answersForPointsLeft > 0
+                ? (
+                  <>
+                    Ещё {answersForPointsLeft} {answersWord(answersForPointsLeft)} с баллами
+                    {pointsPerAnswer != null ? ` (+${pointsPerAnswer} за ответ)` : ''}
+                    {' '}из {limits.answersForPointsMax}. Дальше отвечать можно без баллов.
+                  </>
+                )
+                : 'Лимит ответов с баллами исчерпан — отвечать можно, но без начисления баллов.'}
             </div>
           )}
-          {!canAnswer ? (
-            <div style={{ fontSize: 13, color: '#9B2C2C' }}>
-              Лимит ответов на сегодня исчерпан. Завтра снова можно отвечать.
+          {parentPreview && (
+            <div style={{ fontSize: 12, color: '#666', marginBottom: 8, padding: '8px 10px', background: 'var(--m-surface)', borderRadius: 8 }}>
+              В ответ на: {parentPreview.authorName} — «{parentPreview.text.slice(0, 80)}{parentPreview.text.length > 80 ? '…' : ''}»
+              <button
+                type="button"
+                style={{ marginLeft: 8, border: 'none', background: 'none', color: 'var(--m-accent)', cursor: 'pointer', fontSize: 12 }}
+                onClick={() => setParentAnswerId(null)}
+              >
+                Отменить
+              </button>
             </div>
-          ) : (
-            <>
-              {parentPreview && (
-                <div style={{ fontSize: 12, color: '#666', marginBottom: 8, padding: '8px 10px', background: 'var(--m-surface)', borderRadius: 8 }}>
-                  В ответ на: {parentPreview.authorName} — «{parentPreview.text.slice(0, 80)}{parentPreview.text.length > 80 ? '…' : ''}»
-                  <button
-                    type="button"
-                    style={{ marginLeft: 8, border: 'none', background: 'none', color: 'var(--m-accent)', cursor: 'pointer', fontSize: 12 }}
-                    onClick={() => setParentAnswerId(null)}
-                  >
-                    Отменить
-                  </button>
-                </div>
-              )}
-              <Textarea
-                value={replyText}
-                onChange={e => setReplyText(e.target.value)}
-                placeholder={parentAnswerId ? 'Напишите уточнение...' : 'Поделитесь своим опытом...'}
-              />
-              <Button size="l" stretched loading={submitting} style={{ marginTop: 10 }} onClick={() => { void submit(); }}>
-                Отправить
-              </Button>
-            </>
           )}
+          <Textarea
+            value={replyText}
+            onChange={e => setReplyText(e.target.value)}
+            placeholder={parentAnswerId ? 'Напишите уточнение...' : 'Поделитесь своим опытом...'}
+          />
+          <Button size="l" stretched loading={submitting} style={{ marginTop: 10 }} onClick={() => { void submit(); }}>
+            Отправить
+          </Button>
         </div>
       </Group>
     </ModalPage>
@@ -376,14 +403,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const [exchangeAudience, setExchangeAudience] = useState<'all' | 'direction'>('all');
   const [exchangeViewFilter, setExchangeViewFilter] = useState<'all' | 'direction'>('all');
   const [exchangeThreadId, setExchangeThreadId] = useState<number | null>(null);
-  const [exchangeLimits, setExchangeLimits] = useState<{
-    questionsMax: number;
-    questionsUsed: number;
-    questionsLeft: number;
-    answersPerDayMax: number;
-    answersTodayUsed: number;
-    answersTodayLeft: number;
-  } | null>(null);
+  const [exchangeLimits, setExchangeLimits] = useState<ExchangeLimits | null>(null);
   const [activeQuestion, setActiveQuestion] = useState<any>(null);
   const [questionOptions, setQuestionOptions] = useState<any[]>([]);
   const [dayEvents, setDayEvents] = useState<any[]>([]);
@@ -418,7 +438,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
         if (q.answerConfirm) setAnswerConfirmDefaults(q.answerConfirm);
         setExchange(ex.questions || []);
         if (typeof ex.myParticipantId === 'number') setMyParticipantId(ex.myParticipantId);
-        if (ex.limits && typeof ex.limits === 'object') setExchangeLimits(ex.limits);
+        if (ex.limits && typeof ex.limits === 'object') setExchangeLimits(normalizeExchangeLimits(ex.limits));
         setMyQuestions((ex.questions || []).filter((item: any) => item.isMine));
         setOrgThreads(org.threads || []);
         const card = home?.eveningCard;
@@ -784,10 +804,13 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
             <div className="ask-btn m-card" style={{ marginBottom: 10 }}>
               {exchangeLimits && (
                 <div style={{ fontSize: 12, color: '#666', marginBottom: 8, lineHeight: 1.45 }}>
-                  У вас есть возможность задать {exchangeLimits.questionsLeft} {questionsWord(exchangeLimits.questionsLeft)}
-                  {' '}и дать {exchangeLimits.answersTodayLeft} {answersWord(exchangeLimits.answersTodayLeft)} сегодня
-                  {' '}(лимит: {exchangeLimits.questionsMax} {questionsWord(exchangeLimits.questionsMax)},{' '}
-                  {exchangeLimits.answersPerDayMax} {answersWord(exchangeLimits.answersPerDayMax)} в день).
+                  Можно задать ещё {exchangeLimits.questionsLeft} {questionsWord(exchangeLimits.questionsLeft)}
+                  {' '}(из {exchangeLimits.questionsMax}
+                  {exchangeLimits.pointsPerQuestion != null ? `, +${exchangeLimits.pointsPerQuestion} за вопрос` : ''}).
+                  {' '}Ответов с баллами осталось: {exchangeLimits.answersForPointsLeft}
+                  {' '}из {exchangeLimits.answersForPointsMax}
+                  {exchangeLimits.pointsPerAnswer != null ? ` (+${exchangeLimits.pointsPerAnswer} за ответ)` : ''};
+                  {' '}дальше отвечать можно без баллов.
                 </div>
               )}
               <Textarea

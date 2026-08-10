@@ -3,7 +3,8 @@ import type { Response } from 'express';
 import { db } from '../../db/index.js';
 import {
   adminActionsLog, answers, exchangeAnswers, exchangeQuestions,
-  medals, orgMessages, orgThreads, participants, pointsLog, questions, tasks, taskSubmissions, userMedals, piggybank, forumSettings, directions
+  medals, orgMessages, orgThreads, participants, pointsLog, questions, tasks, taskSubmissions, userMedals, piggybank, forumSettings, directions,
+  participantDayState,
 } from '../../db/schema.js';
 import { queryPiggybankForExport } from '../../controllers/adminPiggybankController.js';
 import { isPublishedStatus } from '../publishStatus.js';
@@ -822,12 +823,34 @@ export async function writeActivityExport(res: Response): Promise<void> {
     dayQsCache.set(d, published.filter(q => isTouchpointQuestionForForumDay(q, d)));
   }
 
+  const eveningDoneByPid = new Map<number, Set<number>>();
+  if (ids.length) {
+    const eveningStates = await db.select({
+      participantId: participantDayState.participantId,
+      dayNumber: participantDayState.dayNumber,
+      eveningRatings: participantDayState.eveningRatings,
+    }).from(participantDayState).where(inArray(participantDayState.participantId, ids));
+    for (const s of eveningStates) {
+      if (s.dayNumber < 1 || s.dayNumber > 7) continue;
+      if (s.eveningRatings == null || typeof s.eveningRatings !== 'object') continue;
+      let set = eveningDoneByPid.get(s.participantId);
+      if (!set) {
+        set = new Set();
+        eveningDoneByPid.set(s.participantId, set);
+      }
+      set.add(s.dayNumber);
+    }
+  }
+
   const rows = allP.map(p => {
     const answeredIds = answersByPid.get(p.id) ?? new Set<number>();
+    const eveningDays = eveningDoneByPid.get(p.id) ?? new Set<number>();
     let tp = 0;
     for (let d = 1; d <= 7; d++) {
       const dayQs = dayQsCache.get(d) ?? [];
-      tp += touchpointCompletionRatio(dayQs, answeredIds, d).completed;
+      tp += touchpointCompletionRatio(dayQs, answeredIds, d, {
+        eveningDone: eveningDays.has(d),
+      }).completed;
     }
     return [
       String(p.id), fullName(p), p.direction ?? '', p.groupName ?? '',

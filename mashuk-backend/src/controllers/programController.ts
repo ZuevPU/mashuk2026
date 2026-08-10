@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { eq, and, asc, lte, or, isNull, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { events, eventAttendance, materials, questions, answers, scheduleDays, dayFocus, kbDayUnlocks, programSpeakers } from '../db/schema.js';
+import { events, eventAttendance, materials, questions, answers, scheduleDays, dayFocus, kbDayUnlocks, programSpeakers, participantDayState } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
   getForumSettings, formatTime, getForumOperationalDateKey,
@@ -69,7 +69,17 @@ export async function countTouchpointsForDay(participantId: number, dayNumber: n
   const participantAnswers = await db.select().from(answers)
     .where(eq(answers.participantId, participantId));
   const answeredIds = new Set(participantAnswers.map(a => a.questionId));
-  const { completed, expected } = touchpointCompletionRatio(dayQuestions, answeredIds, dayNumber);
+  const [dayState] = await db.select({
+    eveningRatings: participantDayState.eveningRatings,
+  }).from(participantDayState).where(and(
+    eq(participantDayState.participantId, participantId),
+    eq(participantDayState.dayNumber, dayNumber),
+  )).limit(1);
+  const eveningDone = dayState?.eveningRatings != null
+    && typeof dayState.eveningRatings === 'object';
+  const { completed, expected } = touchpointCompletionRatio(dayQuestions, answeredIds, dayNumber, {
+    eveningDone,
+  });
   return { completed, total: expected || TOUCHPOINT_SLOTS.length };
 }
 

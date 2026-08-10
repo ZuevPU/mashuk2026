@@ -276,12 +276,17 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       }
       : null;
     const dayTouchpointsTotal = TOUCHPOINT_SLOTS.length;
+    // Slot 7: completed evening form for the current forum day (eveningRatings), not only marker answers.
+    const eveningDoneForTouchpoints = currentDay === eveningSurveyDay
+      ? !!eveningQuestionnaire.completed
+      : !!dayContext.eveningQuestionnaire?.completed;
     const touchpointItems = buildTouchpointItemsForDay(
       dayQuestions,
       answeredIds,
       currentDay,
       currentDay,
       now,
+      { eveningDone: eveningDoneForTouchpoints },
     );
     const dayTouchpointsCompleted = touchpointItems.filter(i => i.state === 'done').length;
 

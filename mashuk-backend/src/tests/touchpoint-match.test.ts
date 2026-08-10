@@ -80,4 +80,43 @@ describe('touchpoint slot matching', () => {
     const morning = items[0];
     assert.equal(morning.state, 'done');
   });
+
+  it('counts evening slot from eveningRatings without marker question', () => {
+    const { completed } = touchpointCompletionRatio([], new Set(), 3, { eveningDone: true });
+    assert.equal(completed, 1);
+    assert.equal(TOUCHPOINT_SLOTS.length, 7);
+  });
+
+  it('does not double-count evening slot when marker answered and eveningDone', () => {
+    const marker = {
+      id: 77,
+      title: 'Итоговая анкета по дню',
+      type: 'open',
+      block: 'Итоги дня',
+      timePoint: 'вечер',
+      dayNumber: 3,
+      dayNumbers: [3],
+    };
+    const { completed } = touchpointCompletionRatio(
+      [marker as never],
+      new Set([77]),
+      3,
+      { eveningDone: true },
+    );
+    assert.equal(completed, 1);
+  });
+
+  it('marks evening item done from eveningRatings even without marker questions', () => {
+    const items = buildTouchpointItemsForDay(
+      [] as never,
+      new Set(),
+      2,
+      2,
+      new Date(),
+      { eveningDone: true },
+    );
+    const evening = items.find(i => i.title === 'Итоговая анкета по дню');
+    assert.ok(evening);
+    assert.equal(evening!.state, 'done');
+  });
 });

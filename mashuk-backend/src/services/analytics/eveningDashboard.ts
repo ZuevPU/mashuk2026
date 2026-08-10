@@ -342,6 +342,21 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
     }),
   );
 
+  /** Средние по шкалам в разрезе направлений за весь выбранный период (без разбивки по дням). */
+  const scaleByDirection = directions.map(direction => {
+    const slice = submittedRows.filter(r => {
+      const d = (r.directionName || r.p.direction || '—').trim() || '—';
+      return d === direction;
+    });
+    const stats = scaleStatsForRows(slice);
+    return {
+      direction,
+      overallAvg: stats.overallAvg,
+      answered: stats.answered,
+      byQuestion: stats.byQuestion,
+    };
+  }).filter(r => r.answered > 0);
+
   const { daySeries, byDirectionDaySeries } = await buildEveningDaySeries(
     cohort,
     seriesDays,
@@ -368,6 +383,7 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
     scaleAverages,
     scaleOverallAvg,
     scaleByDay,
+    scaleByDirection,
     scaleByDirectionDay,
     participantProgramPct,
     diagnostics: {

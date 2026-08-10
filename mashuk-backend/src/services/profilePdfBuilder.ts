@@ -253,10 +253,18 @@ export async function gatherProfileBundle(participantId: number) {
     }
   }
   const dayForTp = Math.min(currentDay, 7);
+  const eveningDoneDays = new Set(
+    dayStates
+      .filter(s => s.dayNumber >= 1 && s.dayNumber <= 7
+        && s.eveningRatings != null
+        && typeof s.eveningRatings === 'object')
+      .map(s => s.dayNumber),
+  );
   const { completed: tpDone, expected: tpExpected } = touchpointCompletionRatioCumulative(
     touchpointQuestions,
     answeredIds,
     dayForTp,
+    { eveningDoneDays },
   );
   const tpRatio = tpDone / tpExpected;
 
@@ -295,11 +303,14 @@ export async function gatherProfileBundle(participantId: number) {
   const publishedEvents = await db.select({ id: events.id }).from(events).where(eq(events.isPublished, true));
   const activitiesTotal = Math.max(1, publishedEvents.length);
 
+  const tpDay = Math.min(currentDay, 7);
   const touchpointItems = buildTouchpointItemsForDay(
     touchpointQuestions,
     answeredIds,
     currentDay,
-    Math.min(currentDay, 7),
+    tpDay,
+    new Date(),
+    { eveningDone: eveningDoneDays.has(tpDay) },
   );
   const missedTouchpoints = touchpointItems.filter(i => i.state === 'overdue' || i.state === 'locked').length;
 

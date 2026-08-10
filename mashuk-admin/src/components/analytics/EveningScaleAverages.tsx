@@ -75,11 +75,6 @@ export function EveningScaleAverages({
     }))
     .sort((a, b) => b.avg - a.avg || a.name.localeCompare(b.name, 'ru')), [dirDayRows, dirDay]);
 
-  const dirQuestions = useMemo(() => {
-    const hit = dirDayRows.find(r => r.day === dirDay && (r.byQuestion?.length ?? 0) > 0);
-    return hit?.byQuestion ?? [];
-  }, [dirDayRows, dirDay]);
-
   if (!list.length && !dayRows.some(d => d.answered > 0)) {
     return (
       <DashCard title={title}>
@@ -226,31 +221,9 @@ export function EveningScaleAverages({
                   ))}
                 </tbody>
               </table>
-              {dirQuestions.length > 0 && (
-                <>
-                  <p className="adm-muted" style={{ fontSize: 12, marginTop: 12, marginBottom: 6 }}>
-                    По вопросам · {formatForumDay(dirDay)}
-                  </p>
-                  <table className="adm-table">
-                    <thead>
-                      <tr>
-                        <th>Вопрос</th>
-                        <th>Средняя</th>
-                        <th>Ответов</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dirQuestions.map(q => (
-                        <tr key={q.key || q.label}>
-                          <td>{q.label}</td>
-                          <td><strong>{q.avg}</strong></td>
-                          <td>{q.answered}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </>
-              )}
+              <p className="adm-muted" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
+                Подробное сравнение по вопросам — в тепловой таблице ниже.
+              </p>
             </>
           ) : (
             <p className="adm-muted" style={{ fontSize: 12, margin: 0 }}>

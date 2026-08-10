@@ -329,10 +329,8 @@ export function HubForumScreen({
         rows={data.directionEmotionEnergy ?? pulse.directionEmotionEnergy}
         onOpenDirection={openDirection}
       />
-      <DashGrid cols={2}>
-        <DirectionEnergyCompareChart byDirectionDay={pulse.energyByDirectionDay} />
-        <DirectionRadarCompare rows={data.directionMetrics} />
-      </DashGrid>
+      <DirectionEnergyCompareChart byDirectionDay={pulse.energyByDirectionDay} />
+      <DirectionRadarCompare rows={data.directionMetrics} />
       <StateReasonsByDirectionTable
         rows={data.pulse?.stateReasons?.byDirection}
         directions={(data.byDirection ?? []).map((r: { direction: string }) => r.direction)}

@@ -55,9 +55,11 @@ function formatWhen(value?: string | null): string {
 function ExchangeAnswersBlock({
   answers,
   onOpenCard,
+  onDeleteAnswer,
 }: {
   answers: ExchangeAnswer[];
   onOpenCard: (id: number) => void;
+  onDeleteAnswer?: (answerId: number) => void;
 }) {
   const top = answers.filter(a => !a.parentAnswerId);
   const replies = (parentId: number) => answers.filter(a => a.parentAnswerId === parentId);
@@ -82,16 +84,26 @@ function ExchangeAnswersBlock({
             </span>
           </div>
           <div style={{ fontSize: 13, marginTop: 4, whiteSpace: 'pre-wrap' }}>{a.text}</div>
-          {a.participantId != null && (
-            <button
-              type="button"
-              className="adm-btn adm-btn-ghost adm-btn-sm"
-              style={{ marginTop: 6 }}
-              onClick={() => onOpenCard(a.participantId!)}
-            >
-              Карточка автора ответа
-            </button>
-          )}
+          <div className="form-row" style={{ marginTop: 6, gap: 6 }}>
+            {a.participantId != null && (
+              <button
+                type="button"
+                className="adm-btn adm-btn-ghost adm-btn-sm"
+                onClick={() => onOpenCard(a.participantId!)}
+              >
+                Карточка автора ответа
+              </button>
+            )}
+            {onDeleteAnswer && (
+              <button
+                type="button"
+                className="adm-btn btn-danger adm-btn-sm"
+                onClick={() => onDeleteAnswer(a.id)}
+              >
+                Удалить ответ
+              </button>
+            )}
+          </div>
           {replies(a.id).map(r => (
             <div
               key={r.id}
@@ -112,6 +124,16 @@ function ExchangeAnswersBlock({
                 </span>
               </div>
               <div style={{ fontSize: 12, marginTop: 4, whiteSpace: 'pre-wrap' }}>{r.text}</div>
+              {onDeleteAnswer && (
+                <button
+                  type="button"
+                  className="adm-btn btn-danger adm-btn-sm"
+                  style={{ marginTop: 6 }}
+                  onClick={() => onDeleteAnswer(r.id)}
+                >
+                  Удалить комментарий
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -131,6 +153,7 @@ function ExchangeQuestionCard({
   onOpenCard,
   onToggleAnswers,
   answersOpen,
+  onDeleteAnswer,
 }: {
   q: ExchangeQuestion;
   mode: 'pending' | 'archive';
@@ -142,6 +165,7 @@ function ExchangeQuestionCard({
   onOpenCard: (id: number) => void;
   onToggleAnswers?: () => void;
   answersOpen?: boolean;
+  onDeleteAnswer?: (answerId: number) => void;
 }) {
   const answers = q.answers || [];
   const showAnswers = mode === 'archive' ? !!answersOpen : answers.length > 0;
@@ -225,7 +249,11 @@ function ExchangeQuestionCard({
       )}
 
       {showAnswers && (
-        <ExchangeAnswersBlock answers={answers} onOpenCard={onOpenCard} />
+        <ExchangeAnswersBlock
+          answers={answers}
+          onOpenCard={onOpenCard}
+          onDeleteAnswer={onDeleteAnswer}
+        />
       )}
     </div>
   );
@@ -292,6 +320,14 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
     }, 'Вопрос удалён');
   };
 
+  const removeAnswer = (answerId: number) => {
+    if (!window.confirm('Удалить этот ответ (и вложенные комментарии)?')) return;
+    act(async () => {
+      await adminFetch(`/exchange/answers/${answerId}`, { method: 'DELETE' });
+      await reload();
+    }, 'Ответ удалён');
+  };
+
   const segments: { key: Segment; label: string }[] = [
     { key: 'exchange', label: `Обмен (ожидает${pendingExchange.length ? ` · ${pendingExchange.length}` : ''})` },
     { key: 'tasks', label: 'Задания на проверке' },
@@ -338,6 +374,7 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
               onReject={() => moderate(q.id, 'rejected', rejectDraft[q.id])}
               onDelete={() => removeQuestion(q.id)}
               onOpenCard={id => onOpenCard(id)}
+              onDeleteAnswer={removeAnswer}
             />
           ))}
         </>
@@ -373,6 +410,7 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
               onReject={() => moderate(q.id, 'rejected', 'Снято с публикации модератором')}
               onDelete={() => removeQuestion(q.id)}
               onOpenCard={id => onOpenCard(id)}
+              onDeleteAnswer={removeAnswer}
             />
           ))}
         </>

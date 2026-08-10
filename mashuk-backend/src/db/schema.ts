@@ -55,6 +55,8 @@ export const shifts = pgTable('shifts', {
   eveningQuestionnaireConfig: jsonb('evening_questionnaire_config'),
   eveningQuestionnaireByDay: jsonb('evening_questionnaire_by_day'),
   answerConfirmation: jsonb('answer_confirmation'),
+  /** Обмен опытом: { maxQuestionsTotal, maxAnswersPerDay } */
+  exchangeLimits: jsonb('exchange_limits'),
   profileProgressWeights: jsonb('profile_progress_weights'),
   shiftLabel: varchar('shift_label', { length: 100 }),
   pdfTemplate: jsonb('pdf_template'),
@@ -84,6 +86,8 @@ export const forumSettings = pgTable('forum_settings', {
   eveningQuestionnaireConfig: jsonb('evening_questionnaire_config'),
   eveningQuestionnaireByDay: jsonb('evening_questionnaire_by_day'),
   answerConfirmation: jsonb('answer_confirmation'),
+  /** Обмен опытом: { maxQuestionsTotal, maxAnswersPerDay } */
+  exchangeLimits: jsonb('exchange_limits'),
   profileProgressWeights: jsonb('profile_progress_weights'),
   shiftLabel: varchar('shift_label', { length: 100 }),
   pdfTemplate: jsonb('pdf_template'),

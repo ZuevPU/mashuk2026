@@ -4,6 +4,8 @@ import { ADMIN_SHIFT_CHANGED_EVENT, adminDownloadBinary, getAdminEditingShiftId 
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
 import { AnswerConfirmationSettings, type AnswerConfirmForm } from './AnswerConfirmationSettings';
+import { ExchangeLimitsSettings, type ExchangeLimitsForm } from './ExchangeLimitsSettings';
+import { ExchangeAdminPanel } from './ExchangeAdminPanel';
 import { QuestionAnswersModal } from './QuestionAnswersModal';
 import { QuestionForm } from './QuestionForm';
 import { QuestionParticipantPreview } from './QuestionParticipantPreview';
@@ -21,7 +23,11 @@ import {
 } from './types';
 import { ROLE_OPTIONS } from '../onboarding/roleOptions';
 
-export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps) {
+type QuestionsTabProps = AdminTabProps & {
+  onOpenCard?: (id: number) => void;
+};
+
+export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }: QuestionsTabProps) {
   const [loading, setLoading] = useState(true);
   const [totalAll, setTotalAll] = useState(0);
   const [questions, setQuestions] = useState<AdminQuestion[]>([]);
@@ -61,6 +67,12 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
     showPoints: true,
     titleTemplate: 'Ответ отправлен',
   });
+  const [exchangeLimitsForm, setExchangeLimitsForm] = useState<ExchangeLimitsForm>({
+    maxQuestionsTotal: 3,
+    pointsPerQuestion: 3,
+    maxAnswersForPoints: 5,
+    pointsPerAnswer: 5,
+  });
 
   const [directions, setDirections] = useState<{ id: number; name: string }[]>([]);
   const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
@@ -94,6 +106,16 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
         enabled: ac.enabled !== false,
         showPoints: ac.showPoints !== false,
         titleTemplate: ac.titleTemplate || 'Ответ отправлен',
+      });
+    }
+    if (fs?.exchangeLimits && typeof fs.exchangeLimits === 'object') {
+      const el = fs.exchangeLimits as Partial<ExchangeLimitsForm> & { maxAnswersPerDay?: number };
+      const answersForPoints = el.maxAnswersForPoints ?? el.maxAnswersPerDay;
+      setExchangeLimitsForm({
+        maxQuestionsTotal: Number.isFinite(Number(el.maxQuestionsTotal)) ? Math.max(0, Math.floor(Number(el.maxQuestionsTotal))) : 3,
+        pointsPerQuestion: Number.isFinite(Number(el.pointsPerQuestion)) ? Math.max(0, Math.floor(Number(el.pointsPerQuestion))) : 3,
+        maxAnswersForPoints: Number.isFinite(Number(answersForPoints)) ? Math.max(0, Math.floor(Number(answersForPoints))) : 5,
+        pointsPerAnswer: Number.isFinite(Number(el.pointsPerAnswer)) ? Math.max(0, Math.floor(Number(el.pointsPerAnswer))) : 5,
       });
     }
     const allRes = await adminFetch('/questions');
@@ -667,127 +689,162 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab }: AdminTabPro
             ))}
           </div>
 
-          <div className="adm-seg" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
-            <button type="button" className={!dayFilter ? 'on' : ''} onClick={() => setDayFilter('')}>
-              Все дни
-            </button>
-            {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
-              <button
-                key={d}
-                type="button"
-                className={dayFilter === String(d) ? 'on' : ''}
-                onClick={() => setDayFilter(String(d))}
-              >
-                День {d}
-              </button>
-            ))}
-          </div>
-
-          <div className="form-row" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-            <input
-              className="adm-input"
-              placeholder="Поиск"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{ minWidth: 160 }}
+          {kindTab === 'exchange' && (
+            <ExchangeLimitsSettings
+              form={exchangeLimitsForm}
+              onChange={patch => setExchangeLimitsForm(f => ({ ...f, ...patch }))}
+              onSave={() => act(() => adminFetch('/forum-settings', {
+                method: 'PATCH',
+                body: JSON.stringify({ exchangeLimits: exchangeLimitsForm }),
+              }), 'Лимиты обмена сохранены')}
             />
-            <select className="adm-input" value={audienceFilter} onChange={e => setAudienceFilter(e.target.value)}>
-              <option value="">Аудитория: все</option>
-              <option value="all">Все</option>
-              <option value="direction">Направление</option>
-              <option value="group">Группа</option>
-              <option value="role">Роль</option>
-            </select>
-            <select className="adm-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-              <option value="">Статус: все</option>
-              <option value="published">Опубликован</option>
-              <option value="draft">Черновик</option>
-            </select>
-          </div>
+          )}
 
-          {!readOnly && (
-            <div className="form-row card" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-              <span>Скопировать день</span>
-              <input
-                type="number"
-                className="adm-input"
-                style={{ width: 70 }}
-                min={1}
-                max={8}
-                value={copyDayForm.fromDay}
-                onChange={e => setCopyDayForm({ ...copyDayForm, fromDay: Number(e.target.value) })}
-              />
-              <span>→</span>
-              <input
-                type="number"
-                className="adm-input"
-                style={{ width: 70 }}
-                min={1}
-                max={8}
-                value={copyDayForm.toDay}
-                onChange={e => setCopyDayForm({ ...copyDayForm, toDay: Number(e.target.value) })}
-              />
-              <label className="adm-forum-check">
+          {kindTab === 'exchange' ? (
+            <>
+              <div className="form-row" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                 <input
-                  type="checkbox"
-                  checked={copyDayForm.overwrite}
-                  onChange={e => setCopyDayForm({ ...copyDayForm, overwrite: e.target.checked })}
+                  className="adm-input"
+                  placeholder="Поиск по тексту или участнику"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  style={{ minWidth: 220 }}
                 />
-                Заменить на целевом дне
-              </label>
-              <button
-                type="button"
-                className="adm-btn adm-btn-secondary adm-btn-sm"
-                onClick={() => act(() => adminFetch('/questions/copy-day', {
-                  method: 'POST',
-                  body: JSON.stringify(copyDayForm),
-                }).then(() => loadQuestions()), 'Скопировано (вопросы + анкета вечера на «Форуме», если дни 1–7)')}
-              >
-                Скопировать
-              </button>
-              <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => setView('tools')}>
-                Ещё инструменты…
-              </button>
-            </div>
-          )}
-
-          {!readOnly && selectedIds.size > 0 && (
-            <div className="form-row card" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 12, alignItems: 'center', background: '#F5F0E8', padding: '8px 12px' }}>
-              <span style={{ fontWeight: 700 }}>Выбрано: {selectedIds.size}</span>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('publish')}>Опубликовать</button>
-                <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('hide')}>Скрыть</button>
-                <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('unhide')}>Показать</button>
-                <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('draft')}>В черновики</button>
-                <button type="button" className="adm-btn btn-danger adm-btn-xs" onClick={() => bulkAction('delete')}>Удалить</button>
               </div>
-              <div style={{ width: '100%', height: 1, background: '#e0dad0', margin: '4px 0' }} />
-              <span>→ день</span>
-              <input type="number" className="adm-input" style={{ width: 64 }} min={1} max={8} value={bulkTargetDay} onChange={e => setBulkTargetDay(Number(e.target.value))} />
-              <button type="button" className="adm-btn adm-btn-sm" onClick={bulkCopy}>Скопировать выбранные</button>
-            </div>
-          )}
+              <ExchangeAdminPanel
+                adminFetch={adminFetch}
+                act={act}
+                reloadKey={reloadKey}
+                search={search}
+                onOpenModeration={setTab ? () => setTab('moderation') : undefined}
+                onOpenCard={onOpenCard}
+              />
+            </>
+          ) : (
+            <>
+              <div className="adm-seg" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
+                <button type="button" className={!dayFilter ? 'on' : ''} onClick={() => setDayFilter('')}>
+                  Все дни
+                </button>
+                {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
+                  <button
+                    key={d}
+                    type="button"
+                    className={dayFilter === String(d) ? 'on' : ''}
+                    onClick={() => setDayFilter(String(d))}
+                  >
+                    День {d}
+                  </button>
+                ))}
+              </div>
 
-          <QuestionsListTable
-            questions={questions}
-            selectedIds={selectedIds}
-            readOnly={readOnly}
-            groupByDay={!dayFilter && !readOnly}
-            onToggleSelect={toggleSelect}
-            onToggleAll={toggleAll}
-            onEdit={openEdit}
-            onDuplicate={duplicateQuestion}
-            onViewAnswers={viewAnswers}
-            onNotify={openNotify}
-            onViewPracticesResults={(q) => {
-              setPracticesResultsId(q.id);
-              setPracticesResultsTitle(q.title);
-            }}
-            onCopyToDay={copyToDay}
-            onHide={hideQuestion}
-            onDelete={deleteQuestion}
-            onOpenModeration={setTab ? () => setTab('moderation') : undefined}
-          />
+              <div className="form-row" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                <input
+                  className="adm-input"
+                  placeholder="Поиск"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  style={{ minWidth: 160 }}
+                />
+                <select className="adm-input" value={audienceFilter} onChange={e => setAudienceFilter(e.target.value)}>
+                  <option value="">Аудитория: все</option>
+                  <option value="all">Все</option>
+                  <option value="direction">Направление</option>
+                  <option value="group">Группа</option>
+                  <option value="role">Роль</option>
+                </select>
+                <select className="adm-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                  <option value="">Статус: все</option>
+                  <option value="published">Опубликован</option>
+                  <option value="draft">Черновик</option>
+                </select>
+              </div>
+
+              {!readOnly && (
+                <div className="form-row card" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  <span>Скопировать день</span>
+                  <input
+                    type="number"
+                    className="adm-input"
+                    style={{ width: 70 }}
+                    min={1}
+                    max={8}
+                    value={copyDayForm.fromDay}
+                    onChange={e => setCopyDayForm({ ...copyDayForm, fromDay: Number(e.target.value) })}
+                  />
+                  <span>→</span>
+                  <input
+                    type="number"
+                    className="adm-input"
+                    style={{ width: 70 }}
+                    min={1}
+                    max={8}
+                    value={copyDayForm.toDay}
+                    onChange={e => setCopyDayForm({ ...copyDayForm, toDay: Number(e.target.value) })}
+                  />
+                  <label className="adm-forum-check">
+                    <input
+                      type="checkbox"
+                      checked={copyDayForm.overwrite}
+                      onChange={e => setCopyDayForm({ ...copyDayForm, overwrite: e.target.checked })}
+                    />
+                    Заменить на целевом дне
+                  </label>
+                  <button
+                    type="button"
+                    className="adm-btn adm-btn-secondary adm-btn-sm"
+                    onClick={() => act(() => adminFetch('/questions/copy-day', {
+                      method: 'POST',
+                      body: JSON.stringify(copyDayForm),
+                    }).then(() => loadQuestions()), 'Скопировано (вопросы + анкета вечера на «Форуме», если дни 1–7)')}
+                  >
+                    Скопировать
+                  </button>
+                  <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => setView('tools')}>
+                    Ещё инструменты…
+                  </button>
+                </div>
+              )}
+
+              {!readOnly && selectedIds.size > 0 && (
+                <div className="form-row card" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 12, alignItems: 'center', background: '#F5F0E8', padding: '8px 12px' }}>
+                  <span style={{ fontWeight: 700 }}>Выбрано: {selectedIds.size}</span>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('publish')}>Опубликовать</button>
+                    <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('hide')}>Скрыть</button>
+                    <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('unhide')}>Показать</button>
+                    <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('draft')}>В черновики</button>
+                    <button type="button" className="adm-btn btn-danger adm-btn-xs" onClick={() => bulkAction('delete')}>Удалить</button>
+                  </div>
+                  <div style={{ width: '100%', height: 1, background: '#e0dad0', margin: '4px 0' }} />
+                  <span>→ день</span>
+                  <input type="number" className="adm-input" style={{ width: 64 }} min={1} max={8} value={bulkTargetDay} onChange={e => setBulkTargetDay(Number(e.target.value))} />
+                  <button type="button" className="adm-btn adm-btn-sm" onClick={bulkCopy}>Скопировать выбранные</button>
+                </div>
+              )}
+
+              <QuestionsListTable
+                questions={questions}
+                selectedIds={selectedIds}
+                readOnly={readOnly}
+                groupByDay={!dayFilter && !readOnly}
+                onToggleSelect={toggleSelect}
+                onToggleAll={toggleAll}
+                onEdit={openEdit}
+                onDuplicate={duplicateQuestion}
+                onViewAnswers={viewAnswers}
+                onNotify={openNotify}
+                onViewPracticesResults={(q) => {
+                  setPracticesResultsId(q.id);
+                  setPracticesResultsTitle(q.title);
+                }}
+                onCopyToDay={copyToDay}
+                onHide={hideQuestion}
+                onDelete={deleteQuestion}
+                onOpenModeration={setTab ? () => setTab('moderation') : undefined}
+              />
+            </>
+          )}
         </>
       )}
 

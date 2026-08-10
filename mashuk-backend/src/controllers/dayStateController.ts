@@ -1,9 +1,9 @@
 import { Response } from 'express';
-import { and, eq, or } from 'drizzle-orm';
+import { and, eq, or, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db/index.js';
 import {
-  participantDayState, dayExperiments, questions, answers, events,
+  participantDayState, dayExperiments, questions, answers, events, pointsLog,
 } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
@@ -26,6 +26,27 @@ import {
   filterEventsForEveningProgramPick,
 } from '../services/eveningProgramPickTree.js';
 import { resolveActiveShiftId } from '../services/shiftService.js';
+
+const EVENING_COMPLETE_POINTS = 15;
+
+/** One Path award per participant per forum day for evening questionnaire. */
+async function awardEveningCompleteOnce(
+  participantId: number,
+  dayNumber: number,
+): Promise<void> {
+  const [existing] = await db.select({ id: pointsLog.id })
+    .from(pointsLog)
+    .where(and(
+      eq(pointsLog.participantId, participantId),
+      eq(pointsLog.actionType, 'evening_complete'),
+      eq(pointsLog.forumDay, dayNumber),
+      isNull(pointsLog.revokedAt),
+      sql`${pointsLog.points} > 0`,
+    ))
+    .limit(1);
+  if (existing) return;
+  await awardPoints(participantId, 'evening_complete', EVENING_COMPLETE_POINTS, dayNumber);
+}
 
 const scaleField = z.coerce.number().int().min(1).max(5).optional();
 
@@ -208,7 +229,8 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
       });
     }
 
-    // Отметить точку 7 «Итоги дня» выполненным, если есть вопрос-маркер
+    // Точка 7 «Итоги дня»: eveningRatings уже записаны выше.
+    // Если есть вопрос-маркер — синхронизируем answers; баллы — всегда один раз за день.
     const summaryConds = [
       eq(questions.dayNumber, dayNumber),
       eq(questions.status, 'published'),
@@ -230,7 +252,6 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
           eq(answers.participantId, req.participant!.id),
           eq(answers.questionId, summaryQ.id),
         )).limit(1);
-      const eveningPoints = 15;
       const wordCount = String(ratings.mainThesis || ratings.freeNote || '')
         .split(/\s+/).filter(Boolean).length;
       if (!existing) {
@@ -239,11 +260,9 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
           questionId: summaryQ.id,
           answerData: ratings,
           questionTextSnapshot: summaryQ.text,
-          pointsAwarded: eveningPoints,
+          pointsAwarded: EVENING_COMPLETE_POINTS,
           wordCount,
         });
-        // Single Path award: evening questionnaire covers touchpoint 7 (avoid question_answer + evening_complete).
-        await awardPoints(req.participant!.id, 'evening_complete', eveningPoints, dayNumber);
       } else {
         await db.update(answers).set({
           answerData: ratings,
@@ -251,6 +270,8 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
         }).where(eq(answers.id, existing.id));
       }
     }
+    // Award even when Forum evening form has no Questions marker (avoid question_answer double-count).
+    await awardEveningCompleteOnce(req.participant!.id, dayNumber);
 
     res.json({
       ok: true,

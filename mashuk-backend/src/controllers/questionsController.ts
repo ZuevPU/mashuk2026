@@ -939,15 +939,14 @@ export const answerExchange = async (req: ParticipantRequest, res: Response): Pr
       }
     }
 
-    const { getExchangeLimitsForParticipant } = await import('../services/exchangeLimits.js');
-    const limits = await getExchangeLimitsForParticipant(req.participant!.id);
-    if (limits.answersTodayLeft <= 0) {
-      res.status(400).json({
-        error: `Лимит ответов на сегодня исчерпан: не больше ${limits.answersPerDayMax} в день`,
-        limits,
-      });
-      return;
-    }
+    const {
+      getExchangeLimitsForParticipant,
+      getExchangeLimitsConfig,
+    } = await import('../services/exchangeLimits.js');
+    const limitsBefore = await getExchangeLimitsForParticipant(req.participant!.id);
+    const exchangeCfg = await getExchangeLimitsConfig();
+    // Отвечать можно без лимита; баллы — только за первые N ответов.
+    const awardAnswerPoints = limitsBefore.answersForPointsLeft > 0 && exchangeCfg.pointsPerAnswer > 0;
 
     const [answer] = await db.insert(exchangeAnswers).values({
       questionId,
@@ -962,12 +961,15 @@ export const answerExchange = async (req: ParticipantRequest, res: Response): Pr
     let confirm = resolveAnswerConfirmation(undefined);
     try {
       const settings = await getForumSettings();
-      pointsResult = await awardPoints(
-        req.participant!.id,
-        'exchange_answer',
-        undefined,
-        resolveEffectiveCurrentDay(settings),
-      );
+      if (awardAnswerPoints) {
+        pointsResult = await awardPoints(
+          req.participant!.id,
+          'exchange_answer',
+          exchangeCfg.pointsPerAnswer,
+          resolveEffectiveCurrentDay(settings),
+          { ignoreMaxAccruals: true },
+        );
+      }
       const extras = await answerSubmitExtras(req.participant!.id, settings);
       newMedals = extras.newMedals;
       confirm = extras.confirm;

@@ -363,7 +363,7 @@ export async function awardPoints(
   actionType: string,
   overridePoints?: number,
   forumDay?: number,
-  opts?: { submissionId?: number },
+  opts?: { submissionId?: number; ignoreMaxAccruals?: boolean },
 ): Promise<{ awarded: number; track: PointTrack | 'bonus'; logId: number } | null> {
   const [config] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, actionType)).limit(1);
   const catalog = ACTION_CATALOG.find(a => a.actionType === actionType);
@@ -374,7 +374,7 @@ export async function awardPoints(
   if (points <= 0) return null;
 
   const maxAccruals = config?.maxAccruals ?? catalog?.maxAccruals ?? null;
-  if (maxAccruals) {
+  if (maxAccruals && !opts?.ignoreMaxAccruals) {
     // Count only active awards — revoked rows used to silently block further touchpoint XP.
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)::int` })
