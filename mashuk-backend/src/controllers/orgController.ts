@@ -196,3 +196,40 @@ export const adminReplyOrgThread = async (req: AdminRequest, res: Response): Pro
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+/** Permanently delete an org appeal thread and all its messages. */
+export const adminDeleteOrgThread = async (req: AdminRequest, res: Response): Promise<void> => {
+  try {
+    const threadId = Number(req.params.id);
+    if (!Number.isFinite(threadId) || threadId <= 0) {
+      res.status(400).json({ error: 'Invalid thread id' });
+      return;
+    }
+    const [thread] = await db.select().from(orgThreads).where(eq(orgThreads.id, threadId)).limit(1);
+    if (!thread) {
+      res.status(404).json({ error: 'Thread not found' });
+      return;
+    }
+
+    await db.delete(orgMessages).where(eq(orgMessages.threadId, threadId));
+    await db.delete(orgThreads).where(eq(orgThreads.id, threadId));
+
+    await logAdminAction({
+      req,
+      actionType: 'org_thread_delete',
+      section: 'org',
+      objectId: threadId,
+      oldValue: {
+        participantId: thread.participantId,
+        subject: thread.subject,
+        status: thread.status,
+      },
+      isCritical: true,
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('adminDeleteOrgThread:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

@@ -89,6 +89,8 @@ const LABELS: Record<string, string> = {
   exp_level: 'Порог уровня «Опыт»',
   points_recalculate: 'Пересчёт баллов',
   points_revoke: 'Аннулирование баллов',
+  org_reply: 'Ответ на обращение к дирекции',
+  org_thread_delete: 'Удаление обращения к дирекции',
 
   // Уведомления / доставка
   manual: 'Вручную',
@@ -145,6 +147,8 @@ const LABELS: Record<string, string> = {
 
   // Орг. обращения
   answered: 'Отвечено',
+  waiting: 'Ожидает ответа',
+  closed: 'Закрыто',
   org_thread_open: 'Ожидает ответа',
 
   // Роли админов

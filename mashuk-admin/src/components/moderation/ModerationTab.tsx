@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { label } from '../../labels/ru';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
+import { OrgDirectorPanel } from '../questions/OrgDirectorPanel';
 import { TaskModerationQueue } from './TaskModerationQueue';
 
 type Segment = 'exchange' | 'org' | 'archive' | 'tasks';
@@ -298,8 +299,6 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
   const [loading, setLoading] = useState(true);
   const [pendingExchange, setPendingExchange] = useState<ExchangeQuestion[]>([]);
   const [exchangeArchive, setExchangeArchive] = useState<ExchangeQuestion[]>([]);
-  const [orgThreads, setOrgThreads] = useState<any[]>([]);
-  const [orgReplyDraft, setOrgReplyDraft] = useState<Record<number, string>>({});
   const [rejectDraft, setRejectDraft] = useState<Record<number, string>>({});
   const [categoryDraft, setCategoryDraft] = useState<Record<number, number | ''>>({});
   const [categories, setCategories] = useState<ExchangeCategory[]>([]);
@@ -313,15 +312,13 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
       const archivePath = archiveFilter === 'all'
         ? '/exchange?limit=100'
         : `/exchange?status=${archiveFilter}&limit=100`;
-      const [pendingRes, archiveRes, orgRes, catsRes] = await Promise.all([
+      const [pendingRes, archiveRes, catsRes] = await Promise.all([
         adminFetch('/exchange/pending'),
         adminFetch(archivePath),
-        adminFetch('/org/threads'),
         adminFetch('/exchange-categories'),
       ]);
       setPendingExchange((pendingRes as { questions?: ExchangeQuestion[] }).questions || []);
       setExchangeArchive((archiveRes as { questions?: ExchangeQuestion[] }).questions || []);
-      setOrgThreads((orgRes as { threads?: unknown[] }).threads || []);
       setCategories((catsRes as { categories?: ExchangeCategory[] }).categories || []);
     } finally {
       setLoading(false);
@@ -500,54 +497,12 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
       )}
 
       {segment === 'org' && (
-        <>
-          {orgThreads.length === 0 && <p className="adm-muted">Нет обращений</p>}
-          {orgThreads.map(t => (
-            <div key={t.id} className="card">
-              <p>
-                <strong>{t.participantName || 'Участник'}</strong>
-                {t.groupName ? ` · ${t.groupName}` : ''}
-                {t.direction ? ` · ${t.direction}` : ''}
-                {' · '}
-                <span style={{ color: t.status === 'answered' ? '#2F855A' : '#B8621A' }}>
-                  {t.status === 'answered' ? 'отвечено' : 'ожидает'}
-                </span>
-              </p>
-              <p style={{ fontSize: 12, color: '#666' }}>{t.subject}</p>
-              {(t.messages || []).map((m: any) => (
-                <div key={m.id} style={{
-                  marginTop: 6, padding: 8, borderRadius: 6, fontSize: 12,
-                  background: m.senderType === 'admin' ? '#F0FFF4' : '#F7F7F7',
-                }}>
-                  <div style={{ color: '#888', fontSize: 10 }}>
-                    {m.senderType === 'admin' ? 'Организаторы' : 'Участник'}
-                    {m.createdAt ? ` · ${new Date(m.createdAt).toLocaleString('ru-RU')}` : ''}
-                  </div>
-                  {m.text}
-                </div>
-              ))}
-              <div className="form-row" style={{ marginTop: 8 }}>
-                <input
-                  className="adm-input"
-                  value={orgReplyDraft[t.id] || ''}
-                  onChange={e => setOrgReplyDraft({ ...orgReplyDraft, [t.id]: e.target.value })}
-                  placeholder="Ответ организатора…"
-                  style={{ flex: 1 }}
-                />
-                <button
-                  type="button"
-                  className="adm-btn"
-                  onClick={() => act(() => adminFetch(`/org/threads/${t.id}/reply`, {
-                    method: 'POST',
-                    body: JSON.stringify({ text: orgReplyDraft[t.id], sendPush: true }),
-                  }).then(() => setOrgReplyDraft({ ...orgReplyDraft, [t.id]: '' })), 'Ответ отправлен')}
-                >
-                  Ответить и уведомить
-                </button>
-              </div>
-            </div>
-          ))}
-        </>
+        <OrgDirectorPanel
+          adminFetch={adminFetch}
+          act={act}
+          reloadKey={reloadKey}
+          onOpenCard={onOpenCard}
+        />
       )}
     </div>
   );

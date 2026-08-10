@@ -6,6 +6,7 @@ import type { AdminTabProps } from '../admin/types';
 import { AnswerConfirmationSettings, type AnswerConfirmForm } from './AnswerConfirmationSettings';
 import { ExchangeLimitsSettings, type ExchangeLimitsForm } from './ExchangeLimitsSettings';
 import { ExchangeAdminPanel } from './ExchangeAdminPanel';
+import { OrgDirectorPanel } from './OrgDirectorPanel';
 import { QuestionAnswersModal } from './QuestionAnswersModal';
 import { QuestionForm } from './QuestionForm';
 import { QuestionParticipantPreview } from './QuestionParticipantPreview';
@@ -676,7 +677,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             {!readOnly && (
               <button type="button" className="adm-btn" style={{ marginLeft: 'auto' }} onClick={openCreate}>+ Создать вопрос</button>
             )}
-            {readOnly && setTab && (
+            {kindTab === 'exchange' && setTab && (
               <button type="button" className="adm-btn" style={{ marginLeft: 'auto' }} onClick={() => setTab('moderation')}>Модерация</button>
             )}
           </div>
@@ -717,6 +718,25 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
                 reloadKey={reloadKey}
                 search={search}
                 onOpenModeration={setTab ? () => setTab('moderation') : undefined}
+                onOpenCard={onOpenCard}
+              />
+            </>
+          ) : kindTab === 'org_director' ? (
+            <>
+              <div className="form-row" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                <input
+                  className="adm-input"
+                  placeholder="Поиск по вопросу, участнику, теме"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  style={{ minWidth: 260 }}
+                />
+              </div>
+              <OrgDirectorPanel
+                adminFetch={adminFetch}
+                act={act}
+                reloadKey={reloadKey}
+                search={search}
                 onOpenCard={onOpenCard}
               />
             </>

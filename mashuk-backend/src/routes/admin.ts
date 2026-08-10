@@ -5,7 +5,7 @@ import * as admin from '../controllers/adminController.js';
 import * as ops from '../controllers/adminOpsController.js';
 import * as p0 from '../controllers/adminP0P2Controller.js';
 import { adminLogin } from '../controllers/adminAuthController.js';
-import { adminListOrgThreads, adminReplyOrgThread } from '../controllers/orgController.js';
+import { adminDeleteOrgThread, adminListOrgThreads, adminReplyOrgThread } from '../controllers/orgController.js';
 import * as rights from '../controllers/adminRightsController.js';
 import * as profilePdf from '../controllers/adminProfilePdfController.js';
 import * as pushAdmin from '../controllers/pushAdminController.js';
@@ -182,6 +182,7 @@ router.get('/exchange-tags', wrap(exchangeCat.adminListExchangeTags));
 
 router.get('/org/threads', wrap(adminListOrgThreads));
 router.post('/org/threads/:id/reply', requireAdminRole('moderate'), wrap(adminReplyOrgThread));
+router.delete('/org/threads/:id', requireAdminRole('moderate'), wrap(adminDeleteOrgThread));
 
 router.get('/consents', wrap(p0.crudConsents.list));
 router.post('/consents', requireAdminRole('settings'), wrap(p0.crudConsents.create));
