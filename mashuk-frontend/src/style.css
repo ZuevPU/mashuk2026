@@ -2383,6 +2383,7 @@ body {
   display: block;
   box-sizing: border-box;
   margin-top: 16px;
+  margin-bottom: 8px;
   width: 100%;
   border: none;
   background: var(--m-notice-accent-soft);
@@ -2394,6 +2395,10 @@ body {
   cursor: pointer;
   text-align: center;
   text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  position: relative;
+  z-index: 2;
 }
 .m-home-notice-modal__cta:active {
   background: var(--m-notice-accent);

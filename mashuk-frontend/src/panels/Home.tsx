@@ -210,7 +210,7 @@ export const HomePanel: React.FC<{
         <ModalRoot activeModal="home-notice" onClose={closeNotice}>
           <ModalPage id="home-notice" settlingHeight={80} onClose={closeNotice}>
             <ModalPageHeader>Объявление</ModalPageHeader>
-            <HomeNoticeModalBody notice={data.homeNotice} />
+            <HomeNoticeModalBody notice={data.homeNotice} onAfterOpenLink={closeNotice} />
           </ModalPage>
         </ModalRoot>,
       );
