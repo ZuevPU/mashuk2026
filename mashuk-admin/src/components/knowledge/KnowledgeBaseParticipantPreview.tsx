@@ -50,7 +50,7 @@ export function KnowledgeBaseParticipantPreview({
   kbThreshold = 4,
 }: Props) {
   const dayMats = materials
-    .filter(m => (m.dayNumber ?? 0) === day && m.status === 'published')
+    .filter(m => Number(m.dayNumber) === day && (m.status || 'published') === 'published')
     .slice()
     .sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru'));
 

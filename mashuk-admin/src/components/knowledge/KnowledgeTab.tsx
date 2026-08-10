@@ -60,6 +60,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   const [speakers, setSpeakers] = useState<ProgramSpeaker[]>([]);
   const [previewMat, setPreviewMat] = useState<MaterialRow | null>(null);
   const [previewDay, setPreviewDay] = useState(1);
+  const [previewOpen, setPreviewOpen] = useState(true);
   const [kbForumThreshold, setKbForumThreshold] = useState(4);
   const [totalDays, setTotalDays] = useState(8);
 
@@ -210,12 +211,42 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
         }
         hint="В аналитику и приложение участника попадают только материалы со статусом «Опубликован»."
       >
-        {setTab && (
-          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setTab('events')}>
-            Перейти к программе
+        <div className="form-row" style={{ marginTop: 8, flexWrap: 'wrap', gap: 8 }}>
+          <button
+            type="button"
+            className="adm-btn adm-btn-primary"
+            onClick={() => setPreviewOpen(v => !v)}
+          >
+            {previewOpen ? 'Скрыть предпросмотр' : 'Предпросмотр'}
           </button>
-        )}
+          <select
+            className="adm-input"
+            value={previewDay}
+            onChange={e => setPreviewDay(Number(e.target.value))}
+            style={{ width: 120 }}
+            title="День для превью"
+          >
+            {dayOptions.map(d => (
+              <option key={d} value={d}>День {d}</option>
+            ))}
+          </select>
+          {setTab && (
+            <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setTab('events')}>
+              Перейти к программе
+            </button>
+          )}
+        </div>
       </AdminPageHero>
+
+      {previewOpen && (
+        <KnowledgeBaseParticipantPreview
+          day={previewDay}
+          materials={materials}
+          typeOptions={materialTypes}
+          speakers={speakers}
+          kbThreshold={kbForumThreshold}
+        />
+      )}
 
       <MaterialTypesPanel adminFetch={adminFetch} act={act} />
 
@@ -281,30 +312,6 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             </tbody>
           </table>
         )}
-      </div>
-
-      <div className="card adm-forum-block">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-          <h3 style={{ margin: 0 }}>Превью для участника</h3>
-          <select
-            className="adm-input"
-            value={previewDay}
-            onChange={e => setPreviewDay(Number(e.target.value))}
-            style={{ width: 120 }}
-            title="День для превью"
-          >
-            {dayOptions.map(d => (
-              <option key={d} value={d}>День {d}</option>
-            ))}
-          </select>
-        </div>
-        <KnowledgeBaseParticipantPreview
-          day={previewDay}
-          materials={materials}
-          typeOptions={materialTypes}
-          speakers={speakers}
-          kbThreshold={kbForumThreshold}
-        />
       </div>
 
       <div className="card adm-forum-block">
