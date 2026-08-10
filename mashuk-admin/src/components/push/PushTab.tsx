@@ -144,7 +144,8 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
     setPreviewText(res.preview.body);
   };
 
-  if (loading && view === 'list') {
+  // Не размонтировать «Главный экран»: после act()/reloadKey иначе сбрасывается черновик плашки.
+  if (loading && view === 'list' && listTab !== 'home') {
     return <p className="adm-muted">Загрузка пушей…</p>;
   }
 
@@ -187,7 +188,7 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
             await load();
           }, mode === 'queue' ? 'В очереди' : 'Отправлено')}
           onCancel={() => { setView('list'); setEditingId(null); }}
-          onImagePick={file => act(() => uploadImage(file), 'Картинка загружена')}
+          onImagePick={file => act(() => uploadImage(file), 'Картинка загружена', { reload: false })}
         />
       </div>
     );

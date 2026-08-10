@@ -57,10 +57,10 @@ export const App = () => {
   const [reloadKey, setReloadKey] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const reload = () => setReloadKey(k => k + 1);
-  const act = (fn: () => Promise<unknown>, msg = 'Сохранено') =>
+  const act = (fn: () => Promise<unknown>, msg = 'Сохранено', opts?: { reload?: boolean }) =>
     fn().then((result) => {
       setToast(typeof result === 'string' && result.length > 0 ? result : msg);
-      reload();
+      if (opts?.reload !== false) reload();
     }).catch(e => setToast(translateApiError(String(e))));
 
   const [participantCard, setParticipantCard] = useState<any>(null);

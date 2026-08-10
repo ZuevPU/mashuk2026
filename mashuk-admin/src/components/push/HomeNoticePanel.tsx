@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
 import type { AdminTabProps } from '../admin/types';
 
@@ -60,19 +60,22 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [previewMode, setPreviewMode] = useState<'compact' | 'modal'>('compact');
+  const bootstrappedRef = useRef(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (mode: 'full' | 'soft' = 'full') => {
+    if (mode === 'full') setLoading(true);
     try {
       const res = await adminFetch('/home-notices') as { notices: HomeNoticeRow[] };
       setNotices(res.notices || []);
+      bootstrappedRef.current = true;
     } finally {
-      setLoading(false);
+      if (mode === 'full') setLoading(false);
     }
   }, [adminFetch]);
 
   useEffect(() => {
-    load().catch(() => setLoading(false));
+    // Первый заход — со спиннером; reloadKey после act — мягко, без размонтирования формы.
+    load(bootstrappedRef.current ? 'soft' : 'full').catch(() => setLoading(false));
   }, [load, reloadKey]);
 
   const patchDraft = (p: Partial<Draft>) => setDraft(d => ({ ...d, ...p }));
@@ -113,7 +116,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
       setEditingId(res.notice.id);
       setDraft(rowToDraft(res.notice));
     }
-    await load();
+    await load('soft');
   };
 
   const unpublish = async (id: number) => {
@@ -124,7 +127,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
     if (editingId === id) {
       setDraft(rowToDraft(res.notice));
     }
-    await load();
+    await load('soft');
   };
 
   const uploadImages = async (files: FileList | null) => {
@@ -241,7 +244,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
                 } finally {
                   input.value = '';
                 }
-              }, 'Картинки загружены');
+              }, 'Картинки загружены', { reload: false });
             }}
           />
           {draft.imageUrls.length > 0 && (
@@ -319,7 +322,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
                         act(async () => {
                           await adminFetch(`/home-notices/${n.id}`, { method: 'DELETE' });
                           if (editingId === n.id) openCreate();
-                          await load();
+                          await load('soft');
                         });
                       }
                     }}
