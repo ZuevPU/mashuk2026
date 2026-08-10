@@ -25,6 +25,7 @@ COPY tsconfig.json ./
 COPY src ./src
 COPY drizzle ./drizzle
 COPY assets ./assets
+COPY config ./config
 
 RUN npm run build
 
@@ -56,6 +57,7 @@ RUN set -e; \
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/drizzle ./drizzle
 COPY assets ./assets
+COPY config ./config
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh
 

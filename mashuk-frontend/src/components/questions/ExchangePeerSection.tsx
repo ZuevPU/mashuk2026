@@ -226,12 +226,15 @@ export function ExchangePeerSection({
               {limits.pointsPerQuestion != null ? `, +${limits.pointsPerQuestion} за вопрос` : ''}).
             </div>
           )}
+          <div style={{ fontSize: 12, color: '#2D6A4F', marginBottom: 8, lineHeight: 1.4 }}>
+            Сначала выберите тему (рубрику) — так коллегам проще ответить.
+          </div>
           <Button
             stretched
             disabled={!!limits && limits.questionsLeft <= 0}
             onClick={() => setComposeStep('category')}
           >
-            {limits && limits.questionsLeft <= 0 ? 'Лимит вопросов исчерпан' : '+ Задать новый вопрос'}
+            {limits && limits.questionsLeft <= 0 ? 'Лимит вопросов исчерпан' : '+ Задать вопрос · выбрать тему'}
           </Button>
         </div>
       )}

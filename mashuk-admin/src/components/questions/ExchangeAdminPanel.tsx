@@ -12,6 +12,13 @@ type ExchangeAnswer = {
   createdAt?: string | null;
 };
 
+type ExchangeCategory = {
+  id: number;
+  slug: string;
+  title: string;
+  emoji?: string | null;
+};
+
 type ExchangeQuestion = {
   id: number;
   text: string;
@@ -25,6 +32,9 @@ type ExchangeQuestion = {
   answerCount?: number;
   answers?: ExchangeAnswer[];
   createdAt?: string | null;
+  categoryId?: number | null;
+  classifiedBy?: string | null;
+  category?: ExchangeCategory | null;
 };
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
@@ -88,6 +98,8 @@ export function ExchangeAdminPanel({
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [questions, setQuestions] = useState<ExchangeQuestion[]>([]);
+  const [categories, setCategories] = useState<ExchangeCategory[]>([]);
+  const [categoryDraft, setCategoryDraft] = useState<Record<number, number | ''>>({});
   const [rejectDraft, setRejectDraft] = useState<Record<number, string>>({});
   const [sort, setSort] = useState<SortState>({ key: 'createdAt', dir: 'desc' });
   const [answersModal, setAnswersModal] = useState<{
@@ -101,8 +113,12 @@ export function ExchangeAdminPanel({
       const path = statusFilter === 'all'
         ? '/exchange?limit=100'
         : `/exchange?status=${statusFilter}&limit=100`;
-      const res = await adminFetch(path);
+      const [res, cats] = await Promise.all([
+        adminFetch(path),
+        adminFetch('/exchange-categories').catch(() => ({ categories: [] })),
+      ]);
       setQuestions((res.questions || []) as ExchangeQuestion[]);
+      setCategories((cats.categories || []) as ExchangeCategory[]);
     } finally {
       setLoading(false);
     }
@@ -184,11 +200,14 @@ export function ExchangeAdminPanel({
 
   const moderate = (id: number, moderationStatus: 'approved' | 'rejected', comment?: string) =>
     act(async () => {
+      const categoryId = categoryDraft[id];
       await adminFetch(`/exchange/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           moderationStatus,
           moderatorComment: comment || undefined,
+          categoryId: categoryId === '' || categoryId == null ? undefined : categoryId,
+          categoryConfirmed: true,
         }),
       });
       setRejectDraft(prev => {
@@ -278,8 +297,14 @@ export function ExchangeAdminPanel({
       </div>
 
       <p className="adm-muted" style={{ fontSize: 13, marginBottom: 12, lineHeight: 1.45 }}>
-        Вопросы участников: модерируйте публикацию и смотрите ответы, чтобы отсекать спам.
+        Вопросы участников с рубриками. Перед одобрением можно сменить тему в колонке «Рубрика».
+        Полный разбор очереди — во вкладке <strong>Модерация → Обмен</strong>.
       </p>
+      {categories.length === 0 && !loading && (
+        <p className="adm-insights-warn" style={{ marginBottom: 12 }}>
+          Справочник рубрик не загрузился (миграция 0061?). Перезапустите backend или проверьте /admin/exchange-categories.
+        </p>
+      )}
 
       {loading && <p className="adm-muted">Загрузка вопросов обмена…</p>}
       {!loading && sorted.length === 0 && (
@@ -320,6 +345,7 @@ export function ExchangeAdminPanel({
                   </button>
                 </th>
               ))}
+              <th>Рубрика</th>
               <th>Действия</th>
             </tr>
           </thead>
@@ -328,6 +354,7 @@ export function ExchangeAdminPanel({
               const likes = likesSum(q.answers);
               const answersCount = q.answerCount ?? (q.answers || []).filter(a => !a.parentAnswerId).length;
               const status = q.moderationStatus || 'pending';
+              const catVal = categoryDraft[q.id] ?? q.categoryId ?? q.category?.id ?? '';
               return (
                 <tr key={q.id}>
                   <td>{q.id}</td>
@@ -341,6 +368,7 @@ export function ExchangeAdminPanel({
                     )}
                     <div className="adm-muted" style={{ fontSize: 11 }}>
                       {[q.direction, q.groupName].filter(Boolean).join(' · ') || '—'}
+                      {q.classifiedBy ? ` · ${q.classifiedBy}` : ''}
                     </div>
                   </td>
                   <td style={{ maxWidth: 360, whiteSpace: 'pre-wrap' }}>{q.text}</td>
@@ -350,6 +378,22 @@ export function ExchangeAdminPanel({
                   <td>{answersCount}</td>
                   <td className="adm-muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                     {formatWhen(q.createdAt) || '—'}
+                  </td>
+                  <td>
+                    <select
+                      className="adm-input"
+                      style={{ minWidth: 160, fontSize: 12 }}
+                      value={catVal === '' ? '' : String(catVal)}
+                      onChange={e => setCategoryDraft(prev => ({
+                        ...prev,
+                        [q.id]: e.target.value ? Number(e.target.value) : '',
+                      }))}
+                    >
+                      <option value="">{q.category ? `${q.category.emoji || ''} ${q.category.title}` : 'Без рубрики'}</option>
+                      {categories.map(c => (
+                        <option key={c.id} value={c.id}>{c.emoji ? `${c.emoji} ` : ''}{c.title}</option>
+                      ))}
+                    </select>
                   </td>
                   <td>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>

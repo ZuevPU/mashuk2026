@@ -154,6 +154,21 @@ async function ensureQuestionAnswerAccrualCap(pool: ReturnType<typeof createPool
   `);
 }
 
+/** Apply exchange categories migration if table missing (0061). */
+async function ensureExchangeCategoriesSchema(pool: ReturnType<typeof createPool>): Promise<void> {
+  const { rows } = await pool.query<{ ok: number }>(
+    `SELECT 1 AS ok FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = 'exchange_categories'
+     LIMIT 1`,
+  );
+  if (rows.length > 0) return;
+
+  const sqlPath = path.join(__dirname, '../../drizzle/0061_exchange_categories.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  console.warn('Repair: applying 0061_exchange_categories.sql (exchange_categories missing)');
+  await pool.query(sql);
+}
+
 export async function runMigrations(): Promise<void> {
   const pool = createPool(process.env.DATABASE_URL!);
   const db = drizzle(pool);
@@ -172,6 +187,7 @@ export async function runMigrations(): Promise<void> {
     await ensurePiggybankPointsLogSchema(pool);
     await ensureAnswersPointsLogSchema(pool);
     await ensureQuestionAnswerAccrualCap(pool);
+    await ensureExchangeCategoriesSchema(pool);
     await pool.end();
   }
 }
