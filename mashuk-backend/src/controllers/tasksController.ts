@@ -158,12 +158,19 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
       const todayCompletedCount = taskSubs.filter(s =>
         s.status === 'approved' && s.checkedAt && s.checkedAt >= dayStart,
       ).length;
+      // Prefer admin rich-text / description — never let a stale shortDescription override it.
+      const plainFromHtml = (t.descriptionHtml || '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const adminDescription = plainFromHtml || (t.description || '').trim() || (t.shortDescription || '').trim() || null;
       return {
         id: t.id,
         title: t.title,
-        shortDescription: t.shortDescription ?? t.description ?? null,
-        description: t.shortDescription ?? t.description ?? null,
-        descriptionHtml: t.descriptionHtml ?? t.description ?? null,
+        shortDescription: adminDescription,
+        description: adminDescription,
+        descriptionHtml: t.descriptionHtml || (adminDescription ? `<p>${adminDescription}</p>` : null),
         points: t.points,
         category: t.category,
         categoryIconKey: t.iconKey ?? null,

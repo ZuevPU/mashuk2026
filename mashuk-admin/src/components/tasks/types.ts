@@ -221,12 +221,24 @@ export function draftFromTask(t: AdminTask): TaskDraft {
   };
 }
 
+function plainFromHtml(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function patchBodyFromDraft(draft: TaskDraft, publish = false): Record<string, unknown> {
   const status = publish ? 'published' : draft.status;
+  // Always derive short/plain description from the admin rich-text editor —
+  // never keep a stale shortDescription that can shadow the real task text.
+  const fromHtml = plainFromHtml(draft.descriptionHtml || '');
+  const plain = fromHtml || draft.description.trim();
   return {
     title: draft.title.trim(),
-    shortDescription: draft.shortDescription.trim() || draft.description.trim() || draft.descriptionHtml.replace(/<[^>]+>/g, ' ').trim(),
-    description: draft.description.trim() || draft.descriptionHtml.replace(/<[^>]+>/g, ' ').trim(),
+    shortDescription: plain,
+    description: plain,
     descriptionHtml: draft.descriptionHtml,
     categoryId: draft.categoryId === '' ? null : Number(draft.categoryId),
     points: Number(draft.points),

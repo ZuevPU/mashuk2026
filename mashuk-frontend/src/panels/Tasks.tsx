@@ -194,8 +194,15 @@ function TaskDetailHeader({ task }: { task: any }) {
         <span className="tasks-meta-pill">{taskConfirmLabel(task || {})}</span>
         {progress && <span className="tasks-meta-pill">{progress}</span>}
       </div>
-      {task?.description && (
-        <div className="tasks-detail-desc">{task.description}</div>
+      {(task?.descriptionHtml || task?.description) && (
+        task?.descriptionHtml
+          ? (
+            <div
+              className="tasks-detail-desc"
+              dangerouslySetInnerHTML={{ __html: task.descriptionHtml }}
+            />
+          )
+          : <div className="tasks-detail-desc">{task.description}</div>
       )}
     </div>
   );
@@ -784,7 +791,16 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
                 {t.category && (
                   <span className="tasks-cat-badge" data-tone={tone || 'sand'}>{t.category}</span>
                 )}
-                {t.description && <TaskDescriptionClamp text={t.description} />}
+                {(t.descriptionHtml || t.description) && (
+                  t.descriptionHtml
+                    ? (
+                      <div
+                        className="tasks-desc"
+                        dangerouslySetInnerHTML={{ __html: t.descriptionHtml }}
+                      />
+                    )
+                    : <TaskDescriptionClamp text={t.description} />
+                )}
                 <div style={{ fontSize: 11, color: isDone ? '#2F6B45' : '#888', marginTop: 6 }}>
                   +{t.points ?? 0} · {taskConfirmLabel(t)}
                   {repeatableProgressLabel(t) ? ` · ${repeatableProgressLabel(t)}` : ''}

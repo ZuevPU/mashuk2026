@@ -162,11 +162,29 @@ export function taskMethodsForParticipant(task: Pick<typeof tasks.$inferSelect, 
   return methodsFromLegacy(task);
 }
 
+function plainFromTaskHtml(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function enrichTaskWritePayload(
   body: Record<string, unknown>,
   existing?: Partial<typeof tasks.$inferInsert>,
 ): Partial<typeof tasks.$inferInsert> {
   const patch = { ...body } as Partial<typeof tasks.$inferInsert>;
+
+  // Keep plain/short description in sync with admin rich text so stale
+  // short_description never overrides what the admin actually wrote.
+  if ('descriptionHtml' in body && typeof body.descriptionHtml === 'string') {
+    const plain = plainFromTaskHtml(body.descriptionHtml);
+    if (plain) {
+      patch.description = plain;
+      patch.shortDescription = plain;
+    }
+  }
 
   if ('confirmationMethods' in body) {
     const methods = normalizeConfirmationMethods(body.confirmationMethods);
