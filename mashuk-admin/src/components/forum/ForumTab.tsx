@@ -43,7 +43,11 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     keyQuestion: '',
   });
   const [groups, setGroups] = useState<any[]>([]);
-  const [groupDrafts, setGroupDrafts] = useState<Record<number, { name: string; capacity: number }>>({});
+  const [groupDrafts, setGroupDrafts] = useState<Record<number, {
+    name: string;
+    capacity: number;
+    directionId: number | '';
+  }>>({});
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<number>>(() => new Set());
   const [bulkCapacity, setBulkCapacity] = useState(30);
   const [directions, setDirections] = useState<any[]>([]);
@@ -85,15 +89,16 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   }, [adminFetch]);
 
   useEffect(() => {
-    setGroupDrafts(prev => {
-      const next = { ...prev };
-      for (const g of groups) {
-        if (!next[g.id]) {
-          next[g.id] = { name: g.name || '', capacity: g.capacity ?? 30 };
-        }
-      }
-      return next;
-    });
+    setGroupDrafts(Object.fromEntries(groups.map((g: {
+      id: number;
+      name?: string;
+      capacity?: number;
+      directionId?: number | null;
+    }) => [g.id, {
+      name: g.name || '',
+      capacity: g.capacity ?? 30,
+      directionId: g.directionId ?? '',
+    }])));
   }, [groups]);
 
   useEffect(() => {
@@ -421,7 +426,11 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
       <div className="card adm-forum-block">
         <h3>Группы при регистрации</h3>
-        <p className="adm-forum-hint">Рабочие группы на смене: участник выбирает или система назначает автоматически.</p>
+        <p className="adm-forum-hint">
+          Рабочие группы на смене: участник выбирает или система назначает автоматически.
+          Столбец «Направление» принудительно задаёт направление всем участникам группы
+          (даже если при регистрации выбрали другое).
+        </p>
         <label className="adm-field">
           <span className="adm-label">Режим</span>
           <select
@@ -437,7 +446,7 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           <input value={newGroup.name} onChange={e => setNewGroup({ ...newGroup, name: e.target.value })} placeholder="Название группы" />
           <input type="number" value={newGroup.capacity} onChange={e => setNewGroup({ ...newGroup, capacity: Number(e.target.value) })} placeholder="Мест" style={{ width: 80 }} />
           <select value={newGroup.directionId} onChange={e => setNewGroup({ ...newGroup, directionId: e.target.value })}>
-            <option value="">Любое направление</option>
+            <option value="">Без принудительного направления</option>
             {directions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
           <button
@@ -491,10 +500,14 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                 await Promise.all(ids.map(async (id) => {
                   const g = groups.find(x => x.id === id);
                   if (!g) return;
-                  const name = groupDrafts[id]?.name ?? g.name;
+                  const draft = groupDrafts[id];
+                  const name = draft?.name ?? g.name;
+                  const directionId = draft?.directionId !== undefined
+                    ? (draft.directionId === '' ? null : Number(draft.directionId))
+                    : (g.directionId ?? null);
                   await adminFetch(`/groups/${id}`, {
                     method: 'PATCH',
-                    body: JSON.stringify({ name, capacity }),
+                    body: JSON.stringify({ name, capacity, directionId }),
                   });
                 }));
                 setGroupDrafts(prev => {
@@ -504,6 +517,7 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                     next[id] = {
                       name: prev[id]?.name ?? g?.name ?? '',
                       capacity,
+                      directionId: prev[id]?.directionId ?? g?.directionId ?? '',
                     };
                   }
                   return next;
@@ -513,7 +527,21 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             >
               Применить к выбранным
             </button>
+            <button
+              type="button"
+              className="adm-btn adm-btn-secondary"
+              onClick={() => act(async () => {
+                const res = await adminFetch('/groups/sync-directions', { method: 'POST' });
+                await load();
+                return `Направление обновлено у ${res.synced ?? 0} участников`;
+              })}
+            >
+              Применить направления групп к участникам
+            </button>
           </div>
+        )}
+        {groups.length === 0 && (
+          <p className="adm-muted" style={{ marginTop: 8 }}>Пока нет групп — добавьте первую выше.</p>
         )}
         <table className="adm-table">
           <thead>
@@ -531,6 +559,7 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
               </th>
               <th>Название</th>
               <th>Мест</th>
+              <th>Направление</th>
               <th>Участников</th>
               <th></th>
             </tr>
@@ -559,7 +588,11 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                     value={groupDrafts[g.id]?.name ?? g.name}
                     onChange={e => setGroupDrafts(prev => ({
                       ...prev,
-                      [g.id]: { ...prev[g.id], name: e.target.value, capacity: prev[g.id]?.capacity ?? g.capacity ?? 30 },
+                      [g.id]: {
+                        name: e.target.value,
+                        capacity: prev[g.id]?.capacity ?? g.capacity ?? 30,
+                        directionId: prev[g.id]?.directionId ?? g.directionId ?? '',
+                      },
                     }))}
                   />
                 </td>
@@ -570,9 +603,32 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                     value={groupDrafts[g.id]?.capacity ?? g.capacity ?? 30}
                     onChange={e => setGroupDrafts(prev => ({
                       ...prev,
-                      [g.id]: { name: prev[g.id]?.name ?? g.name, capacity: Number(e.target.value) },
+                      [g.id]: {
+                        name: prev[g.id]?.name ?? g.name,
+                        capacity: Number(e.target.value),
+                        directionId: prev[g.id]?.directionId ?? g.directionId ?? '',
+                      },
                     }))}
                   />
+                </td>
+                <td>
+                  <select
+                    className="adm-input"
+                    value={groupDrafts[g.id]?.directionId ?? g.directionId ?? ''}
+                    onChange={e => setGroupDrafts(prev => ({
+                      ...prev,
+                      [g.id]: {
+                        name: prev[g.id]?.name ?? g.name,
+                        capacity: prev[g.id]?.capacity ?? g.capacity ?? 30,
+                        directionId: e.target.value === '' ? '' : Number(e.target.value),
+                      },
+                    }))}
+                  >
+                    <option value="">— не задано —</option>
+                    {directions.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
                 </td>
                 <td>{g.membersCount ?? 0}</td>
                 <td>
@@ -580,12 +636,23 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                     type="button"
                     className="adm-btn adm-btn-secondary adm-btn-sm"
                     onClick={() => act(async () => {
-                      const d = groupDrafts[g.id] || { name: g.name, capacity: g.capacity ?? 30 };
-                      await adminFetch(`/groups/${g.id}`, {
+                      const d = groupDrafts[g.id] || {
+                        name: g.name,
+                        capacity: g.capacity ?? 30,
+                        directionId: g.directionId ?? '',
+                      };
+                      const res = await adminFetch(`/groups/${g.id}`, {
                         method: 'PATCH',
-                        body: JSON.stringify({ name: d.name, capacity: d.capacity }),
+                        body: JSON.stringify({
+                          name: d.name,
+                          capacity: d.capacity,
+                          directionId: d.directionId === '' ? null : Number(d.directionId),
+                        }),
                       });
                       await load();
+                      if (res.directionSynced) {
+                        return `Сохранено · направление обновлено у ${res.directionSynced}`;
+                      }
                     })}
                   >
                     Сохранить

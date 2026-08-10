@@ -67,14 +67,14 @@ async function assignGroup(
     return { groupId: g.id, groupName: g.name };
   }
 
+  // Auto: least-filled group. Direction of the participant is forced from the group later.
+  void directionId;
   const groups = await db.select().from(participantGroups)
     .where(eq(participantGroups.shiftId, shiftId))
     .orderBy(asc(participantGroups.id));
-  const candidates = groups.filter(g => !g.directionId || g.directionId === directionId);
-  const pool = candidates.length ? candidates : groups;
-  let best: typeof pool[0] | null = null;
+  let best: typeof groups[0] | null = null;
   let bestCount = Infinity;
-  for (const g of pool) {
+  for (const g of groups) {
     const [c] = await db.select({ c: count() }).from(participants).where(and(
       eq(participants.groupId, g.id),
       eq(participants.shiftId, shiftId),
@@ -245,6 +245,9 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       return;
     }
 
+    const { resolveDirectionFromGroup } = await import('../services/groupDirectionSync.js');
+    const finalDir = await resolveDirectionFromGroup(groupAssign.groupId, { id: dir.id, name: dir.name });
+
     const values = {
       vkId: vkUserId,
       shiftId,
@@ -260,8 +263,8 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       consentAnalyticsVersion: data.consentAnalyticsVersion ?? consentVersions.analytics,
       groupId: groupAssign.groupId,
       groupName: groupAssign.groupName,
-      directionId: dir.id,
-      direction: dir.name,
+      directionId: finalDir.id,
+      direction: finalDir.name,
       interests: data.interests,
       goalAnswers: data.goalAnswers,
       roleAnswers: data.roleAnswers,

@@ -169,8 +169,21 @@ export const updateParticipantGroup = async (req: AdminRequest, res: Response): 
     return;
   }
 
+  const { resolveDirectionFromGroup } = await import('../services/groupDirectionSync.js');
+  const dirPatch = group.directionId
+    ? await resolveDirectionFromGroup(group.id, { id: 0, name: '' })
+    : null;
+  const memberPatch: Partial<typeof participants.$inferInsert> = {
+    groupId: group.id,
+    groupName: group.name,
+  };
+  if (dirPatch?.fromGroup) {
+    memberPatch.directionId = dirPatch.id;
+    memberPatch.direction = dirPatch.name;
+  }
+
   const [updated] = await db.update(participants)
-    .set({ groupId: group.id, groupName: group.name })
+    .set(memberPatch)
     .where(eq(participants.id, id))
     .returning();
   const { logAdminAction } = await import('../services/adminActionsLog.js');
@@ -180,7 +193,11 @@ export const updateParticipantGroup = async (req: AdminRequest, res: Response): 
     section: 'participants',
     objectId: id,
     oldValue: { groupId: existing.groupId, groupName: existing.groupName },
-    newValue: { groupId: group.id, groupName: group.name },
+    newValue: {
+      groupId: group.id,
+      groupName: group.name,
+      ...(dirPatch?.fromGroup ? { directionId: dirPatch.id, direction: dirPatch.name } : {}),
+    },
     isCritical: true,
   });
   res.json({ participant: updated });

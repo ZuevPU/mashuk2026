@@ -101,11 +101,33 @@ export const crudGroups = {
   },
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
-    const [updated] = await db.update(participantGroups).set(req.body).where(eq(participantGroups.id, id)).returning();
+    if (!Number.isFinite(id) || id <= 0) {
+      res.status(400).json({ error: 'Invalid id' });
+      return;
+    }
+    const patch: Partial<typeof participantGroups.$inferInsert> = {};
+    if (req.body.name !== undefined) patch.name = String(req.body.name).trim();
+    if (req.body.capacity !== undefined) patch.capacity = Math.max(1, Number(req.body.capacity) || 1);
+    if (req.body.directionId !== undefined) {
+      const raw = req.body.directionId;
+      patch.directionId = raw === null || raw === '' ? null : Number(raw);
+      if (patch.directionId != null && (!Number.isFinite(patch.directionId) || patch.directionId <= 0)) {
+        res.status(400).json({ error: 'Invalid directionId' });
+        return;
+      }
+    }
+    if (Object.keys(patch).length === 0) {
+      res.status(400).json({ error: 'Nothing to update' });
+      return;
+    }
+    const [updated] = await db.update(participantGroups).set(patch).where(eq(participantGroups.id, id)).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
     // sync group_name on participants
     await db.update(participants).set({ groupName: updated.name }).where(eq(participants.groupId, id));
-    res.json({ group: updated });
+    // Force members' direction from the group's direction column
+    const { applyGroupDirectionToMembers } = await import('../services/groupDirectionSync.js');
+    const synced = await applyGroupDirectionToMembers(id);
+    res.json({ group: updated, directionSynced: synced });
   },
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
@@ -113,6 +135,13 @@ export const crudGroups = {
     const [deleted] = await db.delete(participantGroups).where(eq(participantGroups.id, id)).returning();
     if (!deleted) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ ok: true });
+  },
+  syncDirections: async (req: AdminRequest, res: Response) => {
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
+    const { applyAllGroupDirections } = await import('../services/groupDirectionSync.js');
+    const synced = await applyAllGroupDirections(shiftId);
+    res.json({ ok: true, synced });
   },
 };
 

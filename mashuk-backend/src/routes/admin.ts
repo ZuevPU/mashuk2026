@@ -181,6 +181,7 @@ router.delete('/consents/:id', requireAdminRole('delete'), wrap(p0.crudConsents.
 router.get('/groups', wrap(p0.crudGroups.list));
 router.post('/groups', requireAdminRole('settings'), wrap(p0.crudGroups.create));
 router.patch('/groups/:id', requireAdminRole('settings'), wrap(p0.crudGroups.update));
+router.post('/groups/sync-directions', requireAdminRole('settings'), wrap(p0.crudGroups.syncDirections));
 router.delete('/groups/:id', requireAdminRole('delete'), wrap(p0.crudGroups.delete));
 
 router.get('/event-attendance', wrap(admin.listEventAttendance));
