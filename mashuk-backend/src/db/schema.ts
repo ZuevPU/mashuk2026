@@ -312,6 +312,26 @@ export const dayFocus = pgTable('day_focus', {
   uniqueIndex('day_focus_shift_day_unique').on(table.shiftId, table.dayNumber),
 ]);
 
+/** Editorial home-screen notice (compact plate + modal), one published per shift. */
+export const homeNotices = pgTable('home_notices', {
+  id: serial('id').primaryKey(),
+  shiftId: integer('shift_id').notNull(),
+  title: varchar('title', { length: 255 }).notNull(),
+  body: text('body').notNull().default(''),
+  ctaUrl: text('cta_url'),
+  ctaLabel: varchar('cta_label', { length: 120 }),
+  imageUrls: jsonb('image_urls').$type<string[]>().default([]),
+  status: varchar('status', { length: 32 }).notNull().default('draft'),
+  publishedAt: timestamp('published_at'),
+  visibleFrom: timestamp('visible_from'),
+  visibleUntil: timestamp('visible_until'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index('home_notices_shift_id_idx').on(table.shiftId),
+  index('home_notices_status_idx').on(table.status),
+]);
+
 export const adminUsers = pgTable('admin_users', {
   id: serial('id').primaryKey(),
   login: varchar('login', { length: 255 }).unique().notNull(),

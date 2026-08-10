@@ -17,6 +17,7 @@ import * as hubCtrl from '../controllers/hubController.js';
 import * as exportsCtrl from '../controllers/exportController.js';
 import * as exportCustomCtrl from '../controllers/exportCustomController.js';
 import * as shiftsCtrl from '../controllers/adminShiftController.js';
+import * as homeNotice from '../controllers/homeNoticeController.js';
 
 const router = Router();
 const P = requireAdminPermission;
@@ -289,6 +290,11 @@ router.post('/push/notifications/:id/send', requireAdminRole('settings'), wrap(p
 router.post('/push/notifications/:id/refresh-stats', wrap(pushAdmin.refreshPushNotificationStats));
 router.get('/push/templates/:templateId/apply', wrap(pushAdmin.applyPushTemplate));
 router.post('/upload-image', requireAdminRole('settings'), wrap(adminUploadImage));
+router.get('/home-notices', wrap(homeNotice.listHomeNotices));
+router.get('/home-notices/:id', wrap(homeNotice.getHomeNotice));
+router.post('/home-notices', requireAdminRole('settings'), wrap(homeNotice.createHomeNotice));
+router.patch('/home-notices/:id', requireAdminRole('settings'), wrap(homeNotice.updateHomeNotice));
+router.delete('/home-notices/:id', requireAdminRole('delete'), wrap(homeNotice.deleteHomeNotice));
 router.get('/push/templates', wrap(p0.crudPushTemplates.list));
 router.post('/push/templates', requireAdminRole('settings'), wrap(p0.crudPushTemplates.create));
 router.patch('/push/templates/:id', requireAdminRole('settings'), wrap(p0.crudPushTemplates.update));

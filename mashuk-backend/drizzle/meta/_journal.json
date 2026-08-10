@@ -414,6 +414,13 @@
       "when": 1838000000000,
       "tag": "0059_exchange_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1839000000000,
+      "tag": "0060_home_notices",
+      "breakpoints": true
     }
   ]
 }

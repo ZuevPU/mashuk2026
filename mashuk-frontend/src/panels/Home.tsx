@@ -15,6 +15,7 @@ import {
   UnansweredAfterBlocksCard, PracticesHomeCard,
 } from '../components/home/DashboardCards';
 import { PushBanner, type PushBannerItem } from '../components/home/PushBanner';
+import { HomeNoticeCard, HomeNoticeModalBody, type HomeNoticeItem } from '../components/home/HomeNoticeCard';
 import { EveningDaySummaryFlow } from '../components/questions/EveningDaySummaryFlow';
 import { apiGet, ApiError } from '../api/client';
 import { isEveningDaySummaryQuestion } from '../utils/eveningSummaryQuestion';
@@ -119,6 +120,7 @@ interface HomeData {
     showEveningCard?: boolean;
   };
   activePushBanners?: PushBannerItem[];
+  homeNotice?: HomeNoticeItem | null;
 }
 
 const scheduleKindLabel = (kind: string) => {
@@ -141,6 +143,7 @@ export const HomePanel: React.FC<{
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showEvening, setShowEvening] = useState(false);
+  const [showHomeNotice, setShowHomeNotice] = useState(false);
   const [dismissedBanners, setDismissedBanners] = useState<number[]>([]);
 
   const reload = () => {
@@ -175,32 +178,46 @@ export const HomePanel: React.FC<{
     if (params.get('evening') === '1') setShowEvening(true);
   }, []);
 
-  /** Итоговая анкета — отдельное модальное окно (как на «Вопросах»), не в ленте главной. */
+  /** Итоговая анкета / плашка главного экрана — отдельные модалки (не в ленте). */
   useEffect(() => {
     if (activePanel !== id) {
       if (showEvening) setShowEvening(false);
+      if (showHomeNotice) setShowHomeNotice(false);
       return;
     }
-    if (!showEvening) return;
-
-    const closeEvening = () => setShowEvening(false);
-    setModal(
-      <ModalRoot activeModal="evening" onClose={closeEvening}>
-        <ModalPage id="evening" settlingHeight={100} onClose={closeEvening}>
-          <ModalPageHeader>Итоговая анкета</ModalPageHeader>
-          <EveningDaySummaryFlow
-            onClose={closeEvening}
-            onSubmitted={() => {
-              closeEvening();
-              setSnackbar('Итоговая анкета сохранена · +15 Путь');
-              reload();
-            }}
-          />
-        </ModalPage>
-      </ModalRoot>,
-    );
-    return () => setModal(null);
-  }, [showEvening, activePanel, id, setModal]);
+    if (showEvening) {
+      const closeEvening = () => setShowEvening(false);
+      setModal(
+        <ModalRoot activeModal="evening" onClose={closeEvening}>
+          <ModalPage id="evening" settlingHeight={100} onClose={closeEvening}>
+            <ModalPageHeader>Итоговая анкета</ModalPageHeader>
+            <EveningDaySummaryFlow
+              onClose={closeEvening}
+              onSubmitted={() => {
+                closeEvening();
+                setSnackbar('Итоговая анкета сохранена · +15 Путь');
+                reload();
+              }}
+            />
+          </ModalPage>
+        </ModalRoot>,
+      );
+      return () => setModal(null);
+    }
+    if (showHomeNotice && data?.homeNotice) {
+      const closeNotice = () => setShowHomeNotice(false);
+      setModal(
+        <ModalRoot activeModal="home-notice" onClose={closeNotice}>
+          <ModalPage id="home-notice" settlingHeight={80} onClose={closeNotice}>
+            <ModalPageHeader>Объявление</ModalPageHeader>
+            <HomeNoticeModalBody notice={data.homeNotice} />
+          </ModalPage>
+        </ModalRoot>,
+      );
+      return () => setModal(null);
+    }
+    setModal(null);
+  }, [showEvening, showHomeNotice, data?.homeNotice, activePanel, id, setModal]);
 
   const piggyCaptureOpts = (onSaved?: () => void) => ({
     onSaved,
@@ -270,6 +287,13 @@ export const HomePanel: React.FC<{
           focusKeyQuestion={d.dayFocus?.keyQuestion}
           progressPercent={(d.currentDay / d.totalDays) * 100}
         />
+
+        {d.homeNotice && (
+          <HomeNoticeCard
+            notice={d.homeNotice}
+            onOpen={() => setShowHomeNotice(true)}
+          />
+        )}
 
         <PushBanner
           banners={pushBanners}

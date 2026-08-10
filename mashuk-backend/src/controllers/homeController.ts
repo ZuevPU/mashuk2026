@@ -414,6 +414,21 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       // migration pending
     }
 
+    let homeNotice: {
+      id: number;
+      title: string;
+      body: string;
+      ctaUrl: string | null;
+      ctaLabel: string | null;
+      imageUrls: string[];
+    } | null = null;
+    try {
+      const { getActiveHomeNotice } = await import('./homeNoticeController.js');
+      homeNotice = await getActiveHomeNotice(shiftIdForQs, now);
+    } catch {
+      // migration pending
+    }
+
     res.json({
       user: {
         firstName: participant.firstName,
@@ -502,6 +517,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       sectionsVisibility: settings.sectionsVisibility ?? {},
       startDate: settings.startDate ?? null,
       activePushBanners,
+      homeNotice,
     });
   } catch (error) {
     console.error('getHome:', error);
