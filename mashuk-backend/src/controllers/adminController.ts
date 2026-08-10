@@ -3045,6 +3045,11 @@ export const listAllSubmissions = async (req: AdminRequest, res: Response): Prom
   const confirmationType = req.query.confirmationType as string | undefined;
   const dateFrom = req.query.dateFrom as string | undefined;
   const dateTo = req.query.dateTo as string | undefined;
+  const dayRaw = req.query.day ?? req.query.dayNumber;
+  const dayNumber = dayRaw != null && dayRaw !== '' ? Number(dayRaw) : undefined;
+  const verifiedByMe = req.query.verifiedByMe === '1' || req.query.verifiedByMe === 'true';
+  const verifiedByAdminIdRaw = req.query.verifiedByAdminId as string | undefined;
+  const verifiedByAdminId = verifiedByAdminIdRaw ? Number(verifiedByAdminIdRaw) : undefined;
   const taskId = taskIdRaw ? Number(taskIdRaw) : undefined;
   const participantId = participantIdRaw ? Number(participantIdRaw) : undefined;
   const groupId = groupIdRaw ? Number(groupIdRaw) : undefined;
@@ -3067,6 +3072,17 @@ export const listAllSubmissions = async (req: AdminRequest, res: Response): Prom
   if (direction) conditions.push(eq(participants.direction, direction));
   if (groupId && !Number.isNaN(groupId)) conditions.push(eq(participants.groupId, groupId));
   if (confirmationType) conditions.push(eq(tasks.confirmationType, confirmationType));
+  if (dayNumber && !Number.isNaN(dayNumber)) {
+    conditions.push(or(
+      eq(tasks.dayNumber, dayNumber),
+      sql`${tasks.dayNumbers} @> ${JSON.stringify([dayNumber])}::jsonb`,
+    )!);
+  }
+  if (verifiedByMe && req.adminId) {
+    conditions.push(eq(taskSubmissions.verifiedByAdminId, req.adminId));
+  } else if (verifiedByAdminId && !Number.isNaN(verifiedByAdminId)) {
+    conditions.push(eq(taskSubmissions.verifiedByAdminId, verifiedByAdminId));
+  }
   if (dateFrom) {
     const d = new Date(dateFrom);
     if (!Number.isNaN(d.getTime())) conditions.push(gte(taskSubmissions.submittedAt, d));
@@ -3087,6 +3103,9 @@ export const listAllSubmissions = async (req: AdminRequest, res: Response): Prom
   if (sortBy === 'participant') orderExpr = sortDirFn(participants.firstName);
   else if (sortBy === 'status') orderExpr = sortDirFn(taskSubmissions.status);
   else if (sortBy === 'points') orderExpr = sortDirFn(taskSubmissions.pointsAwarded);
+  else if (sortBy === 'task') orderExpr = sortDirFn(tasks.title);
+  else if (sortBy === 'checkedAt') orderExpr = sortDirFn(taskSubmissions.checkedAt);
+  else if (sortBy === 'day') orderExpr = sortDirFn(tasks.dayNumber);
   else orderExpr = sortDirFn(taskSubmissions.submittedAt);
 
   let baseQuery = db.select({
@@ -3127,6 +3146,7 @@ export const listAllSubmissions = async (req: AdminRequest, res: Response): Prom
       participantId: r.p?.id ?? r.s.participantId,
       taskTitle: r.t?.title,
       taskDay: r.t?.dayNumber,
+      taskDayNumbers: r.t?.dayNumbers ?? (r.t?.dayNumber != null ? [r.t.dayNumber] : []),
       confirmationType: r.t?.confirmationType,
       participantDirection: r.p?.direction,
       participantGroupId: r.p?.groupId,

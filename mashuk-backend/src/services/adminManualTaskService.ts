@@ -85,7 +85,7 @@ export type RevokeSubmissionResult =
 
 const TASK_AWARD_ACTIONS = ['task_complete', 'admin_manual_task'] as const;
 
-async function revokePointsForSubmission(
+export async function revokePointsForSubmission(
   submission: typeof taskSubmissions.$inferSelect,
   task: typeof tasks.$inferSelect,
   reason: string,
@@ -135,6 +135,32 @@ async function revokePointsForSubmission(
   }
 
   return [...revoked];
+}
+
+/** Strip awards from an approved submission but keep the row (for re-moderation). */
+export async function stripSubmissionAwards(
+  submission: typeof taskSubmissions.$inferSelect,
+  task: typeof tasks.$inferSelect,
+  reason = 'Изменение решения модерации',
+): Promise<number[]> {
+  const revokedLogIds = await revokePointsForSubmission(submission, task, reason);
+  await db.delete(userMedals).where(eq(userMedals.submissionId, submission.id));
+  if (submission.userMedalId) {
+    await db.delete(userMedals).where(eq(userMedals.id, submission.userMedalId));
+  }
+  await db.update(taskSubmissions).set({
+    pointsAwarded: 0,
+    pointsLogId: null,
+    userMedalId: null,
+  }).where(eq(taskSubmissions.id, submission.id));
+
+  const affected = new Set<number>([submission.participantId]);
+  ((submission.teamMemberIds as number[]) || []).forEach(id => affected.add(id));
+  for (const pid of affected) {
+    await recalculateParticipantTotals(pid);
+    await evaluateMedalsForParticipant(pid);
+  }
+  return revokedLogIds;
 }
 
 /**

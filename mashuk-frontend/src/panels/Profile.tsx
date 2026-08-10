@@ -25,6 +25,14 @@ function formatExperimentCount(n: number): string {
   return `${n} экспериментов`;
 }
 
+function medalLevelRu(level?: string | null): string {
+  const key = String(level || '').trim().toLowerCase();
+  if (key === 'bronze' || key === 'бронза') return 'Бронза';
+  if (key === 'silver' || key === 'серебро') return 'Серебро';
+  if (key === 'gold' || key === 'золото') return 'Золото';
+  return level || '';
+}
+
 const PUSH_TYPES = [
   { key: 'touchpoints', label: 'Точки осмысления / проверки состояния' },
   { key: 'program', label: 'Программа и события' },
@@ -1158,7 +1166,7 @@ export const ProfilePanel: React.FC<{
                   )}
                   <div style={{ fontSize: 10, color: '#888', marginTop: 6 }}>
                     {m.earned ? 'Получена' : 'Ещё не получена'}
-                    {m.level ? ` · ${m.level}` : ''}
+                    {m.level ? ` · ${medalLevelRu(m.level)}` : ''}
                   </div>
                 </div>
               ))

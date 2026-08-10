@@ -13,12 +13,15 @@ export type TaskSubmissionRow = {
   participantName?: string;
   taskId: number;
   taskTitle?: string;
+  taskDay?: number | null;
+  taskDayNumbers?: number[] | null;
   status: string;
   answerText?: string | null;
   photoUrl?: string | null;
   postUrl?: string | null;
   pointsAwarded?: number | null;
   submittedAt?: string | null;
+  checkedAt?: string | null;
   moderatorComment?: string | null;
   confirmationType?: string | null;
   participantDirection?: string | null;
@@ -36,6 +39,14 @@ export type TaskSubmissionRow = {
   verifiedAt?: string | null;
   verifiedByAdminId?: number | null;
 };
+
+export function taskDayLabel(row: Pick<TaskSubmissionRow, 'taskDay' | 'taskDayNumbers'>): string {
+  const days = row.taskDayNumbers?.length
+    ? row.taskDayNumbers
+    : (row.taskDay != null ? [row.taskDay] : []);
+  if (!days.length) return '—';
+  return days.map(d => `Д${d}`).join(', ');
+}
 
 export function taskSubmissionAnswerCell(row: TaskSubmissionRow): ReactNode {
   const parts: ReactNode[] = [];
