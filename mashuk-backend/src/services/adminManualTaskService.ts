@@ -10,7 +10,6 @@ import {
   userMedals,
 } from '../db/schema.js';
 import { recalculateParticipantTotals, revokePointsLogEntry } from './pointsService.js';
-import { assertTaskSubmissionAllowed } from './taskEligibility.js';
 import { evaluateMedalsForParticipant } from './medalEvaluator.js';
 import {
   completeSubmissionRewards,
@@ -21,6 +20,10 @@ export type ManualTaskResult =
   | { ok: true; submission: typeof taskSubmissions.$inferSelect }
   | { ok: false; error: string; status: number };
 
+/**
+ * Admin card: mark task completed. Always creates a NEW approved submission,
+ * so the same task can be credited multiple times to one participant.
+ */
 export async function adminCompleteParticipantTask(
   participantId: number,
   taskId: number,
@@ -36,25 +39,6 @@ export async function adminCompleteParticipantTask(
     return { ok: false, error: 'Командные задания отмечайте через модерацию заявки', status: 400 };
   }
 
-  const [existing] = await db.select().from(taskSubmissions)
-    .where(and(
-      eq(taskSubmissions.participantId, participantId),
-      eq(taskSubmissions.taskId, taskId),
-    ))
-    .limit(1);
-
-  if (existing?.status === 'approved' && (existing.pointsAwarded ?? 0) > 0) {
-    return { ok: false, error: 'Задание уже выполнено', status: 400 };
-  }
-
-  const elig = await assertTaskSubmissionAllowed(participantId, task, {
-    allowResubmitRejected: existing?.status === 'rejected',
-    existingStatus: existing?.status ?? null,
-  });
-  if (!elig.ok && existing?.status !== 'rejected') {
-    return { ok: false, error: elig.error, status: 400 };
-  }
-
   const lifecyclePatch = submissionCreatePatch({
     task,
     payload: { volunteer: false },
@@ -62,45 +46,26 @@ export async function adminCompleteParticipantTask(
     isTeam: false,
     forceAuto: true,
   });
-  let submissionId: number;
 
-  if (existing) {
-    const [updated] = await db.update(taskSubmissions)
-      .set({
-        status: 'approved',
-        checkedAt: new Date(),
-        verifiedAt: new Date(),
-        moderatorComment: moderatorComment ?? 'Отмечено администратором',
-        pointsAwarded: 0,
-        pointsLogId: null,
-        userMedalId: null,
-        submittedAt: existing.submittedAt ?? new Date(),
-        proofType: 'moderator',
-        verificationType: 'manual_moderator',
-        lifecycleStage: 'confirmed',
-      })
-      .where(eq(taskSubmissions.id, existing.id))
-      .returning();
-    submissionId = updated!.id;
-  } else {
-    const [created] = await db.insert(taskSubmissions).values({
-      participantId,
-      taskId,
-      status: 'approved',
-      checkedAt: new Date(),
-      verifiedAt: new Date(),
-      moderatorComment: moderatorComment ?? 'Отмечено администратором',
-      pointsAwarded: 0,
-      submittedAt: new Date(),
-      ...lifecyclePatch,
-      proofType: 'moderator',
-      verificationType: 'manual_moderator',
-    }).returning();
-    submissionId = created!.id;
-  }
+  const [created] = await db.insert(taskSubmissions).values({
+    participantId,
+    taskId,
+    status: 'approved',
+    checkedAt: new Date(),
+    verifiedAt: new Date(),
+    moderatorComment: moderatorComment ?? 'Отмечено администратором',
+    pointsAwarded: 0,
+    submittedAt: new Date(),
+    ...lifecyclePatch,
+    proofType: 'moderator',
+    verificationType: 'manual_moderator',
+  }).returning();
+
+  const submissionId = created!.id;
 
   await completeSubmissionRewards(submissionId, [participantId], task, {
     verificationType: 'manual_moderator',
+    ignoreMaxAccruals: true,
   });
 
   const [submission] = await db.select().from(taskSubmissions).where(eq(taskSubmissions.id, submissionId)).limit(1);

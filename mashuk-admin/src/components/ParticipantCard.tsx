@@ -872,7 +872,17 @@ export function ParticipantCardModal({
 
                   <strong>{it.title}</strong>
 
-                  {it.detail && <div style={{ marginTop: 4 }}>{it.detail}</div>}
+                  {it.sourceTitle && it.sourceTitle !== it.title && (
+                    <div style={{ marginTop: 4, fontWeight: 600 }}>{it.sourceTitle}</div>
+                  )}
+
+                  {(it.sourceDescription || it.description) && (
+                    <div style={{ marginTop: 4, color: '#444', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                      {it.sourceDescription || it.description}
+                    </div>
+                  )}
+
+                  {it.detail && <div style={{ marginTop: 4, color: '#666' }}>{it.detail}</div>}
 
                 </div>
 
@@ -919,7 +929,7 @@ export function ParticipantCardModal({
           {tab === 'tasks' && (
 
             <>
-            <div className="adm-forum-toolbar" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <div className="adm-forum-toolbar" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
               <select
                 className="adm-input"
                 value={manualTaskId}
@@ -945,6 +955,9 @@ export function ParticipantCardModal({
               >
                 Отметить выполненным
               </button>
+              <span className="adm-muted" style={{ fontSize: 12 }}>
+                Одно и то же задание можно отметить несколько раз — каждый раз начислятся баллы.
+              </span>
             </div>
             <table className="adm-table">
 
@@ -1163,7 +1176,7 @@ export function ParticipantCardModal({
 
             <table className="adm-table">
 
-              <thead><tr><th>Тип</th><th>Баллы</th><th>Когда</th><th></th></tr></thead>
+              <thead><tr><th>Тип</th><th>Источник</th><th>Баллы</th><th>Когда</th><th></th></tr></thead>
 
               <tbody>
 
@@ -1172,6 +1185,25 @@ export function ParticipantCardModal({
                   <tr key={pt.id} style={pt.revokedAt ? { opacity: 0.5 } : undefined}>
 
                     <td>{label(pt.actionType)}</td>
+
+                    <td style={{ maxWidth: 360, fontSize: 12 }}>
+                      {pt.sourceTitle ? (
+                        <>
+                          <div style={{ fontWeight: 700 }}>
+                            {pt.sourceKind === 'question' ? 'Вопрос' : pt.sourceKind === 'task' ? 'Задание' : 'Источник'}
+                            {': '}
+                            {pt.sourceTitle}
+                          </div>
+                          {pt.sourceDescription && (
+                            <div style={{ marginTop: 4, color: '#555', whiteSpace: 'pre-wrap', lineHeight: 1.35 }}>
+                              {pt.sourceDescription}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <span className="adm-muted">—</span>
+                      )}
+                    </td>
 
                     <td>{pt.points}</td>
 

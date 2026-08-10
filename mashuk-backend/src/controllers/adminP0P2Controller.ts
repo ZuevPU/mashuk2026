@@ -367,30 +367,68 @@ export const getParticipantActivity = async (req: AdminRequest, res: Response): 
     )).orderBy(desc(piggybank.createdAt)).limit(40),
   ]);
 
-  type Item = { at: Date | null; kind: string; title: string; detail?: string };
+  const { enrichPointsLogRows } = await import('../services/pointsLogSource.js');
+  const enrichedPts = await enrichPointsLogRows(pts);
+
+  const plainTaskDesc = (t: typeof tasks.$inferSelect | null | undefined) => {
+    if (!t) return null;
+    const fromHtml = (t.descriptionHtml || '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return fromHtml || (t.description || '').trim() || (t.shortDescription || '').trim() || null;
+  };
+
+  type Item = {
+    at: Date | null;
+    kind: string;
+    title: string;
+    detail?: string;
+    description?: string | null;
+    sourceKind?: string | null;
+    sourceTitle?: string | null;
+    sourceDescription?: string | null;
+  };
   const items: Item[] = [];
   for (const r of ans) {
+    const qDesc = [r.q?.subtitle, r.q?.text].filter(Boolean).join('\n').trim() || null;
     items.push({
       at: r.a.createdAt,
       kind: 'answer',
       title: r.q?.title || 'Ответ',
+      description: qDesc,
       detail: typeof r.a.answerData === 'string' ? r.a.answerData : JSON.stringify(r.a.answerData),
+      sourceKind: 'question',
+      sourceTitle: r.q?.title || null,
+      sourceDescription: qDesc,
     });
   }
   for (const r of subs) {
+    const desc = plainTaskDesc(r.t);
     items.push({
       at: r.s.submittedAt,
       kind: 'task',
       title: r.t?.title || 'Задание',
+      description: desc,
       detail: r.s.status ?? undefined,
+      sourceKind: 'task',
+      sourceTitle: r.t?.title || null,
+      sourceDescription: desc,
     });
   }
-  for (const pl of pts) {
+  for (const pl of enrichedPts) {
     items.push({
       at: pl.createdAt,
       kind: 'points',
-      title: pl.actionType || 'Баллы',
+      title: pl.sourceTitle
+        ? `${pl.actionType || 'Баллы'} · ${pl.sourceTitle}`
+        : (pl.actionType || 'Баллы'),
+      description: pl.sourceDescription,
       detail: `${pl.points > 0 ? '+' : ''}${pl.points}`,
+      sourceKind: pl.sourceKind,
+      sourceTitle: pl.sourceTitle,
+      sourceDescription: pl.sourceDescription,
     });
   }
   for (const r of att) {
@@ -666,6 +704,8 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
   }
 
   const avatarUrl = await resolveParticipantAvatarUrl(p, { preferVkPhoto: true });
+  const { enrichPointsLogRows } = await import('../services/pointsLogSource.js');
+  const enrichedPoints = await enrichPointsLogRows(userPoints);
 
   res.json({
     participant: { ...p, avatarUrl },
@@ -697,7 +737,7 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
       })),
       createdAt: r.s.submittedAt,
     })),
-    points: userPoints.map(pl => ({
+    points: enrichedPoints.map(pl => ({
       ...pl,
       canRevoke: !pl.revokedAt && pl.points > 0 && !(pl.actionType || '').endsWith('_revoke'),
     })),

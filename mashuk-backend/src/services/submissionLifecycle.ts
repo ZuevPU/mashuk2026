@@ -195,6 +195,8 @@ export async function completeSubmissionRewards(
     verificationType?: VerificationType;
     verifiedByAdminId?: number;
     verifiedByVolunteerVkId?: number;
+    /** Admin manual card: allow awarding beyond once/daily task_complete caps. */
+    ignoreMaxAccruals?: boolean;
   } = {},
 ): Promise<{ pointsLogId: number | null; userMedalId: number | null; lifecycleStage: LifecycleStage }> {
   const pts = await resolveTaskAwardPoints(task);
@@ -204,7 +206,10 @@ export async function completeSubmissionRewards(
 
   for (const pid of participantIds) {
     if (pts > 0) {
-      const result = await awardPoints(pid, 'task_complete', pts, task.dayNumber ?? undefined, { submissionId });
+      const result = await awardPoints(pid, 'task_complete', pts, task.dayNumber ?? undefined, {
+        submissionId,
+        ignoreMaxAccruals: opts.ignoreMaxAccruals,
+      });
       if (pid === leaderId && result?.logId) pointsLogId = result.logId;
     }
     const medal = await awardTaskLinkedMedals(pid, task, submissionId);
