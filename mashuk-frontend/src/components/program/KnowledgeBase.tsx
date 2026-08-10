@@ -38,7 +38,6 @@ interface KnowledgeBaseProps {
 }
 
 export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
-  const [openSpeaker, setOpenSpeaker] = useState<string | null>(null);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [pendingMaterial, setPendingMaterial] = useState<Material | null>(null);
   const [piggyTags, setPiggyTags] = useState<string[]>(['на будущее']);
@@ -91,14 +90,7 @@ export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
     );
   }
 
-  const bySpeaker = new Map<string, { topic: string; mats: Material[] }>();
-  for (const m of kb.materials ?? []) {
-    const key = m.speakerName || 'Материалы';
-    if (!bySpeaker.has(key)) {
-      bySpeaker.set(key, { topic: m.topic || m.eventTitle || m.title, mats: [] });
-    }
-    bySpeaker.get(key)!.mats.push(m);
-  }
+  const materials = kb.materials ?? [];
 
   const openPiggyDialog = (m: Material) => {
     setPendingMaterial(m);
@@ -147,47 +139,52 @@ export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
       <div style={{ fontSize: 10, color: '#888', marginBottom: 10, lineHeight: 1.4 }}>
         {kb.ruleLabel || <>Материалы открываются когда пройдено <strong style={{ color: '#FF5500' }}>≥ 4 из 7 точек осмысления</strong> за день</>}
       </div>
-      {Array.from(bySpeaker.entries()).map(([speaker, group]) => {
-        const initials = group.mats[0]?.speakerInitials || speaker.slice(0, 2).toUpperCase();
-        const isOpen = openSpeaker === speaker;
-        return (
-          <div key={speaker} className="kb-speaker">
-            <div className="kb-speaker-h" onClick={() => setOpenSpeaker(isOpen ? null : speaker)}>
-              <div className="kb-av">{initials}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, fontWeight: 700 }}>{speaker}</div>
-                <div style={{ fontSize: 10, color: '#666', marginTop: 2 }}>{group.topic}</div>
-              </div>
-              <span>{isOpen ? '▲' : '▼'}</span>
-            </div>
-            {isOpen && group.mats.map(m => (
-              <div key={m.id} className="kb-mat">
-                <span
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, cursor: m.url ? 'pointer' : 'default' }}
-                  onClick={() => m.url && openExternalUrl(m.url)}
-                >
-                  <span style={{ fontSize: 11, minWidth: 88 }}>{m.typeLabel || m.title}</span>
-                  <span style={{ flex: 1, fontSize: 11 }}>{m.title}</span>
-                  {m.isNew && <span className="kb-mat-new">Новый</span>}
-                </span>
-                <button
-                  type="button"
-                  style={{ fontSize: 10, border: '1px solid #ddd', borderRadius: 8, padding: '4px 8px', background: '#fff', cursor: 'pointer' }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openPiggyDialog(m);
-                  }}
-                >
-                  {savedIds.has(m.id) ? 'В копилке' : 'В копилку'}
-                </button>
-              </div>
-            ))}
-          </div>
-        );
-      })}
-      {(kb.materials ?? []).length === 0 && (
+
+      {materials.length === 0 ? (
         <div style={{ textAlign: 'center', color: '#888', padding: 16, fontSize: 12 }}>Материалы появятся после мероприятий</div>
+      ) : (
+        <div className="kb-table-card">
+          <table className="kb-table">
+            <thead>
+              <tr>
+                <th>Тип</th>
+                <th>Название</th>
+                <th>Спикер</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {materials.map(m => (
+                <tr key={m.id}>
+                  <td className="kb-table-type">{m.typeLabel || m.type || 'Материал'}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="kb-table-title-btn"
+                      onClick={() => m.url && openExternalUrl(m.url)}
+                      disabled={!m.url}
+                    >
+                      <span className="kb-table-title">{m.title}</span>
+                      {m.isNew && <span className="kb-mat-new">Новый</span>}
+                    </button>
+                  </td>
+                  <td className="kb-table-speaker">{m.speakerName || '—'}</td>
+                  <td className="kb-table-action">
+                    <button
+                      type="button"
+                      className="kb-piggy-btn"
+                      onClick={() => openPiggyDialog(m)}
+                    >
+                      {savedIds.has(m.id) ? 'В копилке' : 'В копилку'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
+
       {pendingMaterial != null && (
         <div
           style={{

@@ -32,6 +32,10 @@ type Props = {
 
 type DayMode = 'period' | number;
 
+function isOrganizerDirection(name: string): boolean {
+  return name.trim().toLowerCase() === 'организатор форума';
+}
+
 function heatBg(avg: number | null, max: number): string {
   if (avg == null || !Number.isFinite(avg) || max <= 0) return '#f3f4f6';
   const t = Math.min(1, Math.max(0, avg / max));
@@ -91,6 +95,7 @@ export function EveningDirectionHeatmap({
 
   const allDirections = useMemo(
     () => [...new Set(activeSlices.map(r => r.direction))]
+      .filter(d => !isOrganizerDirection(d))
       .sort((a, b) => a.localeCompare(b, 'ru')),
     [activeSlices],
   );

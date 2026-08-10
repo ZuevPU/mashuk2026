@@ -29,6 +29,9 @@ type ExchangeQuestion = {
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
 
+type SortKey = 'id' | 'author' | 'text' | 'audience' | 'status' | 'likes' | 'answers' | 'createdAt';
+type SortState = { key: SortKey; dir: 'asc' | 'desc' };
+
 type Props = {
   adminFetch: (path: string, opts?: RequestInit) => Promise<any>;
   act: (fn: () => Promise<unknown>, msg?: string) => void;
@@ -37,6 +40,17 @@ type Props = {
   onOpenModeration?: () => void;
   onOpenCard?: (id: number) => void;
 };
+
+const STATUS_ORDER: Record<string, number> = {
+  pending: 0,
+  approved: 1,
+  rejected: 2,
+};
+
+function sortMark(sort: SortState, key: SortKey): string {
+  if (sort.key !== key) return ' ↕';
+  return sort.dir === 'asc' ? ' ↑' : ' ↓';
+}
 
 function formatWhen(value?: string | null): string {
   if (!value) return '';
@@ -75,6 +89,7 @@ export function ExchangeAdminPanel({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [questions, setQuestions] = useState<ExchangeQuestion[]>([]);
   const [rejectDraft, setRejectDraft] = useState<Record<number, string>>({});
+  const [sort, setSort] = useState<SortState>({ key: 'createdAt', dir: 'desc' });
   const [answersModal, setAnswersModal] = useState<{
     open: boolean;
     question: ExchangeQuestion | null;
@@ -97,21 +112,75 @@ export function ExchangeAdminPanel({
     load().catch(() => setLoading(false));
   }, [load, reloadKey]);
 
-  const filtered = useMemo(() => {
+  const toggleSort = (key: SortKey) => {
+    setSort(prev => (
+      prev.key === key
+        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: key === 'likes' || key === 'answers' || key === 'createdAt' || key === 'id' ? 'desc' : 'asc' }
+    ));
+  };
+
+  const sorted = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return questions;
-    return questions.filter(item => {
-      const hay = [
-        item.text,
-        item.authorName,
-        item.direction,
-        item.groupName,
-        item.moderationStatus,
-        String(item.id),
-      ].filter(Boolean).join(' ').toLowerCase();
-      return hay.includes(q);
+    const filtered = !q
+      ? questions
+      : questions.filter(item => {
+        const hay = [
+          item.text,
+          item.authorName,
+          item.direction,
+          item.groupName,
+          item.moderationStatus,
+          String(item.id),
+        ].filter(Boolean).join(' ').toLowerCase();
+        return hay.includes(q);
+      });
+
+    const mul = sort.dir === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const likesA = likesSum(a.answers);
+      const likesB = likesSum(b.answers);
+      const answersA = a.answerCount ?? (a.answers || []).filter(x => !x.parentAnswerId).length;
+      const answersB = b.answerCount ?? (b.answers || []).filter(x => !x.parentAnswerId).length;
+      let cmp = 0;
+      switch (sort.key) {
+        case 'id':
+          cmp = a.id - b.id;
+          break;
+        case 'author':
+          cmp = (a.authorName || '').localeCompare(b.authorName || '', 'ru');
+          break;
+        case 'text':
+          cmp = (a.text || '').localeCompare(b.text || '', 'ru');
+          break;
+        case 'audience':
+          cmp = audienceLabel(a.audience).localeCompare(audienceLabel(b.audience), 'ru');
+          break;
+        case 'status': {
+          const sa = a.moderationStatus || 'pending';
+          const sb = b.moderationStatus || 'pending';
+          cmp = (STATUS_ORDER[sa] ?? 9) - (STATUS_ORDER[sb] ?? 9)
+            || sa.localeCompare(sb, 'ru');
+          break;
+        }
+        case 'likes':
+          cmp = likesA - likesB;
+          break;
+        case 'answers':
+          cmp = answersA - answersB;
+          break;
+        case 'createdAt':
+        default: {
+          const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          cmp = ta - tb || a.id - b.id;
+          break;
+        }
+      }
+      if (cmp !== 0) return cmp * mul;
+      return (b.id - a.id);
     });
-  }, [questions, search]);
+  }, [questions, search, sort]);
 
   const moderate = (id: number, moderationStatus: 'approved' | 'rejected', comment?: string) =>
     act(async () => {
@@ -213,7 +282,7 @@ export function ExchangeAdminPanel({
       </p>
 
       {loading && <p className="adm-muted">Загрузка вопросов обмена…</p>}
-      {!loading && filtered.length === 0 && (
+      {!loading && sorted.length === 0 && (
         <p className="adm-muted">
           Нет вопросов обмена.
           {onOpenModeration && (
@@ -225,22 +294,37 @@ export function ExchangeAdminPanel({
         </p>
       )}
 
-      {!loading && filtered.length > 0 && (
+      {!loading && sorted.length > 0 && (
         <table className="adm-table">
           <thead>
             <tr>
-              <th>№</th>
-              <th>Участник</th>
-              <th>Вопрос</th>
-              <th>Аудитория</th>
-              <th>Статус</th>
-              <th>Лайки</th>
-              <th>Ответы</th>
+              {([
+                { key: 'id' as const, label: '№' },
+                { key: 'author' as const, label: 'Участник' },
+                { key: 'text' as const, label: 'Вопрос' },
+                { key: 'audience' as const, label: 'Аудитория' },
+                { key: 'status' as const, label: 'Статус' },
+                { key: 'likes' as const, label: 'Лайки' },
+                { key: 'answers' as const, label: 'Ответы' },
+                { key: 'createdAt' as const, label: 'Дата' },
+              ]).map(col => (
+                <th key={col.key}>
+                  <button
+                    type="button"
+                    className="adm-link-btn"
+                    onClick={() => toggleSort(col.key)}
+                    style={{ fontWeight: 700, whiteSpace: 'nowrap' }}
+                    title="Сортировать"
+                  >
+                    {col.label}{sortMark(sort, col.key)}
+                  </button>
+                </th>
+              ))}
               <th>Действия</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(q => {
+            {sorted.map(q => {
               const likes = likesSum(q.answers);
               const answersCount = q.answerCount ?? (q.answers || []).filter(a => !a.parentAnswerId).length;
               const status = q.moderationStatus || 'pending';
@@ -258,15 +342,15 @@ export function ExchangeAdminPanel({
                     <div className="adm-muted" style={{ fontSize: 11 }}>
                       {[q.direction, q.groupName].filter(Boolean).join(' · ') || '—'}
                     </div>
-                    {q.createdAt && (
-                      <div className="adm-muted" style={{ fontSize: 11 }}>{formatWhen(q.createdAt)}</div>
-                    )}
                   </td>
                   <td style={{ maxWidth: 360, whiteSpace: 'pre-wrap' }}>{q.text}</td>
                   <td>{audienceLabel(q.audience)}</td>
                   <td style={statusTone(status)}>{label(status)}</td>
                   <td>{likes}</td>
                   <td>{answersCount}</td>
+                  <td className="adm-muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                    {formatWhen(q.createdAt) || '—'}
+                  </td>
                   <td>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
                       <button

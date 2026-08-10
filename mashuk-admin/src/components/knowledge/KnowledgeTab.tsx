@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
 import { AdminPageHero } from '../admin/AdminPageHero';
-import { ParticipantPreviewHtml, ParticipantPreviewModal } from '../admin/ParticipantPreviewModal';
+import { ParticipantPreviewModal } from '../admin/ParticipantPreviewModal';
 import type { AdminTabProps } from '../admin/types';
 import { SpeakerMultiPick } from '../program/ProgramCatalogs';
 import type { ProgramSpeaker } from '../program/types';
+import { KnowledgeBaseParticipantPreview } from './KnowledgeBaseParticipantPreview';
 import { MaterialCard, type MaterialRow } from './MaterialCard';
 import { MaterialTypesPanel } from './MaterialTypesPanel';
 
@@ -58,6 +59,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   const [statusFilter, setStatusFilter] = useState('');
   const [speakers, setSpeakers] = useState<ProgramSpeaker[]>([]);
   const [previewMat, setPreviewMat] = useState<MaterialRow | null>(null);
+  const [previewDay, setPreviewDay] = useState(1);
   const [kbForumThreshold, setKbForumThreshold] = useState(4);
   const [totalDays, setTotalDays] = useState(8);
 
@@ -101,6 +103,10 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   useEffect(() => {
     load().catch(() => setLoading(false));
   }, [load, reloadKey]);
+
+  useEffect(() => {
+    if (dayFilter) setPreviewDay(Number(dayFilter));
+  }, [dayFilter]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -275,6 +281,30 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             </tbody>
           </table>
         )}
+      </div>
+
+      <div className="card adm-forum-block">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+          <h3 style={{ margin: 0 }}>Превью для участника</h3>
+          <select
+            className="adm-input"
+            value={previewDay}
+            onChange={e => setPreviewDay(Number(e.target.value))}
+            style={{ width: 120 }}
+            title="День для превью"
+          >
+            {dayOptions.map(d => (
+              <option key={d} value={d}>День {d}</option>
+            ))}
+          </select>
+        </div>
+        <KnowledgeBaseParticipantPreview
+          day={previewDay}
+          materials={materials}
+          typeOptions={materialTypes}
+          speakers={speakers}
+          kbThreshold={kbForumThreshold}
+        />
       </div>
 
       <div className="card adm-forum-block">
@@ -517,15 +547,15 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
       <ParticipantPreviewModal
         open={!!previewMat}
         onClose={() => setPreviewMat(null)}
-        title={previewMat?.title || 'Материал'}
+        title={previewMat ? `Превью · день ${previewMat.dayNumber ?? 1}` : 'Превью'}
       >
         {previewMat && (
-          <ParticipantPreviewHtml
-            title={previewMat.title}
-            subtitle={previewMat.direction ? `Направление: ${previewMat.direction}` : undefined}
-            html={previewMat.url
-              ? `<p><a href="${previewMat.url}" target="_blank" rel="noreferrer">Открыть материал</a></p>`
-              : (previewMat.fileUrl ? `<p><a href="${previewMat.fileUrl}">Скачать файл</a></p>` : '<p>Нет ссылки</p>')}
+          <KnowledgeBaseParticipantPreview
+            day={previewMat.dayNumber ?? 1}
+            materials={materials}
+            typeOptions={materialTypes}
+            speakers={speakers}
+            kbThreshold={kbForumThreshold}
           />
         )}
       </ParticipantPreviewModal>

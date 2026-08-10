@@ -49,7 +49,7 @@ export function ParticipantPreviewModal({
   if (!open) return null;
   return (
     <div className="adm-modal-backdrop" onClick={onClose} role="presentation">
-      <div className="card adm-modal" style={{ maxWidth: 520, width: '100%' }} onClick={e => e.stopPropagation()}>
+      <div className="card adm-modal" style={{ maxWidth: 560, width: '100%' }} onClick={e => e.stopPropagation()}>
         <h3 style={{ marginTop: 0 }}>{title}</h3>
         {children}
         <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" style={{ marginTop: 12 }} onClick={onClose}>
