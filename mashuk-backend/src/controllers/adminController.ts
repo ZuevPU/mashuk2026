@@ -1212,6 +1212,69 @@ export const resetAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
   res.json({ config: resolveEveningConfigForDay(shape as never, day) });
 };
 
+/**
+ * Рассылка через VK (мини-приложение + ЛС сообщества): итоговая анкета дня доступна.
+ * По умолчанию — только тем, кто ещё не сдал анкету за этот день.
+ */
+export const notifyAdminEveningQuestionnaire = async (req: AdminRequest, res: Response): Promise<void> => {
+  const day = Math.max(1, Math.min(7, Number(req.query.day) || Number(req.body?.day) || 1));
+  const shiftId = await resolveAdminShiftId(req);
+  const includeCompleted = req.body?.includeCompleted === true
+    || String(req.query.includeCompleted || '') === '1';
+  const customText = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+
+  const { resolveBroadcastParticipantIds } = await import('../services/pushAudienceResolve.js');
+  const { pushCopy } = await import('../services/pushCopy.js');
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+
+  const allIds = await resolveBroadcastParticipantIds(shiftId);
+  let targetIds = allIds;
+
+  if (!includeCompleted && allIds.length) {
+    const doneRows = await db.select({
+      participantId: participantDayState.participantId,
+    }).from(participantDayState).where(and(
+      eq(participantDayState.dayNumber, day),
+      isNotNull(participantDayState.eveningRatings),
+      inArray(participantDayState.participantId, allIds),
+    ));
+    const done = new Set(doneRows.map(r => r.participantId));
+    targetIds = allIds.filter(id => !done.has(id));
+  }
+
+  const text = customText || pushCopy.eveningQuestionnaireOpen(day);
+  if (targetIds.length) {
+    await sendPushNotification(targetIds, text, 'evening_questionnaire_notify', {
+      appLinkHash: '#/?evening=1',
+    });
+  }
+
+  await logAdminAction({
+    req,
+    actionType: 'evening_questionnaire_notify',
+    section: 'forum',
+    objectId: day,
+    newValue: {
+      shiftId,
+      day,
+      sentTo: targetIds.length,
+      audience: allIds.length,
+      skippedCompleted: allIds.length - targetIds.length,
+      includeCompleted,
+      text,
+    },
+  });
+
+  res.json({
+    ok: true,
+    day,
+    sentTo: targetIds.length,
+    audience: allIds.length,
+    skippedCompleted: Math.max(0, allIds.length - targetIds.length),
+    text,
+  });
+};
+
 export const upsertDayFocus = async (req: AdminRequest, res: Response): Promise<void> => {
   const { dayNumber, title, text, textHtml, keyQuestion } = req.body;
   const shiftId = await resolveAdminShiftId(req);

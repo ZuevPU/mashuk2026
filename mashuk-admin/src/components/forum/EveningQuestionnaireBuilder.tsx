@@ -379,6 +379,35 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
         >
           Снять с публикации
         </button>
+        <button
+          type="button"
+          className="adm-btn adm-btn-primary adm-btn-sm"
+          title="Рассылка в ЛС сообщества VK и уведомление мини-приложения: анкета доступна"
+          onClick={() => {
+            if (!confirm(
+              `Оповестить участников смены, что итоговая анкета дня ${day} доступна?\n\n`
+              + 'Сообщение уйдёт через VK (сообщество + мини-приложение). '
+              + 'Тем, кто уже сдал анкету за этот день, письмо не отправим.',
+            )) return;
+            act(async () => {
+              const res = await adminFetch(`/evening-questionnaire/notify?day=${day}`, {
+                method: 'POST',
+                body: JSON.stringify({}),
+              }) as {
+                sentTo?: number;
+                audience?: number;
+                skippedCompleted?: number;
+              };
+              const sent = res.sentTo ?? 0;
+              const skipped = res.skippedCompleted ?? 0;
+              return skipped > 0
+                ? `Оповещение отправлено: ${sent} · уже сдали, пропущено: ${skipped}`
+                : `Оповещение отправлено: ${sent}`;
+            }, 'Оповещение отправлено');
+          }}
+        >
+          Оповестить
+        </button>
       </div>
 
       <div className="adm-forum-toolbar">

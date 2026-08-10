@@ -107,6 +107,7 @@ router.get('/evening-questionnaire', wrap(admin.getAdminEveningQuestionnaire));
 router.patch('/evening-questionnaire', requireAdminRole('settings'), wrap(admin.patchAdminEveningQuestionnaire));
 router.post('/evening-questionnaire/copy', requireAdminRole('settings'), wrap(admin.copyAdminEveningQuestionnaire));
 router.post('/evening-questionnaire/reset', requireAdminRole('settings'), wrap(admin.resetAdminEveningQuestionnaire));
+router.post('/evening-questionnaire/notify', requireAdminRole('settings'), wrap(admin.notifyAdminEveningQuestionnaire));
 router.get('/kb-unlocks', wrap(admin.listKbDayUnlocks));
 router.post('/kb-unlocks', requireAdminRole('settings'), wrap(admin.createKbDayUnlock));
 router.delete('/kb-unlocks/:participantId/:dayNumber', requireAdminRole('settings'), wrap(admin.deleteKbDayUnlock));

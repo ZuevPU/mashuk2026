@@ -38,6 +38,9 @@ export const pushCopy = {
   taskPublished: (title: string) =>
     `Новое задание: «${qTitle(title)}». Откройте раздел «Задания».`,
 
+  eveningQuestionnaireOpen: (day: number) =>
+    `Итоговая анкета дня ${day} уже доступна. Откройте главную и заполните — займёт несколько минут.`,
+
   medalForTask: (medalName: string, taskTitle: string) =>
     `Новая медаль «${qTitle(medalName)}» за задание «${qTitle(taskTitle)}».`,
 
