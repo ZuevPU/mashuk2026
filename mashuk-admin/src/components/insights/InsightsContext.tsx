@@ -201,6 +201,13 @@ export function InsightsProvider({
   useEffect(() => { reloadMeta(); }, [reloadMeta, reloadKey]);
 
   useEffect(() => {
+    if (activeDashboardId === 'semantic' || activeDashboardId === 'clubs') {
+      setActiveDashboardIdState('overview');
+      persist({ dash: 'overview' });
+    }
+  }, [activeDashboardId, persist]);
+
+  useEffect(() => {
     if (!analyticsDashboardAllowlist?.length) return;
     const list = analyticsDashboardAllowlist
       .map(normalizeDashboardId)

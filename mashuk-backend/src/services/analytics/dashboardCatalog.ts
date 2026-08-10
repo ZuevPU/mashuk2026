@@ -19,10 +19,8 @@ export const DASHBOARD_CATALOG: DashboardCatalogEntry[] = [
   { id: 'program', label: '8. Образовательная программа', minForumDay: 1, availabilityTier: 'D1', path: '/analytics/dashboards/program', kind: 'api' },
   { id: 'activity', label: '9. Активность и рейтинг', minForumDay: 2, availabilityTier: 'D2', path: '/analytics/dashboards/activity', kind: 'api' },
   { id: 'piggybank', label: '10. Копилка', minForumDay: 1, availabilityTier: 'D1', path: '/analytics/dashboards/piggybank', kind: 'api' },
-  { id: 'semantic', label: '11. Смысловая аналитика', minForumDay: 3, availabilityTier: 'D3-D4', path: '/analytics/dashboards/semantic', kind: 'api', requiresV2: true },
-  { id: 'clubs', label: '12. Материал для клубов', minForumDay: 3, availabilityTier: 'D3-D4', path: '/analytics/dashboards/clubs', kind: 'api' },
-  { id: 'departure', label: '13. Заезд → выезд', minForumDay: 3, availabilityTier: 'D3-D4', path: '/analytics/departure-portrait', kind: 'api' },
-  { id: 'roles', label: '14. Роли 2×3', minForumDay: 2, availabilityTier: 'D2', kind: 'static' },
+  { id: 'departure', label: '11. Заезд → выезд', minForumDay: 3, availabilityTier: 'D3-D4', path: '/analytics/departure-portrait', kind: 'api' },
+  { id: 'roles', label: '12. Роли 2×3', minForumDay: 2, availabilityTier: 'D2', kind: 'static' },
 ];
 
 export function forumDayCalendarDate(startDate: Date | string | null | undefined, forumDay: number): string | null {

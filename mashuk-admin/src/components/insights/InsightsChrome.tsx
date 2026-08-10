@@ -22,8 +22,10 @@ export function InsightsChrome({ children }: { children: ReactNode }) {
     analyticsDashboardAllowlist,
   } = useInsights();
 
+  const HIDDEN_DASH_TILES = new Set(['semantic', 'clubs']);
   const catalog = (meta?.dashboardCatalog ?? []).filter(
-    item => !analyticsDashboardAllowlist?.length || analyticsDashboardAllowlist.includes(item.id),
+    item => !HIDDEN_DASH_TILES.has(item.id)
+      && (!analyticsDashboardAllowlist?.length || analyticsDashboardAllowlist.includes(item.id)),
   );
   const dayMeta = meta?.forumDays?.find(d => String(d.day) === forumDay);
   const activeEntry = catalog.find(c => c.id === activeDashboardId);

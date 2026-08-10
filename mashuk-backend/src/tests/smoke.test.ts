@@ -212,7 +212,7 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     assert.equal(meta.status, 200);
     assert.ok(meta.body.refreshMs);
     assert.ok(Array.isArray(meta.body.dashboardCatalog));
-    assert.equal(meta.body.dashboardCatalog.length, 14);
+    assert.equal(meta.body.dashboardCatalog.length, 12);
 
     const pulse = await request(app)
       .get('/api/admin/analytics/dashboards/pulse?mode=day&day=1')
