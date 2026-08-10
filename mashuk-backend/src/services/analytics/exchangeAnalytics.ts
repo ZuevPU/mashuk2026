@@ -1,6 +1,6 @@
 import { inArray } from 'drizzle-orm';
 import { db } from '../../db/index.js';
-import { exchangeAnswers, exchangeQuestions } from '../../db/schema.js';
+import { exchangeAnswers, exchangeCategories, exchangeQuestions } from '../../db/schema.js';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { getForumSettings } from '../helpers.js';
 import { getCalendarForumDay } from '../timePhase.js';
@@ -217,6 +217,21 @@ export async function buildExchangeAnalytics(filters: AnalyticsFilters, req?: Ad
     ? Math.round((approvedAnswerSum / approved) * 10) / 10
     : 0;
 
+  const cats = await db.select().from(exchangeCategories);
+  const catById = new Map(cats.map(c => [c.id, c]));
+  const byCategoryMap = new Map<string, number>();
+  let otherCount = 0;
+  for (const q of questionsInCohort) {
+    const cat = q.categoryId != null ? catById.get(q.categoryId) : null;
+    const key = cat ? `${cat.emoji || ''} ${cat.title}`.trim() : 'Без рубрики';
+    byCategoryMap.set(key, (byCategoryMap.get(key) || 0) + 1);
+    if (cat?.slug === 'other') otherCount += 1;
+  }
+  const byCategory = [...byCategoryMap.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+  const otherSharePct = total ? Math.round((otherCount / total) * 1000) / 10 : 0;
+
   return {
     kpi: {
       total,
@@ -229,9 +244,12 @@ export async function buildExchangeAnalytics(filters: AnalyticsFilters, req?: Ad
       approvalRatePct: total ? Math.round((approved / total) * 100) : 0,
       rejectRatePct: total ? Math.round((rejected / total) * 100) : 0,
       avgAnswersPerApproved,
+      otherCount,
+      otherSharePct,
     },
     byDay,
     byDirectionDay,
+    byCategory,
     topQuestions,
     topAskers: mapPeople(askerCounts, 8),
     topAnswerers: mapPeople(answererCounts, 8),

@@ -20,6 +20,13 @@ type ExchangeAnswer = {
   createdAt?: string | null;
 };
 
+type ExchangeCategory = {
+  id: number;
+  slug: string;
+  title: string;
+  emoji?: string | null;
+};
+
 type ExchangeQuestion = {
   id: number;
   text: string;
@@ -33,6 +40,10 @@ type ExchangeQuestion = {
   answerCount?: number;
   answers?: ExchangeAnswer[];
   createdAt?: string | null;
+  categoryId?: number | null;
+  classifiedBy?: string | null;
+  categoryConfirmed?: boolean;
+  category?: ExchangeCategory | null;
 };
 
 export type ModerationTabProps = AdminTabProps & {
@@ -154,6 +165,9 @@ function ExchangeQuestionCard({
   onToggleAnswers,
   answersOpen,
   onDeleteAnswer,
+  categories,
+  categoryDraft,
+  onCategoryDraftChange,
 }: {
   q: ExchangeQuestion;
   mode: 'pending' | 'archive';
@@ -166,9 +180,15 @@ function ExchangeQuestionCard({
   onToggleAnswers?: () => void;
   answersOpen?: boolean;
   onDeleteAnswer?: (answerId: number) => void;
+  categories: ExchangeCategory[];
+  categoryDraft?: number | '';
+  onCategoryDraftChange?: (value: number | '') => void;
 }) {
   const answers = q.answers || [];
   const showAnswers = mode === 'archive' ? !!answersOpen : answers.length > 0;
+  const catValue = categoryDraft !== undefined && categoryDraft !== ''
+    ? categoryDraft
+    : (q.categoryId ?? q.category?.id ?? '');
 
   return (
     <div className="card" style={{ marginBottom: 10 }}>
@@ -185,6 +205,7 @@ function ExchangeQuestionCard({
         <span className="adm-muted" style={{ fontSize: 12 }}>
           {label(q.moderationStatus || 'pending')}
           {typeof q.answerCount === 'number' ? ` · ответов: ${q.answerCount}` : ''}
+          {q.classifiedBy ? ` · ${q.classifiedBy}` : ''}
         </span>
       </div>
       <p style={{ marginTop: 8, marginBottom: 0, whiteSpace: 'pre-wrap' }}>{q.text}</p>
@@ -193,6 +214,18 @@ function ExchangeQuestionCard({
           Причина отклонения: {q.moderatorComment}
         </p>
       )}
+
+      <label className="adm-label" style={{ marginTop: 10 }}>Рубрика</label>
+      <select
+        className="adm-input"
+        value={catValue === '' ? '' : String(catValue)}
+        onChange={e => onCategoryDraftChange?.(e.target.value ? Number(e.target.value) : '')}
+      >
+        <option value="">Выберите рубрику</option>
+        {categories.map(c => (
+          <option key={c.id} value={c.id}>{c.emoji ? `${c.emoji} ` : ''}{c.title}</option>
+        ))}
+      </select>
 
       {mode === 'pending' && (
         <>
@@ -268,7 +301,11 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
   const [orgThreads, setOrgThreads] = useState<any[]>([]);
   const [orgReplyDraft, setOrgReplyDraft] = useState<Record<number, string>>({});
   const [rejectDraft, setRejectDraft] = useState<Record<number, string>>({});
+  const [categoryDraft, setCategoryDraft] = useState<Record<number, number | ''>>({});
+  const [categories, setCategories] = useState<ExchangeCategory[]>([]);
   const [openAnswers, setOpenAnswers] = useState<Record<number, boolean>>({});
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [bulkCategoryId, setBulkCategoryId] = useState<number | ''>('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -276,14 +313,16 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
       const archivePath = archiveFilter === 'all'
         ? '/exchange?limit=100'
         : `/exchange?status=${archiveFilter}&limit=100`;
-      const [pendingRes, archiveRes, orgRes] = await Promise.all([
+      const [pendingRes, archiveRes, orgRes, catsRes] = await Promise.all([
         adminFetch('/exchange/pending'),
         adminFetch(archivePath),
         adminFetch('/org/threads'),
+        adminFetch('/exchange-categories'),
       ]);
       setPendingExchange((pendingRes as { questions?: ExchangeQuestion[] }).questions || []);
       setExchangeArchive((archiveRes as { questions?: ExchangeQuestion[] }).questions || []);
       setOrgThreads((orgRes as { threads?: unknown[] }).threads || []);
+      setCategories((catsRes as { categories?: ExchangeCategory[] }).categories || []);
     } finally {
       setLoading(false);
     }
@@ -297,11 +336,14 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
 
   const moderate = (id: number, moderationStatus: 'approved' | 'rejected', comment?: string) =>
     act(async () => {
+      const categoryId = categoryDraft[id];
       await adminFetch(`/exchange/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           moderationStatus,
           moderatorComment: comment || undefined,
+          categoryId: categoryId === '' || categoryId == null ? undefined : categoryId,
+          categoryConfirmed: true,
         }),
       });
       setRejectDraft(prev => {
@@ -359,23 +401,61 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
       {segment === 'exchange' && (
         <>
           <p className="adm-forum-hint">
-            Пользователь отправил вопрос → статус «на модерации». Одобрите — вопрос появится у остальных;
-            отклоните или удалите, если публиковать нельзя.
+            Пользователь отправил вопрос → статус «на модерации». Выберите рубрику и одобрите — вопрос появится у остальных.
+            В очереди сверху: «Другое» и авторазметка.
           </p>
+          {selectedIds.length > 0 && (
+            <div className="card" style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span>Выбрано: {selectedIds.length}</span>
+              <select className="adm-input" style={{ maxWidth: 240 }} value={bulkCategoryId === '' ? '' : String(bulkCategoryId)} onChange={e => setBulkCategoryId(e.target.value ? Number(e.target.value) : '')}>
+                <option value="">Сменить рубрику…</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.emoji ? `${c.emoji} ` : ''}{c.title}</option>)}
+              </select>
+              <button
+                type="button"
+                className="adm-btn adm-btn-secondary"
+                disabled={!bulkCategoryId}
+                onClick={() => act(async () => {
+                  await adminFetch('/exchange/bulk-category', {
+                    method: 'POST',
+                    body: JSON.stringify({ ids: selectedIds, categoryId: bulkCategoryId }),
+                  });
+                  setSelectedIds([]);
+                  await reload();
+                }, 'Рубрика обновлена')}
+              >
+                Применить
+              </button>
+            </div>
+          )}
           {pendingExchange.length === 0 && <p className="adm-muted">Нет вопросов на модерации</p>}
           {pendingExchange.map(q => (
-            <ExchangeQuestionCard
-              key={q.id}
-              q={q}
-              mode="pending"
-              rejectDraft={rejectDraft[q.id] || ''}
-              onRejectDraftChange={value => setRejectDraft(prev => ({ ...prev, [q.id]: value }))}
-              onApprove={() => moderate(q.id, 'approved')}
-              onReject={() => moderate(q.id, 'rejected', rejectDraft[q.id])}
-              onDelete={() => removeQuestion(q.id)}
-              onOpenCard={id => onOpenCard(id)}
-              onDeleteAnswer={removeAnswer}
-            />
+            <div key={q.id}>
+              <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4, fontSize: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(q.id)}
+                  onChange={e => setSelectedIds(prev => (
+                    e.target.checked ? [...prev, q.id] : prev.filter(id => id !== q.id)
+                  ))}
+                />
+                Выбрать для массовой смены рубрики
+              </label>
+              <ExchangeQuestionCard
+                q={q}
+                mode="pending"
+                categories={categories}
+                categoryDraft={categoryDraft[q.id] ?? q.categoryId ?? q.category?.id ?? ''}
+                onCategoryDraftChange={value => setCategoryDraft(prev => ({ ...prev, [q.id]: value }))}
+                rejectDraft={rejectDraft[q.id] || ''}
+                onRejectDraftChange={value => setRejectDraft(prev => ({ ...prev, [q.id]: value }))}
+                onApprove={() => moderate(q.id, 'approved')}
+                onReject={() => moderate(q.id, 'rejected', rejectDraft[q.id])}
+                onDelete={() => removeQuestion(q.id)}
+                onOpenCard={id => onOpenCard(id)}
+                onDeleteAnswer={removeAnswer}
+              />
+            </div>
           ))}
         </>
       )}
@@ -404,6 +484,9 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
               key={q.id}
               q={q}
               mode="archive"
+              categories={categories}
+              categoryDraft={categoryDraft[q.id] ?? q.categoryId ?? q.category?.id ?? ''}
+              onCategoryDraftChange={value => setCategoryDraft(prev => ({ ...prev, [q.id]: value }))}
               answersOpen={!!openAnswers[q.id]}
               onToggleAnswers={() => setOpenAnswers(prev => ({ ...prev, [q.id]: !prev[q.id] }))}
               onApprove={() => moderate(q.id, 'approved')}

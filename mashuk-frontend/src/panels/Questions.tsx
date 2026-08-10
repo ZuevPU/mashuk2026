@@ -5,6 +5,7 @@ import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { useAppModal } from '../App';
 import { QuestionAnswerForm } from '../components/questions/QuestionAnswerForm';
 import { EveningDaySummaryFlow } from '../components/questions/EveningDaySummaryFlow';
+import { ExchangePeerSection } from '../components/questions/ExchangePeerSection';
 import { PriorityAction } from '../components/home/DashboardCards';
 import { EmptyState } from '../components/EmptyState';
 import { AnswerSuccessOverlay, type SubmitSuccessPayload, type AnswerConfirmationConfig } from '../components/questions/AnswerSuccessOverlay';
@@ -36,13 +37,6 @@ function byCreatedAtAsc(a: ExchangeAnswerRow, b: ExchangeAnswerRow): number {
   return a.id - b.id;
 }
 
-function byQuestionNewest(a: { createdAt?: string | null; id: number }, b: { createdAt?: string | null; id: number }): number {
-  const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-  const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-  if (tb !== ta) return tb - ta;
-  return b.id - a.id;
-}
-
 function exchangeTopLevelAnswers(answers: ExchangeAnswerRow[] | undefined): ExchangeAnswerRow[] {
   return (answers || []).filter(a => !a.parentAnswerId).sort(byCreatedAtAsc);
 }
@@ -58,10 +52,6 @@ function ruPlural(n: number, one: string, few: string, many: string): string {
   if (last === 1) return one;
   if (last >= 2 && last <= 4) return few;
   return many;
-}
-
-function questionsWord(n: number): string {
-  return ruPlural(n, 'вопрос', 'вопроса', 'вопросов');
 }
 
 function answersWord(n: number): string {
@@ -181,13 +171,25 @@ const ExchangeThreadModal = ({
       });
       onRefresh();
     } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Ошибка отправки';
+      const hint = msg === 'ANSWER_TOO_SHORT' || /корот|TOO_SHORT/i.test(msg)
+        ? 'Похоже, это реакция, а не ответ. Нажмите 👍 под вопросом — автор увидит.'
+        : msg;
       onSubmitSuccess({
         xpAwarded: 0,
-        confirm: { ...DEFAULT_CONFIRM, titleTemplate: err instanceof ApiError ? err.message : 'Ошибка отправки' },
+        confirm: { ...DEFAULT_CONFIRM, titleTemplate: hint },
       });
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const reactQuestion = async (kind: 'like' | 'discuss') => {
+    if (!question?.id) return;
+    try {
+      await apiPost(`/exchange/${question.id}/react`, { type: kind });
+      onRefresh();
+    } catch { /* ignore */ }
   };
 
   return (
@@ -196,10 +198,20 @@ const ExchangeThreadModal = ({
       <Group>
         <div className="peer-thread-q m-card">
           <div className="peer-dir">
-            {isDirectionAudience(question?.audience) ? 'Своему направлению' : 'Всем участникам'}
+            {question?.category
+              ? `${question.category.emoji || ''} ${question.category.title}`
+              : (isDirectionAudience(question?.audience) ? 'Своему направлению' : 'Всем участникам')}
           </div>
           <div className="peer-q peer-q--lg">{question?.text}</div>
           <div className="peer-meta">{question?.authorName} · {exchangeAnswerCountLabel(question || {})}</div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <Button size="s" mode="secondary" onClick={() => { void reactQuestion('like'); }}>
+              👍 {question?.reactions?.likes ?? 0}
+            </Button>
+            <Button size="s" mode="secondary" onClick={() => { void reactQuestion('discuss'); }}>
+              💬 {question?.reactions?.discuss ?? 0}
+            </Button>
+          </div>
         </div>
 
         {topAnswers.length === 0 ? (
@@ -394,16 +406,13 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const [tab, setTab] = useState<ChatTab>('reflect');
   const [questions, setQuestions] = useState<any[]>([]);
   const [exchange, setExchange] = useState<any[]>([]);
-  const [myQuestions, setMyQuestions] = useState<any[]>([]);
   const [orgThreads, setOrgThreads] = useState<any[]>([]);
   const [answerConfirmDefaults, setAnswerConfirmDefaults] = useState<AnswerConfirmationConfig>(DEFAULT_CONFIRM);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [newQuestion, setNewQuestion] = useState('');
-  const [exchangeAudience, setExchangeAudience] = useState<'all' | 'direction'>('all');
-  const [exchangeViewFilter, setExchangeViewFilter] = useState<'all' | 'direction'>('all');
   const [exchangeThreadId, setExchangeThreadId] = useState<number | null>(null);
   const [exchangeLimits, setExchangeLimits] = useState<ExchangeLimits | null>(null);
+  const [exchangeReloadKey, setExchangeReloadKey] = useState(0);
   const [activeQuestion, setActiveQuestion] = useState<any>(null);
   const [questionOptions, setQuestionOptions] = useState<any[]>([]);
   const [dayEvents, setDayEvents] = useState<any[]>([]);
@@ -439,7 +448,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
         setExchange(ex.questions || []);
         if (typeof ex.myParticipantId === 'number') setMyParticipantId(ex.myParticipantId);
         if (ex.limits && typeof ex.limits === 'object') setExchangeLimits(normalizeExchangeLimits(ex.limits));
-        setMyQuestions((ex.questions || []).filter((item: any) => item.isMine));
+        setExchangeReloadKey(k => k + 1);
         setOrgThreads(org.threads || []);
         const card = home?.eveningCard;
         const showCard = !!card && (home?.timeSlot === 'evening' || home?.eveningWrap);
@@ -501,21 +510,6 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
     } catch (err) {
       showSubmitSuccess({
         confirm: { ...DEFAULT_CONFIRM, titleTemplate: err instanceof ApiError ? err.message : 'Ошибка сохранения' },
-      });
-    }
-  };
-
-  const submitExchange = async () => {
-    if (!newQuestion.trim()) return;
-    try {
-      await apiPost('/exchange', { text: newQuestion, audience: exchangeAudience });
-      setNewQuestion('');
-      setExchangeAudience('all');
-      showSubmitSuccess({ confirm: { ...DEFAULT_CONFIRM, titleTemplate: 'Вопрос отправлен на модерацию' }, xpAwarded: 0 });
-      loadAll();
-    } catch (err) {
-      showSubmitSuccess({
-        confirm: { ...DEFAULT_CONFIRM, titleTemplate: err instanceof ApiError ? err.message : 'Ошибка отправки' },
       });
     }
   };
@@ -649,14 +643,8 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const answeredEarlier = questions.filter(q => q.status === 'done' && !q.answeredToday);
   const myAnswers = questions.filter(q => q.status === 'done');
   const locked = questions.filter(q => q.status === 'locked');
-  const peerApproved = exchange
-    .filter(q => (q.moderationStatus || '').toLowerCase() === 'approved')
-    .slice()
-    .sort(byQuestionNewest);
-  const peerVisible = peerApproved.filter(q => (
-    exchangeViewFilter === 'all' ? true : isDirectionAudience(q.audience)
-  ));
-  const myQuestionsSorted = myQuestions.slice().sort(byQuestionNewest);
+  const peerApprovedCount = exchange
+    .filter(q => (q.moderationStatus || '').toLowerCase() === 'approved').length;
 
   const orgStatusLabel = (status: string) => {
     if (status === 'answered') return 'Отвечено';
@@ -694,7 +682,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
             Мои ответы{myAnswers.length > 0 ? ` · ${myAnswers.length}` : ''}
           </button>
           <button type="button" className={`time-btn ${tab === 'peer' ? 'on' : ''}`} onClick={() => setTab('peer')}>
-            Обмен опытом{peerApproved.length > 0 ? ` · ${peerApproved.length}` : ''}
+            Обмен опытом{peerApprovedCount > 0 ? ` · ${peerApprovedCount}` : ''}
           </button>
           <button type="button" className={`time-btn ${tab === 'org' ? 'on' : ''}`} onClick={() => setTab('org')}>
             Организаторам
@@ -796,145 +784,14 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
             )}
           </>
         ) : tab === 'peer' ? (
-          <>
-            <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8, lineHeight: 1.45 }}>
-              Читайте вопросы участников и открывайте ответы отдельно. Новые вопросы — сверху.
-            </div>
-
-            <div className="ask-btn m-card" style={{ marginBottom: 10 }}>
-              {exchangeLimits && (
-                <div style={{ fontSize: 12, color: '#666', marginBottom: 8, lineHeight: 1.45 }}>
-                  Можно задать ещё {exchangeLimits.questionsLeft} {questionsWord(exchangeLimits.questionsLeft)}
-                  {' '}(из {exchangeLimits.questionsMax}
-                  {exchangeLimits.pointsPerQuestion != null ? `, +${exchangeLimits.pointsPerQuestion} за вопрос` : ''}).
-                  {' '}Ответов с баллами осталось: {exchangeLimits.answersForPointsLeft}
-                  {' '}из {exchangeLimits.answersForPointsMax}
-                  {exchangeLimits.pointsPerAnswer != null ? ` (+${exchangeLimits.pointsPerAnswer} за ответ)` : ''};
-                  {' '}дальше отвечать можно без баллов.
-                </div>
-              )}
-              <Textarea
-                value={newQuestion}
-                onChange={e => setNewQuestion(e.target.value)}
-                placeholder="Задайте вопрос участникам..."
-                disabled={!!exchangeLimits && exchangeLimits.questionsLeft <= 0}
-              />
-              <div className="time-sw" style={{ marginTop: 8, marginBottom: 0 }}>
-                <button
-                  type="button"
-                  className={`time-btn ${exchangeAudience === 'all' ? 'on' : ''}`}
-                  onClick={() => setExchangeAudience('all')}
-                  disabled={!!exchangeLimits && exchangeLimits.questionsLeft <= 0}
-                >
-                  Всем участникам
-                </button>
-                <button
-                  type="button"
-                  className={`time-btn ${exchangeAudience === 'direction' ? 'on' : ''}`}
-                  onClick={() => setExchangeAudience('direction')}
-                  disabled={!!exchangeLimits && exchangeLimits.questionsLeft <= 0}
-                >
-                  Своему направлению
-                </button>
-              </div>
-              <Button
-                style={{ marginTop: 8 }}
-                disabled={!!exchangeLimits && exchangeLimits.questionsLeft <= 0}
-                onClick={submitExchange}
-              >
-                {exchangeLimits && exchangeLimits.questionsLeft <= 0
-                  ? 'Лимит вопросов исчерпан'
-                  : '+ Задать новый вопрос'}
-              </Button>
-            </div>
-
-            {myQuestionsSorted.length > 0 && (
-              <>
-                <div className="rq-hdr">
-                  <span className="rq-hdr-t">Мои вопросы · {myQuestionsSorted.length}</span>
-                </div>
-                {myQuestionsSorted.map(q => (
-                  <div key={q.id} className="myq2 m-card" style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 13, lineHeight: 1.4 }}>{q.text}</div>
-                    <div className="peer-meta">
-                      {q.moderationStatus === 'pending'
-                        ? 'На модерации — появится после одобрения'
-                        : q.moderationStatus === 'rejected'
-                          ? (q.moderatorComment
-                            ? `Не прошёл модерацию: ${q.moderatorComment}`
-                            : 'Не прошёл модерацию')
-                          : exchangeAnswerCountLabel(q)}
-                    </div>
-                    {(q.moderationStatus || '').toLowerCase() === 'approved' && (
-                      <Button size="s" mode="secondary" style={{ marginTop: 8 }} onClick={() => setExchangeThreadId(q.id)}>
-                        Показать ответы
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </>
-            )}
-
-            <div className="rq-hdr" style={{ marginTop: 12 }}>
-              <span className="rq-hdr-t">Просмотр вопросов</span>
-            </div>
-            <div className="time-sw" style={{ marginBottom: 10 }}>
-              <button
-                type="button"
-                className={`time-btn ${exchangeViewFilter === 'all' ? 'on' : ''}`}
-                onClick={() => setExchangeViewFilter('all')}
-              >
-                Все вопросы
-              </button>
-              <button
-                type="button"
-                className={`time-btn ${exchangeViewFilter === 'direction' ? 'on' : ''}`}
-                onClick={() => setExchangeViewFilter('direction')}
-              >
-                По направлению
-              </button>
-            </div>
-
-            {peerVisible.length > 0 && (
-              <div className="rq-hdr">
-                <span className="rq-hdr-t">
-                  {exchangeViewFilter === 'direction' ? 'Вопросы направления' : 'Вопросы участников'}
-                  {' · '}{peerVisible.length}
-                </span>
-              </div>
-            )}
-            {peerVisible.map(q => (
-              <div key={q.id} className="peer-item m-card" style={{ marginTop: 8 }}>
-                <div className="peer-wrap">
-                  <div className="peer-av">{(q.authorName || '?').slice(0, 2).toUpperCase()}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="peer-dir">
-                      {isDirectionAudience(q.audience) ? 'Своему направлению' : 'Всем участникам'}
-                    </div>
-                    <div className="peer-q peer-q--lg">{q.text}</div>
-                    <div className="peer-meta">{q.authorName} · {exchangeAnswerCountLabel(q)}</div>
-                  </div>
-                </div>
-                <Button size="m" stretched mode="secondary" style={{ marginTop: 10 }} onClick={() => setExchangeThreadId(q.id)}>
-                  Показать ответы
-                </Button>
-              </div>
-            ))}
-            {peerVisible.length === 0 && myQuestionsSorted.length === 0 && (
-              <EmptyState
-                icon="🤝"
-                title={exchangeViewFilter === 'direction' ? 'Нет вопросов по направлению' : 'Пока нет вопросов'}
-                subtitle={exchangeViewFilter === 'direction'
-                  ? 'Попробуйте «Все вопросы» или задайте вопрос своему направлению'
-                  : 'Задайте первый вопрос участникам или дождитесь публикации после модерации'}
-              />
-            )}
-            {peerVisible.length === 0 && myQuestionsSorted.length > 0 && exchangeViewFilter === 'direction' && (
-              <div className="m-card" style={{ fontSize: 13, color: '#666', marginTop: 8 }}>
-                В фильтре «По направлению» пока пусто. Переключитесь на «Все вопросы».
-              </div>
-            )}
-          </>
+          <ExchangePeerSection
+            myParticipantId={myParticipantId}
+            limits={exchangeLimits}
+            reloadKey={exchangeReloadKey}
+            onOpenThread={setExchangeThreadId}
+            onSubmitted={(msg) => showSubmitSuccess({ confirm: { ...DEFAULT_CONFIRM, titleTemplate: msg }, xpAwarded: 0 })}
+            onError={(msg) => showSubmitSuccess({ confirm: { ...DEFAULT_CONFIRM, titleTemplate: msg }, xpAwarded: 0 })}
+          />
         ) : (
           <>
             <div className="m-card" style={{ fontSize: 12, color: '#666', marginBottom: 8, lineHeight: 1.45 }}>

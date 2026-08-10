@@ -21,7 +21,10 @@ type ExchangeData = {
     approvalRatePct?: number;
     rejectRatePct?: number;
     avgAnswersPerApproved?: number;
+    otherCount?: number;
+    otherSharePct?: number;
   };
+  byCategory?: { label: string; count: number }[];
   byDay?: {
     day: number;
     total: number;
@@ -130,6 +133,19 @@ export function ExchangeAnalyticsPanel({ data }: { data: ExchangeData | null | u
         <DashKpi value={dashVal(kpi.total)} label="вопросов подано" sub={`в очереди: ${kpi.pending ?? 0}`} />
         <DashKpi value={dashVal(kpi.approved)} label="принято" accent="#22c55e" sub={`охват ${kpi.approvalRatePct ?? 0}%`} />
         <DashKpi value={dashVal(kpi.rejected)} label="отклонено" accent="#ef4444" sub={`доля ${kpi.rejectRatePct ?? 0}%`} />
+        <DashKpi
+          value={`${kpi.otherSharePct ?? 0}%`}
+          label="доля «Другое»"
+          accent="#B8621A"
+          sub={`${kpi.otherCount ?? 0} вопросов · качество рубрик`}
+        />
+      </DashGrid>
+      {(data?.byCategory?.length ?? 0) > 0 && (
+        <DashCard title="Распределение по рубрикам">
+          <SrcBars items={(data?.byCategory || []).map(r => ({ label: r.label, count: r.count }))} />
+        </DashCard>
+      )}
+      <DashGrid cols={4}>
         <DashKpi
           value={dashVal(kpi.answers)}
           label="ответов в ленте"

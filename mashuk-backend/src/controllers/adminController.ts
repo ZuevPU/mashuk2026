@@ -5,7 +5,7 @@ import {
   participants, directions, participantGroups, thematicTags, programPlaces, programBlockTypes, programSpeakers,
   forumSettings, dayFocus, scheduleDays,
   events, tasks, taskCategories, questions, questionOptions, taskSubmissions, taskTeamConfirmations, exchangeQuestions,
-  exchangeAnswers, eventAttendance, materials, materialTypes, kbDayUnlocks,
+  exchangeAnswers, exchangeCategories, eventAttendance, materials, materialTypes, kbDayUnlocks,
   levelsConfig, piggybank, answers, dailyStats, pushLog, pointsLog,
   participantDayState, pedagogicalRoles, dayExperiments, adminActionsLog,
   ratingRecalcRuns, ratingBonusRules,
@@ -2086,13 +2086,15 @@ export const getModerationSummary = async (_req: AdminRequest, res: Response): P
 
 export const moderateExchange = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
-  const { moderationStatus, moderatorComment, rejectReason } = req.body;
+  const {
+    moderationStatus,
+    moderatorComment,
+    rejectReason,
+    categoryId: rawCategoryId,
+    categoryConfirmed,
+    tagIds,
+  } = req.body;
   const comment = moderatorComment ?? rejectReason;
-
-  if (!['approved', 'rejected', 'pending'].includes(String(moderationStatus || ''))) {
-    res.status(400).json({ error: 'moderationStatus must be approved, rejected or pending' });
-    return;
-  }
 
   const [before] = await db.select().from(exchangeQuestions).where(eq(exchangeQuestions.id, id)).limit(1);
   if (!before) {
@@ -2100,18 +2102,64 @@ export const moderateExchange = async (req: AdminRequest, res: Response): Promis
     return;
   }
 
-  const patch: { moderationStatus: string; moderatorComment?: string | null } = { moderationStatus };
-  if (moderationStatus === 'rejected') {
-    patch.moderatorComment = comment != null ? String(comment).slice(0, 500) : before.moderatorComment;
-  } else if (moderationStatus === 'approved') {
-    patch.moderatorComment = null;
+  const patch: Partial<typeof exchangeQuestions.$inferInsert> = {};
+
+  if (moderationStatus !== undefined) {
+    if (!['approved', 'rejected', 'pending'].includes(String(moderationStatus || ''))) {
+      res.status(400).json({ error: 'moderationStatus must be approved, rejected or pending' });
+      return;
+    }
+    patch.moderationStatus = moderationStatus;
+    if (moderationStatus === 'rejected') {
+      patch.moderatorComment = comment != null ? String(comment).slice(0, 500) : before.moderatorComment;
+    } else if (moderationStatus === 'approved') {
+      patch.moderatorComment = null;
+    }
   }
 
-  const [updated] = await db.update(exchangeQuestions)
-    .set(patch)
-    .where(eq(exchangeQuestions.id, id)).returning();
+  if (rawCategoryId !== undefined) {
+    const categoryId = Number(rawCategoryId);
+    if (!Number.isFinite(categoryId) || categoryId <= 0) {
+      res.status(400).json({ error: 'Invalid categoryId' });
+      return;
+    }
+    patch.categoryId = categoryId;
+    patch.classifiedBy = 'moderator';
+    patch.categoryConfirmed = true;
+  }
 
-  if (moderationStatus === 'approved' && before.moderationStatus !== 'approved' && updated) {
+  if (categoryConfirmed !== undefined) {
+    patch.categoryConfirmed = !!categoryConfirmed;
+  }
+
+  if (Object.keys(patch).length === 0 && tagIds === undefined) {
+    res.status(400).json({ error: 'Nothing to update' });
+    return;
+  }
+
+  if (moderationStatus === 'approved' && !patch.categoryId && !before.categoryId) {
+    res.status(400).json({ error: 'categoryId required before approve' });
+    return;
+  }
+
+  if (moderationStatus === 'approved') {
+    patch.categoryConfirmed = true;
+  }
+
+  const [updated] = Object.keys(patch).length
+    ? await db.update(exchangeQuestions).set(patch).where(eq(exchangeQuestions.id, id)).returning()
+    : [before];
+
+  if (Array.isArray(tagIds)) {
+    const { setQuestionTags } = await import('./exchangeCategoryController.js');
+    await setQuestionTags(id, tagIds.map(Number));
+  }
+
+  if (
+    moderationStatus === 'approved'
+    && before.moderationStatus !== 'approved'
+    && updated
+  ) {
     const { awardPoints } = await import('../services/pointsService.js');
     const { getExchangeLimitsConfig } = await import('../services/exchangeLimits.js');
     const exchangeCfg = await getExchangeLimitsConfig();
@@ -2130,8 +2178,15 @@ export const moderateExchange = async (req: AdminRequest, res: Response): Promis
     actionType: 'exchange_moderate',
     section: 'moderation',
     objectId: id,
-    oldValue: { moderationStatus: before.moderationStatus },
-    newValue: { moderationStatus, moderatorComment: patch.moderatorComment ?? null },
+    oldValue: {
+      moderationStatus: before.moderationStatus,
+      categoryId: before.categoryId,
+    },
+    newValue: {
+      moderationStatus: updated?.moderationStatus ?? before.moderationStatus,
+      categoryId: updated?.categoryId ?? before.categoryId,
+      moderatorComment: updated?.moderatorComment ?? null,
+    },
   });
 
   res.json({ question: updated });
@@ -2151,6 +2206,10 @@ export const deleteExchangeQuestion = async (req: AdminRequest, res: Response): 
   }
 
   await db.delete(exchangeAnswers).where(eq(exchangeAnswers.questionId, id));
+  try {
+    const { exchangeQuestionTags } = await import('../db/schema.js');
+    await db.delete(exchangeQuestionTags).where(eq(exchangeQuestionTags.questionId, id));
+  } catch { /* migration pending */ }
   await db.delete(exchangeQuestions).where(eq(exchangeQuestions.id, id));
 
   const { logAdminAction } = await import('../services/adminActionsLog.js');
@@ -2247,6 +2306,7 @@ async function mapExchangeAdminRows(
 
   return rows.map(r => {
     const answers = answersByQ.get(r.q.id) || [];
+    const cat = (r as { c?: typeof exchangeCategories.$inferSelect | null }).c;
     return {
       ...r.q,
       authorName: `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim() || '—',
@@ -2254,6 +2314,12 @@ async function mapExchangeAdminRows(
       groupName: r.p?.groupName ?? null,
       answerCount: answers.filter(a => !a.parentAnswerId).length,
       answers,
+      category: cat ? {
+        id: cat.id,
+        slug: cat.slug,
+        title: cat.title,
+        emoji: cat.emoji,
+      } : null,
     };
   });
 }
@@ -2262,10 +2328,15 @@ export const listPendingExchange = async (_req: AdminRequest, res: Response): Pr
   const rows = await db.select({
     q: exchangeQuestions,
     p: participants,
+    c: exchangeCategories,
   }).from(exchangeQuestions)
     .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
+    .leftJoin(exchangeCategories, eq(exchangeQuestions.categoryId, exchangeCategories.id))
     .where(eq(exchangeQuestions.moderationStatus, 'pending'))
-    .orderBy(desc(exchangeQuestions.createdAt));
+    .orderBy(
+      sql`CASE WHEN ${exchangeCategories.slug} = 'other' THEN 0 WHEN ${exchangeQuestions.classifiedBy} = 'auto' THEN 1 ELSE 2 END`,
+      desc(exchangeQuestions.createdAt),
+    );
 
   res.json({ questions: await mapExchangeAdminRows(rows) });
 };
@@ -2279,8 +2350,10 @@ export const listAllExchange = async (req: AdminRequest, res: Response): Promise
   let baseQuery = db.select({
     q: exchangeQuestions,
     p: participants,
+    c: exchangeCategories,
   }).from(exchangeQuestions)
-    .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id));
+    .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
+    .leftJoin(exchangeCategories, eq(exchangeQuestions.categoryId, exchangeCategories.id));
 
   let countQuery = db.select({ count: count() }).from(exchangeQuestions);
 

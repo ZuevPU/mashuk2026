@@ -116,6 +116,17 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
     await load();
   };
 
+  const unpublish = async (id: number) => {
+    const res = await adminFetch(`/home-notices/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'archived' }),
+    }) as { notice: HomeNoticeRow };
+    if (editingId === id) {
+      setDraft(rowToDraft(res.notice));
+    }
+    await load();
+  };
+
   const uploadImages = async (files: FileList | null) => {
     if (!files?.length) return;
     const urls: string[] = [];
@@ -158,8 +169,18 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
         </div>
 
         {published && (
-          <div className="adm-forum-hint" style={{ marginBottom: 12 }}>
-            Сейчас на главной: <strong>{published.title}</strong>
+          <div
+            className="adm-forum-hint"
+            style={{ marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}
+          >
+            <span>Сейчас на главной: <strong>{published.title}</strong></span>
+            <button
+              type="button"
+              className="adm-btn adm-btn-secondary adm-btn-sm"
+              onClick={() => act(() => unpublish(published.id), 'Снято с публикации')}
+            >
+              Снять с публикации
+            </button>
           </div>
         )}
 
@@ -253,11 +274,11 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
           <button type="button" className="adm-btn adm-btn-primary" onClick={() => act(() => persist('published'), 'Опубликовано на главной')}>
             Опубликовать
           </button>
-          {editingId && (
+          {editingId && notices.find(n => n.id === editingId)?.status === 'published' && (
             <button
               type="button"
               className="adm-btn adm-btn-secondary"
-              onClick={() => act(() => persist('archived'), 'Снято с публикации')}
+              onClick={() => act(() => unpublish(editingId), 'Снято с публикации')}
             >
               Снять с публикации
             </button>

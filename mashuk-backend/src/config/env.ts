@@ -29,4 +29,8 @@ export const env = {
   EXCHANGE_MAX_QUESTIONS_TOTAL: process.env.EXCHANGE_MAX_QUESTIONS_TOTAL || '3',
   /** Обмен опытом: лимит ответов на участника за календарный день (МСК) */
   EXCHANGE_MAX_ANSWERS_PER_DAY: process.env.EXCHANGE_MAX_ANSWERS_PER_DAY || '5',
+  /** Мин. длина текста вопроса в «Обмене опытом» */
+  EXCHANGE_MIN_QUESTION_LEN: Number(process.env.EXCHANGE_MIN_QUESTION_LEN) || 60,
+  /** Мин. длина текста ответа в «Обмене опытом» */
+  EXCHANGE_MIN_ANSWER_LEN: Number(process.env.EXCHANGE_MIN_ANSWER_LEN) || 20,
 };

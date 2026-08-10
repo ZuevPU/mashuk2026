@@ -18,6 +18,7 @@ import * as exportsCtrl from '../controllers/exportController.js';
 import * as exportCustomCtrl from '../controllers/exportCustomController.js';
 import * as shiftsCtrl from '../controllers/adminShiftController.js';
 import * as homeNotice from '../controllers/homeNoticeController.js';
+import * as exchangeCat from '../controllers/exchangeCategoryController.js';
 
 const router = Router();
 const P = requireAdminPermission;
@@ -166,10 +167,17 @@ router.post('/questions/backfill-points', requireAdminRole('settings'), wrap(adm
 
 router.get('/exchange', wrap(admin.listAllExchange));
 router.get('/exchange/pending', wrap(admin.listPendingExchange));
+router.get('/exchange/moderation-queue', wrap(exchangeCat.adminModerationQueueExchange));
+router.post('/exchange/bulk-category', requireAdminRole('moderate'), wrap(exchangeCat.adminBulkExchangeCategory));
 router.get('/exchange-answers', wrap(admin.listExchangeAnswers));
 router.delete('/exchange/answers/:answerId', requireAdminRole('moderate'), wrap(admin.deleteExchangeAnswer));
 router.patch('/exchange/:id', requireAdminRole('moderate'), wrap(admin.moderateExchange));
 router.delete('/exchange/:id', requireAdminRole('moderate'), wrap(admin.deleteExchangeQuestion));
+router.get('/exchange-categories', wrap(exchangeCat.adminListExchangeCategories));
+router.post('/exchange-categories', requireAdminRole('settings'), wrap(exchangeCat.adminCreateExchangeCategory));
+router.patch('/exchange-categories/:id', requireAdminRole('settings'), wrap(exchangeCat.adminUpdateExchangeCategory));
+router.delete('/exchange-categories/:id', requireAdminRole('delete'), wrap(exchangeCat.adminDeleteExchangeCategory));
+router.get('/exchange-tags', wrap(exchangeCat.adminListExchangeTags));
 
 router.get('/org/threads', wrap(adminListOrgThreads));
 router.post('/org/threads/:id/reply', requireAdminRole('moderate'), wrap(adminReplyOrgThread));

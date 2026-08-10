@@ -1,10 +1,13 @@
 import { Response } from 'express';
-import { eq, and, or, asc } from 'drizzle-orm';
+import { eq, and, or, asc, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  questions, questionOptions, answers, exchangeQuestions, exchangeAnswers, participants, events, eventAttendance,
+  questions, questionOptions, answers, exchangeQuestions, exchangeAnswers, exchangeCategories,
+  participants, events, eventAttendance,
 } from '../db/schema.js';
+import { env } from '../config/env.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
+import { toggleExchangeReaction } from '../services/exchangeReactions.js';
 import {
   countWords,
   getForumSettings,
@@ -795,57 +798,168 @@ export const listExchange = async (req: ParticipantRequest, res: Response): Prom
   try {
     const me = req.participant!;
     const { getExchangeLimitsForParticipant } = await import('../services/exchangeLimits.js');
+
+    const categoryCsv = String(req.query.category || '').trim();
+    const directionCsv = String(req.query.direction || '').trim();
+    const audienceFilter = String(req.query.audience || '').trim().toLowerCase();
+    const sort = String(req.query.sort || 'new').trim().toLowerCase();
+    const feed = String(req.query.feed || 'main').trim().toLowerCase(); // main | smalltalk | mine
+    const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 20));
+    const cursorRaw = String(req.query.cursor || '').trim();
+    let cursorCreatedAt: Date | null = null;
+    let cursorId: number | null = null;
+    if (cursorRaw.includes(':')) {
+      const [ts, idPart] = cursorRaw.split(':');
+      const d = new Date(ts);
+      const id = Number(idPart);
+      if (!Number.isNaN(d.getTime()) && Number.isFinite(id)) {
+        cursorCreatedAt = d;
+        cursorId = id;
+      }
+    }
+
+    const categoryIds = categoryCsv
+      ? categoryCsv.split(',').map(Number).filter(n => Number.isFinite(n) && n > 0)
+      : [];
+    const directions = directionCsv
+      ? directionCsv.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+
     const list = await db.select({
       q: exchangeQuestions,
       author: participants,
+      category: exchangeCategories,
     }).from(exchangeQuestions)
       .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
+      .leftJoin(exchangeCategories, eq(exchangeQuestions.categoryId, exchangeCategories.id))
       .where(or(
         eq(exchangeQuestions.moderationStatus, 'approved'),
         eq(exchangeQuestions.participantId, me.id),
       ));
 
-    const visible = list.filter(row =>
+    let visible = list.filter(row =>
       participantCanViewExchangeQuestion(row.q, me, row.author?.direction ?? null));
 
-    const allAnswers = await db.select({
-      a: exchangeAnswers,
-      author: participants,
-    }).from(exchangeAnswers)
-      .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
-      .orderBy(asc(exchangeAnswers.createdAt), asc(exchangeAnswers.id));
+    if (feed === 'smalltalk') {
+      visible = visible.filter(row => row.category?.slug === 'smalltalk');
+    } else if (feed === 'mine') {
+      visible = visible.filter(row => row.q.participantId === me.id);
+    } else {
+      // main feed: never show smalltalk (even own — they appear in mine / smalltalk)
+      visible = visible.filter(row => row.category?.slug !== 'smalltalk');
+    }
 
-    const answersByQuestion = new Map<number, typeof allAnswers>();
-    for (const row of allAnswers) {
-      const qid = row.a.questionId;
-      if (!answersByQuestion.has(qid)) answersByQuestion.set(qid, []);
-      answersByQuestion.get(qid)!.push(row);
+    if (categoryIds.length) {
+      visible = visible.filter(row => row.q.categoryId != null && categoryIds.includes(row.q.categoryId));
+    }
+    if (directions.length) {
+      const set = new Set(directions.map(d => d.toLowerCase()));
+      visible = visible.filter(row => set.has(String(row.author?.direction || '').toLowerCase()));
+    }
+    if (audienceFilter === 'all' || audienceFilter === 'direction') {
+      visible = visible.filter(row => {
+        const aud = (row.q.audience || 'all').toLowerCase();
+        const isDir = aud === 'direction' || aud === 'my_direction';
+        return audienceFilter === 'direction' ? isDir : !isDir;
+      });
+    }
+
+    const answerCounts = new Map<number, number>();
+    if (visible.length) {
+      const ids = visible.map(v => v.q.id);
+      const countRows = await db.select({
+        questionId: exchangeAnswers.questionId,
+        c: sql<number>`count(*)::int`,
+      }).from(exchangeAnswers)
+        .where(and(
+          inArray(exchangeAnswers.questionId, ids),
+          sql`${exchangeAnswers.parentAnswerId} is null`,
+        ))
+        .groupBy(exchangeAnswers.questionId);
+      for (const row of countRows) answerCounts.set(row.questionId, Number(row.c) || 0);
     }
 
     const sorted = [...visible].sort((a, b) => {
+      if (sort === 'unanswered') {
+        const ca = answerCounts.get(a.q.id) || 0;
+        const cb = answerCounts.get(b.q.id) || 0;
+        if (ca !== cb) return ca - cb;
+      }
+      if (sort === 'popular') {
+        const ra = (a.q.reactions as { likes?: number } | null)?.likes || 0;
+        const rb = (b.q.reactions as { likes?: number } | null)?.likes || 0;
+        if (rb !== ra) return rb - ra;
+      }
       const ta = a.q.createdAt ? new Date(a.q.createdAt).getTime() : 0;
       const tb = b.q.createdAt ? new Date(b.q.createdAt).getTime() : 0;
       if (tb !== ta) return tb - ta;
       return b.q.id - a.q.id;
     });
 
+    let start = 0;
+    if (cursorCreatedAt && cursorId != null) {
+      start = sorted.findIndex(row => {
+        const t = row.q.createdAt ? new Date(row.q.createdAt).getTime() : 0;
+        if (t < cursorCreatedAt!.getTime()) return true;
+        if (t === cursorCreatedAt!.getTime() && row.q.id < cursorId!) return true;
+        return false;
+      });
+      if (start < 0) start = sorted.length;
+    }
+
+    const page = sorted.slice(start, start + limit);
+    const pageIds = page.map(p => p.q.id);
+
+    const answersByQuestion = new Map<number, Array<{
+      id: number;
+      participantId: number;
+      text: string;
+      parentAnswerId: number | null;
+      authorName: string;
+      reactions: unknown;
+      createdAt: Date | null;
+    }>>();
+
+    if (pageIds.length) {
+      const answerRows = await db.select({
+        a: exchangeAnswers,
+        author: participants,
+      }).from(exchangeAnswers)
+        .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
+        .where(inArray(exchangeAnswers.questionId, pageIds))
+        .orderBy(asc(exchangeAnswers.createdAt), asc(exchangeAnswers.id));
+      for (const row of answerRows) {
+        const qid = row.a.questionId;
+        if (!answersByQuestion.has(qid)) answersByQuestion.set(qid, []);
+        answersByQuestion.get(qid)!.push({
+          id: row.a.id,
+          participantId: row.a.participantId,
+          text: row.a.text,
+          parentAnswerId: row.a.parentAnswerId,
+          authorName: `${row.author?.firstName ?? ''} ${row.author?.lastName ?? ''}`.trim(),
+          reactions: row.a.reactions,
+          createdAt: row.a.createdAt,
+        });
+      }
+    }
+
+    const last = page[page.length - 1];
+    const nextCursor = page.length === limit && last?.q.createdAt
+      ? `${new Date(last.q.createdAt).toISOString()}:${last.q.id}`
+      : null;
+
     const limits = await getExchangeLimitsForParticipant(me.id);
 
     res.json({
       myParticipantId: me.id,
       limits,
-      questions: sorted.map(row => {
-        const answerRows = answersByQuestion.get(row.q.id) || [];
-        const mapped = answerRows.map(ar => ({
-          id: ar.a.id,
-          participantId: ar.a.participantId,
-          text: ar.a.text,
-          parentAnswerId: ar.a.parentAnswerId,
-          authorName: `${ar.author?.firstName ?? ''} ${ar.author?.lastName ?? ''}`.trim(),
-          reactions: ar.a.reactions,
-          createdAt: ar.a.createdAt,
-        }));
-        const topLevelCount = mapped.filter(a => !a.parentAnswerId).length;
+      minQuestionLen: env.EXCHANGE_MIN_QUESTION_LEN,
+      minAnswerLen: env.EXCHANGE_MIN_ANSWER_LEN,
+      nextCursor,
+      questions: page.map(row => {
+        const mapped = answersByQuestion.get(row.q.id) || [];
+        const topLevelCount = answerCounts.get(row.q.id)
+          ?? mapped.filter(a => !a.parentAnswerId).length;
         return {
           ...row.q,
           authorName: `${row.author?.firstName ?? ''} ${row.author?.lastName ?? ''}`.trim(),
@@ -853,6 +967,12 @@ export const listExchange = async (req: ParticipantRequest, res: Response): Prom
           isMine: row.q.participantId === me.id,
           answerCount: topLevelCount,
           answers: mapped,
+          category: row.category ? {
+            id: row.category.id,
+            slug: row.category.slug,
+            title: row.category.title,
+            emoji: row.category.emoji,
+          } : null,
         };
       }),
     });
@@ -864,11 +984,8 @@ export const listExchange = async (req: ParticipantRequest, res: Response): Prom
 
 export const createExchangeQuestion = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
-    const { text, audience } = req.body;
-    if (!text) {
-      res.status(400).json({ error: 'text required' });
-      return;
-    }
+    const { text, audience, categoryId: rawCategoryId } = req.body;
+    const trimmed = typeof text === 'string' ? text.trim() : '';
 
     const { getExchangeLimitsForParticipant } = await import('../services/exchangeLimits.js');
     const limits = await getExchangeLimitsForParticipant(req.participant!.id);
@@ -880,16 +997,47 @@ export const createExchangeQuestion = async (req: ParticipantRequest, res: Respo
       return;
     }
 
+    const categoryId = Number(rawCategoryId);
+    if (!Number.isFinite(categoryId) || categoryId <= 0) {
+      res.status(422).json({ error: 'NO_CATEGORY', code: 'NO_CATEGORY' });
+      return;
+    }
+    if (!trimmed || trimmed.length < env.EXCHANGE_MIN_QUESTION_LEN) {
+      res.status(422).json({
+        error: 'TEXT_TOO_SHORT',
+        code: 'TEXT_TOO_SHORT',
+        min: env.EXCHANGE_MIN_QUESTION_LEN,
+        current: trimmed.length,
+      });
+      return;
+    }
+
+    const [cat] = await db.select().from(exchangeCategories)
+      .where(and(eq(exchangeCategories.id, categoryId), eq(exchangeCategories.isActive, true)))
+      .limit(1);
+    if (!cat) {
+      res.status(422).json({ error: 'NO_CATEGORY', code: 'NO_CATEGORY' });
+      return;
+    }
+
     const aud = audience === 'direction' || audience === 'my_direction' ? 'direction' : 'all';
     const [q] = await db.insert(exchangeQuestions).values({
       participantId: req.participant!.id,
-      text,
+      text: trimmed.slice(0, 8000),
       audience: aud,
       moderationStatus: 'pending',
+      categoryId: cat.id,
+      classifiedBy: 'user',
+      categoryConfirmed: false,
+      reactions: { likes: 0, discuss: 0, likedBy: [], discussBy: [] },
     }).returning();
 
     const nextLimits = await getExchangeLimitsForParticipant(req.participant!.id);
-    res.json({ question: q, limits: nextLimits });
+    res.json({
+      question: q,
+      limits: nextLimits,
+      category: { id: cat.id, slug: cat.slug, title: cat.title, emoji: cat.emoji },
+    });
   } catch (error) {
     console.error('createExchangeQuestion:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -903,6 +1051,16 @@ export const answerExchange = async (req: ParticipantRequest, res: Response): Pr
     const trimmed = typeof text === 'string' ? text.trim() : '';
     if (!trimmed) {
       res.status(400).json({ error: 'Введите текст ответа' });
+      return;
+    }
+    if (trimmed.length < env.EXCHANGE_MIN_ANSWER_LEN) {
+      res.status(422).json({
+        error: 'ANSWER_TOO_SHORT',
+        code: 'ANSWER_TOO_SHORT',
+        min: env.EXCHANGE_MIN_ANSWER_LEN,
+        current: trimmed.length,
+        hint: 'Похоже, это реакция, а не ответ. Нажмите 👍 под вопросом — автор увидит.',
+      });
       return;
     }
 
@@ -1004,8 +1162,8 @@ export const answerExchange = async (req: ParticipantRequest, res: Response): Pr
 export const reactExchangeAnswer = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const answerId = Number(req.params.answerId);
-    const { type } = req.body as { type: 'like' | 'discuss' };
-    if (!['like', 'discuss'].includes(type)) {
+    const kind = (req.body?.type || req.body?.kind) as 'like' | 'discuss';
+    if (!['like', 'discuss'].includes(kind)) {
       res.status(400).json({ error: 'Invalid reaction type' });
       return;
     }
@@ -1016,43 +1174,50 @@ export const reactExchangeAnswer = async (req: ParticipantRequest, res: Response
       return;
     }
 
-    const reactions = (existing.reactions as {
-      likes?: number;
-      discuss?: number;
-      likedBy?: number[];
-      discussBy?: number[];
-    }) || { likes: 0, discuss: 0, likedBy: [], discussBy: [] };
-
-    const participantId = req.participant!.id;
-    const likedBy = Array.isArray(reactions.likedBy) ? [...reactions.likedBy] : [];
-    const discussBy = Array.isArray(reactions.discussBy) ? [...reactions.discussBy] : [];
-
-    if (type === 'like') {
-      if (likedBy.includes(participantId)) {
-        res.json({ answer: existing, already: true });
-        return;
-      }
-      likedBy.push(participantId);
-      reactions.likedBy = likedBy;
-      reactions.likes = likedBy.length;
-    } else {
-      if (discussBy.includes(participantId)) {
-        res.json({ answer: existing, already: true });
-        return;
-      }
-      discussBy.push(participantId);
-      reactions.discussBy = discussBy;
-      reactions.discuss = discussBy.length;
-    }
-
+    const { reactions, removed } = toggleExchangeReaction(existing.reactions, req.participant!.id, kind);
     const [updated] = await db.update(exchangeAnswers)
       .set({ reactions })
       .where(eq(exchangeAnswers.id, answerId))
       .returning();
 
-    res.json({ answer: updated });
+    res.json({ answer: updated, removed });
   } catch (error) {
     console.error('reactExchangeAnswer:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const reactExchangeQuestion = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    const kind = (req.body?.type || req.body?.kind) as 'like' | 'discuss';
+    if (!['like', 'discuss'].includes(kind)) {
+      res.status(400).json({ error: 'Invalid reaction type' });
+      return;
+    }
+
+    const [existing] = await db.select().from(exchangeQuestions).where(eq(exchangeQuestions.id, id)).limit(1);
+    if (!existing) {
+      res.status(404).json({ error: 'Question not found' });
+      return;
+    }
+
+    const [author] = await db.select({ direction: participants.direction }).from(participants)
+      .where(eq(participants.id, existing.participantId)).limit(1);
+    if (!participantCanViewExchangeQuestion(existing, req.participant!, author?.direction ?? null)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const { reactions, removed } = toggleExchangeReaction(existing.reactions, req.participant!.id, kind);
+    const [updated] = await db.update(exchangeQuestions)
+      .set({ reactions })
+      .where(eq(exchangeQuestions.id, id))
+      .returning();
+
+    res.json({ question: updated, removed });
+  } catch (error) {
+    console.error('reactExchangeQuestion:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

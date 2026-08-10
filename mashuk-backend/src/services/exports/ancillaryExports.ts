@@ -635,9 +635,11 @@ export async function writePointsManualExport(res: Response): Promise<void> {
 }
 
 export async function writeExchangeFullExport(res: Response): Promise<void> {
-  const qs = await db.select({ q: exchangeQuestions, p: participants })
+  const { exchangeCategories } = await import('../../db/schema.js');
+  const qs = await db.select({ q: exchangeQuestions, p: participants, c: exchangeCategories })
     .from(exchangeQuestions)
-    .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id));
+    .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
+    .leftJoin(exchangeCategories, eq(exchangeQuestions.categoryId, exchangeCategories.id));
   const ans = await db.select({ a: exchangeAnswers, p: participants, q: exchangeQuestions })
     .from(exchangeAnswers)
     .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
@@ -645,10 +647,13 @@ export async function writeExchangeFullExport(res: Response): Promise<void> {
   sendCsv(
     res,
     'exchange.csv',
-    'kind,id,participant_id,name,direction,text,status,time,points',
+    'kind,id,participant_id,name,direction,category,text,status,time,points',
     [
-      ...qs.map(r => ['question', r.q.id, r.p?.id, fullName(r.p), r.p?.direction, r.q.text, r.q.moderationStatus, r.q.createdAt, '']),
-      ...ans.map(r => ['answer', r.a.id, r.p?.id, fullName(r.p), r.p?.direction, r.a.text, '', r.a.createdAt, '']),
+      ...qs.map(r => [
+        'question', r.q.id, r.p?.id, fullName(r.p), r.p?.direction,
+        r.c?.slug || '', r.q.text, r.q.moderationStatus, r.q.createdAt, '',
+      ]),
+      ...ans.map(r => ['answer', r.a.id, r.p?.id, fullName(r.p), r.p?.direction, '', r.a.text, '', r.a.createdAt, '']),
     ],
   );
 }

@@ -421,6 +421,13 @@
       "when": 1839000000000,
       "tag": "0060_home_notices",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1840000000000,
+      "tag": "0061_exchange_categories",
+      "breakpoints": true
     }
   ]
 }

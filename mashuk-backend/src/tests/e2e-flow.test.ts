@@ -192,11 +192,20 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
       .send({ tags: ['контакт', 'идея'], text: 'E2E contact mix no source' });
     assert.equal(piggyContactMix.status, 400);
 
+    const cats = await request(app).get('/api/exchange/categories').set(headers);
+    assert.equal(cats.status, 200);
+    const methodsId = (cats.body.categories || []).find((c: { slug: string }) => c.slug === 'methods')?.id
+      || (cats.body.categories || [])[0]?.id;
+    assert.ok(methodsId, 'exchange categories seed required');
     const ex = await request(app)
       .post('/api/exchange')
       .set(headers)
-      .send({ text: 'E2E exchange question', audience: 'all' });
-    assert.equal(ex.status, 200);
+      .send({
+        text: 'E2E exchange question about lesson structure and activity switch for kids in the classroom.',
+        audience: 'all',
+        categoryId: methodsId,
+      });
+    assert.equal(ex.status, 200, JSON.stringify(ex.body));
 
     const home = await request(app).get('/api/home').set(headers);
     assert.equal(home.status, 200);

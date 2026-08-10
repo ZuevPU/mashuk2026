@@ -736,6 +736,24 @@ export const piggybank = pgTable('piggybank', {
   index('piggybank_participant_id_idx').on(table.participantId),
 ]);
 
+export const exchangeCategories = pgTable('exchange_categories', {
+  id: serial('id').primaryKey(),
+  slug: varchar('slug', { length: 32 }).notNull().unique(),
+  title: varchar('title', { length: 64 }).notNull(),
+  emoji: varchar('emoji', { length: 8 }),
+  hint: text('hint'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  isActive: boolean('is_active').default(true).notNull(),
+  isSystem: boolean('is_system').default(false).notNull(),
+});
+
+export const exchangeTags = pgTable('exchange_tags', {
+  id: serial('id').primaryKey(),
+  slug: varchar('slug', { length: 32 }).notNull().unique(),
+  title: varchar('title', { length: 64 }).notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+});
+
 export const exchangeQuestions = pgTable('exchange_questions', {
   id: serial('id').primaryKey(),
   participantId: integer('participant_id').references(() => participants.id).notNull(),
@@ -743,10 +761,28 @@ export const exchangeQuestions = pgTable('exchange_questions', {
   audience: varchar('audience', { length: 100 }),
   moderationStatus: varchar('moderation_status', { length: 50 }).default('pending'),
   moderatorComment: text('moderator_comment'),
+  categoryId: integer('category_id').references(() => exchangeCategories.id),
+  classifiedBy: varchar('classified_by', { length: 16 }).default('user'),
+  categoryConfirmed: boolean('category_confirmed').default(false).notNull(),
+  reactions: jsonb('reactions').default({}),
+  duplicateOfId: integer('duplicate_of_id'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('exchange_questions_participant_id_idx').on(table.participantId),
   index('exchange_questions_moderation_status_idx').on(table.moderationStatus),
+  index('exchange_questions_category_mod_created_idx').on(
+    table.categoryId,
+    table.moderationStatus,
+    table.createdAt,
+  ),
+]);
+
+export const exchangeQuestionTags = pgTable('exchange_question_tags', {
+  questionId: integer('question_id').references(() => exchangeQuestions.id).notNull(),
+  tagId: integer('tag_id').references(() => exchangeTags.id).notNull(),
+}, (table) => [
+  index('exchange_question_tags_question_idx').on(table.questionId),
+  index('exchange_question_tags_tag_idx').on(table.tagId),
 ]);
 
 export const exchangeAnswers = pgTable('exchange_answers', {

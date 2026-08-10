@@ -13,8 +13,9 @@ import {
 import { listTasks, submitTask, scanTask, resolveTaskQr, teamConfirmSubmission, searchTeammates } from '../controllers/tasksController.js';
 import {
   listForumQuestions, getQuestion, submitAnswer,
-  listExchange, createExchangeQuestion, answerExchange, reactExchangeAnswer,
+  listExchange, createExchangeQuestion, answerExchange, reactExchangeAnswer, reactExchangeQuestion,
 } from '../controllers/questionsController.js';
+import { listActiveExchangeCategories } from '../controllers/exchangeCategoryController.js';
 import {
   getProfile, listPiggybank, createPiggybank, updateProfileSettings, deleteMyProfile, getPublicLeaderboard,
   exportPiggybankText, listMyMedals, listMedalsCatalog, synthesizeMyOutcomes, downloadMyProfilePdf,
@@ -71,9 +72,11 @@ router.get('/questions', vkAuthMiddleware, requireParticipant, listForumQuestion
 router.get('/questions/:id', vkAuthMiddleware, requireParticipant, getQuestion);
 router.post('/questions/:id/answer', vkAuthMiddleware, requireParticipant, submitAnswer);
 
+router.get('/exchange/categories', vkAuthMiddleware, requireParticipant, listActiveExchangeCategories);
 router.get('/exchange', vkAuthMiddleware, requireParticipant, listExchange);
 router.post('/exchange', vkAuthMiddleware, requireParticipant, createExchangeQuestion);
 router.post('/exchange/:id/answer', vkAuthMiddleware, requireParticipant, answerExchange);
+router.post('/exchange/:id/react', vkAuthMiddleware, requireParticipant, reactExchangeQuestion);
 router.post('/exchange/answers/:answerId/react', vkAuthMiddleware, requireParticipant, reactExchangeAnswer);
 
 router.get('/org/threads', vkAuthMiddleware, requireParticipant, listMyOrgThreads);
