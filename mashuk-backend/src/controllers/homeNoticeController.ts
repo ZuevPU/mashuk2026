@@ -22,6 +22,15 @@ function normalizeImageUrls(raw: unknown): string[] {
     .filter(u => /^https?:\/\//.test(u) || u.startsWith('/uploads/'));
 }
 
+function normalizeCtaUrl(raw: unknown): string | null {
+  const t = String(raw ?? '').trim();
+  if (!t) return null;
+  if (/^(https?:\/\/|mailto:|tel:)/i.test(t)) return t;
+  if (t.startsWith('//')) return `https:${t}`;
+  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}([/:?]|$)/i.test(t)) return `https://${t}`;
+  return t;
+}
+
 function toPublicNotice(row: typeof homeNotices.$inferSelect) {
   return {
     id: row.id,
@@ -103,9 +112,7 @@ export const createHomeNotice = async (req: AdminRequest, res: Response): Promis
     if (!STATUSES.has(status)) status = 'draft';
 
     const body = String(req.body.body ?? '');
-    const ctaUrl = req.body.ctaUrl != null && String(req.body.ctaUrl).trim()
-      ? String(req.body.ctaUrl).trim()
-      : null;
+    const ctaUrl = req.body.ctaUrl != null ? normalizeCtaUrl(req.body.ctaUrl) : null;
     const ctaLabel = req.body.ctaLabel != null && String(req.body.ctaLabel).trim()
       ? String(req.body.ctaLabel).trim().slice(0, 120)
       : null;
@@ -176,8 +183,7 @@ export const updateHomeNotice = async (req: AdminRequest, res: Response): Promis
     }
     if (req.body.body !== undefined) patch.body = String(req.body.body);
     if (req.body.ctaUrl !== undefined) {
-      const v = String(req.body.ctaUrl ?? '').trim();
-      patch.ctaUrl = v || null;
+      patch.ctaUrl = normalizeCtaUrl(req.body.ctaUrl);
     }
     if (req.body.ctaLabel !== undefined) {
       const v = String(req.body.ctaLabel ?? '').trim();

@@ -1,4 +1,4 @@
-import { openExternalUrl } from '../../utils/openUrl';
+import { normalizeExternalUrl, openExternalUrl } from '../../utils/openUrl';
 
 export type HomeNoticeItem = {
   id: number;
@@ -31,7 +31,7 @@ type ModalBodyProps = {
 
 export function HomeNoticeModalBody({ notice }: ModalBodyProps) {
   const images = Array.isArray(notice.imageUrls) ? notice.imageUrls : [];
-  const ctaUrl = (notice.ctaUrl || '').trim();
+  const ctaHref = normalizeExternalUrl(notice.ctaUrl || '');
   const ctaLabel = (notice.ctaLabel || '').trim() || 'Открыть';
 
   return (
@@ -43,18 +43,31 @@ export function HomeNoticeModalBody({ notice }: ModalBodyProps) {
       {images.length > 0 && (
         <div className="m-home-notice-modal__gallery">
           {images.map((url, i) => (
-            <img key={`${url}-${i}`} src={url} alt="" className="m-home-notice-modal__img" />
+            <img
+              key={`${url}-${i}`}
+              src={url}
+              alt=""
+              className="m-home-notice-modal__img"
+              loading="lazy"
+              decoding="async"
+            />
           ))}
         </div>
       )}
-      {ctaUrl && (
-        <button
-          type="button"
+      {ctaHref && (
+        <a
+          href={ctaHref}
           className="m-home-notice-modal__cta"
-          onClick={() => openExternalUrl(ctaUrl)}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openExternalUrl(ctaHref);
+          }}
         >
           {ctaLabel}
-        </button>
+        </a>
       )}
     </div>
   );

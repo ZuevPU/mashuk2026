@@ -50,6 +50,45 @@ function statusLabel(status: string) {
   return 'Черновик';
 }
 
+/** Shrink notice photos ~2× before upload so they stay sharp on the phone screen. */
+async function fileToResizedDataUrl(file: File, scale = 0.5, quality = 0.86): Promise<string> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      bitmap.close();
+      throw new Error('canvas');
+    }
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    bitmap.close();
+    const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+    return canvas.toDataURL(mime, quality);
+  } catch {
+    return new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+}
+
+function normalizeCtaUrl(raw: string): string {
+  const t = raw.trim();
+  if (!t) return '';
+  if (/^(https?:\/\/|mailto:|tel:)/i.test(t)) return t;
+  if (t.startsWith('//')) return `https:${t}`;
+  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}([/:?]|$)/i.test(t)) return `https://${t}`;
+  return t;
+}
+
 type Props = Pick<AdminTabProps, 'adminFetch' | 'act'> & {
   reloadKey?: number;
 };
@@ -93,7 +132,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
   const payload = (status?: string) => ({
     title: draft.title.trim(),
     body: draft.body,
-    ctaUrl: draft.ctaUrl.trim() || null,
+    ctaUrl: normalizeCtaUrl(draft.ctaUrl) || null,
     ctaLabel: draft.ctaLabel.trim() || null,
     imageUrls: draft.imageUrls,
     ...(status ? { status } : {}),
@@ -134,12 +173,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
     if (!files?.length) return;
     const urls: string[] = [];
     for (const file of Array.from(files)) {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(String(r.result));
-        r.onerror = reject;
-        r.readAsDataURL(file);
-      });
+      const dataUrl = await fileToResizedDataUrl(file, 0.5);
       const up = await adminFetch('/upload-image', {
         method: 'POST',
         body: JSON.stringify({ dataUrl }),
@@ -231,6 +265,9 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
 
         <div className="adm-forum-block" style={{ marginTop: 12 }}>
           <span className="adm-label">Картинки</span>
+          <p className="adm-muted" style={{ margin: '0 0 6px', fontSize: 11 }}>
+            Перед загрузкой уменьшаем в 2 раза — так они чётче смотрятся на телефоне.
+          </p>
           <input
             type="file"
             accept="image/*"
