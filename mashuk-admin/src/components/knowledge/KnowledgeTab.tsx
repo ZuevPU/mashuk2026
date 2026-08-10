@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
 import { AdminPageHero } from '../admin/AdminPageHero';
-import { ParticipantPreviewModal } from '../admin/ParticipantPreviewModal';
 import type { AdminTabProps } from '../admin/types';
 import { SpeakerMultiPick } from '../program/ProgramCatalogs';
 import type { ProgramSpeaker } from '../program/types';
@@ -58,11 +57,18 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   const [eventFilter, setEventFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [speakers, setSpeakers] = useState<ProgramSpeaker[]>([]);
-  const [previewMat, setPreviewMat] = useState<MaterialRow | null>(null);
   const [previewDay, setPreviewDay] = useState(1);
-  const [previewOpen, setPreviewOpen] = useState(true);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [kbForumThreshold, setKbForumThreshold] = useState(4);
   const [totalDays, setTotalDays] = useState(8);
+
+  const openDayPreview = (day: number) => {
+    setPreviewDay(day);
+    setPreviewOpen(true);
+    requestAnimationFrame(() => {
+      document.getElementById('kb-participant-preview')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
 
   const refreshUnlocks = async () => {
     setKbUnlocks((await adminFetch('/kb-unlocks')).unlocks || []);
@@ -209,44 +215,14 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             ? `База знаний · ${materials.length} материалов`
             : `База знаний · ${filtered.length} из ${materials.length} материалов`
         }
-        hint="В аналитику и приложение участника попадают только материалы со статусом «Опубликован»."
+        hint="В аналитику и приложение участника попадают только материалы со статусом «Опубликован». Кнопка «Предпросмотр» открывает макет телефона, как у итоговой анкеты."
       >
-        <div className="form-row" style={{ marginTop: 8, flexWrap: 'wrap', gap: 8 }}>
-          <button
-            type="button"
-            className="adm-btn adm-btn-primary"
-            onClick={() => setPreviewOpen(v => !v)}
-          >
-            {previewOpen ? 'Скрыть предпросмотр' : 'Предпросмотр'}
+        {setTab && (
+          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setTab('events')}>
+            Перейти к программе
           </button>
-          <select
-            className="adm-input"
-            value={previewDay}
-            onChange={e => setPreviewDay(Number(e.target.value))}
-            style={{ width: 120 }}
-            title="День для превью"
-          >
-            {dayOptions.map(d => (
-              <option key={d} value={d}>День {d}</option>
-            ))}
-          </select>
-          {setTab && (
-            <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setTab('events')}>
-              Перейти к программе
-            </button>
-          )}
-        </div>
+        )}
       </AdminPageHero>
-
-      {previewOpen && (
-        <KnowledgeBaseParticipantPreview
-          day={previewDay}
-          materials={materials}
-          typeOptions={materialTypes}
-          speakers={speakers}
-          kbThreshold={kbForumThreshold}
-        />
-      )}
 
       <MaterialTypesPanel adminFetch={adminFetch} act={act} />
 
@@ -341,8 +317,43 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             <option value="published">Опубликован</option>
             <option value="archived">Архив</option>
           </select>
+          <select
+            className="adm-input"
+            value={previewDay}
+            onChange={e => setPreviewDay(Number(e.target.value))}
+            style={{ width: 120 }}
+            title="День для предпросмотра"
+          >
+            {dayOptions.map(d => (
+              <option key={d} value={d}>День {d}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="adm-btn adm-btn-secondary adm-btn-sm"
+            onClick={() => {
+              if (previewOpen) setPreviewOpen(false);
+              else openDayPreview(previewDay);
+            }}
+          >
+            {previewOpen ? 'Скрыть предпросмотр' : 'Предпросмотр'}
+          </button>
           <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => load()}>Обновить</button>
         </div>
+
+        {previewOpen && (
+          <div id="kb-participant-preview">
+            <KnowledgeBaseParticipantPreview
+              day={previewDay}
+              dayOptions={dayOptions}
+              materials={materials}
+              typeOptions={materialTypes}
+              speakers={speakers}
+              kbThreshold={kbForumThreshold}
+              onDayChange={setPreviewDay}
+            />
+          </div>
+        )}
 
         <div className="adm-kb-create card" style={{ marginBottom: 16, padding: 16, background: '#FAFAF8' }}>
           <h4 style={{ margin: '0 0 12px' }}>Новый материал</h4>
@@ -535,7 +546,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
                 directions={directions}
                 dayOptions={dayOptions}
                 onCopyLink={copyLink}
-                onPreview={() => setPreviewMat(m)}
+                onPreview={() => openDayPreview(m.dayNumber ?? 1)}
                 onSave={body => act(async () => {
                   await adminFetch(`/materials/${m.id}`, { method: 'PATCH', body: JSON.stringify(body) });
                   await load();
@@ -550,22 +561,6 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
         </table>
         {filtered.length === 0 && <p className="adm-muted">Нет материалов по фильтрам</p>}
       </div>
-
-      <ParticipantPreviewModal
-        open={!!previewMat}
-        onClose={() => setPreviewMat(null)}
-        title={previewMat ? `Превью · день ${previewMat.dayNumber ?? 1}` : 'Превью'}
-      >
-        {previewMat && (
-          <KnowledgeBaseParticipantPreview
-            day={previewMat.dayNumber ?? 1}
-            materials={materials}
-            typeOptions={materialTypes}
-            speakers={speakers}
-            kbThreshold={kbForumThreshold}
-          />
-        )}
-      </ParticipantPreviewModal>
     </div>
   );
 }

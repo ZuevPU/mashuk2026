@@ -531,10 +531,99 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 .adm-evening-preview-btn.secondary { background: #fff; color: #1D1D1F; border: 1px solid #ddd; }
 .adm-evening-preview-btn.ghost { background: transparent; color: #666; }
 
-/* Knowledge base — participant preview table */
-.adm-kb-preview-table-wrap {
+/* Knowledge base — participant phone preview */
+.adm-kb-preview-card {
+  position: relative;
+  background: #F7F4EF !important;
+  min-height: 520px;
+}
+.adm-kb-preview-appbar {
+  font-size: 15px;
+  font-weight: 800;
+  text-align: center;
+  margin: -2px 0 10px;
+}
+.adm-kb-preview-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.adm-kb-preview-tab {
+  flex: 1;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 8px 6px;
+  border-radius: 10px;
+  background: #fff;
+  color: #888;
+  border: 1px solid #E8E0D4;
+}
+.adm-kb-preview-tab.active {
+  background: #1D1D1F;
+  color: #fff;
+  border-color: #1D1D1F;
+}
+.adm-kb-preview-days {
+  display: flex;
+  gap: 6px;
   overflow-x: auto;
-  margin: 0 -4px;
+  padding-bottom: 4px;
+  margin-bottom: 10px;
+}
+.adm-kb-preview-day {
+  flex: 0 0 auto;
+  min-width: 36px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+.adm-kb-preview-day.active {
+  background: #FF5500;
+  border-color: #FF5500;
+  color: #fff;
+}
+.adm-kb-preview-day-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+}
+.adm-kb-preview-day-title {
+  font-size: 13px;
+  font-weight: 800;
+}
+.adm-kb-preview-day-meta {
+  font-size: 10px;
+  color: #888;
+  margin-top: 4px;
+}
+.adm-kb-preview-rule {
+  font-size: 10px;
+  color: #888;
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+.adm-kb-preview-rule strong { color: #FF5500; }
+.adm-kb-preview-empty {
+  text-align: center;
+  color: #888;
+  padding: 22px 10px;
+  font-size: 12px;
+  background: #fff;
+  border-radius: 12px;
+}
+.adm-kb-preview-table-card {
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
 }
 .adm-kb-preview-table {
   width: 100%;
@@ -548,11 +637,12 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   letter-spacing: 0.04em;
   color: #888;
   font-weight: 700;
-  padding: 6px 6px 8px;
-  border-bottom: 1px solid #E8E0D4;
+  padding: 8px 8px 7px;
+  border-bottom: 1px solid #F0EBE3;
+  background: #FAFAF8;
 }
 .adm-kb-preview-table td {
-  padding: 9px 6px;
+  padding: 9px 8px;
   border-bottom: 1px solid #F5F0E8;
   vertical-align: middle;
 }
@@ -561,6 +651,18 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   color: #666;
   white-space: nowrap;
   max-width: 72px;
+  font-size: 10px;
+}
+.adm-kb-preview-title-btn {
+  display: block;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
 }
 .adm-kb-preview-title {
   font-weight: 600;
@@ -577,10 +679,32 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   font-size: 9px;
   border: 1px solid #ddd;
   border-radius: 8px;
-  padding: 3px 6px;
+  padding: 4px 7px;
   background: #fff;
   white-space: nowrap;
   color: #444;
+  cursor: pointer;
+  font-family: inherit;
+}
+.adm-kb-preview-toast {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 42px;
+  border: none;
+  border-radius: 10px;
+  background: #222;
+  color: #fff;
+  padding: 10px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.adm-kb-preview-hint {
+  margin-top: 10px;
+  font-size: 10px;
+  color: #999;
+  line-height: 1.35;
 }
 .adm-forum-step-card {
   border: 1px solid var(--m-border); border-radius: 12px; padding: 12px; margin-top: 12px; background: #fff;
