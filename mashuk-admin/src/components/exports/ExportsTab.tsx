@@ -231,8 +231,7 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             <tr>
               <td>Ответы на вопросы за день</td>
               <td className="adm-muted">
-                Все ответы одним списком + сводка по направлениям + отдельный лист на каждый вопрос
-                (участник · направление · ответ)
+                «Все ответы» + «После блоков» (тема → подтема → осмысление) + сводки + лист на каждый вопрос.
               </td>
               <td>
                 <span className="adm-muted">D{forumDay}{direction ? ` · ${direction}` : ''}</span>
@@ -256,12 +255,73 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
               </td>
             </tr>
             <tr>
-              <td>Итоги дня (вопросы анкеты)</td>
+              <td>После блоков</td>
               <td className="adm-muted">
-                Все, кто сдал итоговую анкету на главной (текущая смена): «Все ответы» (вопросы столбцами) + лист на каждый вопрос + диагностика.
+                Только осмысление после блоков: «Где вы были?» → тема → подтема → текст.
+                Отдельные колонки на основном листе и на листах вопросов.
+              </td>
+              <td>
+                <span className="adm-muted">D{forumDay}{direction ? ` · ${direction}` : ''}{group ? ` · ${group}` : ''}</span>
+              </td>
+              <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-primary"
+                  onClick={() =>
+                    downloadXlsx(
+                      `/exports/after-blocks${buildQuery({
+                        mode: 'day',
+                        day: String(forumDay),
+                        direction: direction || undefined,
+                        group: group || undefined,
+                      })}`,
+                      `after_blocks_d${forumDay}.xlsx`,
+                    )
+                  }
+                >
+                  За день D{forumDay}
+                </button>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-secondary"
+                  onClick={() =>
+                    downloadXlsx(
+                      `/exports/after-blocks${buildQuery({
+                        mode: 'shift',
+                        direction: direction || undefined,
+                        group: group || undefined,
+                      })}`,
+                      'after_blocks_shift.xlsx',
+                    )
+                  }
+                >
+                  Вся смена
+                </button>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-secondary"
+                  onClick={() =>
+                    downloadXlsx(
+                      `/exports/questions-day${buildQuery({
+                        day: String(forumDay),
+                        direction: direction || undefined,
+                        questionKind: 'after_blocks',
+                      })}`,
+                      `after_blocks_day${forumDay}.xlsx`,
+                    )
+                  }
+                >
+                  Как в «вопросах дня»
+                </button>
+              </td>
+            </tr>
+            <tr>
+              <td>Итоги дня (вечерняя анкета)</td>
+              <td className="adm-muted">
+                «Все ответы» (вопросы столбцами) + лист «Открытые уроки» (тема → подтема → оценка 1–10)
+                + лист на каждый вопрос + диагностика.
                 <div style={{ marginTop: 4, fontSize: 11 }}>
-                  Не путать с вечерней проверкой состояния. Если файл пуст — смотрите лист «Диагностика»
-                  (часто анкета снята с публикации).
+                  Не путать с проверкой состояния. Если пусто — лист «Диагностика».
                 </div>
               </td>
               <td>
@@ -287,6 +347,8 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                     downloadXlsx(
                       `/exports/evening-summary${buildQuery({
                         day: String(forumDay),
+                        direction: direction || undefined,
+                        group: group || undefined,
                       })}`,
                       `evening_summary_d${forumDay}.xlsx`,
                     )

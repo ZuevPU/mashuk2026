@@ -11,6 +11,11 @@ import {
   type AnswerJoinRow,
 } from './exportCommon.js';
 import { queryAnswerJoinRows } from './answerJoinQuery.js';
+import {
+  isAfterBlocksQuestion,
+  parseAfterBlocksPicks,
+  type AfterBlocksPick,
+} from './nestedPickParse.js';
 import { createWorkbook, sendWorkbook } from './workbook.js';
 
 export type QuestionsDayExportFilters = {
@@ -20,6 +25,12 @@ export type QuestionsDayExportFilters = {
   group?: string | null;
   /** When set, only this questionKind (e.g. after_blocks). */
   questionKind?: string | null;
+};
+
+type FlatAnswerRow = {
+  source: AnswerJoinRow;
+  pick: AfterBlocksPick | null;
+  answerText: string;
 };
 
 function displayAnswer(data: unknown): string {
@@ -41,6 +52,25 @@ function displayAnswer(data: unknown): string {
   return answerText(data);
 }
 
+function flattenAnswerRows(answerRows: AnswerJoinRow[]): FlatAnswerRow[] {
+  const out: FlatAnswerRow[] = [];
+  for (const r of answerRows) {
+    if (isAfterBlocksQuestion(r.q)) {
+      const picks = parseAfterBlocksPicks(r.a.answerData);
+      if (picks.length === 0) {
+        out.push({ source: r, pick: null, answerText: displayAnswer(r.a.answerData) });
+        continue;
+      }
+      for (const pick of picks) {
+        out.push({ source: r, pick, answerText: pick.text });
+      }
+      continue;
+    }
+    out.push({ source: r, pick: null, answerText: displayAnswer(r.a.answerData) });
+  }
+  return out;
+}
+
 function safeSheetName(raw: string, used: Set<string>): string {
   let base = raw.replace(/[\\/*?:\[\]]/g, ' ').replace(/\s+/g, ' ').trim() || 'Лист';
   base = base.slice(0, 31);
@@ -54,11 +84,64 @@ function safeSheetName(raw: string, used: Set<string>): string {
   return name;
 }
 
+const MAIN_HEADERS = [
+  'ID ответа',
+  'ID участника',
+  'ФИО',
+  'Направление',
+  'Группа',
+  'День',
+  'ID вопроса',
+  'Вопрос',
+  'Тип вопроса',
+  'ID события',
+  'Событие / тема',
+  'ID подтемы',
+  'Подтема',
+  'Путь',
+  'Ответ / осмысление',
+  'Время',
+] as const;
+
+function writeFlatRow(
+  ws: { addRow: (values: unknown[]) => unknown },
+  flat: FlatAnswerRow,
+  day: number,
+): void {
+  const r = flat.source;
+  const pick = flat.pick;
+  const parent = (pick?.parentEventTitle || '').trim();
+  const topic = (pick?.eventTitle || '').trim();
+  const path = pick?.pathLabel || '';
+  const parentCol = parent || (topic && !pick?.parentEventId ? topic : '');
+  const topicCol = parent && topic && parent !== topic ? topic : (parent ? '' : topic);
+
+  ws.addRow([
+    r.a.id,
+    r.p?.id ?? r.a.participantId,
+    fullName(r.p),
+    r.p?.direction ?? '',
+    r.p?.groupName ?? '',
+    r.q?.dayNumber ?? day,
+    r.q?.id ?? '',
+    r.q?.title || r.q?.text || '',
+    r.q ? (getReflectionTypeLabel(r.q) || r.q.questionKind || '') : '',
+    pick?.parentEventId ?? '',
+    parentCol,
+    pick?.eventId ?? '',
+    topicCol,
+    path,
+    flat.answerText,
+    formatTs(r.a.createdAt),
+  ]);
+}
+
 /**
  * Выгрузка ответов на вопросы за день:
- * — «Все ответы» (1 строка = ответ),
- * — «По направлениям» (сводка),
- * — отдельный лист на каждый вопрос (участник · направление · ответ).
+ * — «Все ответы» (после блоков: 1 строка = выбранная подтема),
+ * — «После блоков» (только осмысления с темой/подтемой),
+ * — «По направлениям», «Сводка вопросов»,
+ * — отдельный лист на каждый вопрос.
  */
 export async function writeQuestionsDayAnswersExport(
   res: Response,
@@ -106,24 +189,29 @@ export async function writeQuestionsDayAnswersExport(
     return (a.a.id ?? 0) - (b.a.id ?? 0);
   });
 
-  const byQuestion = new Map<number, AnswerJoinRow[]>();
+  const flatRows = flattenAnswerRows(answerRows);
+  const afterBlocksFlat = flatRows.filter(f => isAfterBlocksQuestion(f.source.q));
+
+  const byQuestion = new Map<number, FlatAnswerRow[]>();
   for (const q of dayQuestions) byQuestion.set(q.id, []);
-  for (const r of answerRows) {
-    const qid = r.q?.id;
+  for (const flat of flatRows) {
+    const qid = flat.source.q?.id;
     if (qid == null) continue;
     if (!byQuestion.has(qid)) byQuestion.set(qid, []);
-    byQuestion.get(qid)!.push(r);
+    byQuestion.get(qid)!.push(flat);
   }
 
   const wb = await createWorkbook();
   addReadmeSheet(wb, [
     `Выгрузка ответов на вопросы за день ${day}.`,
-    'Лист «Все ответы»: один список — кто на какой вопрос ответил.',
+    'Лист «Все ответы»: кто на какой вопрос ответил. Для «После блоков» — отдельные колонки темы/подтемы; если выбрано несколько подтем, несколько строк с одним ID ответа.',
+    'Лист «После блоков»: только осмысления после блоков (событие → подтема → текст).',
     'Лист «По направлениям»: сколько ответов и участников по направлению × вопросу.',
     'Лист «Сводка вопросов»: охват по каждому вопросу.',
-    'Далее — отдельный лист на каждый вопрос: участник, направление, ответ.',
+    'Далее — отдельный лист на каждый вопрос.',
     `Вопросов: ${dayQuestions.length}.`,
-    `Ответов: ${answerRows.length}.`,
+    `Исходных ответов: ${answerRows.length}.`,
+    `Строк после раскрытия подтем: ${flatRows.length}.`,
     `Участников с ответом: ${new Set(answerRows.map(r => r.a.participantId)).size}.`,
     shiftId != null ? `Смена (shiftId): ${shiftId}.` : '',
     direction ? `Фильтр направления: ${direction}.` : 'Направления: все.',
@@ -132,65 +220,66 @@ export async function writeQuestionsDayAnswersExport(
   ].filter(Boolean));
 
   const wsAll = wb.addWorksheet('Все ответы');
-  wsAll.addRow([
-    'ID ответа',
-    'ID участника',
-    'ФИО',
-    'Направление',
-    'Группа',
-    'День',
-    'ID вопроса',
-    'Вопрос',
-    'Тип вопроса',
-    'Ответ',
-    'Время',
-  ]);
-  for (const r of answerRows) {
-    wsAll.addRow([
-      r.a.id,
-      r.p?.id ?? r.a.participantId,
-      fullName(r.p),
-      r.p?.direction ?? '',
-      r.p?.groupName ?? '',
-      r.q?.dayNumber ?? day,
-      r.q?.id ?? '',
-      r.q?.title || r.q?.text || '',
-      r.q ? (getReflectionTypeLabel(r.q) || r.q.questionKind || '') : '',
-      displayAnswer(r.a.answerData),
-      formatTs(r.a.createdAt),
-    ]);
-  }
+  wsAll.addRow([...MAIN_HEADERS]);
+  for (const flat of flatRows) writeFlatRow(wsAll, flat, day);
+
+  const wsAfter = wb.addWorksheet('После блоков');
+  wsAfter.addRow([...MAIN_HEADERS]);
+  for (const flat of afterBlocksFlat) writeFlatRow(wsAfter, flat, day);
 
   const wsDir = wb.addWorksheet('По направлениям');
   wsDir.addRow([
     'Направление',
     'ID вопроса',
     'Вопрос',
-    'Ответов',
+    'Ответов (исходных)',
+    'Строк (с подтемами)',
     'Участников',
   ]);
-  const dirAgg = new Map<string, { qid: number; title: string; n: number; pids: Set<number> }>();
-  for (const r of answerRows) {
+  const dirAgg = new Map<string, {
+    qid: number;
+    title: string;
+    nAnswers: number;
+    nRows: number;
+    pids: Set<number>;
+  }>();
+  for (const flat of flatRows) {
+    const r = flat.source;
     const dir = (r.p?.direction || '—').trim() || '—';
     const qid = r.q?.id ?? 0;
     const title = r.q?.title || r.q?.text || `Вопрос #${qid}`;
     const key = `${dir}::${qid}`;
-    if (!dirAgg.has(key)) dirAgg.set(key, { qid, title, n: 0, pids: new Set() });
+    if (!dirAgg.has(key)) {
+      dirAgg.set(key, { qid, title, nAnswers: 0, nRows: 0, pids: new Set() });
+    }
     const row = dirAgg.get(key)!;
-    row.n += 1;
+    row.nRows += 1;
     row.pids.add(r.a.participantId);
+  }
+  // count unique answer ids per dir×question
+  const answerKeys = new Set<string>();
+  for (const flat of flatRows) {
+    const dir = (flat.source.p?.direction || '—').trim() || '—';
+    const qid = flat.source.q?.id ?? 0;
+    const key = `${dir}::${qid}::${flat.source.a.id}`;
+    if (answerKeys.has(key)) continue;
+    answerKeys.add(key);
+    const aggKey = `${dir}::${qid}`;
+    const row = dirAgg.get(aggKey);
+    if (row) row.nAnswers += 1;
   }
   const dirRows = [...dirAgg.entries()]
     .map(([key, v]) => ({
       direction: key.slice(0, key.lastIndexOf('::')),
       qid: v.qid,
       title: v.title,
-      n: v.n,
+      nAnswers: v.nAnswers,
+      nRows: v.nRows,
       participants: v.pids.size,
     }))
     .sort((a, b) => a.direction.localeCompare(b.direction, 'ru') || a.qid - b.qid);
   for (const r of dirRows) {
-    wsDir.addRow([r.direction, r.qid, r.title, r.n, r.participants]);
+    wsDir.addRow([r.direction, r.qid, r.title, r.nAnswers, r.nRows, r.participants]);
   }
 
   const wsSummary = wb.addWorksheet('Сводка вопросов');
@@ -200,51 +289,99 @@ export async function writeQuestionsDayAnswersExport(
     'Тип',
     'Статус',
     'Ответов',
+    'Строк (с подтемами)',
     'Участников',
   ]);
   for (const q of dayQuestions) {
     const list = byQuestion.get(q.id) ?? [];
-    const pids = new Set(list.map(r => r.a.participantId));
+    const pids = new Set(list.map(f => f.source.a.participantId));
+    const answerIds = new Set(list.map(f => f.source.a.id));
     wsSummary.addRow([
       q.id,
       q.title || q.text || `Вопрос #${q.id}`,
       getReflectionTypeLabel(q) || q.questionKind || '',
       q.status || '',
+      answerIds.size,
       list.length,
       pids.size,
     ]);
   }
 
-  const usedNames = new Set<string>(['Описание', 'Все ответы', 'По направлениям', 'Сводка вопросов']);
+  const usedNames = new Set<string>([
+    'Описание', 'Все ответы', 'После блоков', 'По направлениям', 'Сводка вопросов',
+  ]);
   for (const q of dayQuestions) {
     const label = (q.title || q.text || `Вопрос ${q.id}`).trim();
     const sheetName = safeSheetName(`Q${q.id} ${label}`, usedNames);
     const ws = wb.addWorksheet(sheetName);
     ws.addRow(['Вопрос', label]);
     ws.addRow(['ID вопроса', q.id]);
+    ws.addRow(['Тип', getReflectionTypeLabel(q) || q.questionKind || '']);
     ws.addRow([]);
-    ws.addRow([
-      'ID участника',
-      'ФИО',
-      'Направление',
-      'Группа',
-      'Ответ',
-      'Время',
-      'ID ответа',
-    ]);
-    const list = byQuestion.get(q.id) ?? [];
-    for (const r of list) {
+    const after = isAfterBlocksQuestion(q);
+    if (after) {
       ws.addRow([
-        r.p?.id ?? r.a.participantId,
-        fullName(r.p),
-        r.p?.direction ?? '',
-        r.p?.groupName ?? '',
-        displayAnswer(r.a.answerData),
-        formatTs(r.a.createdAt),
-        r.a.id,
+        'ID участника',
+        'ФИО',
+        'Направление',
+        'Группа',
+        'ID события',
+        'Событие / тема',
+        'ID подтемы',
+        'Подтема',
+        'Путь',
+        'Осмысление',
+        'Время',
+        'ID ответа',
       ]);
+    } else {
+      ws.addRow([
+        'ID участника',
+        'ФИО',
+        'Направление',
+        'Группа',
+        'Ответ',
+        'Время',
+        'ID ответа',
+      ]);
+    }
+    const list = byQuestion.get(q.id) ?? [];
+    for (const flat of list) {
+      const r = flat.source;
+      if (after) {
+        const pick = flat.pick;
+        const parent = (pick?.parentEventTitle || '').trim();
+        const topic = (pick?.eventTitle || '').trim();
+        ws.addRow([
+          r.p?.id ?? r.a.participantId,
+          fullName(r.p),
+          r.p?.direction ?? '',
+          r.p?.groupName ?? '',
+          pick?.parentEventId ?? '',
+          parent || (topic && !pick?.parentEventId ? topic : ''),
+          pick?.eventId ?? '',
+          parent && topic && parent !== topic ? topic : (parent ? '' : topic),
+          pick?.pathLabel || '',
+          flat.answerText,
+          formatTs(r.a.createdAt),
+          r.a.id,
+        ]);
+      } else {
+        ws.addRow([
+          r.p?.id ?? r.a.participantId,
+          fullName(r.p),
+          r.p?.direction ?? '',
+          r.p?.groupName ?? '',
+          flat.answerText,
+          formatTs(r.a.createdAt),
+          r.a.id,
+        ]);
+      }
     }
   }
 
-  await sendWorkbook(res, wb, `questions_day${day}.xlsx`);
+  const fileStem = questionKind === 'after_blocks'
+    ? `after_blocks_day${day}`
+    : `questions_day${day}`;
+  await sendWorkbook(res, wb, `${fileStem}.xlsx`);
 }

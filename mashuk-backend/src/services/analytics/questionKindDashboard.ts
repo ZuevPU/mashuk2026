@@ -25,6 +25,7 @@ import { loadCohortParticipants } from './cohort.js';
 import { getForumSettings } from '../helpers.js';
 import { stateCheckPhaseForAnswer } from './touchpointMetrics.js';
 import { buildKindDaySeries, forumSeriesDays } from './dayComparison.js';
+import { parseAfterBlocksPicks } from '../exports/nestedPickParse.js';
 
 export type KindDashboardMode = 'after_blocks' | 'state_check';
 
@@ -116,70 +117,8 @@ function extractAnswerText(data: unknown): string {
   return '';
 }
 
-type ParsedAfterBlocks = {
-  text: string;
-  eventTitle: string | null;
-  eventId: number | null;
-  parentEventTitle: string | null;
-  parentEventId: number | null;
-  pathLabel: string | null;
-};
-
-function parseAfterBlocksItems(data: unknown): ParsedAfterBlocks[] {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    const text = extractAnswerText(data);
-    return text
-      ? [{
-        text,
-        eventTitle: null,
-        eventId: null,
-        parentEventTitle: null,
-        parentEventId: null,
-        pathLabel: null,
-      }]
-      : [];
-  }
-  const o = data as Record<string, unknown>;
-  const parentEventTitle = typeof o.parentEventTitle === 'string' ? o.parentEventTitle : null;
-  const parentEventId = typeof o.parentEventId === 'number'
-    ? o.parentEventId
-    : (o.parentEventId != null ? Number(o.parentEventId) : null);
-  const parentId = parentEventId != null && Number.isFinite(parentEventId) ? parentEventId : null;
-
-  const toItem = (eventTitle: string | null, eventIdRaw: unknown, text: string): ParsedAfterBlocks => {
-    const eventId = typeof eventIdRaw === 'number'
-      ? eventIdRaw
-      : (eventIdRaw != null ? Number(eventIdRaw) : null);
-    const pathLabel = parentEventTitle && eventTitle && parentEventTitle !== eventTitle
-      ? `${parentEventTitle} → ${eventTitle}`
-      : (eventTitle || parentEventTitle);
-    return {
-      text,
-      eventTitle,
-      eventId: eventId != null && Number.isFinite(eventId) ? eventId : null,
-      parentEventTitle,
-      parentEventId: parentId,
-      pathLabel,
-    };
-  };
-
-  if (Array.isArray(o.reflections) && o.reflections.length > 0) {
-    const items = o.reflections.map((raw) => {
-      if (!raw || typeof raw !== 'object') return null;
-      const r = raw as Record<string, unknown>;
-      const text = typeof r.text === 'string' ? r.text.trim() : '';
-      if (!text) return null;
-      const eventTitle = typeof r.eventTitle === 'string' ? r.eventTitle : null;
-      return toItem(eventTitle, r.eventId, text);
-    }).filter((x): x is ParsedAfterBlocks => Boolean(x));
-    if (items.length) return items;
-  }
-
-  const text = extractAnswerText(data);
-  const eventTitle = typeof o.eventTitle === 'string' ? o.eventTitle : null;
-  const item = toItem(eventTitle, o.eventId, text);
-  if (!item.text && !item.pathLabel) return [];
-  return [item];
+function parseAfterBlocksItems(data: unknown) {
+  return parseAfterBlocksPicks(data);
 }
 
 function afterBlocksPathLabel(r: Pick<KindAnswerRow, 'parentEventTitle' | 'eventTitle'>): string | null {

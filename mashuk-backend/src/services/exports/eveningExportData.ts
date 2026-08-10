@@ -182,6 +182,31 @@ export function formatEveningFieldValue(
   return String(raw);
 }
 
+/** Average 1–10 score across program_event picks (null if none scored). */
+export function programEventAvgScore(raw: unknown): number | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const o = raw as { items?: Array<{ score?: number | null }>; score?: number | null };
+  const scores: number[] = [];
+  if (Array.isArray(o.items)) {
+    for (const it of o.items) {
+      const s = it?.score;
+      if (typeof s === 'number' && s >= 1 && s <= 10) scores.push(s);
+    }
+  } else if (typeof o.score === 'number' && o.score >= 1 && o.score <= 10) {
+    scores.push(o.score);
+  }
+  if (!scores.length) return null;
+  return Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10;
+}
+
+export function programEventPickCount(raw: unknown): number {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return 0;
+  const o = raw as { items?: unknown[]; eventId?: number; eventTitle?: string };
+  if (Array.isArray(o.items)) return o.items.length;
+  if (o.eventId != null || o.eventTitle) return 1;
+  return 0;
+}
+
 type RawCandidate = EveningExportRow & { shiftId: number | null };
 
 /**
