@@ -46,6 +46,21 @@ export const EMOTION_ORDER = [
   'focus',
 ] as const;
 
+/** Distinct colors for multi-emotion lines on profile charts */
+export const EMOTION_COLORS: Record<string, string> = {
+  joy: '#ECC94B',
+  calm: '#38A169',
+  interest: '#3182CE',
+  inspiration: '#805AD5',
+  confidence: '#2B6CB0',
+  tired: '#DD6B20',
+  anxiety: '#E53E3E',
+  irritation: '#C53030',
+  sadness: '#718096',
+  surprise: '#D69E2E',
+  focus: '#0A7B6F',
+};
+
 export const ZONE_COLORS: Record<string, string> = {
   risk: '#E53E3E',
   fatigue: '#DD6B20',

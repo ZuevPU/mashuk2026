@@ -32,7 +32,8 @@ describe('analyticsQuery', () => {
 
   it('resolveDayRange shift ignores single day', () => {
     const q = parseAnalyticsQuery({ query: { mode: 'shift', day: '1' } } as never);
-    assert.deepEqual(resolveDayRange(q, 2), [1, 2, 3, 4, 5, 6, 7]);
+    assert.deepEqual(resolveDayRange(q, 2), [1, 2, 3, 4, 5, 6, 7, 8]);
+    assert.deepEqual(resolveDayRange(q, 2, 7), [1, 2, 3, 4, 5, 6, 7]);
   });
 });
 

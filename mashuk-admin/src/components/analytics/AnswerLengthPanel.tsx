@@ -73,7 +73,7 @@ export function AnswerLengthPanel({ data }: { data: AnswerLengths | null | undef
             <MethodHint text={data?.note ?? 'Средняя длина текстовых ответов в символах по дням смены.'} />
           </div>
           <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
-            Символы в ответах участников · всего ответов: {data?.totalResponses ?? 0}
+            Все дни смены · символы в текстовых ответах · всего: {data?.totalResponses ?? 0}
           </p>
         </div>
         <button

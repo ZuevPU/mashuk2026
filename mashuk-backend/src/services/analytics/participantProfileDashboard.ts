@@ -18,6 +18,7 @@ import { buildPiggybankDashboard } from './piggybankDashboard.js';
 import { buildPortraitDashboard } from './portraitDashboard.js';
 import { buildProgramDashboard } from './programDashboard.js';
 import { buildExchangeAnalytics } from './exchangeAnalytics.js';
+import { collectKindAnswerRows } from './questionKindDashboard.js';
 import { buildTouchpointThresholdCoverage, buildParticipantTouchpointEngagement } from './touchpointMetrics.js';
 import {
   ENGAGEMENT_THRESHOLDS,
@@ -35,6 +36,7 @@ import {
 } from './participantProfileStats.js';
 import {
   buildEmotionDayPhaseDynamics,
+  buildEnergyDayPhaseDynamics,
   buildParticipantPathSeries,
   type PathAnswerInput,
 } from './participantPathSeries.js';
@@ -99,6 +101,14 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
   const denominator = sampleSize;
   const cohortIds = registered.map(p => p.id);
 
+  const shiftWideFilters: AnalyticsFilters = {
+    ...filters,
+    mode: 'shift',
+    day: null,
+    compareDays: [],
+  };
+  const totalDays = Math.min(8, Math.max(1, settings.totalDays ?? 8));
+
   const [
     pulse,
     stateCheck,
@@ -113,6 +123,10 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     engagement,
     approvedTaskRows,
     piggyRows,
+    shiftStateCollected,
+    shiftAfterBlocksCollected,
+    eveningShift,
+    piggyRowsAllDays,
   ] = await Promise.all([
     buildPulseDashboard(filters, req),
     buildStateCheckDashboard(filters, req),
@@ -144,6 +158,21 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
         ...(filters.day != null ? [eq(piggybank.forumDay, filters.day)] : []),
       ))
       : Promise.resolve([] as { participantId: number; text: string | null; forumDay: number | null; tags: unknown; source: string | null }[]),
+    // Emotion / energy path across the whole shift (not only selected day).
+    collectKindAnswerRows('state_check', shiftWideFilters, { includeUnpublished: true }),
+    collectKindAnswerRows('after_blocks', shiftWideFilters, { includeUnpublished: true }),
+    buildEveningDashboard(shiftWideFilters, req),
+    // Piggybank for answer-length series — always all days of the shift.
+    cohortIds.length
+      ? db.select({
+        participantId: piggybank.participantId,
+        text: piggybank.text,
+        forumDay: piggybank.forumDay,
+      }).from(piggybank).where(and(
+        inArray(piggybank.participantId, cohortIds),
+        isNull(piggybank.deletedAt),
+      ))
+      : Promise.resolve([] as { participantId: number; text: string | null; forumDay: number | null }[]),
   ]);
 
   void _program;
@@ -482,13 +511,10 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
   }
 
   const touchpointCoveragePct = pct(atLeast(1), denominator);
-  const energyByDay = pulseFeeling.energyByDay ?? [];
-  const energyPrev = energyByDay.length >= 2
-    ? energyByDay[energyByDay.length - 2]?.avg ?? null
-    : null;
-  const energyLatest = energyByDay.length
-    ? energyByDay[energyByDay.length - 1]?.avg ?? energyStats.avg
-    : energyStats.avg;
+  // Filled from shift-wide state-check answers below (all days, not only filter day).
+  let energyByDay = pulseFeeling.energyByDay ?? [];
+  let energyPrev: number | null = null;
+  let energyLatest: number | null = energyStats.avg;
 
   const pathAnswers: PathAnswerInput[] = [];
   for (const q of scPulse.questions ?? []) {
@@ -504,9 +530,59 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       });
     }
   }
+  const cohortIdSet = new Set(cohortIds);
+  const shiftPathAnswers: PathAnswerInput[] = shiftStateCollected.rows
+    .filter(r => cohortIdSet.has(r.participantId))
+    .map(r => ({
+      participantId: r.participantId,
+      energy: r.energy,
+      emotion: r.emotion,
+      emotionZone: r.emotionZone ?? null,
+      timePoint: r.timePoint ?? null,
+      createdAt: r.createdAt ?? null,
+      day: r.day ?? null,
+    }));
   const dayFilterForPath = filters.mode === 'day' && filters.day != null ? filters.day : null;
+  // Intra-day comparison stays on the selected day; continuous path uses the whole shift.
   const participantPath = buildParticipantPathSeries(pathAnswers, { dayFilter: dayFilterForPath });
-  const emotionDynamics = buildEmotionDayPhaseDynamics(pathAnswers, { maxDay: 8 });
+  const emotionDynamics = buildEmotionDayPhaseDynamics(shiftPathAnswers, { maxDay: totalDays });
+  emotionDynamics.note = 'Доля эмоции по фазам утро / день / вечер за все дни смены (не зависит от фильтра «день»).';
+  const energyDynamics = buildEnergyDayPhaseDynamics(shiftPathAnswers, { maxDay: totalDays });
+
+  // Daily energy + risk/fatigue across the whole shift (for «День / энергия / риск»).
+  const energyRiskByDay = new Map<number, { risk: number; total: number; energies: number[] }>();
+  for (let d = 1; d <= totalDays; d += 1) {
+    energyRiskByDay.set(d, { risk: 0, total: 0, energies: [] });
+  }
+  for (const a of shiftPathAnswers) {
+    if (a.day == null || a.day < 1 || a.day > totalDays) continue;
+    const bucket = energyRiskByDay.get(a.day)!;
+    bucket.total += 1;
+    const zone = (a.emotionZone || '').toLowerCase();
+    if (zone === 'risk' || zone === 'fatigue') bucket.risk += 1;
+    if (a.energy != null && Number.isFinite(a.energy)) bucket.energies.push(a.energy);
+  }
+  energyByDay = Array.from({ length: totalDays }, (_, i) => {
+    const day = i + 1;
+    const bucket = energyRiskByDay.get(day)!;
+    const stats = numericSummary(bucket.energies);
+    return {
+      day,
+      avg: stats.avg,
+      median: stats.median,
+      responses: bucket.energies.length,
+      riskFatiguePct: bucket.total
+        ? Math.round((bucket.risk / bucket.total) * 1000) / 10
+        : null,
+    };
+  });
+  const energyWithData = energyByDay.filter(d => d.responses > 0);
+  energyPrev = energyWithData.length >= 2
+    ? energyWithData[energyWithData.length - 2]?.avg ?? null
+    : null;
+  energyLatest = energyWithData.length
+    ? energyWithData[energyWithData.length - 1]?.avg ?? energyStats.avg
+    : energyStats.avg;
 
   const highEnergyLowReflection = (
     energyStats.avg != null
@@ -617,37 +693,34 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     }
   }
 
-  // Character length of free-text answers by forum day
+  // Character length of free-text answers — always for the whole shift.
   const answerLengthItems: {
     day: number | null;
     text: string;
     participantId: number;
   }[] = [];
-  for (const q of scPulse.questions ?? []) {
-    for (const a of q.answers ?? []) {
-      const text = (a.answer || '').trim();
-      if (!text) continue;
-      answerLengthItems.push({
-        day: a.day ?? null,
-        text,
-        participantId: a.participantId,
-      });
-    }
+  for (const r of shiftStateCollected.rows) {
+    if (!cohortIdSet.has(r.participantId)) continue;
+    const text = (r.answer || '').trim();
+    if (!text) continue;
+    answerLengthItems.push({
+      day: r.day ?? null,
+      text,
+      participantId: r.participantId,
+    });
   }
-  for (const q of (afterBlocks as {
-    questions?: { day?: number | null; answers?: { participantId: number; answer?: string | null }[] }[];
-  }).questions ?? []) {
-    for (const a of q.answers ?? []) {
-      const text = (a.answer || '').trim();
-      if (!text) continue;
-      answerLengthItems.push({
-        day: q.day ?? null,
-        text,
-        participantId: a.participantId,
-      });
-    }
+  for (const r of shiftAfterBlocksCollected.rows) {
+    if (!cohortIdSet.has(r.participantId)) continue;
+    const text = (r.answer || '').trim();
+    if (!text) continue;
+    answerLengthItems.push({
+      day: r.day ?? null,
+      text,
+      participantId: r.participantId,
+    });
   }
-  for (const e of piggyRows) {
+  for (const e of piggyRowsAllDays) {
+    if (!cohortIdSet.has(e.participantId)) continue;
     const text = (e.text || '').trim();
     if (!text) continue;
     answerLengthItems.push({
@@ -656,14 +729,15 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       participantId: e.participantId,
     });
   }
-  for (const q of (evening as {
+  for (const q of ((eveningShift as {
     questions?: {
       type?: string;
       answers?: { participantId: number; day?: number; answer?: string | number }[];
     }[];
-  }).questions ?? []) {
+  }).questions ?? [])) {
     if (q.type === 'scale_1_5' || q.type === 'scale_1_10' || q.type === 'yes_no') continue;
     for (const a of q.answers ?? []) {
+      if (!cohortIdSet.has(a.participantId)) continue;
       if (typeof a.answer !== 'string') continue;
       const text = a.answer.trim();
       if (!text) continue;
@@ -675,9 +749,9 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
     }
   }
   const answerLengths = {
-    byDay: buildAnswerLengthByDay(answerLengthItems, 8),
+    byDay: buildAnswerLengthByDay(answerLengthItems, totalDays),
     totalResponses: answerLengthItems.length,
-    note: 'Длина в символах по текстовым ответам: проверка состояния, после блоков, копилка, открытые поля evening. Шкалы и да/нет не входят.',
+    note: 'Длина в символах по текстовым ответам за все дни смены: проверка состояния, после блоков, копилка, открытые поля evening. Шкалы и да/нет не входят. Не зависит от фильтра «день».',
   };
 
   const interests = themesFromBag(interestBag, sampleSize, 40);
@@ -835,6 +909,7 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       coveragePct: stateFillPct,
       path: participantPath,
       emotionDynamics,
+      energyDynamics,
     },
     engagement: {
       slotsTotal,

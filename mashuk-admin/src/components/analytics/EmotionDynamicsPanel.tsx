@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { ChartTooltipRu, EMOTION_LABELS, EMOTION_ORDER, formatForumDay } from './chartRu';
+import {
+  ChartTooltipRu, EMOTION_COLORS, EMOTION_LABELS, EMOTION_ORDER, formatForumDay,
+} from './chartRu';
 import { OrientableBarChart } from './orientableBars';
 
 type EmotionSeriesRow = {
@@ -62,41 +64,45 @@ function MethodHint({ text }: { text: string }) {
   );
 }
 
-function defaultEmotionId(
-  dynamics: EmotionDynamics | null | undefined,
-  fallbackLabel?: string | null,
-): string {
-  if (fallbackLabel) {
-    const byLabel = EMOTION_ORDER.find(
-      id => EMOTION_LABELS[id]?.toLowerCase() === fallbackLabel.trim().toLowerCase(),
-    );
-    if (byLabel) return byLabel;
-    const byId = EMOTION_ORDER.find(id => id === fallbackLabel);
-    if (byId) return byId;
+function emotionColor(id: string): string {
+  return EMOTION_COLORS[id] ?? '#3182CE';
+}
+
+/** Heat for share 0…100% — cool (low) → warm (high), same idea as evening heatmap. */
+function heatBgPct(pct: number | null): string {
+  if (pct == null || !Number.isFinite(pct)) return '#f3f4f6';
+  const t = Math.min(1, Math.max(0, pct / 100));
+  if (t < 0.2) {
+    return `rgba(148, 163, 184, ${(0.12 + t).toFixed(2)})`;
   }
-  let best = EMOTION_ORDER[0] as string;
-  let bestN = -1;
-  for (const e of dynamics?.emotions ?? []) {
-    const n = e.byDay.reduce(
-      (s, d) => s + d.morningCount + d.dayCount + d.eveningCount,
-      0,
-    );
-    if (n > bestN) {
-      bestN = n;
-      best = e.id;
-    }
+  if (t < 0.45) {
+    return `rgba(49, 130, 206, ${(0.18 + (t - 0.2) * 0.8).toFixed(2)})`;
   }
-  return best;
+  if (t < 0.7) {
+    return `rgba(10, 123, 111, ${(0.28 + (t - 0.45) * 0.9).toFixed(2)})`;
+  }
+  return `rgba(56, 161, 105, ${Math.min(0.9, 0.45 + (t - 0.7) * 1.2).toFixed(2)})`;
+}
+
+function heatTextPct(pct: number | null): string {
+  if (pct == null) return '#9ca3af';
+  return pct >= 45 ? '#fff' : '#1a202c';
+}
+
+function avgPhasePct(d: DayPhasePoint): number | null {
+  const vals = [d.morningPct, d.dayPct, d.eveningPct].filter((v): v is number => v != null);
+  if (!vals.length) return null;
+  return Math.round((vals.reduce((s, n) => s + n, 0) / vals.length) * 10) / 10;
 }
 
 export function EmotionDynamicsPanel({
   intraDay,
   dynamics,
-  defaultEmotion,
 }: {
   /** Сверка утро / день / вечер (агрегат) */
   intraDay?: EmotionSeriesRow[] | null;
   dynamics?: EmotionDynamics | null;
+  /** @deprecated multi-select replaces single default */
   defaultEmotion?: string | null;
 }) {
   const emotionOptions = useMemo(() => {
@@ -105,19 +111,71 @@ export function EmotionDynamicsPanel({
     return EMOTION_ORDER.map(id => ({ id, label: EMOTION_LABELS[id] ?? id }));
   }, [dynamics?.emotions]);
 
-  const [emotionId, setEmotionId] = useState(
-    () => defaultEmotionId(dynamics, defaultEmotion),
+  const optionsKey = emotionOptions.map(o => o.id).join(',');
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(emotionOptions.map(o => o.id)),
   );
 
   useEffect(() => {
-    if (!emotionOptions.some(o => o.id === emotionId)) {
-      setEmotionId(defaultEmotionId(dynamics, defaultEmotion));
-    }
-  }, [dynamics, defaultEmotion, emotionId, emotionOptions]);
+    setSelected(new Set(emotionOptions.map(o => o.id)));
+    // Reset selection when the emotion catalog from API changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- optionsKey tracks catalog identity
+  }, [optionsKey]);
 
-  const selectedLabel = EMOTION_LABELS[emotionId]
-    ?? emotionOptions.find(e => e.id === emotionId)?.label
-    ?? emotionId;
+  const selectedList = emotionOptions.filter(o => selected.has(o.id));
+
+  const toggleEmotion = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => setSelected(new Set(emotionOptions.map(o => o.id)));
+  const clearAll = () => setSelected(new Set());
+
+  const days = useMemo(() => {
+    if (dynamics?.days?.length) return dynamics.days;
+    return Array.from({ length: 8 }, (_, i) => i + 1);
+  }, [dynamics?.days]);
+
+  /** X = dayLabel; one key per emotion = mean of phases that day */
+  const dayTrendMulti = useMemo(() => {
+    return days.map((day) => {
+      const row: Record<string, string | number | null> = {
+        dayLabel: formatForumDay(day),
+      };
+      for (const emo of emotionOptions) {
+        const hit = (dynamics?.emotions ?? []).find(e => e.id === emo.id)?.byDay.find(d => d.day === day);
+        row[emo.id] = hit ? avgPhasePct(hit) : null;
+      }
+      return row;
+    });
+  }, [days, dynamics?.emotions, emotionOptions]);
+
+  /** Continuous path: one point per day×phase, keys = emotion ids */
+  const timelineMulti = useMemo(() => {
+    const rows: Record<string, string | number | null>[] = [];
+    for (const day of days) {
+      for (const phase of [
+        { key: 'morning' as const, label: 'Утро', pct: (d: DayPhasePoint) => d.morningPct },
+        { key: 'day' as const, label: 'День', pct: (d: DayPhasePoint) => d.dayPct },
+        { key: 'evening' as const, label: 'Вечер', pct: (d: DayPhasePoint) => d.eveningPct },
+      ]) {
+        const row: Record<string, string | number | null> = {
+          label: `${formatForumDay(day)} · ${phase.label}`,
+        };
+        for (const emo of emotionOptions) {
+          const hit = (dynamics?.emotions ?? []).find(e => e.id === emo.id)?.byDay.find(d => d.day === day);
+          row[emo.id] = hit ? phase.pct(hit) : null;
+        }
+        rows.push(row);
+      }
+    }
+    return rows;
+  }, [days, dynamics?.emotions, emotionOptions]);
 
   const intraDayBars = useMemo(() => (
     (intraDay ?? []).map(e => ({
@@ -128,63 +186,9 @@ export function EmotionDynamicsPanel({
     }))
   ), [intraDay]);
 
-  const dayTrend = useMemo(() => {
-    const byDay = (dynamics?.emotions ?? []).find(e => e.id === emotionId)?.byDay ?? [];
-    const days = dynamics?.days?.length
-      ? dynamics.days
-      : Array.from({ length: 8 }, (_, i) => i + 1);
-    return days.map(day => {
-      const hit = byDay.find(d => d.day === day);
-      return {
-        dayLabel: formatForumDay(day),
-        morning: hit?.morningPct ?? null,
-        day: hit?.dayPct ?? null,
-        evening: hit?.eveningPct ?? null,
-        morningCount: hit?.morningCount ?? 0,
-        dayCount: hit?.dayCount ?? 0,
-        eveningCount: hit?.eveningCount ?? 0,
-        morningTotal: hit?.morningTotal ?? 0,
-        dayTotal: hit?.dayTotal ?? 0,
-        eveningTotal: hit?.eveningTotal ?? 0,
-      };
-    });
-  }, [dynamics, emotionId]);
-
-  const timeline = useMemo(() => {
-    const rows: {
-      label: string;
-      pct: number | null;
-      count: number;
-      total: number;
-    }[] = [];
-    for (const d of dayTrend) {
-      rows.push(
-        {
-          label: `${d.dayLabel} · Утро`,
-          pct: d.morning,
-          count: d.morningCount,
-          total: d.morningTotal,
-        },
-        {
-          label: `${d.dayLabel} · День`,
-          pct: d.day,
-          count: d.dayCount,
-          total: d.dayTotal,
-        },
-        {
-          label: `${d.dayLabel} · Вечер`,
-          pct: d.evening,
-          count: d.eveningCount,
-          total: d.eveningTotal,
-        },
-      );
-    }
-    return rows;
-  }, [dayTrend]);
-
   const hasIntra = intraDayBars.some(r => r.morning > 0 || r.day > 0 || r.evening > 0);
-  const hasDynamics = dayTrend.some(
-    d => (d.morningCount + d.dayCount + d.eveningCount) > 0,
+  const hasDynamics = (dynamics?.emotions ?? []).some(e =>
+    e.byDay.some(d => (d.morningCount + d.dayCount + d.eveningCount) > 0),
   );
 
   if (!hasIntra && !hasDynamics) {
@@ -199,7 +203,7 @@ export function EmotionDynamicsPanel({
   }
 
   return (
-    <div className="adm-dash-stack" style={{ marginTop: 16, gap: 16 }}>
+    <div className="adm-stack" style={{ marginTop: 16, gap: 16 }}>
       {hasIntra ? (
         <div>
           <div className="adm-dash-card-title">
@@ -226,108 +230,210 @@ export function EmotionDynamicsPanel({
 
       {hasDynamics ? (
         <div>
+          <div className="adm-dash-card-title" style={{ margin: 0 }}>
+            Динамика эмоций по смене
+            <MethodHint text={dynamics?.note ?? 'Доля эмоций в ответах утро / день / вечер за каждый день смены.'} />
+          </div>
+          <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 10px' }}>
+            Отметьте эмоции — линии появляются на обоих графиках. Снимите галочку, чтобы убрать серию.
+          </p>
+
           <div style={{
-            display: 'flex', flexWrap: 'wrap', gap: 12,
-            alignItems: 'flex-end', justifyContent: 'space-between',
+            display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
+            marginBottom: 8,
           }}
           >
-            <div>
-              <div className="adm-dash-card-title" style={{ margin: 0 }}>
-                Динамика эмоции по дням
-                <MethodHint text={dynamics?.note ?? 'Доля выбранной эмоции в ответах утро / день / вечер за каждый день смены.'} />
+            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={selectAll}>
+              Выбрать все
+            </button>
+            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={clearAll}>
+              Снять все
+            </button>
+            <span className="adm-muted" style={{ fontSize: 12 }}>
+              Выбрано: {selectedList.length} / {emotionOptions.length}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+            {emotionOptions.map((o) => {
+              const on = selected.has(o.id);
+              return (
+                <label
+                  key={o.id}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 10px',
+                    borderRadius: 8,
+                    border: `1px solid ${on ? emotionColor(o.id) : '#d2d2d7'}`,
+                    background: on ? `${emotionColor(o.id)}18` : '#fff',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => toggleEmotion(o.id)}
+                  />
+                  <span style={{
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: emotionColor(o.id), display: 'inline-block',
+                  }}
+                  />
+                  {o.label}
+                </label>
+              );
+            })}
+          </div>
+
+          {selectedList.length === 0 ? (
+            <p className="adm-muted" style={{ fontSize: 13 }}>Выберите хотя бы одну эмоцию.</p>
+          ) : (
+            <>
+              <div className="adm-chart-frame" style={{ marginTop: 4 }}>
+                <div className="adm-dash-card-title">Эмоции · среднее за день (%)</div>
+                <p className="adm-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
+                  По дням: среднее из фаз утро / день / вечер, где есть ответы
+                </p>
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={dayTrendMulti} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e5ea" />
+                    <XAxis dataKey="dayLabel" tick={{ fontSize: 11, fill: '#86868b' }} />
+                    <YAxis domain={[0, 'auto']} tick={{ fontSize: 11, fill: '#86868b' }} width={36} unit="%" />
+                    <Tooltip content={<ChartTooltipRu />} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {selectedList.map(o => (
+                      <Line
+                        key={o.id}
+                        type="monotone"
+                        dataKey={o.id}
+                        name={o.label}
+                        stroke={emotionColor(o.id)}
+                        strokeWidth={2}
+                        dot={{ r: 2.5 }}
+                        connectNulls
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
-              <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
-                Выберите эмоцию — три линии: утро, день и вечер на днях 1–8
-              </p>
+
+              <div className="adm-chart-frame" style={{ marginTop: 12 }}>
+                <div className="adm-dash-card-title">Эмоции · непрерывный путь по смене (%)</div>
+                <p className="adm-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
+                  Вся смена подряд: День N · Утро → День → Вечер, затем следующий день
+                </p>
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={timelineMulti} margin={{ top: 8, right: 12, left: 0, bottom: 40 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e5ea" />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 9, fill: '#86868b' }}
+                      interval={0}
+                      angle={-35}
+                      textAnchor="end"
+                      height={60}
+                    />
+                    <YAxis domain={[0, 'auto']} tick={{ fontSize: 11, fill: '#86868b' }} width={36} unit="%" />
+                    <Tooltip content={<ChartTooltipRu />} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {selectedList.map(o => (
+                      <Line
+                        key={o.id}
+                        type="monotone"
+                        dataKey={o.id}
+                        name={o.label}
+                        stroke={emotionColor(o.id)}
+                        strokeWidth={2}
+                        dot={{ r: 2 }}
+                        connectNulls
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </>
+          )}
+
+          <div style={{ marginTop: 14 }}>
+            <div className="adm-dash-card-title" style={{ marginBottom: 6 }}>
+              Тепловая карта · доля эмоции по фазам всех дней (%)
             </div>
-            <label className="adm-insights-filter">
-              Эмоция
-              <select
-                className="adm-input"
-                value={emotionId}
-                onChange={e => setEmotionId(e.target.value)}
-              >
-                {emotionOptions.map(o => (
-                  <option key={o.id} value={o.id}>{o.label}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className="adm-chart-frame" style={{ marginTop: 12 }}>
-            <div className="adm-dash-card-title">{selectedLabel} · утро / день / вечер по дням (%)</div>
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={dayTrend} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e5ea" />
-                <XAxis dataKey="dayLabel" tick={{ fontSize: 11, fill: '#86868b' }} />
-                <YAxis domain={[0, 'auto']} tick={{ fontSize: 11, fill: '#86868b' }} width={36} unit="%" />
-                <Tooltip content={<ChartTooltipRu />} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="morning" name="Утро" stroke={PHASE_COLORS.morning} strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                <Line type="monotone" dataKey="day" name="День" stroke={PHASE_COLORS.day} strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                <Line type="monotone" dataKey="evening" name="Вечер" stroke={PHASE_COLORS.evening} strokeWidth={2} dot={{ r: 3 }} connectNulls />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="adm-chart-frame" style={{ marginTop: 12 }}>
-            <div className="adm-dash-card-title">{selectedLabel} · непрерывный путь по смене (%)</div>
             <p className="adm-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
-              Точки: День N · Утро → День → Вечер, затем следующий день
+              Строки — выбранные эмоции, столбцы — День N · Утро / День / Вечер за всю смену
             </p>
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={timeline} margin={{ top: 8, right: 12, left: 0, bottom: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e5ea" />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fontSize: 9, fill: '#86868b' }}
-                  interval={0}
-                  angle={-35}
-                  textAnchor="end"
-                  height={60}
-                />
-                <YAxis domain={[0, 'auto']} tick={{ fontSize: 11, fill: '#86868b' }} width={36} unit="%" />
-                <Tooltip content={<ChartTooltipRu />} />
-                <Line
-                  type="monotone"
-                  dataKey="pct"
-                  name={selectedLabel}
-                  stroke="#3182CE"
-                  strokeWidth={2}
-                  dot={{ r: 2.5 }}
-                  connectNulls
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="adm-table-scroll" style={{ marginTop: 12 }}>
-            <table className="adm-table adm-table-compact" style={{ width: '100%', minWidth: 640 }}>
-              <thead>
-                <tr>
-                  <th>День</th>
-                  <th>Утро %</th>
-                  <th>День %</th>
-                  <th>Вечер %</th>
-                  <th>N утро</th>
-                  <th>N день</th>
-                  <th>N вечер</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dayTrend.map(r => (
-                  <tr key={r.dayLabel}>
-                    <td>{r.dayLabel}</td>
-                    <td>{r.morning ?? '—'}</td>
-                    <td>{r.day ?? '—'}</td>
-                    <td>{r.evening ?? '—'}</td>
-                    <td>{r.morningCount}</td>
-                    <td>{r.dayCount}</td>
-                    <td>{r.eveningCount}</td>
+            <div className="adm-table-scroll">
+              <table className="adm-table adm-table-compact" style={{ width: '100%', minWidth: Math.max(640, 120 + days.length * 3 * 56) }}>
+                <thead>
+                  <tr>
+                    <th style={{ position: 'sticky', left: 0, background: '#fff', zIndex: 1 }}>Эмоция</th>
+                    {days.flatMap(day => (
+                      [
+                        <th key={`${day}-m`} style={{ fontSize: 10, whiteSpace: 'nowrap' }}>{formatForumDay(day)}·У</th>,
+                        <th key={`${day}-d`} style={{ fontSize: 10, whiteSpace: 'nowrap' }}>{formatForumDay(day)}·Д</th>,
+                        <th key={`${day}-e`} style={{ fontSize: 10, whiteSpace: 'nowrap' }}>{formatForumDay(day)}·В</th>,
+                      ]
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {selectedList.map((o) => {
+                    const byDay = (dynamics?.emotions ?? []).find(e => e.id === o.id)?.byDay ?? [];
+                    return (
+                      <tr key={o.id}>
+                        <td style={{ position: 'sticky', left: 0, background: '#fff', zIndex: 1, whiteSpace: 'nowrap' }}>
+                          <span style={{
+                            display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                            background: emotionColor(o.id), marginRight: 6,
+                          }}
+                          />
+                          {o.label}
+                        </td>
+                        {days.flatMap((day) => {
+                          const hit = byDay.find(d => d.day === day);
+                          const cells: { pct: number | null; n: number; title: string }[] = [
+                            {
+                              pct: hit?.morningPct ?? null,
+                              n: hit?.morningCount ?? 0,
+                              title: `${o.label} · ${formatForumDay(day)} · Утро`,
+                            },
+                            {
+                              pct: hit?.dayPct ?? null,
+                              n: hit?.dayCount ?? 0,
+                              title: `${o.label} · ${formatForumDay(day)} · День`,
+                            },
+                            {
+                              pct: hit?.eveningPct ?? null,
+                              n: hit?.eveningCount ?? 0,
+                              title: `${o.label} · ${formatForumDay(day)} · Вечер`,
+                            },
+                          ];
+                          return cells.map((c, idx) => (
+                            <td
+                              key={`${o.id}-${day}-${idx}`}
+                              title={`${c.title}: ${c.pct ?? '—'}% · N=${c.n}`}
+                              style={{
+                                textAlign: 'center',
+                                fontSize: 11,
+                                fontWeight: 600,
+                                background: heatBgPct(c.pct),
+                                color: heatTextPct(c.pct),
+                                minWidth: 44,
+                              }}
+                            >
+                              {c.pct != null ? c.pct : '—'}
+                            </td>
+                          ));
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       ) : null}

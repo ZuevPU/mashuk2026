@@ -144,12 +144,13 @@ function buildDistribution(
 export async function collectKindAnswerRows(
   mode: KindDashboardMode,
   filters: AnalyticsFilters,
+  opts?: { includeUnpublished?: boolean },
 ): Promise<{
   rows: KindAnswerRow[];
   questionMeta: { id: number; title: string; dayNumber: number | null }[];
 }> {
   const settings = await getForumSettings();
-  const days = resolveDayRange(filters, settings.currentDay ?? 1);
+  const days = resolveDayRange(filters, settings.currentDay ?? 1, settings.totalDays ?? 8);
 
   const qConds = [];
   if (filters.shiftId != null) qConds.push(eq(questions.shiftId, filters.shiftId));
@@ -159,7 +160,9 @@ export async function collectKindAnswerRows(
   const allQs = qConds.length
     ? await db.select().from(questions).where(and(...qConds))
     : await db.select().from(questions);
-  const kindQs = allQs.filter(q => isPublishedStatus(q.status) && matchesKind(q, mode));
+  const kindQs = allQs.filter(q =>
+    (opts?.includeUnpublished || isPublishedStatus(q.status)) && matchesKind(q, mode),
+  );
   const qIds = kindQs.map(q => q.id);
   if (!qIds.length) return { rows: [], questionMeta: [] };
 
@@ -275,7 +278,7 @@ export async function buildKindDashboard(
 ) {
   const settings = await getForumSettings();
   const currentDay = settings.currentDay ?? 1;
-  const days = resolveDayRange(filters, currentDay);
+  const days = resolveDayRange(filters, currentDay, settings.totalDays ?? 8);
   const dayFilter = days.length === 1 ? days[0] : null;
 
   const cohort = await loadCohortParticipants(filters, req);

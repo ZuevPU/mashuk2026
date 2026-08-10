@@ -75,12 +75,19 @@ export async function resolveAnalyticsFilters(req: AdminRequest): Promise<Analyt
   return filters;
 }
 
-export function resolveDayRange(filters: AnalyticsFilters, currentForumDay: number): number[] {
+export function resolveDayRange(
+  filters: AnalyticsFilters,
+  currentForumDay: number,
+  totalDays = 8,
+): number[] {
+  const span = Math.min(8, Math.max(1, totalDays || 8));
+  const allShiftDays = () => Array.from({ length: span }, (_, i) => i + 1);
+
   if (filters.mode === 'compare' && filters.compareDays.length) {
     return filters.compareDays.slice(0, 3);
   }
   if (filters.mode === 'shift') {
-    return [1, 2, 3, 4, 5, 6, 7];
+    return allShiftDays();
   }
   // Explicit day from UI/export always wins (including day=1).
   if (filters.day != null && filters.day >= 1) {
@@ -90,5 +97,5 @@ export function resolveDayRange(filters: AnalyticsFilters, currentForumDay: numb
     const live = currentForumDay >= 1 ? currentForumDay : 1;
     return [live];
   }
-  return [1, 2, 3, 4, 5, 6, 7];
+  return allShiftDays();
 }

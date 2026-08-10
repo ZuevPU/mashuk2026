@@ -13,6 +13,7 @@ import {
 } from '../services/analytics/participantProfileStats.js';
 import {
   buildEmotionDayPhaseDynamics,
+  buildEnergyDayPhaseDynamics,
   buildParticipantPathSeries,
   resolvePathPhase,
 } from '../services/analytics/participantPathSeries.js';
@@ -281,5 +282,25 @@ describe('emotionDayPhaseDynamics', () => {
     assert.equal(d2.eveningPct, 50);
     assert.equal(d2.eveningCount, 1);
     assert.equal(d2.eveningTotal, 2);
+  });
+});
+
+describe('energyDayPhaseDynamics', () => {
+  it('averages energy by day and phase', () => {
+    const dyn = buildEnergyDayPhaseDynamics([
+      { participantId: 1, energy: 8, emotion: 'calm', timePoint: 'утро', day: 1 },
+      { participantId: 2, energy: 6, emotion: 'calm', timePoint: 'утро', day: 1 },
+      { participantId: 3, energy: 5, emotion: 'tired', timePoint: 'день', day: 1 },
+      { participantId: 4, energy: 9, emotion: 'joy', timePoint: 'вечер', day: 2 },
+    ], { maxDay: 3 });
+    assert.deepEqual(dyn.days, [1, 2, 3]);
+    const d1 = dyn.byDay.find(d => d.day === 1)!;
+    const d2 = dyn.byDay.find(d => d.day === 2)!;
+    assert.equal(d1.morningAvg, 7);
+    assert.equal(d1.morningCount, 2);
+    assert.equal(d1.dayAvg, 5);
+    assert.equal(d1.eveningAvg, null);
+    assert.equal(d2.eveningAvg, 9);
+    assert.equal(d2.eveningCount, 1);
   });
 });

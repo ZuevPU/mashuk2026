@@ -267,13 +267,56 @@ export function ParticipantProfileView({ data }: { data: any }) {
     id: string; priority: string; title: string; evidence: string;
   }[];
 
-  const energyLine = useMemo(() => (
-    (feeling.energyByDay ?? []).map((d: { day: number; avg: number | null; responses: number }) => ({
-      dayLabel: formatForumDay(d.day),
+  const energyTimeline = useMemo(() => {
+    const byDay = (feeling.energyDynamics?.byDay ?? []) as {
+      day: number;
+      morningAvg: number | null;
+      dayAvg: number | null;
+      eveningAvg: number | null;
+      morningCount: number;
+      dayCount: number;
+      eveningCount: number;
+    }[];
+    if (byDay.length) {
+      const rows: { label: string; avg: number | null; responses: number }[] = [];
+      for (const d of byDay) {
+        rows.push(
+          { label: `${formatForumDay(d.day)} · Утро`, avg: d.morningAvg, responses: d.morningCount },
+          { label: `${formatForumDay(d.day)} · День`, avg: d.dayAvg, responses: d.dayCount },
+          { label: `${formatForumDay(d.day)} · Вечер`, avg: d.eveningAvg, responses: d.eveningCount },
+        );
+      }
+      return rows;
+    }
+    // Fallback: old daily series
+    return (feeling.energyByDay ?? []).map((d: { day: number; avg: number | null; responses: number }) => ({
+      label: formatForumDay(d.day),
       avg: d.avg,
       responses: d.responses,
-    }))
-  ), [feeling.energyByDay]);
+    }));
+  }, [feeling.energyDynamics, feeling.energyByDay]);
+
+  const energyPhaseTable = useMemo(() => {
+    const byDay = (feeling.energyDynamics?.byDay ?? []) as {
+      day: number;
+      morningAvg: number | null;
+      dayAvg: number | null;
+      eveningAvg: number | null;
+      morningCount: number;
+      dayCount: number;
+      eveningCount: number;
+    }[];
+    if (!byDay.length) return null;
+    return byDay.map(d => ({
+      day: formatForumDay(d.day),
+      morning: d.morningAvg ?? '—',
+      midday: d.dayAvg ?? '—',
+      evening: d.eveningAvg ?? '—',
+      nMorning: d.morningCount,
+      nDay: d.dayCount,
+      nEvening: d.eveningCount,
+    }));
+  }, [feeling.energyDynamics]);
 
   const emotionBars = useMemo(() => (
     (feeling.emotions ?? []).map((e: { label: string; count: number; pct: number }) => ({
@@ -447,18 +490,58 @@ export function ParticipantProfileView({ data }: { data: any }) {
 
         <div style={{ marginTop: 16 }} className="adm-chart-frame">
           <div className="adm-dash-card-title">
-            Энергия по дням
-            <MethodHint text="Линия — средняя энергия ответов за день. N в tooltip = число ответов." />
+            Энергия · непрерывный путь по смене
+            <MethodHint text={feeling.energyDynamics?.note ?? 'Средняя энергия (1–10) по фазам утро → день → вечер за все дни смены. N в tooltip = число ответов.'} />
           </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={energyLine} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+          <p className="adm-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
+            День N · Утро → День → Вечер, затем следующий день
+          </p>
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={energyTimeline} margin={{ top: 8, right: 12, left: 0, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e5ea" />
-              <XAxis dataKey="dayLabel" tick={{ fontSize: 11, fill: '#86868b' }} />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 9, fill: '#86868b' }}
+                interval={0}
+                angle={-35}
+                textAnchor="end"
+                height={60}
+              />
               <YAxis domain={[0, 10]} tick={{ fontSize: 11, fill: '#86868b' }} width={32} />
               <Tooltip content={<ChartTooltipRu />} />
-              <Line type="monotone" dataKey="avg" name="Средняя энергия" stroke="#1F3A5F" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+              <Line type="monotone" dataKey="avg" name="Средняя энергия" stroke="#1F3A5F" strokeWidth={2} dot={{ r: 2.5 }} connectNulls />
             </LineChart>
           </ResponsiveContainer>
+          {energyPhaseTable ? (
+            <div className="adm-table-scroll" style={{ marginTop: 12 }}>
+              <table className="adm-table adm-table-compact" style={{ width: '100%', minWidth: 560 }}>
+                <thead>
+                  <tr>
+                    <th>День</th>
+                    <th>Утро</th>
+                    <th>День</th>
+                    <th>Вечер</th>
+                    <th>N утро</th>
+                    <th>N день</th>
+                    <th>N вечер</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {energyPhaseTable.map(r => (
+                    <tr key={r.day}>
+                      <td>{r.day}</td>
+                      <td>{r.morning}</td>
+                      <td>{r.midday}</td>
+                      <td>{r.evening}</td>
+                      <td>{r.nMorning}</td>
+                      <td>{r.nDay}</td>
+                      <td>{r.nEvening}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </div>
 
         <div style={{ marginTop: 16 }}>

@@ -283,6 +283,74 @@ export function buildEmotionDayPhaseDynamics(
   return {
     days,
     emotions,
-    note: 'Доля выбранной эмоции среди ответов проверки состояния в фазе (утро / день / вечер) каждого дня смены.',
+    note: 'Доля выбранной эмоции среди ответов проверки состояния в фазе (утро / день / вечер) каждого дня смены. Серия строится по всей смене.',
+  };
+}
+
+export type EnergyDayPhasePoint = {
+  day: number;
+  morningAvg: number | null;
+  dayAvg: number | null;
+  eveningAvg: number | null;
+  morningCount: number;
+  dayCount: number;
+  eveningCount: number;
+};
+
+export type EnergyDynamicsPayload = {
+  days: number[];
+  byDay: EnergyDayPhasePoint[];
+  note: string;
+};
+
+function meanOrNull(vals: number[]): number | null {
+  if (!vals.length) return null;
+  return Math.round((vals.reduce((s, n) => s + n, 0) / vals.length) * 10) / 10;
+}
+
+/**
+ * Средняя энергия по дням 1…N и фазам утро / день / вечер (для непрерывного пути).
+ */
+export function buildEnergyDayPhaseDynamics(
+  answers: PathAnswerInput[],
+  opts?: { maxDay?: number },
+): EnergyDynamicsPayload {
+  const maxDay = Math.min(Math.max(opts?.maxDay ?? 8, 1), 8);
+  const days = Array.from({ length: maxDay }, (_, i) => i + 1);
+  const buckets = new Map<string, number[]>();
+
+  for (const a of answers) {
+    if (a.day == null || a.day < 1 || a.day > maxDay) continue;
+    if (a.energy == null || !Number.isFinite(a.energy)) continue;
+    const phase = resolvePathPhase(a);
+    const key = `${a.day}::${phase}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key)!.push(a.energy);
+  }
+
+  const cell = (day: number, phase: PathPhase) => {
+    const vals = buckets.get(`${day}::${phase}`) || [];
+    return { avg: meanOrNull(vals), count: vals.length };
+  };
+
+  const byDay = days.map(day => {
+    const morning = cell(day, 'morning');
+    const midday = cell(day, 'day');
+    const evening = cell(day, 'evening');
+    return {
+      day,
+      morningAvg: morning.avg,
+      dayAvg: midday.avg,
+      eveningAvg: evening.avg,
+      morningCount: morning.count,
+      dayCount: midday.count,
+      eveningCount: evening.count,
+    };
+  });
+
+  return {
+    days,
+    byDay,
+    note: 'Средняя энергия (1–10) по фазам утро → день → вечер за все дни смены.',
   };
 }
