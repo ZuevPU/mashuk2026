@@ -169,13 +169,38 @@ export function ExchangePeerSection({
     setWhoDirs(prev => (prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]));
   };
 
+  const openCompose = async () => {
+    if (categories.length === 0) {
+      try {
+        await loadCategories();
+      } catch {
+        onError('Не удалось загрузить темы. Обновите экран и попробуйте снова.');
+        return;
+      }
+    }
+    if (categories.length === 0) {
+      onError('Темы ещё не настроены на сервере. Напишите организаторам или зайдите позже.');
+      return;
+    }
+    setComposeStep('category');
+  };
+
   const publish = async () => {
-    if (!categoryId || text.trim().length < minQuestionLen) return;
+    if (!categoryId) {
+      onError('Выберите тему вопроса — без рубрики опубликовать нельзя');
+      setComposeStep('category');
+      return;
+    }
+    if (text.trim().length < minQuestionLen) {
+      onError(`Добавьте деталей. Сейчас ${text.trim().length} из ${minQuestionLen} символов.`);
+      setComposeStep('text');
+      return;
+    }
     try {
       const res = await apiPost<{ category?: { title: string } }>('/exchange', {
         text: text.trim(),
         audience,
-        categoryId,
+        categoryId: Number(categoryId),
       });
       const catTitle = res.category?.title || selectedCat?.title || 'тема';
       setComposeStep('idle');
@@ -185,7 +210,7 @@ export function ExchangePeerSection({
       onSubmitted(`Вопрос отправлен на проверку. После публикации он появится в теме «${catTitle}».`);
       await reload();
     } catch (err) {
-      onError(err instanceof ApiError ? err.message : 'Ошибка отправки');
+      onError(err instanceof ApiError ? err.message : 'Не удалось отправить вопрос');
     }
   };
 
@@ -232,7 +257,7 @@ export function ExchangePeerSection({
           <Button
             stretched
             disabled={!!limits && limits.questionsLeft <= 0}
-            onClick={() => setComposeStep('category')}
+            onClick={() => { void openCompose(); }}
           >
             {limits && limits.questionsLeft <= 0 ? 'Лимит вопросов исчерпан' : '+ Задать вопрос · выбрать тему'}
           </Button>
@@ -242,31 +267,47 @@ export function ExchangePeerSection({
       {composeStep === 'category' && (
         <div className="m-card" style={{ marginBottom: 10 }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Тема вопроса</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {thematic.map(c => (
-              <button
-                key={c.id}
-                type="button"
-                className="time-btn"
-                style={{ textAlign: 'left', padding: '10px 8px', whiteSpace: 'normal', height: 'auto' }}
-                onClick={() => { setCategoryId(c.id); setComposeStep('text'); }}
-              >
-                <div>{c.emoji} {c.title}</div>
-              </button>
-            ))}
+          <div style={{ fontSize: 12, color: '#666', marginBottom: 10, lineHeight: 1.45 }}>
+            О чём ваш вопрос? Выберите рубрику — так на него быстрее ответят коллеги по теме.
           </div>
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {smalltalkCat && (
-              <button type="button" className="time-btn" onClick={() => { setCategoryId(smalltalkCat.id); setComposeStep('text'); }}>
-                {smalltalkCat.emoji} {smalltalkCat.title}
-              </button>
-            )}
-            {otherCat && (
-              <button type="button" className="time-btn" onClick={() => { setCategoryId(otherCat.id); setComposeStep('text'); }}>
-                {otherCat.emoji} {otherCat.title}
-              </button>
-            )}
-          </div>
+          {categories.length === 0 ? (
+            <div style={{ fontSize: 13, color: '#C53030', marginBottom: 10 }}>
+              Темы не загрузились. Нажмите «Обновить темы» или перезайдите во вкладку.
+              <div style={{ marginTop: 8 }}>
+                <Button mode="secondary" onClick={() => { void loadCategories().catch(() => onError('Не удалось загрузить темы')); }}>
+                  Обновить темы
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {thematic.map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="time-btn"
+                    style={{ textAlign: 'left', padding: '10px 8px', whiteSpace: 'normal', height: 'auto' }}
+                    onClick={() => { setCategoryId(Number(c.id)); setComposeStep('text'); }}
+                  >
+                    <div>{c.emoji} {c.title}</div>
+                  </button>
+                ))}
+              </div>
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {smalltalkCat && (
+                  <button type="button" className="time-btn" onClick={() => { setCategoryId(Number(smalltalkCat.id)); setComposeStep('text'); }}>
+                    {smalltalkCat.emoji} {smalltalkCat.title}
+                  </button>
+                )}
+                {otherCat && (
+                  <button type="button" className="time-btn" onClick={() => { setCategoryId(Number(otherCat.id)); setComposeStep('text'); }}>
+                    {otherCat.emoji} {otherCat.title}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
           <Button mode="secondary" style={{ marginTop: 10 }} onClick={() => setComposeStep('idle')}>Отмена</Button>
         </div>
       )}
@@ -420,11 +461,11 @@ export function ExchangePeerSection({
               <div className="peer-av">{(q.authorName || '?').slice(0, 2).toUpperCase()}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="peer-dir">
-                  {q.category ? `${q.category.emoji || ''} ${q.category.title}` : 'Тема'}
-                  {' · '}
-                  {q.direction || '—'}
-                  {' · '}
-                  {isDirectionAudience(q.audience) ? 'Своему направлению' : 'Всем'}
+                  {q.category ? `${q.category.emoji || ''} ${q.category.title}` : 'Без темы'}
+                  {q.direction ? ` · ${q.direction}` : ''}
+                </div>
+                <div className="peer-meta" style={{ marginTop: 2 }}>
+                  {isDirectionAudience(q.audience) ? 'Кому: своему направлению' : 'Кому: всем участникам'}
                 </div>
                 <div className="peer-q peer-q--lg">{q.text}</div>
                 <div className="peer-meta">{q.authorName} · {answerCountLabel(q)}</div>

@@ -35,7 +35,7 @@ export const listActiveExchangeCategories = async (_req: ParticipantRequest, res
     });
   } catch (error) {
     console.error('listActiveExchangeCategories:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Не удалось загрузить темы обмена опытом' });
   }
 };
 

@@ -121,7 +121,23 @@ function parseApiErrorMessage(status: number, text: string): string {
   const trimmed = text.trim();
   if (trimmed) {
     try {
-      const body = JSON.parse(trimmed) as { error?: string; message?: string };
+      const body = JSON.parse(trimmed) as { error?: string; message?: string; code?: string; min?: number; current?: number };
+      const code = String(body.code || body.error || '');
+      if (code === 'NO_CATEGORY') {
+        return typeof body.error === 'string' && body.error !== 'NO_CATEGORY'
+          ? body.error
+          : 'Выберите тему вопроса — без рубрики опубликовать нельзя';
+      }
+      if (code === 'TEXT_TOO_SHORT') {
+        return typeof body.error === 'string' && body.error !== 'TEXT_TOO_SHORT'
+          ? body.error
+          : `Добавьте деталей. Сейчас ${body.current ?? 0} из ${body.min ?? 60} символов.`;
+      }
+      if (code === 'ANSWER_TOO_SHORT') {
+        return typeof body.error === 'string' && body.error !== 'ANSWER_TOO_SHORT'
+          ? body.error
+          : 'Похоже, это реакция, а не ответ. Нажмите 👍 под вопросом — автор увидит.';
+      }
       if (typeof body.error === 'string' && body.error) return body.error;
       if (typeof body.message === 'string' && body.message) return body.message;
     } catch {
@@ -132,6 +148,7 @@ function parseApiErrorMessage(status: number, text: string): string {
   if (status === 403) return 'Доступ запрещён';
   if (status === 404) return 'Не найдено';
   if (status === 400) return 'Некорректный запрос';
+  if (status === 422) return 'Проверьте заполнение формы';
   return `Ошибка сервера (${status})`;
 }
 

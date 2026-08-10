@@ -161,12 +161,36 @@ async function ensureExchangeCategoriesSchema(pool: ReturnType<typeof createPool
      WHERE table_schema = 'public' AND table_name = 'exchange_categories'
      LIMIT 1`,
   );
-  if (rows.length > 0) return;
+  if (rows.length === 0) {
+    const sqlPath = path.join(__dirname, '../../drizzle/0061_exchange_categories.sql');
+    const sql = fs.readFileSync(sqlPath, 'utf8');
+    console.warn('Repair: applying 0061_exchange_categories.sql (exchange_categories missing)');
+    await pool.query(sql);
+  }
 
-  const sqlPath = path.join(__dirname, '../../drizzle/0061_exchange_categories.sql');
-  const sql = fs.readFileSync(sqlPath, 'utf8');
-  console.warn('Repair: applying 0061_exchange_categories.sql (exchange_categories missing)');
-  await pool.query(sql);
+  const { rows: countRows } = await pool.query<{ c: string }>(
+    `SELECT count(*)::text AS c FROM exchange_categories`,
+  );
+  if (Number(countRows[0]?.c || 0) > 0) return;
+
+  console.warn('Repair: reseeding exchange_categories (table empty)');
+  await pool.query(`
+    INSERT INTO exchange_categories (slug, title, emoji, hint, sort_order, is_active, is_system)
+    VALUES
+      ('start', 'Старт в профессии', '🚀', 'Первый урок или первая смена, волнение, вход в новый коллектив, поиск наставника, выбор пути в педагогику.', 1, true, false),
+      ('team', 'Коллеги и границы', '🤝', 'Отношения в коллективе, конфликты со старшими коллегами, личные границы, работа с напарником, диалог с администрацией.', 2, true, false),
+      ('motivation', 'Мотивация и вовлечение', '🔥', '«Дети ничего не хотят», клиповое мышление, удержание интереса, поощрения и рейтинги, работа через увлечения детей.', 3, true, false),
+      ('hard_cases', 'Сложные ситуации', '⚡', 'Дисциплина, трудный подросток, конфликты с детьми, ЧП и нестандартные случаи, безопасность.', 4, true, false),
+      ('methods', 'Методика и форматы', '🧩', 'Приёмы и структура занятия, смена деятельности, геймификация, интерактив, оценивание, импровизация.', 5, true, false),
+      ('digital', 'Цифра, ИИ и медиа', '🤖', 'Нейросети на занятии, конкретные сервисы и инструменты, презентации, видео и соцсети, гаджеты.', 6, true, false),
+      ('parents', 'Родители', '👨‍👩‍👧', 'Коммуникация с семьёй, тревожные и конфликтные родители, форматы вовлечения родителей.', 7, true, false),
+      ('resource', 'Ресурс и выгорание', '🌱', 'Как восстанавливаться, баланс работы и жизни, хобби и спорт, признаки выгорания, что делать в моменте.', 8, true, false),
+      ('growth', 'Рост и возможности', '📈', 'Куда расти, карьерные треки, конкурсы, форумы, смены, стажировки, повышение квалификации.', 9, true, false),
+      ('picks', 'Подборки и вдохновение', '📚', 'Книги, фильмы, каналы, цитаты, педагоги-кумиры, смыслы профессии.', 10, true, false),
+      ('smalltalk', 'Знакомство и общение', '👋', 'Представиться, рассказать о себе, ожидания от форума, эмоции и мемы. Отдельная лента, в основную не попадает.', 11, true, true),
+      ('other', 'Другое', '❓', 'Не подошла ни одна рубрика — модератор подберёт её сам при проверке.', 12, true, true)
+    ON CONFLICT (slug) DO NOTHING
+  `);
 }
 
 export async function runMigrations(): Promise<void> {

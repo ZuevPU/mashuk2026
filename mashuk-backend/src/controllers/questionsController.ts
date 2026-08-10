@@ -997,14 +997,17 @@ export const createExchangeQuestion = async (req: ParticipantRequest, res: Respo
       return;
     }
 
-    const categoryId = Number(rawCategoryId);
+    const categoryId = Number(rawCategoryId ?? req.body.category_id);
     if (!Number.isFinite(categoryId) || categoryId <= 0) {
-      res.status(422).json({ error: 'NO_CATEGORY', code: 'NO_CATEGORY' });
+      res.status(422).json({
+        error: 'Выберите тему вопроса — без рубрики опубликовать нельзя',
+        code: 'NO_CATEGORY',
+      });
       return;
     }
     if (!trimmed || trimmed.length < env.EXCHANGE_MIN_QUESTION_LEN) {
       res.status(422).json({
-        error: 'TEXT_TOO_SHORT',
+        error: `Добавьте деталей — так вам ответят по существу. Сейчас ${trimmed.length} из ${env.EXCHANGE_MIN_QUESTION_LEN} символов.`,
         code: 'TEXT_TOO_SHORT',
         min: env.EXCHANGE_MIN_QUESTION_LEN,
         current: trimmed.length,
@@ -1016,7 +1019,10 @@ export const createExchangeQuestion = async (req: ParticipantRequest, res: Respo
       .where(and(eq(exchangeCategories.id, categoryId), eq(exchangeCategories.isActive, true)))
       .limit(1);
     if (!cat) {
-      res.status(422).json({ error: 'NO_CATEGORY', code: 'NO_CATEGORY' });
+      res.status(422).json({
+        error: 'Тема не найдена или отключена. Выберите рубрику ещё раз',
+        code: 'NO_CATEGORY',
+      });
       return;
     }
 
@@ -1040,7 +1046,7 @@ export const createExchangeQuestion = async (req: ParticipantRequest, res: Respo
     });
   } catch (error) {
     console.error('createExchangeQuestion:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Не удалось сохранить вопрос. Попробуйте ещё раз.' });
   }
 };
 
@@ -1055,11 +1061,10 @@ export const answerExchange = async (req: ParticipantRequest, res: Response): Pr
     }
     if (trimmed.length < env.EXCHANGE_MIN_ANSWER_LEN) {
       res.status(422).json({
-        error: 'ANSWER_TOO_SHORT',
+        error: 'Похоже, это реакция, а не ответ. Нажмите 👍 под вопросом — автор увидит.',
         code: 'ANSWER_TOO_SHORT',
         min: env.EXCHANGE_MIN_ANSWER_LEN,
         current: trimmed.length,
-        hint: 'Похоже, это реакция, а не ответ. Нажмите 👍 под вопросом — автор увидит.',
       });
       return;
     }
