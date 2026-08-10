@@ -1,19 +1,39 @@
 import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  answers, exchangeAnswers, exchangeQuestions, pointsLog, questions, taskSubmissions, tasks,
+  answers, eventAttendance, events, exchangeAnswers, exchangeQuestions, piggybank,
+  pointsLog, questions, taskSubmissions, tasks,
 } from '../db/schema.js';
 import { participantAnswerSummary } from './participantAnswerFormat.js';
 import { pointsTrackForAction, type PointTrack } from './pointsService.js';
 
 export type PointsLogSource = {
-  sourceKind: 'task' | 'question' | 'exchange_question' | 'exchange_answer' | null;
+  sourceKind: 'task' | 'question' | 'exchange_question' | 'exchange_answer' | 'piggybank' | 'attendance' | null;
   sourceId: number | null;
   sourceTitle: string | null;
   sourceDescription: string | null;
   answerPreview: string | null;
   track: PointTrack | 'bonus';
 };
+
+const PIGGY_ACTIONS = new Set([
+  'piggybank_idea',
+  'piggybank_thought',
+  'piggybank_question',
+  'piggybank_entry',
+]);
+
+function actionBase(actionType: string | null | undefined): string {
+  return (actionType || '').replace(/_revoke$/i, '');
+}
+
+function formatPiggyTags(tags: unknown, tag: string | null | undefined): string {
+  const list = Array.isArray(tags)
+    ? tags.map(t => String(t).trim()).filter(Boolean)
+    : [];
+  if (!list.length && tag) list.push(tag);
+  return list.join(', ');
+}
 
 function plainFromHtml(html: string | null | undefined): string {
   if (!html) return '';
@@ -179,9 +199,158 @@ export async function resolvePointsLogSources(
     }
   }
 
+  // Piggybank via points_log_id, then nearest createdAt for leftover piggy actions.
+  const unresolvedIds = () => logs.filter(l => !out.get(l.id)?.sourceKind).map(l => l.id);
+  const piggyLogIds = unresolvedIds();
+  if (piggyLogIds.length) {
+    const piggyRows = await db.select({
+      id: piggybank.id,
+      pointsLogId: piggybank.pointsLogId,
+      text: piggybank.text,
+      tag: piggybank.tag,
+      tags: piggybank.tags,
+      source: piggybank.source,
+      forumDay: piggybank.forumDay,
+      participantId: piggybank.participantId,
+      createdAt: piggybank.createdAt,
+    }).from(piggybank).where(and(
+      inArray(piggybank.pointsLogId, piggyLogIds),
+      isNotNull(piggybank.pointsLogId),
+    ));
+
+    for (const row of piggyRows) {
+      if (row.pointsLogId == null) continue;
+      const tags = formatPiggyTags(row.tags, row.tag);
+      const meta = [
+        row.forumDay != null ? `День ${row.forumDay}` : null,
+        tags ? `Теги: ${tags}` : null,
+        row.source ? `Источник: ${row.source}` : null,
+      ].filter(Boolean).join(' · ');
+      out.set(row.pointsLogId, {
+        sourceKind: 'piggybank',
+        sourceId: row.id,
+        sourceTitle: tags ? `Копилка · ${tags}` : 'Копилка',
+        sourceDescription: meta || null,
+        answerPreview: row.text ? clip(row.text, 400) : null,
+        track: pointsTrackForAction(
+          logs.find(l => l.id === row.pointsLogId)?.actionType || 'piggybank_entry',
+        ),
+      });
+    }
+  }
+
+  const piggyFallbackLogs = logs.filter(l =>
+    PIGGY_ACTIONS.has(actionBase(l.actionType)) && !out.get(l.id)?.sourceKind,
+  );
+  if (piggyFallbackLogs.length) {
+    const participantIds = [...new Set(
+      piggyFallbackLogs.map(l => l.participantId).filter((id): id is number => id != null && id > 0),
+    )];
+    if (participantIds.length) {
+      const piggyPool = await db.select({
+        id: piggybank.id,
+        text: piggybank.text,
+        tag: piggybank.tag,
+        tags: piggybank.tags,
+        source: piggybank.source,
+        forumDay: piggybank.forumDay,
+        participantId: piggybank.participantId,
+        createdAt: piggybank.createdAt,
+        pointsLogId: piggybank.pointsLogId,
+      }).from(piggybank).where(inArray(piggybank.participantId, participantIds));
+
+      const usedPiggy = new Set<number>();
+      const WINDOW_MS = 15 * 60 * 1000;
+      for (const log of piggyFallbackLogs) {
+        const pid = log.participantId;
+        if (pid == null) continue;
+        const at = ts(log.createdAt);
+        let best: (typeof piggyPool)[number] | null = null;
+        let bestDelta = Infinity;
+        for (const row of piggyPool) {
+          if (row.participantId !== pid || usedPiggy.has(row.id)) continue;
+          if (row.pointsLogId != null && row.pointsLogId !== log.id) continue;
+          const delta = Math.abs(ts(row.createdAt) - at);
+          if (delta > WINDOW_MS) continue;
+          if (delta < bestDelta) {
+            best = row;
+            bestDelta = delta;
+          }
+        }
+        if (!best) continue;
+        usedPiggy.add(best.id);
+        const tags = formatPiggyTags(best.tags, best.tag);
+        const meta = [
+          best.forumDay != null ? `День ${best.forumDay}` : null,
+          tags ? `Теги: ${tags}` : null,
+          best.source ? `Источник: ${best.source}` : null,
+        ].filter(Boolean).join(' · ');
+        out.set(log.id, {
+          sourceKind: 'piggybank',
+          sourceId: best.id,
+          sourceTitle: tags ? `Копилка · ${tags}` : 'Копилка',
+          sourceDescription: meta || null,
+          answerPreview: best.text ? clip(best.text, 400) : null,
+          track: pointsTrackForAction(log.actionType || 'piggybank_entry'),
+        });
+      }
+    }
+  }
+
+  // Attendance: nearest event check-in (±10 min).
+  const attendanceLogs = logs.filter(l =>
+    actionBase(l.actionType) === 'attendance' && !out.get(l.id)?.sourceKind,
+  );
+  if (attendanceLogs.length) {
+    const participantIds = [...new Set(
+      attendanceLogs.map(l => l.participantId).filter((id): id is number => id != null && id > 0),
+    )];
+    if (participantIds.length) {
+      const attRows = await db.select({
+        id: eventAttendance.id,
+        participantId: eventAttendance.participantId,
+        createdAt: eventAttendance.createdAt,
+        eventId: events.id,
+        eventTitle: events.title,
+        eventDay: events.dayNumber,
+      }).from(eventAttendance)
+        .leftJoin(events, eq(eventAttendance.eventId, events.id))
+        .where(inArray(eventAttendance.participantId, participantIds));
+
+      const usedAtt = new Set<number>();
+      const WINDOW_MS = 10 * 60 * 1000;
+      for (const log of attendanceLogs) {
+        const pid = log.participantId;
+        if (pid == null) continue;
+        const at = ts(log.createdAt);
+        let best: (typeof attRows)[number] | null = null;
+        let bestDelta = Infinity;
+        for (const row of attRows) {
+          if (row.participantId !== pid || usedAtt.has(row.id)) continue;
+          const delta = Math.abs(ts(row.createdAt) - at);
+          if (delta > WINDOW_MS) continue;
+          if (delta < bestDelta) {
+            best = row;
+            bestDelta = delta;
+          }
+        }
+        if (!best) continue;
+        usedAtt.add(best.id);
+        out.set(log.id, {
+          sourceKind: 'attendance',
+          sourceId: best.eventId ?? best.id,
+          sourceTitle: best.eventTitle || `Событие #${best.eventId ?? best.id}`,
+          sourceDescription: best.eventDay != null ? `День ${best.eventDay} · отметка присутствия` : 'Отметка присутствия',
+          answerPreview: null,
+          track: pointsTrackForAction(log.actionType || 'attendance'),
+        });
+      }
+    }
+  }
+
   // Exchange Q/A: no FK on points_log — match by participant + nearest createdAt (±3 min).
   const exchangeLogs = logs.filter(l => {
-    const a = (l.actionType || '').replace(/_revoke$/i, '');
+    const a = actionBase(l.actionType);
     return (a === 'exchange_answer' || a === 'exchange_question') && !out.get(l.id)?.sourceKind;
   });
   if (exchangeLogs.length) {

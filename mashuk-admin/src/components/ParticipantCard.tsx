@@ -103,6 +103,8 @@ type CardData = {
 
 type PointsTrackFilter = 'all' | 'path' | 'experience' | 'bonus';
 
+type PointsSortKey = 'track' | 'type' | 'source' | 'points' | 'when';
+
 function pointsTrackLabel(track: string | null | undefined): string {
   if (track === 'path') return 'Путь';
   if (track === 'experience') return 'Опыт';
@@ -115,7 +117,26 @@ function pointsSourceKindLabel(kind: string | null | undefined): string {
   if (kind === 'task') return 'Задание';
   if (kind === 'exchange_question') return 'Обмен: вопрос';
   if (kind === 'exchange_answer') return 'Обмен: ответ';
+  if (kind === 'piggybank') return 'Копилка';
+  if (kind === 'attendance') return 'Посещение';
   return 'Источник';
+}
+
+function pointsContentLabel(kind: string | null | undefined): string {
+  if (kind === 'piggybank') return 'Текст';
+  if (kind === 'exchange_question') return 'Текст вопроса';
+  if (kind === 'exchange_answer' || kind === 'question' || kind === 'task') return 'Ответ';
+  return 'Текст';
+}
+
+function pointsSortValue(pt: any, key: PointsSortKey): string | number {
+  if (key === 'track') return pointsTrackLabel(pt.track);
+  if (key === 'type') return label(pt.actionType || '');
+  if (key === 'source') {
+    return [pt.sourceTitle, pt.sourceDescription, pt.answerPreview].filter(Boolean).join(' ');
+  }
+  if (key === 'points') return Number(pt.points) || 0;
+  return pt.createdAt ? new Date(pt.createdAt).getTime() : 0;
 }
 
 
@@ -271,6 +292,7 @@ export function ParticipantCardModal({
   const [pointsAmount, setPointsAmount] = useState(10);
   const [pointsReason, setPointsReason] = useState('');
   const [pointsFilter, setPointsFilter] = useState<PointsTrackFilter>('all');
+  const [pointsSort, setPointsSort] = useState<{ key: PointsSortKey; asc: boolean }>({ key: 'when', asc: false });
   const [bulkForumDay, setBulkForumDay] = useState<number | ''>('');
   const [bulkReason, setBulkReason] = useState('');
   const [medalCatalog, setMedalCatalog] = useState<{ id: number; name: string; level?: string }[]>([]);
@@ -281,10 +303,25 @@ export function ParticipantCardModal({
     if (pointsFilter === 'all') return true;
     return (pt.track || 'experience') === pointsFilter;
   });
+  const sortedPoints = [...filteredPoints].sort((a: any, b: any) => {
+    const av = pointsSortValue(a, pointsSort.key);
+    const bv = pointsSortValue(b, pointsSort.key);
+    let cmp = 0;
+    if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
+    else cmp = String(av).localeCompare(String(bv), 'ru');
+    if (cmp === 0) cmp = (Number(a.id) || 0) - (Number(b.id) || 0);
+    return pointsSort.asc ? cmp : -cmp;
+  });
   const filteredPointsSum = filteredPoints.reduce((sum: number, pt: any) => {
     if (pt.revokedAt || String(pt.actionType || '').endsWith('_revoke')) return sum;
     return sum + (Number(pt.points) || 0);
   }, 0);
+  const togglePointsSort = (key: PointsSortKey) => {
+    setPointsSort((prev) => (prev.key === key ? { key, asc: !prev.asc } : { key, asc: key === 'when' || key === 'points' ? false : true }));
+  };
+  const pointsSortMark = (key: PointsSortKey) => (
+    pointsSort.key === key ? (pointsSort.asc ? ' ↑' : ' ↓') : ' ↕'
+  );
   const ratingShown = pointsFilter === 'all'
     ? (card.pointsSummary?.total ?? ((p.pathPoints ?? 0) + (p.experiencePoints ?? 0)))
     : pointsFilter === 'path'
@@ -1367,24 +1404,37 @@ export function ParticipantCardModal({
 
               <thead>
                 <tr>
-                  <th>Линия</th>
-                  <th>Тип</th>
-                  <th>За что / ответ</th>
-                  <th>Баллы</th>
-                  <th>Когда</th>
+                  {([
+                    ['track', 'Линия'],
+                    ['type', 'Тип'],
+                    ['source', 'За что / текст'],
+                    ['points', 'Баллы'],
+                    ['when', 'Когда'],
+                  ] as const).map(([key, title]) => (
+                    <th key={key}>
+                      <button
+                        type="button"
+                        className="adm-link"
+                        style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer', fontWeight: 700 }}
+                        onClick={() => togglePointsSort(key)}
+                      >
+                        {title}{pointsSortMark(key)}
+                      </button>
+                    </th>
+                  ))}
                   <th></th>
                 </tr>
               </thead>
 
               <tbody>
 
-                {filteredPoints.length === 0 && (
+                {sortedPoints.length === 0 && (
                   <tr>
                     <td colSpan={6} className="adm-muted">Нет начислений для выбранного фильтра</td>
                   </tr>
                 )}
 
-                {filteredPoints.map((pt: any) => (
+                {sortedPoints.map((pt: any) => (
 
                   <tr key={pt.id} style={pt.revokedAt ? { opacity: 0.5 } : undefined}>
 
@@ -1393,13 +1443,13 @@ export function ParticipantCardModal({
                     <td>{label(pt.actionType)}</td>
 
                     <td style={{ maxWidth: 420, fontSize: 12 }}>
-                      {pt.sourceTitle || pt.answerPreview ? (
+                      {pt.sourceTitle || pt.answerPreview || pt.sourceDescription ? (
                         <>
                           {pt.sourceTitle && (
                             <div style={{ fontWeight: 700 }}>
-                              {pointsSourceKindLabel(pt.sourceKind)}
-                              {': '}
-                              {pt.sourceTitle}
+                              {pt.sourceKind === 'piggybank'
+                                ? pt.sourceTitle
+                                : `${pointsSourceKindLabel(pt.sourceKind)}: ${pt.sourceTitle}`}
                             </div>
                           )}
                           {pt.sourceDescription && (
@@ -1409,7 +1459,7 @@ export function ParticipantCardModal({
                           )}
                           {pt.answerPreview && (
                             <div style={{ marginTop: 4, whiteSpace: 'pre-wrap', lineHeight: 1.35 }}>
-                              <span className="adm-muted">Ответ: </span>
+                              <span className="adm-muted">{pointsContentLabel(pt.sourceKind)}: </span>
                               {pt.answerPreview}
                             </div>
                           )}

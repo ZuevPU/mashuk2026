@@ -63,14 +63,32 @@ const LABELS: Record<string, string> = {
   // Типы действий (баллы)
   question_answer: 'Ответ на вопрос',
   task_complete: 'Выполнение задания',
-  exchange_answer: 'Ответ в обмене',
-  exchange_question: 'Вопрос в обмене',
-  piggybank_entry: 'Запись в копилку',
-  piggybank_idea: 'Идея в копилку',
-  piggybank_thought: 'Мысль в копилку',
-  piggybank_question: 'Вопрос в копилку',
-  path_level: 'Уровень пути',
-  exp_level: 'Уровень опыта',
+  exchange_answer: 'Ответ участнику в «Общении»',
+  exchange_question: 'Вопрос в «Общении»',
+  piggybank_entry: 'Копилка: запись',
+  piggybank_idea: 'Копилка: идея',
+  piggybank_thought: 'Копилка: мысль',
+  piggybank_question: 'Копилка: вопрос',
+  state_check_morning: 'Утренняя проверка состояния',
+  state_check_day: 'Дневная проверка состояния',
+  state_check_evening: 'Вечерняя проверка состояния',
+  evening_complete: 'Итоги дня',
+  point_a_complete: 'Точка А (вход)',
+  point_b_complete: 'Точка Б (выход)',
+  attendance: 'Посещение события программы',
+  day_complete_bonus: 'Бонус за полный день',
+  reflection_streak_7: 'Бонус за регулярность 7 дней',
+  bonus_regularity: 'Бонус регулярности',
+  bonus_diversity: 'Бонус разнообразия заданий',
+  admin_manual_path: 'Ручное начисление (Путь)',
+  admin_manual_experience: 'Ручное начисление (Опыт)',
+  admin_manual_deduct_path: 'Ручное списание (Путь)',
+  admin_manual_deduct_experience: 'Ручное списание (Опыт)',
+  admin_manual_task: 'Ручное выполнение задания',
+  path_level: 'Порог уровня «Путь»',
+  exp_level: 'Порог уровня «Опыт»',
+  points_recalculate: 'Пересчёт баллов',
+  points_revoke: 'Аннулирование баллов',
 
   // Уведомления / доставка
   manual: 'Вручную',
@@ -173,6 +191,14 @@ export function vkProfileUrl(vkId: string | number | null | undefined): string |
 export function label(key: string): string {
   if (!key) return key;
   if (key.startsWith('error:')) return `Ошибка: ${key.slice(7)}`;
+  if (key.endsWith('_revoke')) {
+    const base = key.slice(0, -'_revoke'.length);
+    return `Аннулирование: ${label(base)}`;
+  }
+  if (key.startsWith('task_cat_')) {
+    const raw = key.slice('task_cat_'.length).replace(/_/g, ' ').trim();
+    return raw ? `Задание: ${raw}` : 'Задание';
+  }
   if (key.startsWith('auto_retry_slot_')) {
     const t = key.replace('auto_retry_slot_', '');
     return `Автоповтор слота ${t.slice(0, 2)}:${t.slice(2)}`;
