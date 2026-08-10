@@ -1120,6 +1120,25 @@ export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
     return;
   }
 
+  // Keep only program_event links that belong to this questionnaire day.
+  const dayEventRows = await db.select({ id: events.id })
+    .from(events)
+    .where(and(eq(events.shiftId, shiftId), eq(events.dayNumber, day)));
+  const dayEventIds = new Set(dayEventRows.map(r => r.id));
+  next = {
+    ...next,
+    steps: next.steps.map(step => ({
+      ...step,
+      fields: (step.fields || []).map(field => {
+        if (field.type !== 'program_event' || !Array.isArray(field.linkedEventIds)) return field;
+        return {
+          ...field,
+          linkedEventIds: field.linkedEventIds.filter(id => dayEventIds.has(Number(id))),
+        };
+      }),
+    })),
+  };
+
   byDay[String(day)] = next;
   const updated = await updateShift(shiftId, { eveningQuestionnaireByDay: byDay });
   clearShiftCaches();
@@ -1147,10 +1166,22 @@ export const copyAdminEveningQuestionnaire = async (req: AdminRequest, res: Resp
   }
   const shape = shiftOpsToForumShape(current);
   const src = resolveEveningConfigForDay(shape as never, fromDay);
+  // Drop program_event links — event ids belong to fromDay and must be re-picked for toDay.
+  const copied: EveningQuestionnaireConfig = {
+    ...src,
+    steps: (src.steps || []).map(step => ({
+      ...step,
+      fields: (step.fields || []).map(field => (
+        field.type === 'program_event'
+          ? { ...field, linkedEventIds: [] }
+          : field
+      )),
+    })),
+  };
   const byDay = {
     ...((current.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {}),
   };
-  byDay[String(toDay)] = src;
+  byDay[String(toDay)] = copied;
   const updated = await updateShift(shiftId, { eveningQuestionnaireByDay: byDay });
   clearShiftCaches();
   const nextShape = updated ? shiftOpsToForumShape(updated) : shape;

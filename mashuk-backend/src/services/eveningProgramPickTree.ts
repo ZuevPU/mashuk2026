@@ -97,23 +97,41 @@ export function collectEveningProgramPickTree(
   }
 
   const linked = Array.isArray(linkedEventIds)
-    ? linkedEventIds.filter(id => Number.isFinite(id))
+    ? [...new Set(linkedEventIds.filter(id => Number.isFinite(id) && id > 0))]
     : [];
+
+  /** Roots must belong to the questionnaire day — never leak another day's blocks. */
+  const belongsToSurveyDay = (e: LessonPickEvent): boolean => {
+    if (surveyDay == null) return true;
+    if (e.dayNumber == null) {
+      // Nested rows sometimes omit day_number; climb to a dated ancestor.
+      let pid = e.parentEventId ?? null;
+      const seen = new Set<number>();
+      while (pid != null && pid !== 0 && !seen.has(pid)) {
+        seen.add(pid);
+        const parent = byId.get(pid);
+        if (!parent) break;
+        if (parent.dayNumber != null) return parent.dayNumber === surveyDay;
+        pid = parent.parentEventId ?? null;
+      }
+      // Explicitly linked undated root: allow only when admin selected it for this day.
+      return linked.length > 0 && linked.includes(e.id);
+    }
+    return e.dayNumber === surveyDay;
+  };
 
   let roots: LessonPickEvent[] = [];
   if (linked.length > 0) {
     for (const id of linked) {
       const e = byId.get(id);
-      if (e && !isBreak(e)) roots.push(e);
+      if (!e || isBreak(e)) continue;
+      if (!belongsToSurveyDay(e)) continue;
+      roots.push(e);
     }
   } else {
     roots = allEvents
       .filter(e => isRootEvent(e) && !isBreak(e))
-      .filter(e => (
-        surveyDay == null
-        || e.dayNumber == null
-        || e.dayNumber === surveyDay
-      ))
+      .filter(belongsToSurveyDay)
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id);
   }
 
@@ -124,6 +142,14 @@ export function collectEveningProgramPickTree(
       if (rootIds.has(pid)) return false;
       pid = byId.get(pid)?.parentEventId ?? null;
     }
+    return true;
+  });
+
+  // Stable unique roots (guards against duplicate linked ids / copied rows).
+  const seenRoot = new Set<number>();
+  roots = roots.filter(e => {
+    if (seenRoot.has(e.id)) return false;
+    seenRoot.add(e.id);
     return true;
   });
 

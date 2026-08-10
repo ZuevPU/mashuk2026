@@ -66,6 +66,32 @@ describe('collectEveningProgramPickTree', () => {
     assert.equal(events[0].children[0].title, 'ИИ в классе');
   });
 
+  it('does not leak another day roots when day_number is null', () => {
+    const all: LessonPickEvent[] = [
+      { id: 1, title: 'Презентации практик D2', parentEventId: null, dayNumber: null, sortOrder: 1 },
+      { id: 2, title: 'Презентации практик D3', parentEventId: null, dayNumber: 3, sortOrder: 1 },
+      { id: 21, title: 'Тема', parentEventId: 2, dayNumber: 3, sortOrder: 1 },
+    ];
+    const { events } = collectEveningProgramPickTree(all, null, undefined, 3);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].id, 2);
+  });
+
+  it('ignores linked event ids from another survey day', () => {
+    const all: LessonPickEvent[] = [
+      { id: 1, title: 'Презентации практик', parentEventId: null, dayNumber: 2, sortOrder: 1 },
+      { id: 2, title: 'Презентации практик', parentEventId: null, dayNumber: 3, sortOrder: 1 },
+      { id: 11, title: 'Тема D2', parentEventId: 1, dayNumber: 2, sortOrder: 1 },
+      { id: 21, title: 'Тема D3', parentEventId: 2, dayNumber: 3, sortOrder: 1 },
+    ];
+    // Config leftover from copy day2→day3 still lists id=1 plus day3 pick id=2
+    const { events } = collectEveningProgramPickTree(all, [1, 2], undefined, 3);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].id, 2);
+    assert.equal(events[0].children.length, 1);
+    assert.equal(events[0].children[0].title, 'Тема D3');
+  });
+
   it('keeps nested themes when dayPublished is false on children only', () => {
     const rows = [
       {

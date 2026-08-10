@@ -63,11 +63,14 @@ export function buildEveningProgramPickNodes(
     children: sort(byParent.get(e.id) || []).map(build),
   });
 
-  const linked = (linkedIds || []).filter(id => Number.isFinite(id));
+  const linked = [...new Set((linkedIds || []).filter(id => Number.isFinite(id) && id > 0))];
   const byId = new Map(flat.map(e => [e.id, e]));
   let roots: ProgramEventRow[];
   if (linked.length) {
-    roots = linked.map(id => byId.get(id)).filter((e): e is ProgramEventRow => !!e);
+    // Only keep links that belong to this questionnaire day (ignore leftovers from copy).
+    roots = linked
+      .map(id => byId.get(id))
+      .filter((e): e is ProgramEventRow => !!e && e.dayNumber === day);
     // Prefer outermost: drop linked nodes whose ancestor is also linked
     const rootSet = new Set(roots.map(r => r.id));
     roots = roots.filter(e => {

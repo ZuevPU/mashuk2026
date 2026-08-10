@@ -101,6 +101,27 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
     [programEvents, day],
   );
 
+  // Drop linkedEventIds that belong to another day (typical after «copy day» in admin).
+  // Wait until program events for the day are loaded — otherwise an empty tree would wipe links.
+  useEffect(() => {
+    if (programEvents.length === 0) return;
+    const dayIds = new Set(dayProgramTrees.map(e => e.id));
+    setConfig(prev => {
+      let changed = false;
+      const steps = prev.steps.map(step => ({
+        ...step,
+        fields: step.fields.map(field => {
+          if (field.type !== 'program_event' || !field.linkedEventIds?.length) return field;
+          const next = field.linkedEventIds.filter(id => dayIds.has(id));
+          if (next.length === field.linkedEventIds.length) return field;
+          changed = true;
+          return { ...field, linkedEventIds: next };
+        }),
+      }));
+      return changed ? { ...prev, steps } : prev;
+    });
+  }, [day, dayProgramTrees, programEvents.length]);
+
   const updateStep = (index: number, patch: Partial<EveningStep>) => {
     setConfig(prev => {
       const steps = [...prev.steps];
@@ -639,8 +660,9 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
                 <div style={{ gridColumn: '1 / -1', marginTop: 6 }}>
                   <div className="adm-label">Связь с программой дня {day}</div>
                   <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 8px' }}>
-                    Отметьте крупные блоки. Участник сначала выбирает блок, затем подтему внутри
-                    (как в «Программе»). Если ничего не отмечено — покажем все блоки дня с их подтемами.
+                    Отметьте крупные блоки дня {day}. Участник видит только отмеченные
+                    (блок → подтемы → оценка 1–10). Если ничего не отмечено — все блоки этого дня.
+                    Связи с других дней (после копирования анкеты) не показываются участнику.
                   </p>
                   <div style={{
                     display: 'flex',
