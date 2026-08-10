@@ -348,6 +348,7 @@ router.post('/qr/download', P('tasks', 'update'), wrap(p0.generateAndDownloadQr)
 router.get('/qr/pack', P('tasks', 'read'), wrap(p0.getQrPack));
 router.post('/participants/:id/points/:logId/revoke', P('levels', 'update'), wrap(p0.revokeParticipantPoints));
 router.post('/participants/:id/points/revoke-bulk', P('levels', 'update'), wrap(p0.revokeSuspiciousParticipantPoints));
+router.post('/participants/:id/points/recalculate', P('levels', 'update'), wrap(p0.recalculateParticipantPointsCard));
 router.get('/leaderboard', wrap(ops.getLeaderboard));
 router.get('/pdf-whitelist', wrap(ops.listPdfWhitelist));
 router.post('/pdf-whitelist', requireAdminRole('settings'), wrap(ops.setPdfWhitelist));

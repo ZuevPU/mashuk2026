@@ -631,7 +631,7 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
       .from(taskSubmissions)
       .leftJoin(tasks, eq(taskSubmissions.taskId, tasks.id))
       .where(eq(taskSubmissions.participantId, id)),
-    db.select().from(pointsLog).where(eq(pointsLog.participantId, id)).orderBy(desc(pointsLog.createdAt)).limit(50),
+    db.select().from(pointsLog).where(eq(pointsLog.participantId, id)).orderBy(desc(pointsLog.createdAt)).limit(300),
     db.select({ um: userMedals, m: medals })
       .from(userMedals)
       .leftJoin(medals, eq(userMedals.medalId, medals.id))
@@ -705,11 +705,16 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
 
   const avatarUrl = await resolveParticipantAvatarUrl(p, { preferVkPhoto: true });
   const { enrichPointsLogRows } = await import('../services/pointsLogSource.js');
-  const enrichedPoints = await enrichPointsLogRows(userPoints);
+  const { auditParticipantPoints } = await import('../services/participantPointsAudit.js');
+  const [enrichedPoints, pointsAudit] = await Promise.all([
+    enrichPointsLogRows(userPoints),
+    auditParticipantPoints(id),
+  ]);
 
   res.json({
     participant: { ...p, avatarUrl },
     avatarUrl,
+    pointsAudit,
     answers: filteredAnswers.map(r => ({
       id: r.a.id,
       questionTitle: r.q?.title,
@@ -807,6 +812,33 @@ export const revokeParticipantPoints = async (req: AdminRequest, res: Response):
     isCritical: true,
   });
   res.json({ ok: true, reversalId: result.reversalId });
+};
+
+/** Rebuild path/experience/bonus from points_log and return a fresh audit. */
+export const recalculateParticipantPointsCard = async (req: AdminRequest, res: Response): Promise<void> => {
+  const participantId = Number(req.params.id);
+  if (!Number.isFinite(participantId) || participantId <= 0) {
+    res.status(400).json({ error: 'Invalid participant id' });
+    return;
+  }
+  const [exists] = await db.select({ id: participants.id }).from(participants).where(eq(participants.id, participantId)).limit(1);
+  if (!exists) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+  const { recalculateParticipantTotals } = await import('../services/pointsService.js');
+  const { auditParticipantPoints } = await import('../services/participantPointsAudit.js');
+  await recalculateParticipantTotals(participantId);
+  const audit = await auditParticipantPoints(participantId);
+  await logAdminAction({
+    req,
+    actionType: 'points_recalculate',
+    section: 'participants',
+    objectId: String(participantId),
+    newValue: { participantId, audit: { ok: audit.ok, stored: audit.stored, fromLog: audit.fromLog } },
+    isCritical: false,
+  });
+  res.json({ ok: true, audit });
 };
 
 export const revokeSuspiciousParticipantPoints = async (req: AdminRequest, res: Response): Promise<void> => {

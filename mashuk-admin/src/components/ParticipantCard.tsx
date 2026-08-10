@@ -82,6 +82,17 @@ type CardData = {
 
   pointsSummary?: { path: number; experience: number; bonus: number; total: number; byDay: Record<string, number> };
 
+  pointsAudit?: {
+    ok: boolean;
+    stored: { path: number; experience: number; bonus: number; total: number };
+    fromLog: { path: number; experience: number; bonus: number; total: number };
+    byAction: Array<{ actionType: string; track: string; points: number; count: number }>;
+    issues: Array<{ code: string; severity: 'ok' | 'warn' | 'error'; message: string }>;
+    answersWithoutLog: number;
+    logRows: number;
+    revokedRows: number;
+  };
+
   piggybank?: any[];
 
   dayStates?: any[];
@@ -89,6 +100,23 @@ type CardData = {
   avatarUrl?: string | null;
 
 };
+
+type PointsTrackFilter = 'all' | 'path' | 'experience' | 'bonus';
+
+function pointsTrackLabel(track: string | null | undefined): string {
+  if (track === 'path') return 'Путь';
+  if (track === 'experience') return 'Опыт';
+  if (track === 'bonus') return 'Бонус';
+  return '—';
+}
+
+function pointsSourceKindLabel(kind: string | null | undefined): string {
+  if (kind === 'question') return 'Вопрос';
+  if (kind === 'task') return 'Задание';
+  if (kind === 'exchange_question') return 'Обмен: вопрос';
+  if (kind === 'exchange_answer') return 'Обмен: ответ';
+  return 'Источник';
+}
 
 
 
@@ -242,10 +270,28 @@ export function ParticipantCardModal({
   const [pointsTrack, setPointsTrack] = useState<'path' | 'experience'>('path');
   const [pointsAmount, setPointsAmount] = useState(10);
   const [pointsReason, setPointsReason] = useState('');
+  const [pointsFilter, setPointsFilter] = useState<PointsTrackFilter>('all');
   const [bulkForumDay, setBulkForumDay] = useState<number | ''>('');
   const [bulkReason, setBulkReason] = useState('');
   const [medalCatalog, setMedalCatalog] = useState<{ id: number; name: string; level?: string }[]>([]);
   const [awardMedalId, setAwardMedalId] = useState<number | ''>('');
+
+  const pointsAudit = card.pointsAudit;
+  const filteredPoints = (card.points || []).filter((pt: any) => {
+    if (pointsFilter === 'all') return true;
+    return (pt.track || 'experience') === pointsFilter;
+  });
+  const filteredPointsSum = filteredPoints.reduce((sum: number, pt: any) => {
+    if (pt.revokedAt || String(pt.actionType || '').endsWith('_revoke')) return sum;
+    return sum + (Number(pt.points) || 0);
+  }, 0);
+  const ratingShown = pointsFilter === 'all'
+    ? (card.pointsSummary?.total ?? ((p.pathPoints ?? 0) + (p.experiencePoints ?? 0)))
+    : pointsFilter === 'path'
+      ? (card.pointsSummary?.path ?? p.pathPoints ?? 0)
+      : pointsFilter === 'experience'
+        ? (card.pointsSummary?.experience ?? p.experiencePoints ?? 0)
+        : (card.pointsSummary?.bonus ?? 0);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1028,20 +1074,163 @@ export function ParticipantCardModal({
 
             <div className="adm-stack">
 
-            {card.pointsSummary && (
+            <div className="card" style={{ padding: 12, fontSize: 13 }}>
 
-              <div className="card" style={{ padding: 12, fontSize: 13 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
 
-                <strong>Сводка:</strong> Путь {card.pointsSummary.path} · Опыт {card.pointsSummary.experience} · Бонус {card.pointsSummary.bonus} · всего {card.pointsSummary.total}
+                <div>
 
-                {Object.keys(card.pointsSummary.byDay || {}).length > 0 && (
+                  <div className="adm-muted" style={{ fontSize: 12, marginBottom: 4 }}>Общий рейтинг</div>
 
-                  <div className="adm-muted" style={{ marginTop: 6 }}>
+                  <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.1 }}>{ratingShown}</div>
 
-                    По дням: {Object.entries(card.pointsSummary.byDay).sort((a, b) => Number(a[0]) - Number(b[0])).map(([d, pts]) => `Д${d}: ${pts}`).join(' · ')}
+                  <div className="adm-muted" style={{ marginTop: 6, fontSize: 12 }}>
+
+                    {pointsFilter === 'all'
+                      ? `Путь ${card.pointsSummary?.path ?? p.pathPoints ?? 0} · Опыт ${card.pointsSummary?.experience ?? p.experiencePoints ?? 0} · Бонус ${card.pointsSummary?.bonus ?? 0}`
+                      : `В журнале (фильтр): ${filteredPointsSum} · показано записей: ${filteredPoints.length}`}
 
                   </div>
 
+                </div>
+
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+
+                  {([
+                    ['all', 'Все'],
+                    ['path', 'Путь'],
+                    ['experience', 'Опыт'],
+                    ['bonus', 'Бонус'],
+                  ] as const).map(([key, title]) => (
+
+                    <button
+
+                      key={key}
+
+                      type="button"
+
+                      className={`adm-chip-btn${pointsFilter === key ? ' on' : ''}`}
+
+                      onClick={() => setPointsFilter(key)}
+
+                    >
+
+                      {title}
+
+                      {key !== 'all' && (
+                        <span style={{ marginLeft: 6, opacity: 0.85 }}>
+                          {key === 'path'
+                            ? (card.pointsSummary?.path ?? 0)
+                            : key === 'experience'
+                              ? (card.pointsSummary?.experience ?? 0)
+                              : (card.pointsSummary?.bonus ?? 0)}
+                        </span>
+                      )}
+
+                    </button>
+
+                  ))}
+
+                </div>
+
+              </div>
+
+              {Object.keys(card.pointsSummary?.byDay || {}).length > 0 && pointsFilter === 'all' && (
+
+                <div className="adm-muted" style={{ marginTop: 10 }}>
+
+                  По дням: {Object.entries(card.pointsSummary!.byDay).sort((a, b) => Number(a[0]) - Number(b[0])).map(([d, pts]) => `Д${d}: ${pts}`).join(' · ')}
+
+                </div>
+
+              )}
+
+            </div>
+
+            {pointsAudit && (
+
+              <div
+                className="card"
+                style={{
+                  padding: 12,
+                  fontSize: 13,
+                  borderColor: pointsAudit.ok
+                    ? (pointsAudit.issues.some(i => i.severity === 'warn') ? '#D69E2E' : '#2F855A')
+                    : '#C53030',
+                }}
+              >
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+
+                  <h4 style={{ margin: 0 }}>
+                    Проверка баллов:{' '}
+                    {pointsAudit.ok
+                      ? (pointsAudit.issues.some(i => i.severity === 'warn') ? 'есть предупреждения' : 'всё сходится')
+                      : 'есть расхождения'}
+                  </h4>
+
+                  <button
+                    type="button"
+                    className="adm-btn adm-btn-secondary adm-btn-sm"
+                    onClick={() => {
+                      act(async () => {
+                        await adminFetch(`/participants/${p.id}/points/recalculate`, { method: 'POST', body: '{}' });
+                        onReloadCard();
+                      }, 'Пересчитано из журнала');
+                    }}
+                  >
+                    Пересчитать из журнала
+                  </button>
+
+                </div>
+
+                <div style={{ marginTop: 8 }} className="adm-muted">
+                  В карточке: Путь {pointsAudit.stored.path} · Опыт {pointsAudit.stored.experience} · Бонус {pointsAudit.stored.bonus} · всего {pointsAudit.stored.total}
+                  <br />
+                  По журналу: Путь {pointsAudit.fromLog.path} · Опыт {pointsAudit.fromLog.experience} · Бонус {pointsAudit.fromLog.bonus} · всего {pointsAudit.fromLog.total}
+                  {' · '}записей {pointsAudit.logRows}{pointsAudit.revokedRows ? ` · аннулировано ${pointsAudit.revokedRows}` : ''}
+                </div>
+
+                <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+                  {pointsAudit.issues.map((issue) => (
+                    <li
+                      key={`${issue.code}-${issue.message}`}
+                      style={{
+                        color: issue.severity === 'error' ? '#C53030' : issue.severity === 'warn' ? '#B7791F' : '#276749',
+                        marginBottom: 4,
+                      }}
+                    >
+                      {issue.message}
+                    </li>
+                  ))}
+                </ul>
+
+                {pointsAudit.byAction.length > 0 && (
+                  <details style={{ marginTop: 8 }}>
+                    <summary style={{ cursor: 'pointer' }}>Сводка по типам действий</summary>
+                    <table className="adm-table" style={{ marginTop: 8 }}>
+                      <thead>
+                        <tr>
+                          <th>Тип</th>
+                          <th>Линия</th>
+                          <th>Записей</th>
+                          <th>Баллы</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pointsAudit.byAction
+                          .filter((row) => pointsFilter === 'all' || row.track === pointsFilter)
+                          .map((row) => (
+                            <tr key={row.actionType}>
+                              <td>{label(row.actionType)}</td>
+                              <td>{pointsTrackLabel(row.track)}</td>
+                              <td>{row.count}</td>
+                              <td>{row.points}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </details>
                 )}
 
               </div>
@@ -1176,32 +1365,62 @@ export function ParticipantCardModal({
 
             <table className="adm-table">
 
-              <thead><tr><th>Тип</th><th>Источник</th><th>Баллы</th><th>Когда</th><th></th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Линия</th>
+                  <th>Тип</th>
+                  <th>За что / ответ</th>
+                  <th>Баллы</th>
+                  <th>Когда</th>
+                  <th></th>
+                </tr>
+              </thead>
 
               <tbody>
 
-                {(card.points || []).map((pt: any) => (
+                {filteredPoints.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="adm-muted">Нет начислений для выбранного фильтра</td>
+                  </tr>
+                )}
+
+                {filteredPoints.map((pt: any) => (
 
                   <tr key={pt.id} style={pt.revokedAt ? { opacity: 0.5 } : undefined}>
 
+                    <td>{pointsTrackLabel(pt.track)}</td>
+
                     <td>{label(pt.actionType)}</td>
 
-                    <td style={{ maxWidth: 360, fontSize: 12 }}>
-                      {pt.sourceTitle ? (
+                    <td style={{ maxWidth: 420, fontSize: 12 }}>
+                      {pt.sourceTitle || pt.answerPreview ? (
                         <>
-                          <div style={{ fontWeight: 700 }}>
-                            {pt.sourceKind === 'question' ? 'Вопрос' : pt.sourceKind === 'task' ? 'Задание' : 'Источник'}
-                            {': '}
-                            {pt.sourceTitle}
-                          </div>
+                          {pt.sourceTitle && (
+                            <div style={{ fontWeight: 700 }}>
+                              {pointsSourceKindLabel(pt.sourceKind)}
+                              {': '}
+                              {pt.sourceTitle}
+                            </div>
+                          )}
                           {pt.sourceDescription && (
                             <div style={{ marginTop: 4, color: '#555', whiteSpace: 'pre-wrap', lineHeight: 1.35 }}>
                               {pt.sourceDescription}
                             </div>
                           )}
+                          {pt.answerPreview && (
+                            <div style={{ marginTop: 4, whiteSpace: 'pre-wrap', lineHeight: 1.35 }}>
+                              <span className="adm-muted">Ответ: </span>
+                              {pt.answerPreview}
+                            </div>
+                          )}
+                          {pt.revokedAt && (
+                            <div className="adm-muted" style={{ marginTop: 4 }}>
+                              Аннулировано{pt.revokeReason ? `: ${pt.revokeReason}` : ''}
+                            </div>
+                          )}
                         </>
                       ) : (
-                        <span className="adm-muted">—</span>
+                        <span className="adm-muted">{pt.revokeReason || '—'}</span>
                       )}
                     </td>
 
