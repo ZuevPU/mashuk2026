@@ -22,7 +22,7 @@ type ExchangeLimits = {
   pointsPerAnswer?: number;
 };
 
-type ExchangeQuestion = {
+export type ExchangeQuestion = {
   id: number;
   text: string;
   audience?: string | null;
@@ -32,6 +32,15 @@ type ExchangeQuestion = {
   direction?: string | null;
   isMine?: boolean;
   answerCount?: number;
+  answers?: Array<{
+    id: number;
+    participantId?: number;
+    text: string;
+    parentAnswerId?: number | null;
+    authorName?: string;
+    createdAt?: string | null;
+    reactions?: { likes?: number; discuss?: number; likedBy?: number[]; discussBy?: number[] };
+  }>;
   reactions?: { likes?: number; discuss?: number; likedBy?: number[]; discussBy?: number[] } | null;
   category?: { id: number; slug: string; title: string; emoji?: string | null } | null;
   createdAt?: string | null;
@@ -40,7 +49,7 @@ type ExchangeQuestion = {
 type Props = {
   myParticipantId: number | null;
   limits: ExchangeLimits | null;
-  onOpenThread: (id: number) => void;
+  onOpenThread: (question: ExchangeQuestion) => void;
   onSubmitted: (msg: string) => void;
   onError: (msg: string) => void;
   reloadKey?: number;
@@ -393,7 +402,7 @@ export function ExchangePeerSection({
                     : answerCountLabel(q)}
               </div>
               {(q.moderationStatus || '').toLowerCase() === 'approved' && (
-                <Button size="s" mode="secondary" style={{ marginTop: 8 }} onClick={() => onOpenThread(q.id)}>
+                <Button size="s" mode="secondary" style={{ marginTop: 8 }} onClick={() => onOpenThread(q)}>
                   Показать ответы
                 </Button>
               )}
@@ -478,7 +487,7 @@ export function ExchangePeerSection({
               <button type="button" className={`time-btn ${discussed ? 'on' : ''}`} onClick={() => void reactQuestion(q, 'discuss')}>
                 💬 {q.reactions?.discuss || 0}
               </button>
-              <Button size="m" mode="secondary" onClick={() => onOpenThread(q.id)}>
+              <Button size="m" mode="secondary" onClick={() => onOpenThread(q)}>
                 Показать ответы
               </Button>
             </div>

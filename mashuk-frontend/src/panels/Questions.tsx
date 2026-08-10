@@ -5,7 +5,7 @@ import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { useAppModal } from '../App';
 import { QuestionAnswerForm } from '../components/questions/QuestionAnswerForm';
 import { EveningDaySummaryFlow } from '../components/questions/EveningDaySummaryFlow';
-import { ExchangePeerSection } from '../components/questions/ExchangePeerSection';
+import { ExchangePeerSection, type ExchangeQuestion } from '../components/questions/ExchangePeerSection';
 import { PriorityAction } from '../components/home/DashboardCards';
 import { EmptyState } from '../components/EmptyState';
 import { AnswerSuccessOverlay, type SubmitSuccessPayload, type AnswerConfirmationConfig } from '../components/questions/AnswerSuccessOverlay';
@@ -410,7 +410,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const [answerConfirmDefaults, setAnswerConfirmDefaults] = useState<AnswerConfirmationConfig>(DEFAULT_CONFIRM);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [exchangeThreadId, setExchangeThreadId] = useState<number | null>(null);
+  const [exchangeThread, setExchangeThread] = useState<ExchangeQuestion | null>(null);
   const [exchangeLimits, setExchangeLimits] = useState<ExchangeLimits | null>(null);
   const [exchangeReloadKey, setExchangeReloadKey] = useState(0);
   const [activeQuestion, setActiveQuestion] = useState<any>(null);
@@ -514,9 +514,23 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
     }
   };
 
+  const refreshExchangeThread = useCallback(async () => {
+    if (!exchangeThread?.id) return;
+    try {
+      const res = await apiGet<{ question: ExchangeQuestion; limits?: Partial<ExchangeLimits> }>(
+        `/exchange/${exchangeThread.id}`,
+      );
+      if (res.question) setExchangeThread(res.question);
+      if (res.limits) setExchangeLimits(normalizeExchangeLimits(res.limits));
+    } catch {
+      /* keep previous thread snapshot */
+    }
+    setExchangeReloadKey(k => k + 1);
+  }, [exchangeThread?.id]);
+
   useEffect(() => {
     if (activePanel !== id) {
-      if (exchangeThreadId != null) setExchangeThreadId(null);
+      if (exchangeThread != null) setExchangeThread(null);
       setModal(null);
       return;
     }
@@ -605,28 +619,23 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
           </ModalPage>
         </ModalRoot>,
       );
-    } else if (exchangeThreadId != null) {
-      const threadQuestion = exchange.find(q => q.id === exchangeThreadId) || null;
-      if (!threadQuestion) {
-        setModal(null);
-      } else {
-        setModal(
-          <ModalRoot activeModal="exchange-thread" onClose={() => setExchangeThreadId(null)}>
-            <ExchangeThreadModal
-              question={threadQuestion}
-              myParticipantId={myParticipantId}
-              limits={exchangeLimits}
-              onClose={() => setExchangeThreadId(null)}
-              onRefresh={loadAll}
-              onSubmitSuccess={showSubmitSuccess}
-            />
-          </ModalRoot>,
-        );
-      }
+    } else if (exchangeThread) {
+      setModal(
+        <ModalRoot activeModal="exchange-thread" onClose={() => setExchangeThread(null)}>
+          <ExchangeThreadModal
+            question={exchangeThread}
+            myParticipantId={myParticipantId}
+            limits={exchangeLimits}
+            onClose={() => setExchangeThread(null)}
+            onRefresh={() => { void refreshExchangeThread(); }}
+            onSubmitSuccess={showSubmitSuccess}
+          />
+        </ModalRoot>,
+      );
     } else {
       setModal(null);
     }
-  }, [activeQuestion, exchangeThreadId, exchange, exchangeLimits, myParticipantId, questionOptions, myAnswer, setModal, loadAll, orgThreadId, orgComposeOpen, dayEvents, afterBlocksEvents, lessonPickMeta, activePanel, id, showEveningFlow]);
+  }, [activeQuestion, exchangeThread, exchangeLimits, myParticipantId, questionOptions, myAnswer, setModal, loadAll, refreshExchangeThread, orgThreadId, orgComposeOpen, dayEvents, afterBlocksEvents, lessonPickMeta, activePanel, id, showEveningFlow]);
 
   useEffect(() => {
     return () => setModal(null);
@@ -788,7 +797,12 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
             myParticipantId={myParticipantId}
             limits={exchangeLimits}
             reloadKey={exchangeReloadKey}
-            onOpenThread={setExchangeThreadId}
+            onOpenThread={(q) => {
+              setExchangeThread(q);
+              void apiGet<{ question: ExchangeQuestion }>(`/exchange/${q.id}`)
+                .then(res => { if (res.question) setExchangeThread(res.question); })
+                .catch(() => { /* keep list snapshot */ });
+            }}
             onSubmitted={(msg) => showSubmitSuccess({ confirm: { ...DEFAULT_CONFIRM, titleTemplate: msg }, xpAwarded: 0 })}
             onError={(msg) => showSubmitSuccess({ confirm: { ...DEFAULT_CONFIRM, titleTemplate: msg }, xpAwarded: 0 })}
           />

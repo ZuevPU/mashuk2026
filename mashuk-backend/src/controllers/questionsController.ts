@@ -982,6 +982,81 @@ export const listExchange = async (req: ParticipantRequest, res: Response): Prom
   }
 };
 
+export const getExchangeQuestion = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const me = req.participant!;
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      res.status(400).json({ error: 'Некорректный id вопроса' });
+      return;
+    }
+
+    const { getExchangeLimitsForParticipant } = await import('../services/exchangeLimits.js');
+
+    const [row] = await db.select({
+      q: exchangeQuestions,
+      author: participants,
+      category: exchangeCategories,
+    }).from(exchangeQuestions)
+      .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
+      .leftJoin(exchangeCategories, eq(exchangeQuestions.categoryId, exchangeCategories.id))
+      .where(eq(exchangeQuestions.id, id))
+      .limit(1);
+
+    if (!row) {
+      res.status(404).json({ error: 'Вопрос не найден' });
+      return;
+    }
+
+    if (!participantCanViewExchangeQuestion(row.q, me, row.author?.direction ?? null)) {
+      res.status(403).json({ error: 'Этот вопрос недоступен' });
+      return;
+    }
+
+    const answerRows = await db.select({
+      a: exchangeAnswers,
+      author: participants,
+    }).from(exchangeAnswers)
+      .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
+      .where(eq(exchangeAnswers.questionId, id))
+      .orderBy(asc(exchangeAnswers.createdAt), asc(exchangeAnswers.id));
+
+    const mapped = answerRows.map(ar => ({
+      id: ar.a.id,
+      participantId: ar.a.participantId,
+      text: ar.a.text,
+      parentAnswerId: ar.a.parentAnswerId,
+      authorName: `${ar.author?.firstName ?? ''} ${ar.author?.lastName ?? ''}`.trim(),
+      reactions: ar.a.reactions,
+      createdAt: ar.a.createdAt,
+    }));
+
+    const limits = await getExchangeLimitsForParticipant(me.id);
+
+    res.json({
+      limits,
+      minAnswerLen: env.EXCHANGE_MIN_ANSWER_LEN,
+      question: {
+        ...row.q,
+        authorName: `${row.author?.firstName ?? ''} ${row.author?.lastName ?? ''}`.trim(),
+        direction: row.author?.direction,
+        isMine: row.q.participantId === me.id,
+        answerCount: mapped.filter(a => !a.parentAnswerId).length,
+        answers: mapped,
+        category: row.category ? {
+          id: row.category.id,
+          slug: row.category.slug,
+          title: row.category.title,
+          emoji: row.category.emoji,
+        } : null,
+      },
+    });
+  } catch (error) {
+    console.error('getExchangeQuestion:', error);
+    res.status(500).json({ error: 'Не удалось загрузить вопрос' });
+  }
+};
+
 export const createExchangeQuestion = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const { text, audience, categoryId: rawCategoryId } = req.body;

@@ -13,7 +13,7 @@ import {
 import { listTasks, submitTask, scanTask, resolveTaskQr, teamConfirmSubmission, searchTeammates } from '../controllers/tasksController.js';
 import {
   listForumQuestions, getQuestion, submitAnswer,
-  listExchange, createExchangeQuestion, answerExchange, reactExchangeAnswer, reactExchangeQuestion,
+  listExchange, getExchangeQuestion, createExchangeQuestion, answerExchange, reactExchangeAnswer, reactExchangeQuestion,
 } from '../controllers/questionsController.js';
 import { listActiveExchangeCategories } from '../controllers/exchangeCategoryController.js';
 import {
@@ -74,6 +74,7 @@ router.post('/questions/:id/answer', vkAuthMiddleware, requireParticipant, submi
 
 router.get('/exchange/categories', vkAuthMiddleware, requireParticipant, listActiveExchangeCategories);
 router.get('/exchange', vkAuthMiddleware, requireParticipant, listExchange);
+router.get('/exchange/:id', vkAuthMiddleware, requireParticipant, getExchangeQuestion);
 router.post('/exchange', vkAuthMiddleware, requireParticipant, createExchangeQuestion);
 router.post('/exchange/:id/answer', vkAuthMiddleware, requireParticipant, answerExchange);
 router.post('/exchange/:id/react', vkAuthMiddleware, requireParticipant, reactExchangeQuestion);
