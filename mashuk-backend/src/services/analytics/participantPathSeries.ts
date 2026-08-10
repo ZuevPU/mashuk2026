@@ -24,7 +24,7 @@ export type PathAnswerInput = {
 };
 
 export type PathStep = {
-  key: PathPhase;
+  key: string;
   label: string;
   responses: number;
   uniqueParticipants: number;
@@ -48,7 +48,7 @@ export type ParticipantPathPayload = {
     dayCount: number;
     eveningCount: number;
   }[];
-  energySeries: { step: PathPhase; label: string; avg: number | null; median: number | null; n: number }[];
+  energySeries: { step: string; label: string; avg: number | null; median: number | null; n: number }[];
   dayFilter: number | null;
   note: string;
 };
@@ -189,6 +189,161 @@ export function buildParticipantPathSeries(
     energySeries,
     dayFilter,
     note: 'Эмоция и энергия собираются в проверках состояния утро / день / вечер. Дневной шаг — после дневной программы.',
+  };
+}
+
+function buildStepFromAnswers(key: string, label: string, list: PathAnswerInput[]): PathStep {
+  if (!list.length) {
+    return {
+      key,
+      label,
+      responses: 0,
+      uniqueParticipants: 0,
+      energy: { avg: null, median: null, min: null, max: null, count: 0 },
+      modeEmotion: null,
+      modeZone: null,
+      emotions: buildEmotionDistribution(new Map(), 0),
+      zonesPercent: zonesToPercent(emptyZoneDistribution()),
+      riskFatiguePct: null,
+    };
+  }
+
+  const pids = new Set(list.map(a => a.participantId));
+  const energyVals = list
+    .map(a => a.energy)
+    .filter((v): v is number => v != null && Number.isFinite(v) && v >= 1 && v <= 10);
+
+  const emotionCounts = new Map<string, number>();
+  const zones = emptyZoneDistribution();
+  for (const a of list) {
+    const emo = (a.emotion || '').trim().toLowerCase();
+    if (emo) emotionCounts.set(emo, (emotionCounts.get(emo) || 0) + 1);
+    const zone = (a.emotionZone as EmotionZoneKey | null | undefined)
+      ?? emotionIdToZone(a.emotion);
+    if (zone && zone in zones) zones[zone] += 1;
+  }
+
+  const emotions = buildEmotionDistribution(emotionCounts, list.length);
+  const zonesPercent = zonesToPercent(zones);
+  const modeEmotionRow = [...emotions].sort((a, b) => b.count - a.count)[0];
+  const modeEmotion = modeEmotionRow && modeEmotionRow.count > 0
+    ? modeEmotionRow.label
+    : null;
+
+  let bestZone: EmotionZoneKey | null = null;
+  let bestZonePct = -1;
+  for (const [zk, pct] of Object.entries(zonesPercent) as [EmotionZoneKey, number][]) {
+    if (pct > bestZonePct) {
+      bestZonePct = pct;
+      bestZone = zk;
+    }
+  }
+
+  const riskFatiguePct = list.length
+    ? Math.round(((zones.risk + zones.fatigue) / list.length) * 1000) / 10
+    : null;
+
+  return {
+    key,
+    label,
+    responses: list.length,
+    uniqueParticipants: pids.size,
+    energy: numericSummary(energyVals),
+    modeEmotion,
+    modeZone: bestZone ? (EMOTION_ZONE_LABELS[bestZone] ?? bestZone) : null,
+    emotions,
+    zonesPercent,
+    riskFatiguePct,
+  };
+}
+
+/**
+ * Путь когорты по всей смене: Д1·Утро → Д1·День → Д1·Вечер → Д2·Утро → …
+ */
+export function buildParticipantPathAcrossDays(
+  answers: PathAnswerInput[],
+  opts?: { maxDay?: number },
+): ParticipantPathPayload {
+  const maxDay = Math.min(Math.max(opts?.maxDay ?? 8, 1), 8);
+  const days = Array.from({ length: maxDay }, (_, i) => i + 1);
+  const buckets = new Map<string, PathAnswerInput[]>();
+
+  for (const a of answers) {
+    if (a.day == null || a.day < 1 || a.day > maxDay) continue;
+    const phase = resolvePathPhase(a);
+    const key = `${a.day}::${phase}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key)!.push(a);
+  }
+
+  const steps: PathStep[] = [];
+  for (const day of days) {
+    for (const phase of PHASE_ORDER) {
+      const key = `d${day}_${phase}`;
+      const label = `День ${day} · ${PHASE_LABELS[phase]}`;
+      steps.push(buildStepFromAnswers(key, label, buckets.get(`${day}::${phase}`) || []));
+    }
+  }
+
+  const emotionSeries = CHECKIN_EMOTION_IDS.map(id => {
+    const row = {
+      emotion: id,
+      label: CHECKIN_EMOTION_LABELS[id] ?? emotionIdToLabel(id),
+      morningPct: 0,
+      dayPct: 0,
+      eveningPct: 0,
+      morningCount: 0,
+      dayCount: 0,
+      eveningCount: 0,
+    };
+    // Aggregate all days into phase totals for the compact series (charts use timeline).
+    let morningN = 0;
+    let dayN = 0;
+    let eveningN = 0;
+    let morningCount = 0;
+    let dayCount = 0;
+    let eveningCount = 0;
+    for (const day of days) {
+      for (const phase of PHASE_ORDER) {
+        const step = steps.find(s => s.key === `d${day}_${phase}`);
+        const hit = step?.emotions.find(e => e.id === id);
+        const total = step?.responses ?? 0;
+        const count = hit?.count ?? 0;
+        if (phase === 'morning') {
+          morningN += total;
+          morningCount += count;
+        } else if (phase === 'day') {
+          dayN += total;
+          dayCount += count;
+        } else {
+          eveningN += total;
+          eveningCount += count;
+        }
+      }
+    }
+    row.morningCount = morningCount;
+    row.dayCount = dayCount;
+    row.eveningCount = eveningCount;
+    row.morningPct = morningN ? Math.round((morningCount / morningN) * 1000) / 10 : 0;
+    row.dayPct = dayN ? Math.round((dayCount / dayN) * 1000) / 10 : 0;
+    row.eveningPct = eveningN ? Math.round((eveningCount / eveningN) * 1000) / 10 : 0;
+    return row;
+  });
+
+  const energySeries = steps.map(s => ({
+    step: s.key,
+    label: s.label,
+    avg: s.energy.avg,
+    median: s.energy.median,
+    n: s.energy.count,
+  }));
+
+  return {
+    steps,
+    emotionSeries,
+    energySeries,
+    dayFilter: null,
+    note: 'Путь по всей смене: День N · Утро → День → Вечер, затем следующий день. Эмоция и энергия — из проверок состояния.',
   };
 }
 

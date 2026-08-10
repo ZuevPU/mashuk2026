@@ -486,7 +486,11 @@ export function ParticipantProfileView({ data }: { data: any }) {
           />
         </DashGrid>
 
-        <ParticipantPathPanel data={feeling.path} />
+        <ParticipantPathPanel
+          data={feeling.pathShift ?? feeling.path}
+          emotionDynamics={feeling.emotionDynamics}
+          energyDynamics={feeling.energyDynamics}
+        />
 
         <div style={{ marginTop: 16 }} className="adm-chart-frame">
           <div className="adm-dash-card-title">

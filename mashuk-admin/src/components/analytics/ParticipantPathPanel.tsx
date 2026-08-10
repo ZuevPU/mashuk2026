@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { ChartTooltipRu, EMOTION_ORDER } from './chartRu';
+import { ChartTooltipRu, EMOTION_COLORS, EMOTION_ORDER, formatForumDay } from './chartRu';
 import { OrientableBarChart } from './orientableBars';
 
 type PathStep = {
@@ -28,26 +28,40 @@ type EmotionSeriesRow = {
   eveningCount: number;
 };
 
+type DayPhasePoint = {
+  day: number;
+  morningPct: number | null;
+  dayPct: number | null;
+  eveningPct: number | null;
+  morningCount: number;
+  dayCount: number;
+  eveningCount: number;
+};
+
+type EmotionDynamics = {
+  days?: number[];
+  emotions?: { id: string; label: string; byDay: DayPhasePoint[] }[];
+};
+
+type EnergyDynamics = {
+  days?: number[];
+  byDay?: {
+    day: number;
+    morningAvg: number | null;
+    dayAvg: number | null;
+    eveningAvg: number | null;
+    morningCount: number;
+    dayCount: number;
+    eveningCount: number;
+  }[];
+};
+
 type PathData = {
   steps?: PathStep[];
   emotionSeries?: EmotionSeriesRow[];
   energySeries?: { step: string; label: string; avg: number | null; median: number | null; n: number }[];
   note?: string;
   dayFilter?: number | null;
-};
-
-const EMOTION_LINE_COLORS: Record<string, string> = {
-  joy: '#38A169',
-  calm: '#718096',
-  interest: '#3182CE',
-  inspiration: '#805AD5',
-  confidence: '#2B6CB0',
-  tired: '#DD6B20',
-  anxiety: '#E53E3E',
-  irritation: '#C53030',
-  sadness: '#9B2C2C',
-  surprise: '#D69E2E',
-  focus: '#2C7A7B',
 };
 
 function MethodHint({ text }: { text: string }) {
@@ -67,22 +81,98 @@ function MethodHint({ text }: { text: string }) {
   );
 }
 
-export function ParticipantPathPanel({ data }: { data: PathData | null | undefined }) {
-  const [mode, setMode] = useState<'table' | 'chart'>('table');
+function emotionColor(id: string): string {
+  return EMOTION_COLORS[id] ?? '#64748b';
+}
+
+export function ParticipantPathPanel({
+  data,
+  emotionDynamics,
+  energyDynamics,
+}: {
+  data: PathData | null | undefined;
+  emotionDynamics?: EmotionDynamics | null;
+  energyDynamics?: EnergyDynamics | null;
+}) {
+  const [mode, setMode] = useState<'table' | 'chart'>('chart');
   const [emotionsOpen, setEmotionsOpen] = useState(false);
 
   const steps = data?.steps ?? [];
   const emotionSeries = data?.emotionSeries ?? [];
-  const hasAny = steps.some(s => s.responses > 0);
+  const hasAny = steps.some(s => s.responses > 0)
+    || (energyDynamics?.byDay ?? []).some(d => d.morningCount + d.dayCount + d.eveningCount > 0);
 
-  const energyChart = useMemo(() => (
-    (data?.energySeries ?? steps).map(s => ({
+  /** Energy: prefer multi-day dynamics, else path energySeries/steps */
+  const energyTimeline = useMemo(() => {
+    const byDay = energyDynamics?.byDay ?? [];
+    if (byDay.length) {
+      const rows: { label: string; avg: number | null; median: number | null; n: number }[] = [];
+      for (const d of byDay) {
+        rows.push(
+          { label: `${formatForumDay(d.day)} · Утро`, avg: d.morningAvg, median: null, n: d.morningCount },
+          { label: `${formatForumDay(d.day)} · День`, avg: d.dayAvg, median: null, n: d.dayCount },
+          { label: `${formatForumDay(d.day)} · Вечер`, avg: d.eveningAvg, median: null, n: d.eveningCount },
+        );
+      }
+      return rows;
+    }
+    return (data?.energySeries ?? steps).map(s => ({
       label: 'label' in s ? s.label : (s as PathStep).label,
-      avg: 'avg' in s ? s.avg : (s as PathStep).energy?.avg,
-      median: 'median' in s ? s.median : (s as PathStep).energy?.median,
-      n: 'n' in s ? s.n : (s as PathStep).energy?.count,
-    }))
-  ), [data?.energySeries, steps]);
+      avg: 'avg' in s ? (s.avg as number | null) : (s as PathStep).energy?.avg,
+      median: 'median' in s ? (s.median as number | null) : (s as PathStep).energy?.median,
+      n: 'n' in s ? (s.n as number) : (s as PathStep).energy?.count ?? 0,
+    }));
+  }, [energyDynamics, data?.energySeries, steps]);
+
+  /** Emotions continuous path across all days × phases */
+  const emotionTimeline = useMemo(() => {
+    const days = emotionDynamics?.days?.length
+      ? emotionDynamics.days
+      : (energyDynamics?.days?.length
+        ? energyDynamics.days
+        : Array.from({ length: 8 }, (_, i) => i + 1));
+    const emos = emotionDynamics?.emotions?.length
+      ? emotionDynamics.emotions
+      : EMOTION_ORDER.map(id => ({
+        id,
+        label: emotionSeries.find(e => e.emotion === id)?.label ?? id,
+        byDay: [] as DayPhasePoint[],
+      }));
+
+    if (emotionDynamics?.emotions?.length) {
+      const rows: Record<string, string | number | null>[] = [];
+      for (const day of days) {
+        for (const phase of [
+          { label: 'Утро', pct: (d: DayPhasePoint) => d.morningPct },
+          { label: 'День', pct: (d: DayPhasePoint) => d.dayPct },
+          { label: 'Вечер', pct: (d: DayPhasePoint) => d.eveningPct },
+        ]) {
+          const row: Record<string, string | number | null> = {
+            label: `${formatForumDay(day)} · ${phase.label}`,
+          };
+          for (const emo of emos) {
+            const hit = emo.byDay.find(d => d.day === day);
+            row[emo.id] = hit ? phase.pct(hit) : null;
+          }
+          rows.push(row);
+        }
+      }
+      return { rows, emotions: emos.map(e => ({ id: e.id, label: e.label })) };
+    }
+
+    // Fallback: only 3 phase points from compact emotionSeries
+    const labels = ['Утро', 'День', 'Вечер'] as const;
+    const keys = ['morningPct', 'dayPct', 'eveningPct'] as const;
+    const rows = labels.map((label, i) => {
+      const row: Record<string, string | number | null> = { label };
+      for (const e of emotionSeries) row[e.emotion] = e[keys[i]];
+      return row;
+    });
+    return {
+      rows,
+      emotions: emotionSeries.map(e => ({ id: e.emotion, label: e.label })),
+    };
+  }, [emotionDynamics, energyDynamics?.days, emotionSeries]);
 
   const emotionBarRows = useMemo(() => (
     emotionSeries.map(e => ({
@@ -92,18 +182,6 @@ export function ParticipantPathPanel({ data }: { data: PathData | null | undefin
       evening: e.eveningPct,
     }))
   ), [emotionSeries]);
-
-  const emotionLineRows = useMemo(() => {
-    const labels = ['Утро', 'День', 'Вечер'] as const;
-    const keys = ['morningPct', 'dayPct', 'eveningPct'] as const;
-    return labels.map((label, i) => {
-      const row: Record<string, string | number> = { label };
-      for (const e of emotionSeries) {
-        row[e.emotion] = e[keys[i]];
-      }
-      return row;
-    });
-  }, [emotionSeries]);
 
   if (!hasAny) {
     return (
@@ -116,17 +194,21 @@ export function ParticipantPathPanel({ data }: { data: PathData | null | undefin
     );
   }
 
+  const isShiftPath = steps.length > 3 || (energyDynamics?.byDay?.length ?? 0) > 0;
+
   return (
     <div className="adm-dash-card" style={{ marginTop: 16 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <div className="adm-dash-card-title" style={{ margin: 0 }}>
             Путь участника
-            <MethodHint text={data?.note ?? 'Средние эмоция и энергия по проверкам состояния утро → день → вечер.'} />
+            <MethodHint text={data?.note ?? 'Средние эмоция и энергия по проверкам состояния утро → день → вечер за всю смену.'} />
           </div>
           <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
-            Утро → день → вечер · эмоция и энергия только из проверок состояния
-            {data?.dayFilter != null ? ` · D${data.dayFilter}` : ''}
+            {isShiftPath
+              ? 'Вся смена: День N · Утро → День → Вечер, затем следующий день'
+              : 'Утро → день → вечер · эмоция и энергия только из проверок состояния'}
+            {data?.dayFilter != null && !isShiftPath ? ` · D${data.dayFilter}` : ''}
           </p>
         </div>
         <button
@@ -134,7 +216,7 @@ export function ParticipantPathPanel({ data }: { data: PathData | null | undefin
           className="adm-btn adm-btn-secondary adm-btn-sm"
           onClick={() => setMode(m => (m === 'table' ? 'chart' : 'table'))}
         >
-          {mode === 'table' ? 'Показать график' : 'Показать таблицу'}
+          {mode === 'table' ? 'Показать графики' : 'Показать таблицу'}
         </button>
       </div>
 
@@ -177,7 +259,7 @@ export function ParticipantPathPanel({ data }: { data: PathData | null | undefin
             style={{ marginTop: 10 }}
             onClick={() => setEmotionsOpen(o => !o)}
           >
-            {emotionsOpen ? 'Скрыть эмоции по шагам' : 'Эмоции × шаги (11)'}
+            {emotionsOpen ? 'Скрыть эмоции по шагам' : 'Эмоции × фазы (сводка)'}
           </button>
 
           {emotionsOpen ? (
@@ -214,51 +296,58 @@ export function ParticipantPathPanel({ data }: { data: PathData | null | undefin
       ) : (
         <div style={{ marginTop: 14 }} className="adm-dash-stack">
           <div className="adm-chart-frame">
-            <div className="adm-dash-card-title">Средняя энергия по пути</div>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={energyChart} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+            <div className="adm-dash-card-title">Средняя энергия по пути · вся смена</div>
+            <p className="adm-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
+              День 1 · Утро → День → Вечер → День 2 · Утро → …
+            </p>
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={energyTimeline} margin={{ top: 8, right: 12, left: 0, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e5ea" />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#86868b' }} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 9, fill: '#86868b' }}
+                  interval={0}
+                  angle={-35}
+                  textAnchor="end"
+                  height={60}
+                />
                 <YAxis domain={[0, 10]} tick={{ fontSize: 11, fill: '#86868b' }} width={32} />
                 <Tooltip content={<ChartTooltipRu />} />
-                <Line type="monotone" dataKey="avg" name="Средняя энергия" stroke="#1F3A5F" strokeWidth={2} dot={{ r: 4 }} connectNulls />
-                <Line type="monotone" dataKey="median" name="Медиана" stroke="#86868b" strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 3 }} connectNulls />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="avg" name="Средняя энергия" stroke="#1F3A5F" strokeWidth={2} dot={{ r: 2.5 }} connectNulls />
+                {energyTimeline.some(r => r.median != null) ? (
+                  <Line type="monotone" dataKey="median" name="Медиана" stroke="#86868b" strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 2 }} connectNulls />
+                ) : null}
               </LineChart>
             </ResponsiveContainer>
           </div>
 
-          <div>
-            <div className="adm-dash-card-title">Доля каждой эмоции по шагам (%)</div>
-            <OrientableBarChart
-              data={emotionBarRows}
-              categoryKey="name"
-              series={[
-                { dataKey: 'morning', name: 'Утро', fill: '#94a3b8' },
-                { dataKey: 'day', name: 'День', fill: '#1F3A5F' },
-                { dataKey: 'evening', name: 'Вечер', fill: '#475569' },
-              ]}
-              height={Math.max(260, emotionBarRows.length * 32)}
-              yAxisWidth={120}
-              showLegend
-            />
-          </div>
-
           <div className="adm-chart-frame">
-            <div className="adm-dash-card-title">Динамика эмоций утро → день → вечер</div>
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={emotionLineRows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+            <div className="adm-dash-card-title">Динамика эмоций · утро / день / вечер за все дни (%)</div>
+            <p className="adm-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
+              Непрерывный путь смены: доля каждой эмоции в фазе
+            </p>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={emotionTimeline.rows} margin={{ top: 8, right: 12, left: 0, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e5ea" />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#86868b' }} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 9, fill: '#86868b' }}
+                  interval={0}
+                  angle={-35}
+                  textAnchor="end"
+                  height={60}
+                />
                 <YAxis domain={[0, 'auto']} tick={{ fontSize: 11, fill: '#86868b' }} width={36} unit="%" />
                 <Tooltip content={<ChartTooltipRu />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                {EMOTION_ORDER.map(id => (
+                {emotionTimeline.emotions.map(e => (
                   <Line
-                    key={id}
+                    key={e.id}
                     type="monotone"
-                    dataKey={id}
-                    name={emotionSeries.find(e => e.emotion === id)?.label ?? id}
-                    stroke={EMOTION_LINE_COLORS[id] ?? '#64748b'}
+                    dataKey={e.id}
+                    name={e.label}
+                    stroke={emotionColor(e.id)}
                     strokeWidth={1.5}
                     dot={{ r: 2 }}
                     connectNulls
@@ -266,6 +355,22 @@ export function ParticipantPathPanel({ data }: { data: PathData | null | undefin
                 ))}
               </LineChart>
             </ResponsiveContainer>
+          </div>
+
+          <div>
+            <div className="adm-dash-card-title">Доля каждой эмоции по фазам · сводка за смену (%)</div>
+            <OrientableBarChart
+              data={emotionBarRows}
+              categoryKey="name"
+              series={[
+                { dataKey: 'morning', name: 'Утро', fill: '#94a3b8' },
+                { dataKey: 'day', name: 'День', fill: '#1F3A5F' },
+                { dataKey: 'evening', name: 'Вечер', fill: '#0A7B6F' },
+              ]}
+              height={Math.max(260, emotionBarRows.length * 32)}
+              yAxisWidth={120}
+              showLegend
+            />
           </div>
         </div>
       )}

@@ -14,6 +14,7 @@ import {
 import {
   buildEmotionDayPhaseDynamics,
   buildEnergyDayPhaseDynamics,
+  buildParticipantPathAcrossDays,
   buildParticipantPathSeries,
   resolvePathPhase,
 } from '../services/analytics/participantPathSeries.js';
@@ -302,5 +303,22 @@ describe('energyDayPhaseDynamics', () => {
     assert.equal(d1.eveningAvg, null);
     assert.equal(d2.eveningAvg, 9);
     assert.equal(d2.eveningCount, 1);
+  });
+});
+
+describe('participantPathAcrossDays', () => {
+  it('builds morning/day/evening steps for every day', () => {
+    const path = buildParticipantPathAcrossDays([
+      { participantId: 1, energy: 8, emotion: 'calm', timePoint: 'утро', day: 1 },
+      { participantId: 2, energy: 6, emotion: 'joy', timePoint: 'день', day: 1 },
+      { participantId: 3, energy: 7, emotion: 'calm', timePoint: 'вечер', day: 2 },
+    ], { maxDay: 2 });
+    assert.equal(path.steps.length, 6);
+    assert.equal(path.steps[0].label, 'День 1 · Утро');
+    assert.equal(path.steps[0].energy.avg, 8);
+    assert.equal(path.steps[1].label, 'День 1 · День');
+    assert.equal(path.steps[5].label, 'День 2 · Вечер');
+    assert.equal(path.steps[5].responses, 1);
+    assert.equal(path.energySeries.length, 6);
   });
 });

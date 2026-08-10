@@ -37,6 +37,7 @@ import {
 import {
   buildEmotionDayPhaseDynamics,
   buildEnergyDayPhaseDynamics,
+  buildParticipantPathAcrossDays,
   buildParticipantPathSeries,
   type PathAnswerInput,
 } from './participantPathSeries.js';
@@ -543,8 +544,9 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       day: r.day ?? null,
     }));
   const dayFilterForPath = filters.mode === 'day' && filters.day != null ? filters.day : null;
-  // Intra-day comparison stays on the selected day; continuous path uses the whole shift.
+  // Intra-day comparison stays on the selected day; path panel / dynamics use the whole shift.
   const participantPath = buildParticipantPathSeries(pathAnswers, { dayFilter: dayFilterForPath });
+  const participantPathShift = buildParticipantPathAcrossDays(shiftPathAnswers, { maxDay: totalDays });
   const emotionDynamics = buildEmotionDayPhaseDynamics(shiftPathAnswers, { maxDay: totalDays });
   emotionDynamics.note = 'Доля эмоции по фазам утро / день / вечер за все дни смены (не зависит от фильтра «день»).';
   const energyDynamics = buildEnergyDayPhaseDynamics(shiftPathAnswers, { maxDay: totalDays });
@@ -908,6 +910,7 @@ export async function buildParticipantProfileDashboard(filters: AnalyticsFilters
       topReasons: pulseFeeling.topReasons ?? [],
       coveragePct: stateFillPct,
       path: participantPath,
+      pathShift: participantPathShift,
       emotionDynamics,
       energyDynamics,
     },
