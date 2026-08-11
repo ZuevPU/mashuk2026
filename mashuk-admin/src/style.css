@@ -2800,3 +2800,185 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   .adm-stats-nav { grid-template-columns: 1fr; }
   .adm-stats-tool { grid-template-columns: 1fr; }
 }
+
+/* Направление — сводный портрет */
+.adm-dir-picker {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0 16px;
+}
+.adm-dir-chip {
+  padding: 7px 14px;
+  border: 1px solid var(--m-border);
+  border-radius: 20px;
+  background: var(--m-surface);
+  color: var(--m-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  font: inherit;
+}
+.adm-dir-chip:hover { color: var(--m-text); border-color: rgba(0,0,0,.18); }
+.adm-dir-chip.is-on {
+  background: var(--m-text);
+  color: #fff;
+  border-color: var(--m-text);
+  font-weight: 600;
+}
+.adm-dir-chip-c {
+  opacity: .65;
+  font-size: 11.5px;
+  margin-left: 6px;
+}
+.adm-dir-prof {
+  display: grid;
+  grid-template-columns: 210px 1fr 78px;
+  gap: 12px;
+  align-items: center;
+  margin: 9px 0;
+}
+.adm-dir-prof-nm {
+  font-size: 13.5px;
+  text-align: right;
+}
+.adm-dir-pbar {
+  position: relative;
+  height: 22px;
+  background: var(--m-bg);
+  border-radius: 4px;
+}
+.adm-dir-pbar-z {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: 50%;
+  width: 1px;
+  background: var(--m-text);
+  opacity: .35;
+}
+.adm-dir-pbar-f {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 3px;
+}
+.adm-dir-prof-vl {
+  font-size: 13px;
+  text-align: right;
+}
+.adm-dir-prof-vl b { font-weight: 600; }
+.adm-dir-prof-vl span {
+  color: var(--m-text-secondary);
+  font-size: 11px;
+  display: block;
+}
+.adm-dir-block-forum {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: #6f7d95;
+  transform: translateX(-50%);
+}
+.adm-dir-block-dot {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+.adm-dir-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.adm-dir-grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.adm-dir-ph {
+  background: var(--m-bg);
+  border-radius: 10px;
+  padding: 14px;
+}
+.adm-dir-ph h3 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.adm-dir-ph-meta {
+  color: var(--m-text-secondary);
+  font-size: 11.5px;
+  margin-bottom: 12px;
+}
+.adm-dir-col {
+  display: flex;
+  flex-direction: column-reverse;
+  height: 150px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.adm-dir-col div {
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #1d1d1f;
+}
+.adm-dir-mini-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.adm-dir-mini-kpis > div {
+  background: var(--m-bg);
+  border-radius: 9px;
+  padding: 12px;
+}
+.adm-dir-mini-kpis .v {
+  font-size: 22px;
+  font-weight: 650;
+}
+.adm-dir-mini-kpis .l {
+  font-size: 12px;
+  color: var(--m-text-secondary);
+  margin-top: 4px;
+}
+.adm-dir-tl {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 7px;
+}
+.adm-dir-tlc {
+  background: var(--m-bg);
+  border-radius: 9px;
+  padding: 11px 9px;
+  min-height: 104px;
+  border: 1px solid transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: default;
+}
+button.adm-dir-tlc { cursor: pointer; }
+.adm-dir-tlc.has { border-color: rgba(230, 174, 74, 0.35); }
+.adm-dir-tlc.is-on { border-color: #e6ae4a; }
+.adm-dir-tlc .d { font-size: 11px; color: var(--m-text-secondary); }
+.adm-dir-tlc .k { font-size: 17px; font-weight: 650; margin-top: 6px; }
+.adm-dir-tlc .s { font-size: 10.5px; color: var(--m-text-secondary); margin-top: 2px; line-height: 1.3; }
+.adm-dir-cell {
+  display: block;
+  text-align: center;
+  border-radius: 5px;
+  padding: 5px 0;
+  font-size: 12.5px;
+}
+tr.adm-dir-me td { background: rgba(230, 174, 74, 0.09); }
+@media (max-width: 900px) {
+  .adm-dir-grid2,
+  .adm-dir-grid3 { grid-template-columns: 1fr; }
+  .adm-dir-prof { grid-template-columns: 130px 1fr 64px; }
+  .adm-dir-tl { grid-template-columns: repeat(4, 1fr); }
+}

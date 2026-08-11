@@ -12,6 +12,7 @@ import { buildParticipantDayFeed } from '../services/analytics/participantDayFee
 import { buildActivityHubDashboard } from '../services/analytics/activityHubDashboard.js';
 import { buildAfterBlocksHubDashboard } from '../services/analytics/afterBlocksHubDashboard.js';
 import { buildDayStatsHubDashboard } from '../services/analytics/dayStatsHubDashboard.js';
+import { buildDirectionHubDashboard } from '../services/analytics/directionHubDashboard.js';
 import { buildExchangeHubDashboard } from '../services/analytics/exchangeHubDashboard.js';
 import { buildPiggybankHubDashboard } from '../services/analytics/piggybankHubDashboard.js';
 import { buildStateDashboard } from '../services/analytics/stateDashboard.js';
@@ -59,6 +60,11 @@ export async function getHubExchangeHandler(req: AdminRequest, res: Response): P
 export async function getHubStatsHandler(req: AdminRequest, res: Response): Promise<void> {
   const filters = await resolveAnalyticsFilters(req);
   res.json(await buildDayStatsHubDashboard(filters, req));
+}
+
+export async function getHubDirectionHandler(req: AdminRequest, res: Response): Promise<void> {
+  const filters = await resolveAnalyticsFilters(req);
+  res.json(await buildDirectionHubDashboard(filters, req));
 }
 
 export async function getHubGroupsHandler(req: AdminRequest, res: Response): Promise<void> {

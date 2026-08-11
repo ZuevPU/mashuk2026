@@ -197,6 +197,21 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     assert.equal(res.body.daySeries.length, 8);
   });
 
+  it('GET /api/admin/analytics/hub/direction with token', async () => {
+    const token = await getAdminBearerToken(app);
+    const res = await request(app)
+      .get('/api/admin/analytics/hub/direction?mode=day&day=3')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(res.status, 200);
+    assert.ok(res.body.meta);
+    assert.ok(Array.isArray(res.body.dirs));
+    assert.ok(Array.isArray(res.body.profile));
+    assert.ok(Array.isArray(res.body.kpis));
+    assert.ok(res.body.matrix);
+    assert.ok(Array.isArray(res.body.daySeries));
+    assert.equal(res.body.daySeries.length, 8);
+  });
+
   it('GET /api/admin/tasks with token', async () => {
     const token = await getAdminBearerToken(app);
     const res = await request(app)

@@ -293,6 +293,7 @@ router.get('/analytics/hub/piggybank', P('analytics', 'read'), wrap(hubCtrl.getH
 router.get('/analytics/hub/after-blocks', P('analytics', 'read'), wrap(hubCtrl.getHubAfterBlocksHandler));
 router.get('/analytics/hub/exchange', P('analytics', 'read'), wrap(hubCtrl.getHubExchangeHandler));
 router.get('/analytics/hub/stats', P('analytics', 'read'), wrap(hubCtrl.getHubStatsHandler));
+router.get('/analytics/hub/direction', P('analytics', 'read'), wrap(hubCtrl.getHubDirectionHandler));
 router.get('/analytics/hub/groups', P('analytics', 'read'), wrap(hubCtrl.getHubGroupsHandler));
 router.get('/analytics/hub/piggybank-matrix', P('analytics', 'read'), wrap(hubCtrl.getHubPiggybankMatrixHandler));
 router.get('/analytics/hub/participant-feed', P('analytics', 'read'), wrap(hubCtrl.getHubParticipantFeedHandler));
