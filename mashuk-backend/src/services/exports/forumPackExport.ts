@@ -17,6 +17,19 @@ import {
   emotionIdToZone,
   emotionZoneToLabel,
 } from '../emotionZones.js';
+
+const PHASE_RU: Record<string, string> = {
+  morning: 'Утро',
+  day: 'День',
+  evening: 'Вечер',
+  night: 'Ночь',
+};
+
+function phaseRu(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const key = raw.trim().toLowerCase();
+  return PHASE_RU[key] || raw;
+}
 import {
   isTouchpointQuestionForForumDay,
   touchpointCompletionRatio,
@@ -97,7 +110,7 @@ async function addKindSheet(
     for (const r of rows) {
       ws.addRow([
         r.answerId, r.participantId, r.name, r.direction, r.group, r.day,
-        r.questionId, r.questionTitle, r.timePoint ?? '',
+        r.questionId, r.questionTitle, phaseRu(r.timePoint),
         emotionIdToLabel(r.emotion) || r.emotion || '',
         emotionZoneToLabel(r.emotionZone)
           || emotionZoneToLabel(emotionIdToZone(r.emotion))
@@ -130,7 +143,7 @@ async function addEveningSheets(
   const programEventFields = fields.filter(f => f.type === 'program_event');
 
   const metaHeaders = [
-    'ID участника', 'ФИО', 'Направление', 'Группа', 'День', 'Время заполнения', 'Статус',
+    'ID участника', 'ФИО', 'Направление', 'Группа', 'День форума', 'Время заполнения (МСК)', 'Статус',
   ];
   const questionHeaders: string[] = [];
   for (const f of fields) {
@@ -327,15 +340,30 @@ async function addExchangeSheet(wb: Workbook, shiftId: number | null): Promise<n
 async function addDayStatsSheet(wb: Workbook, days: number[]): Promise<void> {
   const ws = wb.addWorksheet('Статистика дней');
   ws.addRow([
-    'День', 'Точек осмысления (слоты)', 'Опубликовано вопросов',
-    'Строк ответов', 'Участников с ответами',
-    'checkin Q', 'checkin A', 'direction Q', 'direction A',
-    'evening Q', 'evening A', 'lesson_important Q', 'lesson_important A',
-    'lesson_open Q', 'lesson_open A', 'Зоны эмоций (JSON)',
+    'День форума',
+    'Точек осмысления (слоты)',
+    'Опубликовано вопросов',
+    'Строк ответов',
+    'Участников с ответами',
+    'Проверка состояния · вопросов',
+    'Проверка состояния · с ответами',
+    'Направление · вопросов',
+    'Направление · с ответами',
+    'Итоги дня · вопросов',
+    'Итоги дня · с ответами',
+    'Важный урок · вопросов',
+    'Важный урок · с ответами',
+    'Открытый урок · вопросов',
+    'Открытый урок · с ответами',
+    'Зона спокойствия',
+    'Зона напряжения',
+    'Зона риска',
+    'Зона усталости',
   ]);
   for (const day of days) {
     const s = await computeDayExportStats(day);
     const bt = s.byTouchpointType || {};
+    const zone = s.emotionZones || {};
     ws.addRow([
       s.day,
       s.touchpointQuestions,
@@ -352,7 +380,10 @@ async function addDayStatsSheet(wb: Workbook, days: number[]): Promise<void> {
       bt.lesson_important?.answers ?? 0,
       bt.lesson_open?.questions ?? 0,
       bt.lesson_open?.answers ?? 0,
-      JSON.stringify(s.emotionZones || {}),
+      zone.calm ?? 0,
+      zone.tense ?? 0,
+      zone.risk ?? 0,
+      zone.fatigue ?? 0,
     ]);
   }
 }

@@ -15,6 +15,22 @@ import {
 import { addReadmeSheet } from './exportCommon.js';
 import { createWorkbook, sendWorkbook } from './workbook.js';
 
+const PHASE_RU: Record<string, string> = {
+  morning: 'Утро',
+  day: 'День',
+  evening: 'Вечер',
+  night: 'Ночь',
+  утро: 'Утро',
+  день: 'День',
+  вечер: 'Вечер',
+};
+
+function phaseRu(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const key = raw.trim().toLowerCase();
+  return PHASE_RU[key] || raw;
+}
+
 function filtersFromReq(req: AdminRequest): Promise<AnalyticsFilters> {
   return resolveAnalyticsFilters(req);
 }
@@ -76,7 +92,7 @@ export async function writeKindAnswersExport(
       'Подтема',
       'Путь',
       'Ответ',
-      'Время',
+      'Время (МСК)',
     ]);
     for (const r of rows) {
       const parent = (r.parentEventTitle || '').trim();
@@ -117,7 +133,7 @@ export async function writeKindAnswersExport(
       'Зона',
       'Энергия',
       'Причина',
-      'Время',
+      'Время (МСК)',
     ]);
     for (const r of rows) {
       ws.addRow([
@@ -129,7 +145,7 @@ export async function writeKindAnswersExport(
         r.day,
         r.questionId,
         r.questionTitle,
-        r.timePoint ?? '',
+        phaseRu(r.timePoint),
         emotionIdToLabel(r.emotion) || r.emotion || '',
         emotionZoneToLabel(r.emotionZone)
           || emotionZoneToLabel(emotionIdToZone(r.emotion))

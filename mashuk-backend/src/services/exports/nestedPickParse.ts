@@ -83,14 +83,29 @@ export function parseAfterBlocksPicks(data: unknown): AfterBlocksPick[] {
     };
   };
 
-  if (Array.isArray(o.reflections) && o.reflections.length > 0) {
-    const items = o.reflections.map((raw) => {
+  const nestedLists = [o.reflections, o.items, o.picks].filter(Array.isArray) as unknown[][];
+  for (const list of nestedLists) {
+    if (!list.length) continue;
+    const items = list.map((raw) => {
       if (!raw || typeof raw !== 'object') return null;
       const r = raw as Record<string, unknown>;
-      const text = typeof r.text === 'string' ? r.text.trim() : '';
+      const text = typeof r.text === 'string'
+        ? r.text.trim()
+        : (typeof r.reflection === 'string' ? r.reflection.trim() : '');
       if (!text) return null;
-      const eventTitle = typeof r.eventTitle === 'string' ? r.eventTitle : null;
-      return toItem(eventTitle, r.eventId, text);
+      const eventTitle = typeof r.eventTitle === 'string'
+        ? r.eventTitle
+        : (typeof r.title === 'string' ? r.title : null);
+      if (typeof r.parentEventTitle === 'string' && !parentEventTitle) {
+        // keep outer parent; per-item parent handled via path when present
+      }
+      const item = toItem(eventTitle, r.eventId ?? r.id, text);
+      if (typeof r.parentEventTitle === 'string') {
+        item.parentEventTitle = r.parentEventTitle;
+        item.parentEventId = asNum(r.parentEventId);
+        item.pathLabel = pathOf(item.parentEventTitle, item.eventTitle);
+      }
+      return item;
     }).filter((x): x is AfterBlocksPick => Boolean(x));
     if (items.length) return items;
   }

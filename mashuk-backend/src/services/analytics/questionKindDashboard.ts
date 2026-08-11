@@ -1,8 +1,8 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { db } from '../../db/index.js';
-import { answers, participants, questions } from '../../db/schema.js';
-import { fullName, formatTs } from '../exports/exportCommon.js';
+import { answers, directions, participants, questions } from '../../db/schema.js';
+import { fullName, formatTsMsk } from '../exports/exportCommon.js';
 import { isPublishedStatus } from '../publishStatus.js';
 import { reflectionKindFromQuestion } from '../reflectionTypeLabel.js';
 import {
@@ -141,6 +141,24 @@ function buildDistribution(
     }));
 }
 
+function questionDays(q: { dayNumber?: number | null; dayNumbers?: number[] | null }): number[] {
+  const out: number[] = [];
+  if (q.dayNumber != null && q.dayNumber >= 1) out.push(q.dayNumber);
+  if (Array.isArray(q.dayNumbers)) {
+    for (const d of q.dayNumbers) {
+      if (typeof d === 'number' && d >= 1 && !out.includes(d)) out.push(d);
+    }
+  }
+  return out;
+}
+
+function questionOnDays(q: { dayNumber?: number | null; dayNumbers?: number[] | null }, days: number[]): boolean {
+  if (!days.length) return true;
+  const qd = questionDays(q);
+  if (!qd.length) return false;
+  return days.some(d => qd.includes(d));
+}
+
 export async function collectKindAnswerRows(
   mode: KindDashboardMode,
   filters: AnalyticsFilters,
@@ -154,14 +172,15 @@ export async function collectKindAnswerRows(
 
   const qConds = [];
   if (filters.shiftId != null) qConds.push(eq(questions.shiftId, filters.shiftId));
-  if (days.length === 1) qConds.push(eq(questions.dayNumber, days[0]));
-  else if (days.length > 1) qConds.push(inArray(questions.dayNumber, days));
+  // Day filter applied in JS via dayNumber + dayNumbers (SQL dayNumber alone misses multi-day questions).
 
   const allQs = qConds.length
     ? await db.select().from(questions).where(and(...qConds))
     : await db.select().from(questions);
   const kindQs = allQs.filter(q =>
-    (opts?.includeUnpublished || isPublishedStatus(q.status)) && matchesKind(q, mode),
+    (opts?.includeUnpublished || isPublishedStatus(q.status))
+    && matchesKind(q, mode)
+    && questionOnDays(q, days),
   );
   const qIds = kindQs.map(q => q.id);
   if (!qIds.length) return { rows: [], questionMeta: [] };
@@ -169,7 +188,9 @@ export async function collectKindAnswerRows(
   const pConds = [isNull(participants.selfDeletedAt), inArray(answers.questionId, qIds)];
   if (filters.shiftId != null) pConds.push(eq(participants.shiftId, filters.shiftId));
   if (filters.direction?.trim()) {
-    pConds.push(sql`LOWER(COALESCE(${participants.direction}, '')) = ${filters.direction.trim().toLowerCase()}`);
+    // Same resolution as cohort: directions.name wins over legacy participants.direction.
+    const d = filters.direction.trim().toLowerCase();
+    pConds.push(sql`LOWER(COALESCE(${directions.name}, ${participants.direction}, '')) = ${d}`);
   }
   if (filters.group?.trim()) {
     pConds.push(sql`LOWER(COALESCE(${participants.groupName}, '')) = ${filters.group.trim().toLowerCase()}`);
@@ -179,10 +200,12 @@ export async function collectKindAnswerRows(
     a: answers,
     p: participants,
     q: questions,
+    dirName: directions.name,
   })
     .from(answers)
     .innerJoin(questions, eq(answers.questionId, questions.id))
     .innerJoin(participants, eq(answers.participantId, participants.id))
+    .leftJoin(directions, eq(participants.directionId, directions.id))
     .where(and(...pConds));
 
   const qById = new Map(kindQs.map(q => [q.id, q]));
@@ -191,9 +214,9 @@ export async function collectKindAnswerRows(
   for (const r of joinRows) {
     const q = qById.get(r.q.id) ?? r.q;
     if (!matchesKind(q, mode)) continue;
-    const direction = (r.p.direction || '—').trim() || '—';
+    const direction = (r.dirName || r.p.direction || '—').trim() || '—';
     const group = r.p.groupName || '';
-    const day = q.dayNumber ?? 0;
+    const day = q.dayNumber ?? questionDays(q)[0] ?? 0;
 
     if (mode === 'after_blocks') {
       const parsedItems = parseAfterBlocksItems(r.a.answerData);
@@ -217,7 +240,7 @@ export async function collectKindAnswerRows(
           emotionZone: null,
           energy: null,
           timePoint: q.timePoint ?? null,
-          filledAt: r.a.createdAt ? formatTs(r.a.createdAt) : null,
+          filledAt: r.a.createdAt ? formatTsMsk(r.a.createdAt) : null,
           createdAt: r.a.createdAt ?? null,
         });
       }
@@ -256,7 +279,7 @@ export async function collectKindAnswerRows(
       emotionZone: zone,
       energy: Number.isFinite(energy) ? energy : null,
       timePoint: payload.timePoint || q.timePoint || null,
-      filledAt: r.a.createdAt ? formatTs(r.a.createdAt) : null,
+      filledAt: r.a.createdAt ? formatTsMsk(r.a.createdAt) : null,
       createdAt: r.a.createdAt ?? null,
     });
   }
@@ -266,7 +289,7 @@ export async function collectKindAnswerRows(
     questionMeta: kindQs.map(q => ({
       id: q.id,
       title: q.title || q.text || `Вопрос #${q.id}`,
-      dayNumber: q.dayNumber ?? null,
+      dayNumber: q.dayNumber ?? questionDays(q)[0] ?? null,
     })),
   };
 }

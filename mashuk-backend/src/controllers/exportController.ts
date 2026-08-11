@@ -65,6 +65,7 @@ export async function exportDayStatsHandler(req: AdminRequest, res: Response): P
   if (format === 'xlsx') {
     const { sendSimpleXlsx } = await import('../services/exports/workbook.js');
     const bt = stats.byTouchpointType || {};
+    const zone = stats.emotionZones || {};
     await sendSimpleXlsx(
       res,
       `day_stats_d${day}.xlsx`,
@@ -73,18 +74,25 @@ export async function exportDayStatsHandler(req: AdminRequest, res: Response): P
         'Метрика', 'Значение',
       ],
       [
-        ['День', stats.day],
+        ['День форума', stats.day],
         ['Точек осмысления (слоты)', stats.touchpointQuestions],
         ['Опубликовано вопросов', stats.publishedQuestions],
         ['Строк ответов', stats.answerRows],
         ['Участников с ответами', stats.participantsWithAnswers],
-        ['checkin: вопросов', bt.checkin?.questions ?? 0],
-        ['checkin: с ответами', bt.checkin?.answers ?? 0],
-        ['direction: вопросов', bt.direction?.questions ?? 0],
-        ['direction: с ответами', bt.direction?.answers ?? 0],
-        ['evening: вопросов', bt.evening?.questions ?? 0],
-        ['evening: с ответами', bt.evening?.answers ?? 0],
-        ['Зоны эмоций', JSON.stringify(stats.emotionZones || {})],
+        ['Проверка состояния: вопросов', bt.checkin?.questions ?? 0],
+        ['Проверка состояния: с ответами', bt.checkin?.answers ?? 0],
+        ['Направление: вопросов', bt.direction?.questions ?? 0],
+        ['Направление: с ответами', bt.direction?.answers ?? 0],
+        ['Итоги дня: вопросов', bt.evening?.questions ?? 0],
+        ['Итоги дня: с ответами', bt.evening?.answers ?? 0],
+        ['Важный урок: вопросов', bt.lesson_important?.questions ?? 0],
+        ['Важный урок: с ответами', bt.lesson_important?.answers ?? 0],
+        ['Открытый урок: вопросов', bt.lesson_open?.questions ?? 0],
+        ['Открытый урок: с ответами', bt.lesson_open?.answers ?? 0],
+        ['Зона спокойствия', zone.calm ?? 0],
+        ['Зона напряжения', zone.tense ?? 0],
+        ['Зона риска', zone.risk ?? 0],
+        ['Зона усталости', zone.fatigue ?? 0],
       ],
     );
     return;

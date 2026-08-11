@@ -73,7 +73,7 @@ export function HubForumScreen({
   onLensChange: (lens: HubLens) => void;
 }) {
   const {
-    adminFetch, forumDay, direction, group, setDirection, setGroup, setTab, meta, ageCategory, activity,
+    adminFetch, forumDay, setDirection, setGroup, setTab, meta, ageCategory, activity,
   } = useInsights();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<any>(null);
@@ -145,11 +145,9 @@ export function HubForumScreen({
 
   const kpi = data.kpi ?? {};
   const pulse = data.pulse?.emotionalPulse ?? {};
-  const exportScope = {
-    day: String(selectedDay),
-    direction: direction || undefined,
-    group: group || undefined,
-  };
+  // Как сводка штаба · форум: срез по дню форума, без фильтра направления
+  // (направление — отдельная линза «Направление» со своими выгрузками).
+  const exportScope = { day: String(selectedDay) };
   const exports = forumExportItems(exportScope);
   const openDirection = (nextDirection: string) => {
     setDirection(nextDirection);
