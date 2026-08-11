@@ -19,6 +19,8 @@ export type EveningField = {
   otherLabel?: string;
   /** Root program event ids for type=program_event (empty = all day blocks). */
   linkedEventIds?: number[];
+  /** Empty / missing = all directions. Non-empty = only these direction ids. */
+  audienceDirectionIds?: number[];
   /** Special equals: `__set__` = parent filled; `__other__` = choice other. */
   visibleWhen?: { field: string; equals: boolean | string | number };
 };

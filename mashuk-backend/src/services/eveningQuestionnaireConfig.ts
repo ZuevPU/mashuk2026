@@ -28,6 +28,10 @@ export type EveningField = {
    */
   linkedEventIds?: number[];
   /**
+   * Empty / missing = all directions. Non-empty = only these direction ids.
+   */
+  audienceDirectionIds?: number[];
+  /**
    * Show field when another field matches.
    * Special equals:
    * - `__other__` — choice «свой вариант»
@@ -378,6 +382,45 @@ export function isFieldVisible(
     return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v);
   }
   return v === expected;
+}
+
+export function normalizeAudienceDirectionIds(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  const ids: number[] = [];
+  for (const item of raw) {
+    const n = Number(item);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    const id = Math.floor(n);
+    if (!ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
+/** Empty / missing audienceDirectionIds → field is for all directions. */
+export function isFieldForDirection(
+  field: EveningField,
+  directionId: number | null | undefined,
+): boolean {
+  const ids = normalizeAudienceDirectionIds(field.audienceDirectionIds);
+  if (ids.length === 0) return true;
+  if (directionId == null || !Number.isFinite(directionId)) return false;
+  return ids.includes(Math.floor(directionId));
+}
+
+/** Drop fields (and empty steps) not meant for this participant direction. */
+export function filterEveningConfigForDirection(
+  config: EveningQuestionnaireConfig,
+  directionId: number | null | undefined,
+): EveningQuestionnaireConfig {
+  return {
+    ...config,
+    steps: config.steps
+      .map(step => ({
+        ...step,
+        fields: step.fields.filter(f => isFieldForDirection(f, directionId)),
+      }))
+      .filter(step => step.fields.length > 0),
+  };
 }
 
 /** Collect program_event fields that need a day program tree. */

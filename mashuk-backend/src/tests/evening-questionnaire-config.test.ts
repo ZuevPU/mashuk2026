@@ -2,8 +2,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
+  filterEveningConfigForDirection,
   getEveningOpensAtMsk,
   isEveningOpenForConfig,
+  isFieldForDirection,
   isFieldVisible,
   resolveEveningConfigForDay,
   stripPointBFromEveningConfig,
@@ -184,5 +186,40 @@ describe('eveningQuestionnaireConfig', () => {
         }],
       },
     }), true);
+  });
+
+  it('filters fields by audienceDirectionIds (empty = all)', () => {
+    const forAll = { key: 'a', type: 'text' as const, label: 'All' };
+    const forOne = {
+      key: 'b',
+      type: 'text' as const,
+      label: 'Dir 5',
+      audienceDirectionIds: [5],
+    };
+    const forTwo = {
+      key: 'c',
+      type: 'text' as const,
+      label: 'Dir 5/7',
+      audienceDirectionIds: [5, 7],
+    };
+    assert.equal(isFieldForDirection(forAll, 5), true);
+    assert.equal(isFieldForDirection(forAll, null), true);
+    assert.equal(isFieldForDirection(forOne, 5), true);
+    assert.equal(isFieldForDirection(forOne, 7), false);
+    assert.equal(isFieldForDirection(forOne, null), false);
+    assert.equal(isFieldForDirection(forTwo, 7), true);
+
+    const filtered = filterEveningConfigForDirection({
+      steps: [
+        { id: 's1', title: 'S1', fields: [forAll, forOne] },
+        { id: 's2', title: 'S2', fields: [forTwo] },
+        { id: 's3', title: 'S3', fields: [forOne] },
+      ],
+      opensAtMsk: '21:00',
+    }, 7);
+    assert.equal(filtered.opensAtMsk, '21:00');
+    assert.equal(filtered.steps.length, 2);
+    assert.deepEqual(filtered.steps[0].fields.map(f => f.key), ['a']);
+    assert.deepEqual(filtered.steps[1].fields.map(f => f.key), ['c']);
   });
 });
