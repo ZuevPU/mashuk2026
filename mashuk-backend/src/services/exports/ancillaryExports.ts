@@ -634,32 +634,112 @@ export async function writePointsManualExport(res: Response): Promise<void> {
   );
 }
 
-export async function writeExchangeFullExport(
-  res: Response,
-  opts?: { format?: string },
-): Promise<void> {
-  const format = String(opts?.format || 'xlsx').toLowerCase();
-  const { exchangeCategories } = await import('../../db/schema.js');
-  const qs = await db.select({ q: exchangeQuestions, p: participants, c: exchangeCategories })
-    .from(exchangeQuestions)
-    .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
-    .leftJoin(exchangeCategories, eq(exchangeQuestions.categoryId, exchangeCategories.id));
-  const ans = await db.select({ a: exchangeAnswers, p: participants, q: exchangeQuestions })
-    .from(exchangeAnswers)
-    .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
-    .leftJoin(exchangeQuestions, eq(exchangeAnswers.questionId, exchangeQuestions.id));
-  const rows = [
-    ...qs.map(r => [
-      'вопрос', r.q.id, r.p?.id ?? '', fullName(r.p), r.p?.direction ?? '',
-      r.c?.slug || '', r.q.text, r.q.moderationStatus,
-      r.q.createdAt ? new Date(r.q.createdAt).toISOString() : '',
-    ]),
-    ...ans.map(r => [
-      'ответ', r.a.id, r.p?.id ?? '', fullName(r.p), r.p?.direction ?? '',
-      '', r.a.text, '',
-      r.a.createdAt ? new Date(r.a.createdAt).toISOString() : '',
+/** Category slugs for exchange questions; empty map if table not migrated yet. */
+async function loadExchangeCategorySlugById(): Promise<Map<number, string>> {
+  const map = new Map<number, string>();
+  try {
+    const { exchangeCategories } = await import('../../db/schema.js');
+    const cats = await db.select({
+      id: exchangeCategories.id,
+      slug: exchangeCategories.slug,
+    }).from(exchangeCategories);
+    for (const c of cats) {
+      if (c.id != null) map.set(c.id, c.slug || '');
+    }
+  } catch {
+    /* exchange_categories may be missing on older DBs — export still works */
+  }
+  return map;
+}
+
+export async function collectExchangeExportRows(opts?: {
+  shiftId?: number | null;
+}): Promise<Array<Array<string | number>>> {
+  const shiftId = opts?.shiftId;
+  const inShift = (pShiftId: number | null | undefined) => (
+    shiftId == null || pShiftId === shiftId
+  );
+
+  const colCheck = await db.execute(sql`
+    SELECT 1 AS ok
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'exchange_questions'
+      AND column_name = 'category_id'
+    LIMIT 1
+  `);
+  const hasCategoryId = (colCheck.rows as unknown[]).length > 0;
+
+  // Raw selects: schema may lag migrations (no category_id / exchange_categories).
+  const qRes = await db.execute(hasCategoryId
+    ? sql`
+      SELECT
+        q.id, q.text, q.moderation_status, q.created_at, q.participant_id, q.category_id,
+        p.first_name, p.last_name, p.direction, p.shift_id
+      FROM exchange_questions q
+      LEFT JOIN participants p ON p.id = q.participant_id
+    `
+    : sql`
+      SELECT
+        q.id, q.text, q.moderation_status, q.created_at, q.participant_id,
+        NULL::int AS category_id,
+        p.first_name, p.last_name, p.direction, p.shift_id
+      FROM exchange_questions q
+      LEFT JOIN participants p ON p.id = q.participant_id
+    `);
+  const aRes = await db.execute(sql`
+    SELECT
+      a.id, a.text, a.created_at, a.participant_id,
+      p.first_name, p.last_name, p.direction, p.shift_id
+    FROM exchange_answers a
+    LEFT JOIN participants p ON p.id = a.participant_id
+  `);
+
+  const catById = await loadExchangeCategorySlugById();
+  const qRows = (qRes.rows as Array<Record<string, unknown>>).filter(r => inShift(r.shift_id as number | null));
+  const aRows = (aRes.rows as Array<Record<string, unknown>>).filter(r => inShift(r.shift_id as number | null));
+
+  return [
+    ...qRows.map(r => {
+      const catId = r.category_id != null ? Number(r.category_id) : null;
+      return [
+        'вопрос',
+        Number(r.id),
+        r.participant_id != null ? Number(r.participant_id) : '',
+        fullName({
+          firstName: (r.first_name as string) ?? null,
+          lastName: (r.last_name as string) ?? null,
+        }),
+        (r.direction as string) ?? '',
+        (catId != null && !Number.isNaN(catId) ? catById.get(catId) : '') || '',
+        String(r.text ?? ''),
+        String(r.moderation_status ?? ''),
+        r.created_at ? new Date(String(r.created_at)).toISOString() : '',
+      ];
+    }),
+    ...aRows.map(r => [
+      'ответ',
+      Number(r.id),
+      r.participant_id != null ? Number(r.participant_id) : '',
+      fullName({
+        firstName: (r.first_name as string) ?? null,
+        lastName: (r.last_name as string) ?? null,
+      }),
+      (r.direction as string) ?? '',
+      '',
+      String(r.text ?? ''),
+      '',
+      r.created_at ? new Date(String(r.created_at)).toISOString() : '',
     ]),
   ];
+}
+
+export async function writeExchangeFullExport(
+  res: Response,
+  opts?: { format?: string; shiftId?: number | null },
+): Promise<void> {
+  const format = String(opts?.format || 'xlsx').toLowerCase();
+  const rows = await collectExchangeExportRows({ shiftId: opts?.shiftId });
   const headers = [
     'Тип', 'ID', 'ID участника', 'ФИО', 'Направление', 'Категория', 'Текст', 'Статус', 'Время',
   ];

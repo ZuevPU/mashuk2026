@@ -204,6 +204,41 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     );
   });
 
+  it('Hub Forum exports return real XLSX (ZIP/PK), not CSV/JSON', async () => {
+    const token = await getAdminBearerToken(app);
+    const paths = [
+      '/api/admin/exports/state-checks?mode=day&day=1',
+      '/api/admin/exports/evening-summary?mode=day&day=1',
+      '/api/admin/exports/after-blocks?mode=day&day=1',
+      '/api/admin/exports/piggybank?format=xlsx',
+      '/api/admin/exports/activity?format=xlsx',
+      '/api/admin/exports/exchange?format=xlsx',
+      '/api/admin/exports/day/stats?day=1&format=xlsx',
+      '/api/admin/exports/forum-pack?mode=shift',
+    ];
+    for (const path of paths) {
+      const res = await request(app)
+        .get(path)
+        .set('Authorization', `Bearer ${token}`)
+        .buffer(true)
+        .parse((incoming, cb) => {
+          const chunks: Buffer[] = [];
+          incoming.on('data', (c: Buffer) => chunks.push(c));
+          incoming.on('end', () => cb(null, Buffer.concat(chunks)));
+        });
+      assert.equal(res.status, 200, `${path} status`);
+      const body = res.body as Buffer;
+      assert.ok(Buffer.isBuffer(body) && body.length > 4, `${path} empty body`);
+      assert.equal(body[0], 0x50, `${path} not ZIP/PK (got ${body.slice(0, 8).toString('utf8')})`);
+      assert.equal(body[1], 0x4b, `${path} not ZIP/PK`);
+      const ct = String(res.headers['content-type'] || '');
+      assert.ok(
+        ct.includes('spreadsheet') || ct.includes('octet-stream'),
+        `${path} content-type=${ct}`,
+      );
+    }
+  });
+
   it('GET /api/admin/analytics/meta and pulse dashboard', async () => {
     const token = await getAdminBearerToken(app);
     const meta = await request(app)

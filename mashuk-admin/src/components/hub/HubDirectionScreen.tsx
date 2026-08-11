@@ -21,7 +21,7 @@ import { LeaderboardTable } from '../rating/LeaderboardTable';
 import { DEFAULT_LEADERBOARD_FILTERS, type LeaderboardRow } from '../rating/leaderboardTypes';
 import { HubKpiRow } from './HubKpiRow';
 import { WordDrilldown } from './WordDrilldown';
-import { downloadAllHubExports, downloadHubExport, directionExportItems } from './hubExports';
+import { downloadHubExport, directionExportItems } from './hubExports';
 import { PracticeRecommendNpsTable } from '../analytics/PracticeRecommendNpsTable';
 import { hubFilterParams, statePhaseOf, topWordTokens } from './hubQuery';
 
@@ -681,10 +681,15 @@ export function HubDirectionScreen({ onOpenCard }: { onOpenCard: (id: number) =>
           type="button"
           className="adm-btn adm-btn-primary"
           onClick={() => {
+            const pack = exportItems.find(i => i.id === 'pack') ?? exportItems[0];
+            if (pack) {
+              void downloadHubExport(pack).catch((err: unknown) => {
+                window.alert(err instanceof Error ? err.message : 'Не удалось скачать файл');
+              });
+              return;
+            }
             if (data.exportPath) {
-              download(data.exportPath, exportItems[0]?.filename ?? 'direction.xlsx');
-            } else {
-              void downloadAllHubExports(exportItems);
+              download(data.exportPath, 'direction.xlsx');
             }
           }}
         >

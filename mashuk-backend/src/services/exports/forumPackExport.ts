@@ -4,9 +4,6 @@ import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { db } from '../../db/index.js';
 import {
   answers,
-  exchangeAnswers,
-  exchangeCategories,
-  exchangeQuestions,
   participants,
   participantDayState,
   questions,
@@ -25,6 +22,7 @@ import {
   touchpointCompletionRatio,
 } from '../touchpointProgress.js';
 import { resolveAdminShiftId } from '../shiftService.js';
+import { collectExchangeExportRows } from './ancillaryExports.js';
 import { computeDayExportStats } from './dayStats.js';
 import {
   collectEveningExportRows,
@@ -300,41 +298,14 @@ async function addActivitySheet(wb: Workbook, shiftId: number | null): Promise<n
 }
 
 async function addExchangeSheet(wb: Workbook, shiftId: number | null): Promise<number> {
-  const qs = await db.select({ q: exchangeQuestions, p: participants, c: exchangeCategories })
-    .from(exchangeQuestions)
-    .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
-    .leftJoin(exchangeCategories, eq(exchangeQuestions.categoryId, exchangeCategories.id));
-  const ans = await db.select({ a: exchangeAnswers, p: participants, q: exchangeQuestions })
-    .from(exchangeAnswers)
-    .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
-    .leftJoin(exchangeQuestions, eq(exchangeAnswers.questionId, exchangeQuestions.id));
-
-  const filterShift = <T extends { p: { shiftId?: number | null } | null }>(rows: T[]) => (
-    shiftId == null ? rows : rows.filter(r => r.p?.shiftId === shiftId)
-  );
-  const qRows = filterShift(qs);
-  const aRows = filterShift(ans);
-
+  const rows = await collectExchangeExportRows({ shiftId });
   const ws = wb.addWorksheet('Обмен опытом');
   ws.addRow([
     'Тип', 'ID', 'ID участника', 'ФИО', 'Направление', 'Категория',
     'Текст', 'Статус', 'Время',
   ]);
-  for (const r of qRows) {
-    ws.addRow([
-      'вопрос', r.q.id, r.p?.id ?? '', fullName(r.p), r.p?.direction ?? '',
-      r.c?.slug || '', r.q.text, r.q.moderationStatus,
-      r.q.createdAt ? new Date(r.q.createdAt).toISOString() : '',
-    ]);
-  }
-  for (const r of aRows) {
-    ws.addRow([
-      'ответ', r.a.id, r.p?.id ?? '', fullName(r.p), r.p?.direction ?? '',
-      '', r.a.text, '',
-      r.a.createdAt ? new Date(r.a.createdAt).toISOString() : '',
-    ]);
-  }
-  return qRows.length + aRows.length;
+  for (const row of rows) ws.addRow(row);
+  return rows.length;
 }
 
 async function addDayStatsSheet(wb: Workbook, days: number[]): Promise<void> {
@@ -386,13 +357,26 @@ export async function writeForumPackExport(req: AdminRequest, res: Response): Pr
     'Листы: Состояние · Итоги дня · Открытые уроки · После блоков · Копилка · Активность · Обмен опытом · Статистика дней.',
   ]);
 
-  const stateN = await addKindSheet(wb, 'Состояние', 'state_check', filters, req);
-  const evening = await addEveningSheets(wb, { shiftId });
-  const afterN = await addKindSheet(wb, 'После блоков', 'after_blocks', filters, req);
-  const pigN = await addPiggybankSheet(wb, req);
-  const actN = await addActivitySheet(wb, shiftId);
-  const exN = await addExchangeSheet(wb, shiftId);
-  await addDayStatsSheet(wb, [1, 2, 3, 4, 5, 6, 7, 8]);
+  const notes: string[] = [];
+  const safe = async <T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> => {
+    try {
+      return await fn();
+    } catch (err) {
+      notes.push(`${label}: ошибка — ${err instanceof Error ? err.message : String(err)}`);
+      return fallback;
+    }
+  };
+
+  const stateN = await safe('Состояние', () => addKindSheet(wb, 'Состояние', 'state_check', filters, req), 0);
+  const evening = await safe('Итоги дня', () => addEveningSheets(wb, { shiftId }), { answers: 0, picks: 0 });
+  const afterN = await safe('После блоков', () => addKindSheet(wb, 'После блоков', 'after_blocks', filters, req), 0);
+  const pigN = await safe('Копилка', () => addPiggybankSheet(wb, req), 0);
+  const actN = await safe('Активность', () => addActivitySheet(wb, shiftId), 0);
+  const exN = await safe('Обмен опытом', () => addExchangeSheet(wb, shiftId), 0);
+  await safe('Статистика дней', async () => {
+    await addDayStatsSheet(wb, [1, 2, 3, 4, 5, 6, 7, 8]);
+    return 0;
+  }, 0);
 
   const readme = wb.getWorksheet('Описание') || wb.worksheets[0];
   if (readme) {
@@ -404,6 +388,7 @@ export async function writeForumPackExport(req: AdminRequest, res: Response): Pr
     readme.addRow([`Активность (участников): ${actN}`]);
     readme.addRow([`Обмен опытом (строк): ${exN}`]);
     readme.addRow(['Статистика дней: дни 1–8']);
+    for (const n of notes) readme.addRow([n]);
   }
 
   const stamp = new Date().toISOString().slice(0, 10);

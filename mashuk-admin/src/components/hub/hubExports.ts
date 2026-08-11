@@ -52,7 +52,7 @@ export function forumExportItems(day: string): HubExportItem[] {
     {
       id: 'piggybank',
       label: 'Копилка',
-      path: '/exports/piggybank',
+      path: `/exports/piggybank${qs({ format: 'xlsx' })}`,
       filename: 'piggybank.xlsx',
     },
     {
@@ -111,11 +111,20 @@ export function directionExportItems(
 }
 
 export async function downloadHubExport(item: HubExportItem): Promise<void> {
+  const lower = item.filename.toLowerCase();
+  if (lower.endsWith('.xlsx') && item.kind === 'csv') {
+    throw new Error(`Несогласованная выгрузка: ${item.filename} помечен как csv`);
+  }
   if (item.kind === 'csv') {
     await downloadCsv(item.path, item.filename);
     return;
   }
-  await adminDownloadBinary(item.path, item.filename);
+  if (lower.endsWith('.xlsx') || lower.endsWith('.pdf') || lower.endsWith('.zip')) {
+    await adminDownloadBinary(item.path, item.filename);
+    return;
+  }
+  // Не скачиваем «бинарником» текст под чужим расширением — типичная причина ошибки Excel.
+  throw new Error(`Неизвестный тип файла выгрузки: ${item.filename}`);
 }
 
 /** Вариант A: последовательно скачивает все файлы линзы. */

@@ -364,9 +364,13 @@ export const exportMedalsHandler = async (req: AdminRequest, res: Response) => {
 };
 export const exportModerationLogHandler = (_req: AdminRequest, res: Response) => writeModerationLogExport(res);
 export const exportPointsManualHandler = (_req: AdminRequest, res: Response) => writePointsManualExport(res);
-export const exportExchangeHandler = (req: AdminRequest, res: Response) => {
+export const exportExchangeHandler = async (req: AdminRequest, res: Response) => {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
   const format = String(req.query.format || 'xlsx').toLowerCase();
-  return writeExchangeFullExport(res, { format: format === 'csv' ? 'csv' : 'xlsx' });
+  await writeExchangeFullExport(res, {
+    format: format === 'csv' ? 'csv' : 'xlsx',
+    shiftId: await resolveAdminShiftId(req),
+  });
 };
 export const exportOrgDirectorHandler = async (req: AdminRequest, res: Response) => {
   const { resolveAdminShiftId } = await import('../services/shiftService.js');
