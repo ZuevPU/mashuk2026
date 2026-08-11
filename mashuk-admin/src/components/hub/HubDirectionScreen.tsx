@@ -3,7 +3,6 @@ import { useInsights } from '../insights/InsightsContext';
 import { DashCard, DashScreenTitle } from '../analytics/dashboardUi';
 import { HubKpiRow } from './HubKpiRow';
 import { hubFilterParams, hubDirections, isOrganizerDirection } from './hubQuery';
-import { HubDirectionLegacy } from './HubDirectionLegacy';
 import {
   DayResultsSection,
   Flag,
@@ -127,7 +126,7 @@ function cellBg(tone: number, up: boolean): string {
  * Линза «Направление» — сводный портрет по всем инструментам.
  * GET /analytics/hub/direction. Старый детальный разбор — внизу.
  */
-export function HubDirectionScreen({ onOpenCard }: { onOpenCard: (id: number) => void }) {
+export function HubDirectionScreen() {
   const {
     adminFetch, direction, setDirection, forumDay, setForumDay, meta, ageCategory, activity,
   } = useInsights();
@@ -708,13 +707,6 @@ export function HubDirectionScreen({ onOpenCard }: { onOpenCard: (id: number) =>
           </DayResultsSection>
         </>
       )}
-
-      <DayResultsSection
-        title="Детальный разбор (старый)"
-        note="Прежняя плашка выбора и полный пакет по одному направлению — списки неответивших, цитаты, выгрузки."
-      >
-        <HubDirectionLegacy onOpenCard={onOpenCard} />
-      </DayResultsSection>
     </div>
   );
 }

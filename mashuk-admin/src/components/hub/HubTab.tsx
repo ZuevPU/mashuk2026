@@ -59,7 +59,7 @@ function HubShell({ onOpenCard }: { onOpenCard: (id: number) => void }) {
       {lens === 'piggybank' && <HubPiggybankScreen />}
       {lens === 'afterBlocks' && <HubAfterBlocksScreen />}
       {lens === 'exchange' && <HubExchangeScreen />}
-      {lens === 'direction' && <HubDirectionScreen onOpenCard={onOpenCard} />}
+      {lens === 'direction' && <HubDirectionScreen />}
       {lens === 'groups' && <HubGroupsScreen onLensChange={setLens} />}
       {lens === 'participant' && <HubParticipantScreen onOpenCard={onOpenCard} />}
     </div>
