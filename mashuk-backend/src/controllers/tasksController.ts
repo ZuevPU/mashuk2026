@@ -316,7 +316,10 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
         /* duplicate blocked logs are fine to ignore */
       }
     };
-    if ((methods.includes('qr') || qrToken) && !isQrInValidWindow(task, now)) {
+    const forumDay = isQrSubmit
+      ? (await resolveForumDayForNewEntry())
+      : 0;
+    if ((methods.includes('qr') || qrToken) && !isQrInValidWindow(task, now, forumDay || null)) {
       res.status(400).json({ error: 'QR-код задания сейчас не активен' });
       return;
     }
@@ -331,10 +334,6 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
       res.status(400).json({ error: 'Invalid QR token' });
       return;
     }
-
-    const forumDay = isQrSubmit
-      ? (await resolveForumDayForNewEntry())
-      : 0;
 
     if (isQrSubmit && qrMatches && requestDeviceKey) {
       const { assertQrScanAllowed } = await import('../services/qrScanGuard.js');
@@ -543,7 +542,8 @@ export const resolveTaskQr = async (req: ParticipantRequest, res: Response): Pro
     }
 
     const now = new Date();
-    if (!isQrInValidWindow(task, now)) {
+    const forumDay = await resolveForumDayForNewEntry();
+    if (!isQrInValidWindow(task, now, forumDay)) {
       res.status(400).json({ error: 'QR-код задания сейчас не активен' });
       return;
     }

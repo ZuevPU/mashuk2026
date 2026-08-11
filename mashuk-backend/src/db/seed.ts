@@ -173,13 +173,15 @@ export async function runSeed() {
         category: 'Организация',
         categoryId: orgCat,
         points: 15,
-        dayNumber: 2,
-        dayNumbers: [2],
+        dayNumber: 1,
+        dayNumbers: [1, 2, 3, 4, 5, 6, 7, 8],
         status: 'published',
         publishTime: now,
         autoConfirm: true,
         confirmationType: 'qr',
         confirmationMethods: ['qr'],
+        qrValidFrom: new Date('2000-01-01T00:00:00+03:00'),
+        qrValidTo: new Date('2000-01-01T23:59:00+03:00'),
       },
     ]);
 
@@ -589,10 +591,14 @@ export async function runSeed() {
       title: 'Скан QR на площадке',
       category: 'Организация',
       points: 15,
-      dayNumber: 2,
+      dayNumber: 1,
+      dayNumbers: [1, 2, 3, 4, 5, 6, 7, 8],
       publishTime: new Date(),
       autoConfirm: true,
       confirmationType: 'qr',
+      confirmationMethods: ['qr'],
+      qrValidFrom: new Date('2000-01-01T00:00:00+03:00'),
+      qrValidTo: new Date('2000-01-01T23:59:00+03:00'),
     });
     console.log('QR confirmation task seeded.');
   }

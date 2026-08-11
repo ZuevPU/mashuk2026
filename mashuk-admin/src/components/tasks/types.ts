@@ -135,6 +135,35 @@ function fromLocalInput(v: string): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/** HH:mm in Europe/Moscow for daily-repeating QR windows. */
+function toMskTimeInput(iso?: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  // Accept already-saved HH:mm (after switching UI to time inputs).
+  if (/^\d{2}:\d{2}$/.test(iso.trim())) return iso.trim();
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Moscow',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const hh = parts.find(p => p.type === 'hour')?.value ?? '00';
+  const mm = parts.find(p => p.type === 'minute')?.value ?? '00';
+  return `${hh.padStart(2, '0')}:${mm.padStart(2, '0')}`;
+}
+
+/** Store clock time as ISO anchored on 2000-01-01 MSK (date ignored at runtime). */
+function fromMskTimeInput(v: string): string | null {
+  const s = v.trim();
+  if (!s) return null;
+  if (/^\d{2}:\d{2}$/.test(s)) {
+    return new Date(`2000-01-01T${s}:00+03:00`).toISOString();
+  }
+  // Legacy datetime-local values from older drafts.
+  return fromLocalInput(s);
+}
+
 export function emptyDraft(day = 1): TaskDraft {
   return {
     title: '',
@@ -216,8 +245,8 @@ export function draftFromTask(t: AdminTask): TaskDraft {
     availableFromLocal: toLocalInput(t.availableFrom),
     availableToLocal: toLocalInput(t.availableTo ?? t.deadline),
     applicationDeadlineLocal: toLocalInput(t.applicationDeadline),
-    qrValidFromLocal: toLocalInput(t.qrValidFrom),
-    qrValidToLocal: toLocalInput(t.qrValidTo),
+    qrValidFromLocal: toMskTimeInput(t.qrValidFrom),
+    qrValidToLocal: toMskTimeInput(t.qrValidTo),
   };
 }
 
@@ -268,8 +297,8 @@ export function patchBodyFromDraft(draft: TaskDraft, publish = false): Record<st
     availableFrom: fromLocalInput(draft.availableFromLocal),
     availableTo: fromLocalInput(draft.availableToLocal),
     applicationDeadline: fromLocalInput(draft.applicationDeadlineLocal),
-    qrValidFrom: fromLocalInput(draft.qrValidFromLocal),
-    qrValidTo: fromLocalInput(draft.qrValidToLocal),
+    qrValidFrom: fromMskTimeInput(draft.qrValidFromLocal),
+    qrValidTo: fromMskTimeInput(draft.qrValidToLocal),
   };
 }
 

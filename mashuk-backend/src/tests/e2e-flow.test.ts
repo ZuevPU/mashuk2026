@@ -456,6 +456,17 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
     }
     assert.ok(qrTask, 'need a QR confirmation task from ops bootstrap');
 
+    // Ensure QR window (MSK clock) + days allow confirm on any forum day.
+    await request(app)
+      .patch(`/api/admin/tasks/${qrTask.id}`)
+      .set(adminAuth)
+      .send({
+        dayNumbers: [1, 2, 3, 4, 5, 6, 7, 8],
+        dayNumber: 1,
+        qrValidFrom: '2000-01-01T00:00:00+03:00',
+        qrValidTo: '2000-01-01T23:59:00+03:00',
+      });
+
     const confirm = await request(app)
       .post('/api/volunteer/confirm')
       .set(adminAuth)

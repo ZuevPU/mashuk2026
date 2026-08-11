@@ -197,6 +197,11 @@ export function TaskForm({
             </button>
           ))}
         </div>
+        {draft.confirmationMethods.includes('qr') && (
+          <span className="adm-muted" style={{ fontSize: 11, display: 'block', marginTop: 6 }}>
+            Эти же дни задают, когда повторяется окно активности QR (см. блок ниже).
+          </span>
+        )}
       </div>
 
       <div className="adm-forum-grid-2">
@@ -352,15 +357,51 @@ export function TaskForm({
       </div>
 
       {draft.confirmationMethods.includes('qr') && (
-        <div className="adm-forum-grid-2">
-          <label className="adm-field">
-            <span className="adm-label">QR активен с</span>
-            <input type="datetime-local" className="adm-input" value={draft.qrValidFromLocal} onChange={e => onChange({ qrValidFromLocal: e.target.value })} />
-          </label>
-          <label className="adm-field">
-            <span className="adm-label">QR активен до</span>
-            <input type="datetime-local" className="adm-input" value={draft.qrValidToLocal} onChange={e => onChange({ qrValidToLocal: e.target.value })} />
-          </label>
+        <div className="adm-forum-block" style={{ marginTop: 4 }}>
+          <div className="adm-forum-grid-2">
+            <label className="adm-field">
+              <span className="adm-label">QR активен с (МСК)</span>
+              <input
+                type="time"
+                className="adm-input"
+                value={draft.qrValidFromLocal}
+                onChange={e => onChange({ qrValidFromLocal: e.target.value })}
+              />
+            </label>
+            <label className="adm-field">
+              <span className="adm-label">QR активен до (МСК)</span>
+              <input
+                type="time"
+                className="adm-input"
+                value={draft.qrValidToLocal}
+                onChange={e => onChange({ qrValidToLocal: e.target.value })}
+              />
+            </label>
+          </div>
+          <div className="adm-field" style={{ marginTop: 8 }}>
+            <span className="adm-label">В какие дни повторяется это окно</span>
+            <div className="adm-seg adm-forum-day-seg">
+              {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
+                <button
+                  key={`qr-day-${d}`}
+                  type="button"
+                  className={draft.dayNumbers.includes(d) ? 'on' : ''}
+                  onClick={() => toggleDay(d)}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+            <span className="adm-muted" style={{ fontSize: 11, display: 'block', marginTop: 6 }}>
+              QR можно активировать только в указанный промежуток времени и только в выбранные дни форума
+              {draft.dayNumbers.length
+                ? ` (сейчас: ${draft.dayNumbers.map(d => `Д${d}`).join(', ')})`
+                : ''}.
+              {!draft.qrValidFromLocal && !draft.qrValidToLocal
+                ? ' Если время не задано — ограничение только по дням.'
+                : ''}
+            </span>
+          </div>
         </div>
       )}
 

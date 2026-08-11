@@ -12,6 +12,7 @@ import {
   loadParticipantTaskSubmissions,
   resolveSubmissionWriteAction,
 } from '../services/taskEligibility.js';
+import { resolveForumDayForNewEntry } from '../services/piggybankService.js';
 import {
   completeSubmissionRewards,
   enrichSubmissionRow,
@@ -74,7 +75,8 @@ export const volunteerConfirm = async (req: AdminRequest & VkAuthRequest, res: R
       return;
     }
     const now = new Date();
-    if (!isQrInValidWindow(task, now)) {
+    const forumDay = await resolveForumDayForNewEntry();
+    if (!isQrInValidWindow(task, now, forumDay)) {
       res.status(400).json({ error: 'QR-код задания сейчас не активен' });
       return;
     }

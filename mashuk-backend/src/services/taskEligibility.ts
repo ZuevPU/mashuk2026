@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, lte, ne, or } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { taskSubmissions, tasks } from '../db/schema.js';
+import { taskDayNumbers } from './taskAdminHelpers.js';
 import { getMoscowParts } from './timePhase.js';
 
 export type TaskSubmissionRow = typeof taskSubmissions.$inferSelect;
@@ -100,12 +101,40 @@ function mskDayBounds(now: Date): { start: Date; end: Date } {
   return { start, end };
 }
 
+/**
+ * QR window repeats every selected forum day as a clock interval in MSK.
+ * `qrValidFrom` / `qrValidTo` contribute only their Moscow time-of-day;
+ * calendar dates on those timestamps are ignored.
+ * When `forumDay` is provided, it must be in the task's dayNumbers.
+ */
 export function isQrInValidWindow(
-  task: { qrValidFrom?: Date | null; qrValidTo?: Date | null },
+  task: {
+    qrValidFrom?: Date | null;
+    qrValidTo?: Date | null;
+    dayNumbers?: number[] | null;
+    dayNumber?: number | null;
+  },
   now = new Date(),
+  forumDay?: number | null,
 ): boolean {
-  if (task.qrValidFrom && now < new Date(task.qrValidFrom)) return false;
-  if (task.qrValidTo && now > new Date(task.qrValidTo)) return false;
+  const from = task.qrValidFrom ? new Date(task.qrValidFrom) : null;
+  const to = task.qrValidTo ? new Date(task.qrValidTo) : null;
+  if (from || to) {
+    const nowMin = getMoscowParts(now).totalMinutes;
+    const fromMin = from ? getMoscowParts(from).totalMinutes : 0;
+    const toMin = to ? getMoscowParts(to).totalMinutes : (24 * 60 - 1);
+    if (fromMin <= toMin) {
+      if (nowMin < fromMin || nowMin > toMin) return false;
+    } else if (nowMin < fromMin && nowMin > toMin) {
+      // Overnight window, e.g. 22:00 → 02:00
+      return false;
+    }
+  }
+
+  if (forumDay != null && forumDay > 0) {
+    const days = taskDayNumbers(task as Pick<typeof tasks.$inferSelect, 'dayNumbers' | 'dayNumber'>);
+    if (days.length && !days.includes(forumDay)) return false;
+  }
   return true;
 }
 

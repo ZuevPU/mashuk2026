@@ -33,19 +33,52 @@ describe('isQrInValidWindow', () => {
     assert.equal(isQrInValidWindow({}, new Date()), true);
   });
 
-  it('rejects before qrValidFrom', () => {
-    const now = new Date('2026-08-12T12:00:00Z');
+  it('uses Moscow clock time and ignores calendar date on bounds', () => {
+    // 12:00 MSK = 09:00 UTC
+    const now = new Date('2026-08-12T09:00:00Z');
+    // from 10:00 MSK, to 18:00 MSK (dates intentionally different / past)
     assert.equal(
-      isQrInValidWindow({ qrValidFrom: new Date('2026-08-13T00:00:00Z') }, now),
+      isQrInValidWindow({
+        qrValidFrom: new Date('2000-01-01T07:00:00Z'), // 10:00 MSK
+        qrValidTo: new Date('2000-01-01T15:00:00Z'), // 18:00 MSK
+      }, now),
+      true,
+    );
+    // 08:00 MSK = 05:00 UTC — before window
+    assert.equal(
+      isQrInValidWindow({
+        qrValidFrom: new Date('2000-01-01T07:00:00Z'),
+        qrValidTo: new Date('2000-01-01T15:00:00Z'),
+      }, new Date('2026-08-12T05:00:00Z')),
       false,
     );
   });
 
-  it('rejects after qrValidTo', () => {
-    const now = new Date('2026-08-12T12:00:00Z');
+  it('rejects when forum day is outside task dayNumbers', () => {
+    const now = new Date('2026-08-12T09:00:00Z');
     assert.equal(
-      isQrInValidWindow({ qrValidTo: new Date('2026-08-11T00:00:00Z') }, now),
+      isQrInValidWindow(
+        {
+          qrValidFrom: new Date('2000-01-01T07:00:00Z'),
+          qrValidTo: new Date('2000-01-01T15:00:00Z'),
+          dayNumbers: [1, 2],
+        },
+        now,
+        4,
+      ),
       false,
+    );
+    assert.equal(
+      isQrInValidWindow(
+        {
+          qrValidFrom: new Date('2000-01-01T07:00:00Z'),
+          qrValidTo: new Date('2000-01-01T15:00:00Z'),
+          dayNumbers: [1, 2, 4],
+        },
+        now,
+        4,
+      ),
+      true,
     );
   });
 });

@@ -279,7 +279,18 @@ async function ensureDemoTasks(shiftId: number) {
     { title: 'Познакомься с участником другого направления', category: 'Полезные знакомства', points: 20, dayNumber: 1, confirmationType: 'auto', autoConfirm: true },
     { title: 'Напиши пост о форуме', category: 'Медиа', points: 30, dayNumber: 1, confirmationType: 'post_url', autoConfirm: false, answerType: 'text' },
     { title: 'Зафиксируй идею эксперимента', category: 'Образование', points: 25, dayNumber: 3, confirmationType: 'text_photo', autoConfirm: true },
-    { title: 'Скан QR на площадке', category: 'Организация', points: 15, dayNumber: 2, confirmationType: 'qr', autoConfirm: true },
+    {
+      title: 'Скан QR на площадке',
+      category: 'Организация',
+      points: 15,
+      dayNumber: 1,
+      dayNumbers: [1, 2, 3, 4, 5, 6, 7, 8],
+      confirmationType: 'qr',
+      confirmationMethods: ['qr'] as string[],
+      autoConfirm: true,
+      qrValidFrom: new Date('2000-01-01T00:00:00+03:00'),
+      qrValidTo: new Date('2000-01-01T23:59:00+03:00'),
+    },
   ];
   let created = 0;
   for (const t of need) {
@@ -291,6 +302,17 @@ async function ensureDemoTasks(shiftId: number) {
       description: t.title,
     });
     created++;
+  }
+  // Keep demo QR task usable on any forum day (time window + all days).
+  const qrDemo = existing.find(x => x.title === 'Скан QR на площадке');
+  if (qrDemo) {
+    await db.update(tasks).set({
+      dayNumber: 1,
+      dayNumbers: [1, 2, 3, 4, 5, 6, 7, 8],
+      confirmationMethods: ['qr'],
+      qrValidFrom: new Date('2000-01-01T00:00:00+03:00'),
+      qrValidTo: new Date('2000-01-01T23:59:00+03:00'),
+    }).where(eq(tasks.id, qrDemo.id));
   }
   if (created) console.log(`Demo tasks added: ${created}`);
   else console.log('Demo tasks ok.');
