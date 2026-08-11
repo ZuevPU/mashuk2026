@@ -471,7 +471,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay }: Pro
             'Файл скачан',
           )}
         >
-          Скачать ответы за день {day}
+          Скачать ответы за день форума D{day}
         </button>
         <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={save}>
           Сохранить анкету

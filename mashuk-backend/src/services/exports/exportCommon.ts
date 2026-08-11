@@ -46,6 +46,25 @@ export function formatTs(d: Date | string | null | undefined): string {
   return Number.isNaN(dt.getTime()) ? '' : dt.toISOString();
 }
 
+/** Время для админских выгрузок: всегда Europe/Moscow, без UTC-сюрпризов в Excel. */
+export function formatTsMsk(d: Date | string | null | undefined): string {
+  if (!d) return '';
+  const dt = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(dt.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(dt);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find(p => p.type === type)?.value || '';
+  return `${get('day')}.${get('month')}.${get('year')} ${get('hour')}:${get('minute')}:${get('second')} МСК`;
+}
+
 export function answerText(data: unknown): string {
   if (typeof data === 'string') return data;
   return JSON.stringify(data ?? '');

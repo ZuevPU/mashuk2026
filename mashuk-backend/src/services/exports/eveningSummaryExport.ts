@@ -1,4 +1,5 @@
 import type { Response } from 'express';
+import { getForumDayDateLabel } from '../timePhase.js';
 import {
   collectEveningExportRows,
   formatEveningFieldValue,
@@ -6,7 +7,7 @@ import {
   programEventPickCount,
   type EveningExportFilters,
 } from './eveningExportData.js';
-import { addReadmeSheet, formatTs, fullName } from './exportCommon.js';
+import { addReadmeSheet, formatTsMsk, fullName } from './exportCommon.js';
 import { parseProgramEventPicks } from './nestedPickParse.js';
 import { createWorkbook, sendWorkbook } from './workbook.js';
 
@@ -35,16 +36,20 @@ export async function writeEveningSummaryExport(
   res: Response,
   filters: EveningSummaryExportFilters = {},
 ): Promise<void> {
-  const { rows, fields, emptyReason, diagnostics } = await collectEveningExportRows(filters);
+  const { rows, fields, settings, emptyReason, diagnostics } = await collectEveningExportRows(filters);
   const programEventFields = fields.filter(f => f.type === 'program_event');
+  const dayDate = (dayNumber: number) => (
+    getForumDayDateLabel(settings.startDate ?? null, dayNumber) || ''
+  );
 
   const metaHeaders = [
     'ID участника',
     'ФИО',
     'Направление',
     'Группа',
-    'День',
-    'Время заполнения',
+    'День форума',
+    'Календарная дата дня',
+    'Время заполнения (МСК)',
     'Статус',
   ];
 
@@ -60,6 +65,8 @@ export async function writeEveningSummaryExport(
   const wb = await createWorkbook();
   addReadmeSheet(wb, [
     'Выгрузка ответов на Итоговую анкету вечера (Форум).',
+    'Фильтр «день» — день форума (D1…D7), не число месяца. Смотрите колонку «Календарная дата дня».',
+    'Время заполнения — Europe/Moscow (МСК). Раньше в файле был UTC (−3 часа к Москве).',
     'Лист «Все ответы»: полный список участников — каждый вопрос в отдельном столбце.',
     'Для полей выбора открытых уроков/практик рядом есть столбцы «кол-во» и «ср. оценка» (1–10).',
     'Лист «Открытые уроки»: 1 строка = одна выбранная тема/подтема с оценкой по 10-балльной шкале.',
@@ -70,7 +77,9 @@ export async function writeEveningSummaryExport(
     `Полей выбора уроков/практик: ${programEventFields.length}.`,
     emptyReason || '',
     ...(diagnostics.notes || []),
-    filters.day ? `Запрошен день: ${filters.day}.` : 'Фильтр дней: вся смена.',
+    filters.day
+      ? `Запрошен день форума: D${filters.day}${dayDate(filters.day) ? ` (${dayDate(filters.day)})` : ''}.`
+      : 'Фильтр дней: вся смена.',
     filters.direction ? `Направление: ${filters.direction}.` : '',
     filters.group ? `Группа: ${filters.group}.` : '',
     filters.shiftId != null ? `Смена админки #${filters.shiftId}.` : '',
@@ -86,7 +95,8 @@ export async function writeEveningSummaryExport(
       r.directionName ?? r.p.direction ?? '',
       r.p.groupName ?? '',
       r.dayNumber,
-      formatTs(r.filledAt),
+      dayDate(r.dayNumber),
+      formatTsMsk(r.filledAt),
       r.status,
     ];
     for (const f of fields) {
@@ -109,7 +119,8 @@ export async function writeEveningSummaryExport(
     'ФИО',
     'Направление',
     'Группа',
-    'День',
+    'День форума',
+    'Календарная дата дня',
     'Поле анкеты',
     'Ключ поля',
     'ID события',
@@ -118,7 +129,7 @@ export async function writeEveningSummaryExport(
     'Подтема',
     'Путь',
     'Оценка (1–10)',
-    'Время',
+    'Время (МСК)',
     'Статус',
   ]);
   let pickRows = 0;
@@ -134,6 +145,7 @@ export async function writeEveningSummaryExport(
           r.directionName ?? r.p.direction ?? '',
           r.p.groupName ?? '',
           r.dayNumber,
+          dayDate(r.dayNumber),
           field.label || field.key,
           field.key,
           pick.parentEventId ?? '',
@@ -142,7 +154,7 @@ export async function writeEveningSummaryExport(
           parent && topic && parent !== topic ? topic : (parent ? '' : topic),
           pick.pathLabel || '',
           pick.score ?? '',
-          formatTs(r.filledAt),
+          formatTsMsk(r.filledAt),
           r.status,
         ]);
         pickRows += 1;
@@ -177,14 +189,15 @@ export async function writeEveningSummaryExport(
         'ФИО',
         'Направление',
         'Группа',
-        'День',
+        'День форума',
+        'Календарная дата дня',
         'ID события',
         'Тема / блок',
         'ID подтемы',
         'Подтема',
         'Путь',
         'Оценка (1–10)',
-        'Время',
+        'Время (МСК)',
         'Статус',
       ]);
       for (const r of rows) {
@@ -199,13 +212,14 @@ export async function writeEveningSummaryExport(
             r.directionName ?? r.p.direction ?? '',
             r.p.groupName ?? '',
             r.dayNumber,
+            dayDate(r.dayNumber),
             pick.parentEventId ?? '',
             parent || (topic && !pick.parentEventId ? topic : ''),
             pick.eventId ?? '',
             parent && topic && parent !== topic ? topic : (parent ? '' : topic),
             pick.pathLabel || '',
             pick.score ?? '',
-            formatTs(r.filledAt),
+            formatTsMsk(r.filledAt),
             r.status,
           ]);
         }
@@ -216,9 +230,10 @@ export async function writeEveningSummaryExport(
         'ФИО',
         'Направление',
         'Группа',
-        'День',
+        'День форума',
+        'Календарная дата дня',
         'Ответ',
-        'Время',
+        'Время (МСК)',
         'Статус',
       ]);
       for (const r of rows) {
@@ -230,8 +245,9 @@ export async function writeEveningSummaryExport(
           r.directionName ?? r.p.direction ?? '',
           r.p.groupName ?? '',
           r.dayNumber,
+          dayDate(r.dayNumber),
           answer,
-          formatTs(r.filledAt),
+          formatTsMsk(r.filledAt),
           r.status,
         ]);
       }

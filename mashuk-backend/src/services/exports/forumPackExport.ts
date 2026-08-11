@@ -30,7 +30,7 @@ import {
   programEventAvgScore,
   programEventPickCount,
 } from './eveningExportData.js';
-import { addReadmeSheet, formatTs, fullName } from './exportCommon.js';
+import { addReadmeSheet, formatTsMsk, fullName } from './exportCommon.js';
 import { parseProgramEventPicks } from './nestedPickParse.js';
 import { createWorkbook, sendWorkbook } from './workbook.js';
 
@@ -134,7 +134,7 @@ async function addEveningSheets(
       r.directionName ?? r.p.direction ?? '',
       r.p.groupName ?? '',
       r.dayNumber,
-      formatTs(r.filledAt),
+      formatTsMsk(r.filledAt),
       r.status,
     ];
     for (const f of fields) {
@@ -152,7 +152,7 @@ async function addEveningSheets(
   wsPicks.addRow([
     'ID участника', 'ФИО', 'Направление', 'Группа', 'День',
     'Поле анкеты', 'Ключ поля', 'ID события', 'Тема / блок',
-    'ID подтемы', 'Подтема', 'Путь', 'Оценка (1–10)', 'Время', 'Статус',
+    'ID подтемы', 'Подтема', 'Путь', 'Оценка (1–10)', 'Время (МСК)', 'Статус',
   ]);
   let pickRows = 0;
   for (const r of rows) {
@@ -175,7 +175,7 @@ async function addEveningSheets(
           parent && topic && parent !== topic ? topic : (parent ? '' : topic),
           parent && topic && parent !== topic ? `${parent} → ${topic}` : (topic || parent),
           pick.score ?? '',
-          formatTs(r.filledAt),
+          formatTsMsk(r.filledAt),
           r.status,
         ]);
         pickRows += 1;

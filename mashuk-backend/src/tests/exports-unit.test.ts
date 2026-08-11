@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ANSWER_ROW_HEADERS, buildAnswerRow, fullName } from '../services/exports/exportCommon.js';
+import { ANSWER_ROW_HEADERS, buildAnswerRow, formatTsMsk, fullName } from '../services/exports/exportCommon.js';
+import { resolveEveningFilledAt } from '../services/exports/eveningExportData.js';
 import {
   normalizeExportTouchpointFilter,
   questionMatchesExportFilter,
@@ -139,5 +140,20 @@ describe('exportCommon', () => {
     assert.equal(fullName({ firstName: 'A', lastName: 'B' }), 'A B');
     assert.equal(row[0], 2);
     assert.equal(row[row.length - 1], 'question');
+  });
+});
+
+describe('evening export time', () => {
+  it('formatTsMsk shows Moscow wall clock', () => {
+    // 12:00 UTC = 15:00 MSK
+    assert.equal(formatTsMsk('2026-08-10T12:00:00.000Z'), '10.08.2026 15:00:00 МСК');
+  });
+
+  it('resolveEveningFilledAt prefers stamped submit time over updatedAt', () => {
+    const stamped = resolveEveningFilledAt(
+      { _submittedAt: '2026-08-10T14:40:00.000Z', energy: 4 },
+      [new Date('2026-08-10T10:00:00.000Z')],
+    );
+    assert.equal(stamped?.toISOString(), '2026-08-10T14:40:00.000Z');
   });
 });

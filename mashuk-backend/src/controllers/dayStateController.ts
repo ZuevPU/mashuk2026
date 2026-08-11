@@ -215,7 +215,11 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
       return;
     }
 
-    const ratings = parsed.data.ratings;
+    const ratings: Record<string, unknown> = {
+      ...(parsed.data.ratings as Record<string, unknown>),
+      // Stamp for exports: day-state.updatedAt is polluted by later role/experiment patches.
+      _submittedAt: new Date().toISOString(),
+    };
     const patch: Partial<typeof participantDayState.$inferInsert> = {
       eveningRatings: ratings,
       tomorrowRoleKey: parsed.data.tomorrowRoleKey ?? null,

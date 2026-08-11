@@ -81,6 +81,24 @@ export function asEveningRatings(raw: unknown): Record<string, unknown> | null {
   return Object.keys(obj).length ? obj : null;
 }
 
+/** Prefer stamped submit time over day-state.updatedAt (often bumped by unrelated patches). */
+export function resolveEveningFilledAt(
+  ratings: Record<string, unknown> | null | undefined,
+  fallbacks: Array<Date | string | null | undefined>,
+): Date | null {
+  const stamped = ratings?._submittedAt ?? ratings?.submittedAt;
+  if (typeof stamped === 'string' || typeof stamped === 'number') {
+    const d = new Date(stamped);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  for (const raw of fallbacks) {
+    if (raw == null || raw === '') continue;
+    const d = raw instanceof Date ? raw : new Date(raw);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
 export function isEveningSummaryQuestion(q: {
   block?: string | null;
   questionKind?: string | null;
@@ -123,6 +141,8 @@ export function resolveEveningQuestionFields(
   }
   for (const key of ratingKeys) {
     if (!key || map.has(key) || key === 'tomorrowRoleKey') continue;
+    // Internal metadata — not questionnaire answers.
+    if (key === '_submittedAt' || key === 'submittedAt') continue;
     map.set(key, { key, type: 'text', label: key });
   }
   return [...map.values()];
@@ -302,7 +322,7 @@ export async function collectEveningExportRows(
         tomorrowRoleKey: r.s.tomorrowRoleKey ?? (
           typeof ratings.tomorrowRoleKey === 'string' ? ratings.tomorrowRoleKey : null
         ),
-        filledAt: r.s.updatedAt ?? null,
+        filledAt: resolveEveningFilledAt(ratings, [r.s.updatedAt]),
         p: r.p,
         directionName: r.dirName ?? r.p.direction ?? null,
         source: 'evening_ratings',
@@ -330,7 +350,7 @@ export async function collectEveningExportRows(
       tomorrowRoleKey: draft.tomorrowRoleKey
         ?? r.s.tomorrowRoleKey
         ?? (typeof draftRatings.tomorrowRoleKey === 'string' ? draftRatings.tomorrowRoleKey : null),
-      filledAt: draft.updatedAt ? new Date(draft.updatedAt) : (r.s.updatedAt ?? null),
+      filledAt: resolveEveningFilledAt(draftRatings, [draft.updatedAt, r.s.updatedAt]),
       p: r.p,
       directionName: r.dirName ?? r.p.direction ?? null,
       source: 'draft',
@@ -377,8 +397,16 @@ export async function collectEveningExportRows(
     if (!dayNumber || dayNumber < 1) continue;
     diagnostics.answerRowsMatched += 1;
     const key = `${r.p.id}:${dayNumber}`;
-    if (byKey.has(key) && byKey.get(key)!.source === 'evening_ratings') continue;
-    if (byKey.has(key) && byKey.get(key)!.source === 'answers') continue;
+    const existing = byKey.get(key);
+    // Prefer answer.createdAt over polluted day-state.updatedAt for already-submitted rows.
+    if (existing && (existing.source === 'evening_ratings' || existing.source === 'draft')) {
+      existing.filledAt = resolveEveningFilledAt(existing.ratings, [
+        r.a.createdAt,
+        existing.filledAt,
+      ]);
+      continue;
+    }
+    if (existing && existing.source === 'answers') continue;
     byKey.set(key, {
       participantId: r.p.id,
       dayNumber,
@@ -386,7 +414,7 @@ export async function collectEveningExportRows(
       tomorrowRoleKey: typeof ratings.tomorrowRoleKey === 'string'
         ? ratings.tomorrowRoleKey
         : null,
-      filledAt: r.a.createdAt ?? null,
+      filledAt: resolveEveningFilledAt(ratings, [r.a.createdAt]),
       p: r.p,
       directionName: r.dirName ?? r.p.direction ?? null,
       source: 'answers',
