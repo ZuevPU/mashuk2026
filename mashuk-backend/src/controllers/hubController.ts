@@ -2,7 +2,10 @@ import type { Response } from 'express';
 import type { AdminRequest } from '../middlewares/adminAuth.js';
 import { resolveAnalyticsFilters } from '../services/analytics/analyticsQuery.js';
 import { buildDayResultsDashboard } from '../services/analytics/dayResultsDashboard.js';
-import { buildHubForumDashboard } from '../services/analytics/hubForumDashboard.js';
+import {
+  buildHubForumDashboard,
+  buildHubForumExtras,
+} from '../services/analytics/hubForumDashboard.js';
 import { buildHubGroupsDashboard } from '../services/analytics/hubGroupsDashboard.js';
 import { buildPiggybankDirectionMatrix } from '../services/analytics/piggybankDirectionMatrix.js';
 import { buildParticipantDayFeed } from '../services/analytics/participantDayFeed.js';
@@ -10,6 +13,11 @@ import { buildParticipantDayFeed } from '../services/analytics/participantDayFee
 export async function getHubForumHandler(req: AdminRequest, res: Response): Promise<void> {
   const filters = await resolveAnalyticsFilters(req);
   res.json(await buildHubForumDashboard(filters, req));
+}
+
+export async function getHubForumExtrasHandler(req: AdminRequest, res: Response): Promise<void> {
+  const filters = await resolveAnalyticsFilters(req);
+  res.json(await buildHubForumExtras(filters, req));
 }
 
 export async function getHubDayResultsHandler(req: AdminRequest, res: Response): Promise<void> {

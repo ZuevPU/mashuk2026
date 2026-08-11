@@ -136,7 +136,18 @@ function buildDirectionSignals(
   return { byDirection, byGroup };
 }
 
-export async function buildPulseDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
+export type PulseDashboardOptions = {
+  /** Штаб · Форум: без тяжёлых панелей охвата точек (грузятся отдельно). */
+  skipTouchpointPanels?: boolean;
+  /** Пропустить activityByDaySeries, если UI использует только daySeries KPI. */
+  skipActivitySeries?: boolean;
+};
+
+export async function buildPulseDashboard(
+  filters: AnalyticsFilters,
+  req?: AdminRequest,
+  opts?: PulseDashboardOptions,
+) {
   const settings = await getForumSettings();
   const currentDay = settings.currentDay ?? 1;
   const days = resolveDayRange(filters, currentDay);
@@ -147,30 +158,35 @@ export async function buildPulseDashboard(filters: AnalyticsFilters, req?: Admin
   const todayStart = startOfTodayUtc();
   const activeToday = cohort.filter(p => p.lastActiveAt && p.lastActiveAt >= todayStart).length;
 
-  const touchpoints = await touchpointCompletionByType(ids, days, filters.shiftId);
-  const stateChecks = await countStateChecksByPhase(ids, days, filters.shiftId);
-  const eveningDone = await countEveningCompleted(ids, days);
   const seriesDays = forumSeriesDays(currentDay);
-  const activitySeries = await activityByDaySeries(
-    ids,
-    days.length > 1 ? days : seriesDays,
-    filters.shiftId,
-  );
-  const { daySeries, byDirectionDaySeries } = await buildForumDayKpiSeries(
-    cohort,
-    seriesDays,
-    filters.shiftId,
-  );
-  const touchpointThreshold = await buildTouchpointThresholdCoverage(
-    cohort,
-    seriesDays,
-    filters.shiftId,
-  );
-  const touchpointSlotCoverage = await buildTouchpointSlotCoverage(
-    cohort,
-    seriesDays,
-    filters.shiftId,
-  );
+  const [
+    touchpoints,
+    stateChecks,
+    eveningDone,
+    activitySeries,
+    dayKpi,
+    touchpointThreshold,
+    touchpointSlotCoverage,
+  ] = await Promise.all([
+    touchpointCompletionByType(ids, days, filters.shiftId),
+    countStateChecksByPhase(ids, days, filters.shiftId),
+    countEveningCompleted(ids, days),
+    opts?.skipActivitySeries
+      ? Promise.resolve([])
+      : activityByDaySeries(
+        ids,
+        days.length > 1 ? days : seriesDays,
+        filters.shiftId,
+      ),
+    buildForumDayKpiSeries(cohort, seriesDays, filters.shiftId),
+    opts?.skipTouchpointPanels
+      ? Promise.resolve(null)
+      : buildTouchpointThresholdCoverage(cohort, seriesDays, filters.shiftId),
+    opts?.skipTouchpointPanels
+      ? Promise.resolve(null)
+      : buildTouchpointSlotCoverage(cohort, seriesDays, filters.shiftId),
+  ]);
+  const { daySeries, byDirectionDaySeries } = dayKpi;
 
   const qRows = filters.shiftId != null
     ? await db.select().from(questions).where(eq(questions.shiftId, filters.shiftId))

@@ -164,7 +164,17 @@ function aggregateField(field: EveningField, rows: EveningExportRow[]): EveningQ
   };
 }
 
-export async function buildEveningDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
+export type EveningDashboardOptions = {
+  /** Штаб · Форум: без дампов ответов по вопросам и без daySeries. */
+  slim?: boolean;
+};
+
+export async function buildEveningDashboard(
+  filters: AnalyticsFilters,
+  req?: AdminRequest,
+  opts?: EveningDashboardOptions,
+) {
+  const slim = Boolean(opts?.slim);
   const settings = await getForumSettings();
   const currentDay = settings.currentDay ?? 1;
   const days = resolveDayRange(filters, currentDay);
@@ -221,10 +231,12 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
     .sort((a, b) => b.submitted - a.submitted || a.direction.localeCompare(b.direction, 'ru'));
 
   // Skip CTA-only fields without answers; program_event / recommend* → таблица NPS
-  const questions = fields
-    .filter(f => f.type !== 'point_b_cta' && !isPracticeNpsField(f))
-    .map(f => aggregateField(f, submittedRows))
-    .filter(q => q.answered > 0 || fields.some(f => f.key === q.key));
+  const questions = slim
+    ? []
+    : fields
+      .filter(f => f.type !== 'point_b_cta' && !isPracticeNpsField(f))
+      .map(f => aggregateField(f, submittedRows))
+      .filter(q => q.answered > 0 || fields.some(f => f.key === q.key));
 
   const practiceRecommendNps = buildPracticeRecommendNps(
     submittedRows.map(r => r.ratings as Record<string, unknown>),
@@ -277,31 +289,33 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
   }
 
   /** Нормированная оценка программы 0–100 на участника (только сданные анкеты). */
-  const participantProgramPct: { participantId: number; avgPct: number; answered: number }[] = (() => {
-    const byPid = new Map<number, { sumPct: number; n: number }>();
-    for (const r of submittedRows) {
-      let sumPct = 0;
-      let n = 0;
-      for (const f of scaleFields) {
-        const maxScale = f.type === 'scale_1_10' ? 10 : 5;
-        const raw = r.ratings[f.key];
-        const num = typeof raw === 'number' ? raw : Number(raw);
-        if (!Number.isFinite(num) || num < 1 || num > maxScale) continue;
-        sumPct += (num / maxScale) * 100;
-        n += 1;
+  const participantProgramPct: { participantId: number; avgPct: number; answered: number }[] = slim
+    ? []
+    : (() => {
+      const byPid = new Map<number, { sumPct: number; n: number }>();
+      for (const r of submittedRows) {
+        let sumPct = 0;
+        let n = 0;
+        for (const f of scaleFields) {
+          const maxScale = f.type === 'scale_1_10' ? 10 : 5;
+          const raw = r.ratings[f.key];
+          const num = typeof raw === 'number' ? raw : Number(raw);
+          if (!Number.isFinite(num) || num < 1 || num > maxScale) continue;
+          sumPct += (num / maxScale) * 100;
+          n += 1;
+        }
+        if (!n) continue;
+        const prev = byPid.get(r.participantId) ?? { sumPct: 0, n: 0 };
+        prev.sumPct += sumPct;
+        prev.n += n;
+        byPid.set(r.participantId, prev);
       }
-      if (!n) continue;
-      const prev = byPid.get(r.participantId) ?? { sumPct: 0, n: 0 };
-      prev.sumPct += sumPct;
-      prev.n += n;
-      byPid.set(r.participantId, prev);
-    }
-    return [...byPid.entries()].map(([participantId, v]) => ({
-      participantId,
-      avgPct: Math.round((v.sumPct / v.n) * 10) / 10,
-      answered: v.n,
-    }));
-  })();
+      return [...byPid.entries()].map(([participantId, v]) => ({
+        participantId,
+        avgPct: Math.round((v.sumPct / v.n) * 10) / 10,
+        answered: v.n,
+      }));
+    })();
 
   const scaleSlice = scaleStatsForRows(submittedRows);
   const scaleAverages = scaleSlice.byQuestion;
@@ -357,10 +371,9 @@ export async function buildEveningDashboard(filters: AnalyticsFilters, req?: Adm
     };
   }).filter(r => r.answered > 0);
 
-  const { daySeries, byDirectionDaySeries } = await buildEveningDaySeries(
-    cohort,
-    seriesDays,
-  );
+  const { daySeries, byDirectionDaySeries } = slim
+    ? { daySeries: [], byDirectionDaySeries: [] }
+    : await buildEveningDaySeries(cohort, seriesDays);
 
   return {
     filters,

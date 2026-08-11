@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useInsights } from '../insights/InsightsContext';
 import { DashCard, SectionLabel, dashVal } from '../analytics/dashboardUi';
 import { hubFilterParams } from './hubQuery';
@@ -26,33 +26,68 @@ function cellColor(pct: number): string {
   return 'rgba(10, 123, 111, 0.55)';
 }
 
-/** Heatmap направление × тег копилки (охват по уникальным участникам). */
+/** Heatmap направление × тег копилки — только по кнопке (не грузим при открытии форума). */
 export function PiggybankDirectionMatrix() {
   const { adminFetch, forumDay, ageCategory, activity } = useInsights();
   const [data, setData] = useState<MatrixData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = async () => {
     setLoading(true);
+    setError(null);
     const params = hubFilterParams({
       mode: 'shift',
       forumDay,
       ageCategory,
       activity,
     });
-    adminFetch(`/analytics/hub/piggybank-matrix?${params.toString()}`)
-      .then(res => setData(res as MatrixData))
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
-  }, [adminFetch, forumDay, ageCategory, activity]);
+    try {
+      const res = await adminFetch(`/analytics/hub/piggybank-matrix?${params.toString()}`);
+      setData(res as MatrixData);
+    } catch {
+      setData(null);
+      setError('Не удалось загрузить матрицу. Попробуйте позже.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!data && !loading) {
+    return (
+      <>
+        <SectionLabel>Копилка × направление</SectionLabel>
+        <DashCard title="Копилка × направление">
+          <p className="adm-muted" style={{ fontSize: 13, margin: '0 0 10px' }}>
+            Тяжёлая матрица не грузится автоматически — чтобы не перегружать сервер.
+          </p>
+          {error && <p style={{ color: '#ef4444', fontSize: 13, margin: '0 0 8px' }}>{error}</p>}
+          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => { void load(); }}>
+            Загрузить матрицу
+          </button>
+        </DashCard>
+      </>
+    );
+  }
 
   if (loading && !data) {
-    return <DashCard title="Копилка × направление"><p className="adm-muted" style={{ margin: 0 }}>Загрузка…</p></DashCard>;
+    return (
+      <DashCard title="Копилка × направление">
+        <div className="tab-loading" style={{ margin: '8px 0' }}>
+          <span className="tab-loading-bar" />
+        </div>
+        <p className="adm-muted" style={{ margin: 0 }}>Загрузка…</p>
+      </DashCard>
+    );
   }
+
   if (!data || !data.directions.length) {
     return (
       <DashCard title="Копилка × направление">
         <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>Нет записей копилки в срезе.</p>
+        <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" style={{ marginTop: 8 }} onClick={() => { void load(); }}>
+          Обновить
+        </button>
       </DashCard>
     );
   }
@@ -63,6 +98,16 @@ export function PiggybankDirectionMatrix() {
     <>
       <SectionLabel>Копилка × направление</SectionLabel>
       <DashCard title="Охват уникальных участников по тегам">
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <button
+            type="button"
+            className="adm-btn adm-btn-secondary adm-btn-sm"
+            disabled={loading}
+            onClick={() => { void load(); }}
+          >
+            {loading ? 'Обновление…' : 'Обновить матрицу'}
+          </button>
+        </div>
         <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 10 }}>
           В ячейке — % участников направления, у которых есть хотя бы одна запись с тегом (не число записей).
         </p>
@@ -86,8 +131,8 @@ export function PiggybankDirectionMatrix() {
                     return (
                       <td
                         key={tag}
-                        title={cell ? `${cell.uniqueParticipants} чел. · ${cell.entries} записей` : '0'}
-                        style={{ background: cellColor(pct), textAlign: 'center', fontSize: 12 }}
+                        title={cell ? `${cell.uniqueParticipants} уч. · ${cell.entries} записей` : 'нет'}
+                        style={{ background: cellColor(pct), textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}
                       >
                         {pct > 0 ? `${pct}%` : '—'}
                       </td>

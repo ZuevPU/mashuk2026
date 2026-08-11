@@ -154,14 +154,30 @@ export function HubForumScreen({
       ageCategory,
       activity,
     });
+    const qs = params.toString();
     try {
-      const res = await adminFetch(`/analytics/hub/forum?${params.toString()}`);
+      const res = await adminFetch(`/analytics/hub/forum?${qs}`) as Record<string, unknown>;
       setData(res);
       const ts = writeForumCache(cacheKey, res);
       setUpdatedAt(ts);
+      setLoading(false);
+      // Тяжёлые панели — второй запрос, не блокирует KPI.
+      try {
+        const extras = await adminFetch(`/analytics/hub/forum-extras?${qs}`) as Record<string, unknown>;
+        const merged = {
+          ...res,
+          touchpointThreshold: extras.touchpointThreshold ?? null,
+          touchpointSlotCoverage: extras.touchpointSlotCoverage ?? null,
+          roleDirectionMatrix: extras.roleDirectionMatrix ?? null,
+          exchange: extras.exchange ?? res.exchange ?? null,
+        };
+        setData(merged);
+        writeForumCache(cacheKey, merged);
+      } catch {
+        /* extras optional */
+      }
     } catch {
-      setLoadError('Не удалось загрузить данные. Попробуйте ещё раз.');
-    } finally {
+      setLoadError('Не удалось загрузить данные. Сервер перегружен или таймаут — подождите и нажмите «Обновить» ещё раз.');
       setLoading(false);
     }
   }, [adminFetch, selectedDay, ageCategory, activity, cacheKey]);

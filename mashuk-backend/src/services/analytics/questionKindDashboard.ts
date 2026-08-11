@@ -321,22 +321,40 @@ export async function collectKindAnswerRows(
   };
 }
 
+export type KindDashboardOptions = {
+  /**
+   * Штаб · Форум: без дампов ответов, без daySeries;
+   * для state_check — один collect по смене (KPI дня + серии энергии).
+   */
+  slim?: boolean;
+};
+
 export async function buildKindDashboard(
   mode: KindDashboardMode,
   filters: AnalyticsFilters,
   req?: AdminRequest,
+  opts?: KindDashboardOptions,
 ) {
   const settings = await getForumSettings();
   const currentDay = settings.currentDay ?? 1;
   const days = resolveDayRange(filters, currentDay, settings.totalDays ?? 8);
   const dayFilter = days.length === 1 ? days[0] : null;
+  const slim = Boolean(opts?.slim);
+  const energySeriesDays = forumSeriesDays(currentDay);
+  const slimShiftCollect = slim && mode === 'state_check' && energySeriesDays.length > 1;
 
   const cohort = await loadCohortParticipants(filters, req);
   const cohortSize = cohort.filter(p => p.onboardingCompletedAt).length;
   const cohortIds = new Set(cohort.map(p => p.id));
 
-  const collected = await collectKindAnswerRows(mode, filters);
-  const rows = collected.rows.filter(r => cohortIds.has(r.participantId));
+  const collectFilters: AnalyticsFilters = slimShiftCollect
+    ? { ...filters, mode: 'shift', day: null, compareDays: [] }
+    : filters;
+  const collected = await collectKindAnswerRows(mode, collectFilters);
+  const allRows = collected.rows.filter(r => cohortIds.has(r.participantId));
+  const rows = slimShiftCollect && dayFilter != null
+    ? allRows.filter(r => r.day === dayFilter)
+    : allRows;
   const questionMeta = collected.questionMeta;
 
   const uniqueParticipants = new Set(rows.map(r => r.participantId));
@@ -374,36 +392,40 @@ export async function buildKindDashboard(
     })
     .sort((a, b) => b.submitted - a.submitted || a.direction.localeCompare(b.direction, 'ru'));
 
-  const questionsOut: KindQuestionStat[] = questionMeta.map(qm => {
-    const qRows = rows.filter(r => r.questionId === qm.id);
-    const counts = new Map<string, number>();
-    if (mode === 'after_blocks') {
-      for (const r of qRows) {
-        const label = afterBlocksPathLabel(r) || 'Без блока';
-        counts.set(label, (counts.get(label) || 0) + 1);
+  const questionsOut: KindQuestionStat[] = slim
+    ? []
+    : questionMeta.map(qm => {
+      const qRows = rows.filter(r => r.questionId === qm.id);
+      const counts = new Map<string, number>();
+      if (mode === 'after_blocks') {
+        for (const r of qRows) {
+          const label = afterBlocksPathLabel(r) || 'Без блока';
+          counts.set(label, (counts.get(label) || 0) + 1);
+        }
+      } else {
+        for (const r of qRows) {
+          const zoneKey = (r.emotionZone as keyof typeof EMOTION_ZONE_LABELS | null)
+            ?? emotionIdToZone(r.emotion);
+          const label = (zoneKey && EMOTION_ZONE_LABELS[zoneKey])
+            || emotionZoneToLabel(r.emotionZone)
+            || emotionIdToLabel(r.emotion)
+            || 'без зоны';
+          counts.set(label, (counts.get(label) || 0) + 1);
+        }
       }
-    } else {
-      for (const r of qRows) {
-        const zoneKey = (r.emotionZone as keyof typeof EMOTION_ZONE_LABELS | null)
-          ?? emotionIdToZone(r.emotion);
-        const label = (zoneKey && EMOTION_ZONE_LABELS[zoneKey])
-          || emotionZoneToLabel(r.emotionZone)
-          || emotionIdToLabel(r.emotion)
-          || 'без зоны';
-        counts.set(label, (counts.get(label) || 0) + 1);
-      }
-    }
-    return {
-      key: String(qm.id),
-      label: qm.title,
-      day: qm.dayNumber,
-      answered: qRows.length,
-      uniqueParticipants: new Set(qRows.map(r => r.participantId)).size,
-      distribution: buildDistribution(counts, qRows.length),
-      answers: qRows.map(publicAnswer),
-    };
-  });
-  questionsOut.sort((a, b) => (a.day ?? 99) - (b.day ?? 99) || a.label.localeCompare(b.label, 'ru'));
+      return {
+        key: String(qm.id),
+        label: qm.title,
+        day: qm.dayNumber,
+        answered: qRows.length,
+        uniqueParticipants: new Set(qRows.map(r => r.participantId)).size,
+        distribution: buildDistribution(counts, qRows.length),
+        answers: qRows.map(publicAnswer),
+      };
+    });
+  if (!slim) {
+    questionsOut.sort((a, b) => (a.day ?? 99) - (b.day ?? 99) || a.label.localeCompare(b.label, 'ru'));
+  }
 
   const exportParams = new URLSearchParams();
   exportParams.set('mode', days.length > 1 ? 'shift' : 'day');
@@ -433,12 +455,14 @@ export async function buildKindDashboard(
     diagnosticsNotes.push(`Фильтр группы: ${filters.group.trim()}.`);
   }
 
-  const { daySeries, byDirectionDaySeries } = await buildKindDaySeries(
-    mode,
-    cohort,
-    forumSeriesDays(currentDay),
-    filters.shiftId,
-  );
+  const { daySeries, byDirectionDaySeries } = slim
+    ? { daySeries: [], byDirectionDaySeries: [] }
+    : await buildKindDaySeries(
+      mode,
+      cohort,
+      forumSeriesDays(currentDay),
+      filters.shiftId,
+    );
 
   const base = {
     filters,
@@ -534,13 +558,15 @@ export async function buildKindDashboard(
     return Math.round(m * 10) / 10;
   };
 
-  const energySeriesDays = forumSeriesDays(currentDay);
   /**
    * Серии энергии всегда по D1…Dcurrent — даже если дашборд открыт в режиме одного дня.
    * Иначе сравнение «день A → день B» в Штабе видит только текущий день фильтра.
+   * В slim уже собрали смену одним запросом.
    */
-  let energySourceRows = rows;
-  if (days.length === 1 && energySeriesDays.length > 1) {
+  let energySourceRows = slimShiftCollect
+    ? allRows.filter(r => r.day != null && r.day >= 1 && energySeriesDays.includes(r.day))
+    : rows;
+  if (!slimShiftCollect && days.length === 1 && energySeriesDays.length > 1) {
     const { rows: seriesRows } = await collectKindAnswerRows(mode, {
       ...filters,
       mode: 'shift',

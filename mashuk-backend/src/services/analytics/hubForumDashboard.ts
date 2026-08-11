@@ -8,13 +8,15 @@ import { buildPulseDashboard } from './pulseDashboard.js';
 import { buildStateCheckDashboard } from './stateCheckDashboard.js';
 import { buildEveningDashboard } from './eveningDashboard.js';
 import { buildKindDashboard } from './questionKindDashboard.js';
-import { buildActivityDashboard } from './activityDashboard.js';
 import { buildPiggybankDashboard } from './piggybankDashboard.js';
-import { buildPortraitDashboard } from './portraitDashboard.js';
 import { buildExchangeAnalytics } from './exchangeAnalytics.js';
-import { computeLeaderboardScores } from '../leaderboardService.js';
 import { buildRoleDirectionMatrix } from './roleDirectionMatrix.js';
 import { forumSeriesDays } from './dayComparison.js';
+import {
+  buildTouchpointSlotCoverage,
+  buildTouchpointThresholdCoverage,
+} from './touchpointMetrics.js';
+import { getForumSettings } from '../helpers.js';
 
 async function loadCommunityQueueCounts() {
   const [[pendingExchange], [orgWaiting], [activeExchange]] = await Promise.all([
@@ -33,41 +35,33 @@ async function loadCommunityQueueCounts() {
 }
 
 /**
- * Композер линзы «Форум» для вкладки «Штаб».
- * Формы pulse/evening/afterBlocks совпадают с /analytics/dashboards/*,
- * плюс exchange + community + byDirection roll-up.
+ * Композер линзы «Форум» для вкладки «Штаб» — облегчённый путь без дампов ответов
+ * и без тяжёлых панелей точек (их грузит buildHubForumExtras).
  */
 export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
   const forumFilters: AnalyticsFilters = { ...filters, direction: null, group: null };
+  const slim = { slim: true as const };
 
   const [
     cohort,
     pulse,
     stateCheckRaw,
-    evening,
-    afterBlocks,
-    activity,
-    piggybank,
-    portrait,
-    exchange,
+    eveningRaw,
+    afterBlocksRaw,
+    piggybankRaw,
     community,
   ] = await Promise.all([
     loadCohortParticipants(forumFilters, req),
-    buildPulseDashboard(forumFilters, req),
-    buildStateCheckDashboard(forumFilters, req),
-    buildEveningDashboard(forumFilters, req),
-    buildKindDashboard('after_blocks', forumFilters, req),
-    buildActivityDashboard(forumFilters, req),
-    buildPiggybankDashboard(forumFilters, req),
-    buildPortraitDashboard(forumFilters, req),
-    buildExchangeAnalytics(forumFilters, req),
+    buildPulseDashboard(forumFilters, req, {
+      skipTouchpointPanels: true,
+      skipActivitySeries: true,
+    }),
+    buildStateCheckDashboard(forumFilters, req, slim),
+    buildEveningDashboard(forumFilters, req, slim),
+    buildKindDashboard('after_blocks', forumFilters, req, slim),
+    buildPiggybankDashboard(forumFilters, req, slim),
     loadCommunityQueueCounts(),
   ]);
-
-  const roleDirectionMatrix = await buildRoleDirectionMatrix(
-    cohort,
-    forumSeriesDays(pulse.currentForumDay ?? 1),
-  );
 
   const stateCheck = stateCheckRaw as typeof stateCheckRaw & {
     emotionalPulse?: {
@@ -136,7 +130,6 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
       activityRatePct: row.activityRatePct,
     }));
 
-  /** Зарегистрированы, но 0 активности — за выбранный день форума, иначе по срезу направлений. */
   const zeroActivityCount = byDirection.reduce(
     (sum, row) => sum + Math.max(0, (row.registered ?? 0) - (row.activeParticipants ?? 0)),
     0,
@@ -154,7 +147,6 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
   const avgEnergy = energyDayRow?.avg ?? scPulse.avgEnergy ?? null;
   const riskFatiguePct = energyDayRow?.riskFatiguePct ?? scPulse.riskFatiguePct ?? null;
 
-  /** Метрики направлений для radar / сравнений (нормировка 0–100 на фронте по max). */
   const energyRows = (scPulse.energyByDirectionDay ?? []) as {
     direction: string; day: number; avg: number | null; responses: number;
   }[];
@@ -163,25 +155,15 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
       .map(r => [r.direction, r.zones]),
   );
   const piggyByDir = new Map(
-    ((piggybank as { byDirection?: { direction: string; count: number }[] }).byDirection ?? [])
+    ((piggybankRaw as { byDirection?: { direction: string; count: number }[] }).byDirection ?? [])
       .map(r => [r.direction, r.count]),
   );
-  const cohortIds = cohort.map(p => p.id);
-  const totalScores = cohortIds.length
-    ? await computeLeaderboardScores(cohortIds, { scope: 'shift', track: 'total' })
-    : new Map<number, number>();
-  const pointsByDir = new Map<string, { sum: number; n: number }>();
-  for (const p of cohort) {
-    const d = p.direction || '—';
-    const pts = totalScores.get(p.id) ?? 0;
-    const cur = pointsByDir.get(d) ?? { sum: 0, n: 0 };
-    cur.sum += pts;
-    cur.n += 1;
-    pointsByDir.set(d, cur);
-  }
+
+  // Без полного pointsLog — иначе /hub/forum часто упирается в таймаут прокси.
   const energyAgg = new Map<string, { sum: number; n: number }>();
   for (const r of energyRows) {
     if (r.avg == null || !r.responses) continue;
+    if (selectedDay != null && r.day !== selectedDay) continue;
     const cur = energyAgg.get(r.direction) ?? { sum: 0, n: 0 };
     cur.sum += r.avg * r.responses;
     cur.n += r.responses;
@@ -194,8 +176,6 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
     ) / 10;
     const eAgg = energyAgg.get(row.direction);
     const energyAvg = eAgg && eAgg.n ? Math.round((eAgg.sum / eAgg.n) * 10) / 10 : null;
-    const pAgg = pointsByDir.get(row.direction);
-    const avgPoints = pAgg && pAgg.n ? Math.round((pAgg.sum / pAgg.n) * 10) / 10 : 0;
     const piggyCount = piggyByDir.get(row.direction) ?? 0;
     const piggyPerCapita = row.registered
       ? Math.round((piggyCount / row.registered) * 100) / 100
@@ -206,11 +186,30 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
       coveragePct: row.activityRatePct,
       energyAvg,
       engagementLiftPct,
-      avgPoints,
+      avgPoints: 0,
       piggyCount,
       piggyPerCapita,
     };
   });
+
+  const evening = {
+    activity: eveningRaw.activity,
+    scaleAverages: eveningRaw.scaleAverages,
+    scaleOverallAvg: eveningRaw.scaleOverallAvg,
+    scaleByDay: eveningRaw.scaleByDay,
+    scaleByDirectionDay: eveningRaw.scaleByDirectionDay,
+    practiceRecommendNps: eveningRaw.practiceRecommendNps,
+  };
+
+  const afterBlocks = {
+    activity: afterBlocksRaw.activity,
+    byEvent: (afterBlocksRaw as { byEvent?: unknown }).byEvent ?? [],
+  };
+
+  const piggybank = {
+    topThemes: (piggybankRaw as { topThemes?: unknown }).topThemes ?? [],
+    byDirection: (piggybankRaw as { byDirection?: unknown }).byDirection ?? [],
+  };
 
   const mergedPulse = {
     ...pulse,
@@ -223,15 +222,6 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
       energyByDay: scPulse.energyByDay ?? [],
       energyByDirectionDay: scPulse.energyByDirectionDay ?? [],
       directionEmotionEnergy: scPulse.directionEmotionEnergy ?? [],
-    },
-    stateCheck: {
-      activity: stateCheck.activity,
-      byDirection: stateCheck.byDirection,
-      questions: stateCheck.questions,
-      exportPath: stateCheck.exportPath,
-      diagnostics: stateCheck.diagnostics,
-      daySeries: stateCheck.daySeries,
-      byDirectionDaySeries: stateCheck.byDirectionDaySeries,
     },
   };
 
@@ -257,18 +247,40 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
     pulse: mergedPulse,
     evening,
     afterBlocks,
-    activity,
     piggybank,
-    portrait,
-    exchange,
+    exchange: null,
     community,
     byDirection,
     directionMetrics,
     daySeries: pulse.activity.daySeries ?? [],
     byDirectionDaySeries: pulse.activity.byDirectionDaySeries ?? [],
-    touchpointThreshold: pulse.activity.touchpointThreshold ?? null,
-    touchpointSlotCoverage: pulse.activity.touchpointSlotCoverage ?? null,
-    roleDirectionMatrix,
+    // Тяжёлые панели — отдельный endpoint /hub/forum-extras
+    touchpointThreshold: null,
+    touchpointSlotCoverage: null,
+    roleDirectionMatrix: null,
     directionEmotionEnergy: scPulse.directionEmotionEnergy ?? [],
+  };
+}
+
+/** Вторая фаза: точки охвата + heatmap ролей + обмен (после основного /hub/forum). */
+export async function buildHubForumExtras(filters: AnalyticsFilters, req?: AdminRequest) {
+  const forumFilters: AnalyticsFilters = { ...filters, direction: null, group: null };
+  const cohort = await loadCohortParticipants(forumFilters, req);
+  const settings = await getForumSettings();
+  const currentDay = settings.currentDay ?? 1;
+  const seriesDays = forumSeriesDays(currentDay);
+
+  const [touchpointThreshold, touchpointSlotCoverage, roleDirectionMatrix, exchange] = await Promise.all([
+    buildTouchpointThresholdCoverage(cohort, seriesDays, forumFilters.shiftId),
+    buildTouchpointSlotCoverage(cohort, seriesDays, forumFilters.shiftId),
+    buildRoleDirectionMatrix(cohort, seriesDays),
+    buildExchangeAnalytics(forumFilters, req),
+  ]);
+
+  return {
+    touchpointThreshold,
+    touchpointSlotCoverage,
+    roleDirectionMatrix,
+    exchange,
   };
 }

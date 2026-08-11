@@ -284,6 +284,7 @@ router.patch('/analytics/forum-clubs/:id', requireAdminRole('settings'), wrap(an
 router.post('/analytics/recalculate', requireAdminRole('settings'), wrap(admin.triggerAnalyticsRecalc));
 router.post('/analytics/refresh', requireAdminRole('settings'), wrap(analyticsCtrl.postAnalyticsRefreshHandler));
 router.get('/analytics/hub/forum', P('analytics', 'read'), wrap(hubCtrl.getHubForumHandler));
+router.get('/analytics/hub/forum-extras', P('analytics', 'read'), wrap(hubCtrl.getHubForumExtrasHandler));
 router.get('/analytics/hub/day-results', P('analytics', 'read'), wrap(hubCtrl.getHubDayResultsHandler));
 router.get('/analytics/hub/groups', P('analytics', 'read'), wrap(hubCtrl.getHubGroupsHandler));
 router.get('/analytics/hub/piggybank-matrix', P('analytics', 'read'), wrap(hubCtrl.getHubPiggybankMatrixHandler));

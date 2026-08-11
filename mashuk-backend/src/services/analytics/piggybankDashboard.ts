@@ -12,7 +12,17 @@ import { loadCohortParticipants } from './cohort.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import { topReasonTokens } from './zoneDistribution.js';
 
-export async function buildPiggybankDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
+export type PiggybankDashboardOptions = {
+  /** Штаб · Форум: только topThemes + byDirection. */
+  slim?: boolean;
+};
+
+export async function buildPiggybankDashboard(
+  filters: AnalyticsFilters,
+  req?: AdminRequest,
+  opts?: PiggybankDashboardOptions,
+) {
+  const slim = Boolean(opts?.slim);
   const cohort = await loadCohortParticipants(filters, req);
   const ids = cohort.map(p => p.id);
   if (!ids.length) {
@@ -21,6 +31,7 @@ export async function buildPiggybankDashboard(filters: AnalyticsFilters, req?: A
       navigation: { total: 0, page: filters.page, limit: filters.limit },
       byTag: Object.fromEntries(PIGGYBANK_TAGS.map(tag => [tag, { count: 0, series: [], entries: [], byDirection: [], topThemes: [] }])),
       bySource: Object.fromEntries(PIGGYBANK_SOURCES.map(src => [src, { count: 0, tagMix: [], series: [] }])),
+      byDirection: [] as { direction: string; count: number }[],
       topThemes: [],
       recurringTools: [],
       vRabota: { total: 0, byDirection: [], sample: [] },
@@ -37,6 +48,28 @@ export async function buildPiggybankDashboard(filters: AnalyticsFilters, req?: A
   }
   if (filters.tag) {
     entries = entries.filter(e => entryTags(e).includes(filters.tag!));
+  }
+
+  if (slim) {
+    const piggyByDirection = new Map<string, number>();
+    for (const e of rows) {
+      const p = cohort.find(c => c.id === e.participantId);
+      const d = p?.direction || '—';
+      piggyByDirection.set(d, (piggyByDirection.get(d) || 0) + 1);
+    }
+    return {
+      filters,
+      navigation: { total: entries.length, page: filters.page, limit: filters.limit },
+      byTag: {},
+      bySource: {},
+      byDirection: [...piggyByDirection.entries()]
+        .map(([direction, count]) => ({ direction, count }))
+        .sort((a, b) => b.count - a.count || a.direction.localeCompare(b.direction, 'ru')),
+      topThemes: topReasonTokens(rows.map(e => e.text), 20),
+      recurringTools: [],
+      vRabota: { total: 0, byDirection: [], sample: [] },
+      entries: [],
+    };
   }
 
   const byTag: Record<string, { count: number; series: { day: number; count: number }[]; entries: unknown[]; byDirection: { direction: string; count: number }[]; topThemes: { token: string; count: number }[] }> = {};
