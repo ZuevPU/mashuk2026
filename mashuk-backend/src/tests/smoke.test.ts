@@ -181,6 +181,22 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     ));
   });
 
+  it('GET /api/admin/analytics/hub/stats with token', async () => {
+    const token = await getAdminBearerToken(app);
+    const res = await request(app)
+      .get('/api/admin/analytics/hub/stats?mode=day&day=3')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(res.status, 200);
+    assert.ok(res.body.meta);
+    assert.ok(typeof res.body.meta.nowLabel === 'string');
+    assert.ok(Array.isArray(res.body.slots));
+    assert.ok(Array.isArray(res.body.tools));
+    assert.ok(Array.isArray(res.body.zones));
+    assert.ok(Array.isArray(res.body.nav));
+    assert.ok(Array.isArray(res.body.daySeries));
+    assert.equal(res.body.daySeries.length, 8);
+  });
+
   it('GET /api/admin/tasks with token', async () => {
     const token = await getAdminBearerToken(app);
     const res = await request(app)

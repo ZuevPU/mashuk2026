@@ -12,9 +12,10 @@ import { HubGroupsScreen } from './HubGroupsScreen';
 import { HubParticipantScreen } from './HubParticipantScreen';
 import { HubPiggybankScreen } from './HubPiggybankScreen';
 import { HubStateScreen } from './HubStateScreen';
+import { HubStatsScreen } from './HubStatsScreen';
 
 export type HubLens =
-  | 'forum' | 'dayResults' | 'state' | 'activity' | 'piggybank' | 'afterBlocks' | 'exchange'
+  | 'forum' | 'stats' | 'dayResults' | 'state' | 'activity' | 'piggybank' | 'afterBlocks' | 'exchange'
   | 'direction' | 'groups' | 'participant';
 
 /**
@@ -51,6 +52,7 @@ function HubShell({ onOpenCard }: { onOpenCard: (id: number) => void }) {
     <div className="adm-dash-stack">
       <HubToolbar lens={lens} onLensChange={setLens} />
       {lens === 'forum' && <HubForumScreen onLensChange={setLens} />}
+      {lens === 'stats' && <HubStatsScreen onLensChange={setLens} />}
       {lens === 'dayResults' && <HubDayResultsScreen />}
       {lens === 'state' && <HubStateScreen />}
       {lens === 'activity' && <HubActivityScreen />}

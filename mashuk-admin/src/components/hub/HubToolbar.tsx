@@ -4,6 +4,7 @@ import { hubDirections, isOrganizerDirection } from './hubQuery';
 
 const LENS_LABELS: Record<HubLens, string> = {
   forum: 'Форум',
+  stats: 'Статистика',
   dayResults: 'Итоги дня',
   state: 'Состояние',
   activity: 'Активность',
@@ -16,7 +17,7 @@ const LENS_LABELS: Record<HubLens, string> = {
 };
 
 const LENS_ORDER: HubLens[] = [
-  'forum', 'dayResults', 'state', 'activity', 'piggybank', 'afterBlocks', 'exchange',
+  'forum', 'stats', 'dayResults', 'state', 'activity', 'piggybank', 'afterBlocks', 'exchange',
   'direction', 'groups', 'participant',
 ];
 
