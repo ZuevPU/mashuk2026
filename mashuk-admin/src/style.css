@@ -3111,7 +3111,7 @@ tr.adm-dir-me td { background: rgba(230, 174, 74, 0.09); }
   .adm-dir-anketa-cards { grid-template-columns: 1fr 1fr; }
 }
 
-/* Итоговый HTML-профиль участника (модалка поверх карточки) */
+/* Final HTML participant profile modal (over participant card) */
 .adm-final-profile-backdrop {
   z-index: 1800;
   padding: 16px;
