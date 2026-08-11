@@ -77,12 +77,20 @@ import {
 
 export const listParticipants = async (req: AdminRequest, res: Response): Promise<void> => {
   const parsed = parseParticipantListQuery(req);
-  if (parsed.shiftId == null || Number.isNaN(parsed.shiftId)) {
+  const allShiftsDeleted = Boolean(parsed.onlySelfDeleted && parsed.allShifts);
+  if (allShiftsDeleted) {
+    parsed.shiftId = undefined;
+  } else if (parsed.shiftId == null || Number.isNaN(parsed.shiftId)) {
     parsed.shiftId = await resolveAdminShiftId(req);
   }
   const result = await queryParticipants(parsed);
   const participants = await enrichParticipantsWithAvatarUrls(result.participants, { preferStored: false });
-  res.json({ ...result, participants, shiftId: parsed.shiftId });
+  res.json({
+    ...result,
+    participants,
+    shiftId: allShiftsDeleted ? null : parsed.shiftId,
+    allShifts: allShiftsDeleted,
+  });
 };
 
 export const listParticipantGroups = async (req: AdminRequest, res: Response): Promise<void> => {

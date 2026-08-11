@@ -48,15 +48,21 @@ function buildListQuery(params: {
   strongRole: string;
   activity: string;
   listMode: ParticipantListMode;
+  allShifts: boolean;
 }): string {
   const sp = new URLSearchParams({ page: String(params.page), limit: '50' });
-  if (params.listMode === 'hidden') sp.set('onlySelfDeleted', 'true');
+  if (params.listMode === 'hidden') {
+    sp.set('onlySelfDeleted', 'true');
+    // По умолчанию показываем удаливших профиль со всех смен — иначе легко «потерять» человека.
+    if (params.allShifts) sp.set('allShifts', 'true');
+  }
   if (params.q.trim()) sp.set('q', params.q.trim());
   for (const id of params.directionIds) sp.append('directionId', String(id));
   if (params.groupId) sp.set('groupId', params.groupId);
   if (params.pedagogicalRole) sp.set('pedagogicalRole', params.pedagogicalRole);
   if (params.strongRole) sp.set('strongRole', params.strongRole);
-  if (params.activity) sp.set('activity', params.activity);
+  // activity не шлём для hidden — бэкенд тоже игнорирует
+  if (params.listMode !== 'hidden' && params.activity) sp.set('activity', params.activity);
   return sp.toString();
 }
 
@@ -79,7 +85,9 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
   const [showIdColumn, setShowIdColumn] = useState(true);
   const [activityFilter, setActivityFilter] = useState('');
   const [listMode, setListMode] = useState<ParticipantListMode>('active');
+  const [hiddenAllShifts, setHiddenAllShifts] = useState(true);
   const [hiddenTotal, setHiddenTotal] = useState(0);
+  const [hiddenUnfilteredTotal, setHiddenUnfilteredTotal] = useState(0);
   const [directions, setDirections] = useState<{ id: number; name: string }[]>([]);
   const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -109,7 +117,8 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
     strongRole: strongRoleFilter,
     activity: activityFilter,
     listMode,
-  }), [participantsPage, debouncedQ, directionFilter, groupFilter, roleFilter, strongRoleFilter, activityFilter, listMode]);
+    allShifts: hiddenAllShifts,
+  }), [participantsPage, debouncedQ, directionFilter, groupFilter, roleFilter, strongRoleFilter, activityFilter, listMode, hiddenAllShifts]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -118,11 +127,27 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
       setParticipants(res.participants || []);
       setParticipantsTotal(res.totalCount || 0);
       setCurrentShiftId(res.shiftId ?? null);
-      if (listMode === 'active') {
-        const hiddenRes = await adminFetch('/participants?onlySelfDeleted=true&limit=1&page=1');
-        setHiddenTotal(hiddenRes.totalCount || 0);
+      // Счётчик бейджа — всегда «все смены», чтобы не путать с пустым фильтром текущей смены
+      const hiddenBadge = await adminFetch('/participants?onlySelfDeleted=true&allShifts=true&limit=1&page=1');
+      setHiddenTotal(hiddenBadge.totalCount || 0);
+      if (listMode === 'hidden') {
+        const hasExtraFilters = Boolean(
+          debouncedQ.trim()
+          || directionFilter.length
+          || groupFilter
+          || roleFilter
+          || strongRoleFilter,
+        );
+        if (hasExtraFilters) {
+          const unfiltered = await adminFetch(
+            `/participants?onlySelfDeleted=true&limit=1&page=1${hiddenAllShifts ? '&allShifts=true' : ''}`,
+          );
+          setHiddenUnfilteredTotal(unfiltered.totalCount || 0);
+        } else {
+          setHiddenUnfilteredTotal(res.totalCount || 0);
+        }
       } else {
-        setHiddenTotal(res.totalCount || 0);
+        setHiddenUnfilteredTotal(hiddenBadge.totalCount || 0);
       }
       setDirections((await adminFetch('/directions')).directions || []);
       // Full shift catalog (not only groups that already have members)
@@ -131,7 +156,17 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
     } finally {
       setLoading(false);
     }
-  }, [adminFetch, listQuery, listMode]);
+  }, [
+    adminFetch,
+    listQuery,
+    listMode,
+    debouncedQ,
+    directionFilter,
+    groupFilter,
+    roleFilter,
+    strongRoleFilter,
+    hiddenAllShifts,
+  ]);
 
   useEffect(() => {
     load().catch(() => setLoading(false));
@@ -258,11 +293,56 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
         <button
           type="button"
           className={listMode === 'hidden' ? 'on' : ''}
-          onClick={() => { setListMode('hidden'); setParticipantsPage(1); setSelected(new Set()); }}
+          onClick={() => {
+            setListMode('hidden');
+            setParticipantsPage(1);
+            setSelected(new Set());
+            setActivityFilter('');
+            setHiddenAllShifts(true);
+          }}
         >
           Удалили профиль{hiddenTotal > 0 ? ` (${hiddenTotal})` : ''}
         </button>
       </div>
+
+      {isHiddenList && (
+        <div className="adm-forum-hint" style={{ marginBottom: 12 }}>
+          Здесь только мягкое удаление (`self_deleted_at`): выход участника или «Исключить из программы».
+          «Удалить безвозвратно» стирает запись из базы — такого человека в этом списке уже не будет.
+          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={hiddenAllShifts}
+                onChange={e => {
+                  setHiddenAllShifts(e.target.checked);
+                  setParticipantsPage(1);
+                }}
+              />
+              Все смены
+            </label>
+            {!hiddenAllShifts && currentShiftId != null && (
+              <span className="adm-muted" style={{ fontSize: 12 }}>
+                Фильтр по смене #{currentShiftId}
+                {shiftOptions.find(s => s.id === currentShiftId)?.name
+                  ? ` · ${shiftOptions.find(s => s.id === currentShiftId)?.name}`
+                  : ''}
+              </span>
+            )}
+          </div>
+          {participantsTotal === 0 && hiddenUnfilteredTotal > 0 && (
+            <p style={{ margin: '8px 0 0', color: '#9B2C2C' }}>
+              С текущими фильтрами никого нет, но без фильтров найдено: {hiddenUnfilteredTotal}. Сбросьте поиск / направление / группу / роль.
+            </p>
+          )}
+          {participantsTotal === 0 && hiddenUnfilteredTotal === 0 && (
+            <p style={{ margin: '8px 0 0' }}>
+              Сейчас в базе нет ни одного мягко удалённого профиля
+              {hiddenAllShifts ? '' : ' на этой смене'}. Если человек был — его могли восстановить или удалить безвозвратно (см. журнал действий админов).
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="card adm-forum-block">
         <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>

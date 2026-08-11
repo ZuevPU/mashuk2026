@@ -16,6 +16,8 @@ export type ParticipantListQuery = {
   includeDeleted?: boolean;
   /** Только участники с self_deleted_at (удалили профиль / исключены) */
   onlySelfDeleted?: boolean;
+  /** Для списка «Удалили профиль»: не резать по текущей смене */
+  allShifts?: boolean;
   ids?: number[];
   /** Фильтр по смене; по умолчанию задаётся в listParticipants */
   shiftId?: number;
@@ -62,13 +64,22 @@ export function buildParticipantNameMatch(
 export function buildParticipantWhere(query: ParticipantListQuery): SQL | undefined {
   const conditions: SQL[] = [];
 
-  if (query.shiftId != null && !Number.isNaN(query.shiftId)) {
-    conditions.push(eq(participants.shiftId, query.shiftId));
-  }
   if (query.onlySelfDeleted) {
     conditions.push(isNotNull(participants.selfDeletedAt));
   } else if (!query.includeDeleted) {
     conditions.push(isNull(participants.selfDeletedAt));
+  }
+  // Смена: для «Удалили профиль» + allShifts не фильтруем.
+  // Иначе null shift_id тоже терялся бы на любой выбранной смене.
+  if (!(query.onlySelfDeleted && query.allShifts) && query.shiftId != null && !Number.isNaN(query.shiftId)) {
+    if (query.onlySelfDeleted) {
+      conditions.push(or(
+        eq(participants.shiftId, query.shiftId),
+        isNull(participants.shiftId),
+      )!);
+    } else {
+      conditions.push(eq(participants.shiftId, query.shiftId));
+    }
   }
   if (query.ids?.length) {
     conditions.push(inArray(participants.id, query.ids));
@@ -104,15 +115,18 @@ export function buildParticipantWhere(query: ParticipantListQuery): SQL | undefi
   if (query.strongRole?.trim()) {
     conditions.push(eq(participants.strongRole, query.strongRole.trim()));
   }
-  const now = new Date();
-  if (query.activity === 'active_today') {
-    conditions.push(gte(participants.lastActiveAt, startOfTodayUtc()));
-  } else if (query.activity === 'inactive_1d') {
-    const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    conditions.push(or(isNull(participants.lastActiveAt), lt(participants.lastActiveAt, cutoff))!);
-  } else if (query.activity === 'inactive_3d') {
-    const cutoff = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-    conditions.push(or(isNull(participants.lastActiveAt), lt(participants.lastActiveAt, cutoff))!);
+  // Фильтр активности не применяем к «Удалили профиль» — иначе список часто пустой.
+  if (!query.onlySelfDeleted) {
+    const now = new Date();
+    if (query.activity === 'active_today') {
+      conditions.push(gte(participants.lastActiveAt, startOfTodayUtc()));
+    } else if (query.activity === 'inactive_1d') {
+      const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      conditions.push(or(isNull(participants.lastActiveAt), lt(participants.lastActiveAt, cutoff))!);
+    } else if (query.activity === 'inactive_3d') {
+      const cutoff = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+      conditions.push(or(isNull(participants.lastActiveAt), lt(participants.lastActiveAt, cutoff))!);
+    }
   }
 
   return conditions.length ? and(...conditions) : undefined;
@@ -186,6 +200,7 @@ export function parseParticipantListQuery(req: { query: Record<string, unknown> 
     includeDeleted: req.query.includeDeleted === 'true' || req.query.includeDeleted === '1',
     onlySelfDeleted: req.query.onlySelfDeleted === 'true' || req.query.onlySelfDeleted === '1'
       || req.query.list === 'hidden',
+    allShifts: req.query.allShifts === 'true' || req.query.allShifts === '1',
     ids,
     shiftId: req.query.shiftId != null && req.query.shiftId !== ''
       ? Number(req.query.shiftId)
