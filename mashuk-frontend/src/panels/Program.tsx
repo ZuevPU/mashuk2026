@@ -138,7 +138,8 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
     const kbSub = activeTab === 'kb' && kbMeta?.switcherLabel
       ? kbMeta.switcherLabel
       : (dayNum < currentDay ? '✓' : dayNum === currentDay ? '→' : '🔒');
-    const weekday = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс', 'пн · отъезд'][i] || '';
+    // Смена стартует в субботу: Д1 сб … Д7 пт, Д8 сб · отъезд
+    const weekday = ['сб', 'вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб · отъезд'][i] || '';
     const schedSub = scheduleLocked
       ? 'скоро'
       : (dayNum < liveDay ? `✓ ${weekday}` : weekday);
