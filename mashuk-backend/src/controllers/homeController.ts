@@ -286,7 +286,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const eveningDoneForTouchpoints = currentDay === eveningSurveyDay
       ? !!eveningQuestionnaire.completed
       : !!dayContext.eveningQuestionnaire?.completed;
-    const touchpointItems = buildTouchpointItemsForDay(
+    const touchpointItemsRaw = buildTouchpointItemsForDay(
       dayQuestions,
       answeredIds,
       currentDay,
@@ -294,6 +294,15 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       now,
       { eveningDone: eveningDoneForTouchpoints },
     );
+    // Until evening opensAt (or force-publish), slot 7 stays pending — not active/overdue.
+    const eveningSlotOpen = !!eveningQuestionnaire.open;
+    const touchpointItems = touchpointItemsRaw.map(item => {
+      const isEveningSlot = /итоговая анкета/i.test(item.title || '')
+        || (item.block || '').includes('Итог');
+      if (!isEveningSlot || item.state === 'done') return item;
+      if (!eveningSlotOpen) return { ...item, state: 'pending' as const };
+      return item;
+    });
     const dayTouchpointsCompleted = touchpointItems.filter(i => i.state === 'done').length;
 
     const missedToday = touchpointItems

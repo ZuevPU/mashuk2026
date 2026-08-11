@@ -19,6 +19,12 @@ import {
   getForumOperationalDateKey,
   lateAnswerPolicyForQuestion,
 } from '../services/helpers.js';
+import {
+  isEveningOpenForConfig,
+  resolveEveningConfigForDay,
+} from '../services/eveningQuestionnaireConfig.js';
+import { isEveningTouchpointSlot, questionMatchesTouchpointSlot } from '../services/touchpointProgress.js';
+import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
 import { awardPoints, pointsActionForQuestion } from '../services/pointsService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { emotionIdToZone, EMOTION_ZONE_LABELS } from '../services/emotionZones.js';
@@ -84,6 +90,21 @@ function isLessonReflectionQuestion(q: { title?: string | null; block?: string |
   return t.includes('осмысление урока') || t.includes('слот 1') || t.includes('слот 2');
 }
 
+/** Stub marker for multi-step evening survey (real form lives on Home / eveningCard). */
+function isEveningSummaryStubQuestion(q: {
+  title?: string | null;
+  block?: string | null;
+  type?: string | null;
+  timePoint?: string | null;
+  questionKind?: string | null;
+}): boolean {
+  const block = (q.block || '').toLowerCase();
+  const title = (q.title || '').toLowerCase();
+  if (block.includes('итоги дня') || /итоговая анкета/i.test(q.title || '')) return true;
+  const eveningSlot = TOUCHPOINT_SLOTS.find(s => isEveningTouchpointSlot(s));
+  return !!eveningSlot && questionMatchesTouchpointSlot(q, eveningSlot);
+}
+
 async function participantForumDayForShift(
   settings: Awaited<ReturnType<typeof getForumSettings>>,
   shiftId: number,
@@ -132,6 +153,9 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
       return questionVisibleToParticipant(q, me, currentDay, { attendedEventIds });
     });
 
+    const eveningCfg = resolveEveningConfigForDay(settings as never, currentDay);
+    const eveningOpenNow = isEveningOpenForConfig(eveningCfg, now);
+
     const result = visible
       .map(q => {
       let access = getQuestionAccess(q, currentDay, now);
@@ -139,6 +163,11 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
       if (q.publishTime) {
         const pubKey = getMoscowParts(q.publishTime).dateKey;
         if (pubKey > opKey) access = 'soon';
+      }
+      // Evening stub follows admin opensAt / force flags, not only question.publishTime
+      // (publishTime is often missing → stub looked "active" all morning).
+      if (!answeredIds.has(q.id) && isEveningSummaryStubQuestion(q) && !eveningOpenNow) {
+        access = 'soon';
       }
       const userAnswer = answerByQuestion.get(q.id);
       const answered = answeredIds.has(q.id);
@@ -168,6 +197,8 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
     })
       .filter(q => {
         if (q.answered) return true;
+        // Unanswered evening stub is never listed — real UI is Home/Questions eveningCard at opensAt.
+        if (isEveningSummaryStubQuestion(q)) return false;
         if (q.access === 'soon') return false;
         // Проверка состояния после окна — скрываем, чтобы нельзя было ответить
         if (q.access === 'locked' && q.latePolicy === 'hard_close') return false;

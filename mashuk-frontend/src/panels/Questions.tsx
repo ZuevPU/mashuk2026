@@ -643,15 +643,16 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
 
   const unanswered = questions.filter(q => {
     if (!(q.status === 'active' || q.status === 'overdue')) return false;
-    // Плашка итоговой анкеты уже сверху — не дублируем stub-вопрос в списке
-    if (eveningCard && isEveningDaySummaryQuestion(q)) return false;
+    // Stub «Итоговая анкета по дню» never in the list: until 22:00 it must be
+    // invisible; when open it appears only as the top PriorityAction (eveningCard).
+    if (isEveningDaySummaryQuestion(q)) return false;
     return true;
   });
   const canAnswer = (status: string) => status === 'active' || status === 'overdue';
   const answeredToday = questions.filter(q => q.status === 'done' && q.answeredToday);
   const answeredEarlier = questions.filter(q => q.status === 'done' && !q.answeredToday);
   const myAnswers = questions.filter(q => q.status === 'done');
-  const locked = questions.filter(q => q.status === 'locked');
+  const locked = questions.filter(q => q.status === 'locked' && !isEveningDaySummaryQuestion(q));
   const peerApprovedCount = exchange
     .filter(q => (q.moderationStatus || '').toLowerCase() === 'approved').length;
 

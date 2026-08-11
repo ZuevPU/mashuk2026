@@ -429,8 +429,10 @@ export const HomePanel: React.FC<{
           missed={d.touchpoints.missed}
           items={d.touchpoints.items}
           onItemClick={(item) => {
-            if (item.state === 'locked') return;
+            if (item.state === 'locked' || item.state === 'pending') return;
             if (isEveningDaySummaryQuestion({ title: item.title, block: item.block })) {
+              // Only open when evening survey is actually available (priority card / open state).
+              if (!d.eveningCard && !d.eveningQuestionnaire?.available) return;
               setShowEvening(true);
               return;
             }
