@@ -33,6 +33,8 @@ router.get('/participants', P('participants', 'read'), wrap(admin.listParticipan
 router.get('/participants/groups', P('participants', 'read'), wrap(admin.listParticipantGroups));
 router.get('/participants/:id/card', P('participants', 'read'), wrap(p0.getParticipantCard));
 router.get('/participants/:id/profile', P('participants', 'read'), wrap(participantProfile.getAdminParticipantFinalProfile));
+router.get('/participants/:id/profile-2', P('participants', 'read'), wrap(participantProfile.getAdminParticipantAnalyticalProfile));
+router.get('/participants/:id/profile-3', P('participants', 'read'), wrap(participantProfile.getAdminParticipantDataDrivenProfile));
 router.get('/participants/:id/activity', P('participants', 'read'), wrap(p0.getParticipantActivity));
 router.get('/participants/:id/admin-actions', P('participants', 'read'), wrap(p0.getParticipantAdminActions));
 router.post('/participants/:id/tasks/:taskId/complete', P('participants', 'confirm'), wrap(p0.adminCompleteParticipantTaskHandler));

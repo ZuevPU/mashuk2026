@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data-driven профиль участника — Машук</title>
+<style>
+@page{size:A4 portrait;margin:14mm 13mm 16mm}
+:root{--paper:#f6f3ee;--ink:#1e2430;--dim:#667084;--faint:#98a2b3;--rule:#ddd5c7;
+ --pine:#1f5a49;--pine-soft:#e2efe9;--ochre:#b57520;--ochre-soft:#f5ebd6;--sky:#3a6a82}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:#7a7e85}
+body{font:11.5pt/1.58 "Charter",Georgia,"Times New Roman",serif;color:var(--ink);
+ -webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{width:210mm;min-height:297mm;padding:15mm 14mm 18mm;background:var(--paper);margin:10mm auto;
+ box-shadow:0 2px 22px rgba(0,0,0,.28);position:relative}
+h1{font-size:23pt;line-height:1.12;margin:0;font-weight:600;letter-spacing:-.01em}
+h2{font-family:"Inter",Arial,sans-serif;font-size:8.1pt;letter-spacing:.15em;text-transform:uppercase;
+ color:var(--pine);font-weight:700;margin:0 0 3mm;padding-bottom:1.5mm;border-bottom:1px solid var(--rule)}
+h3{font-size:12pt;margin:0 0 1.5mm;font-weight:600}
+p{margin:0 0 3.2mm}
+.lede{font-size:12pt;line-height:1.5;color:#2a3140}
+.muted{color:var(--dim)}
+.tiny{font-size:8.2pt;color:var(--faint);font-family:"Inter",Arial,sans-serif;line-height:1.45}
+.brand{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--ink);padding-bottom:2.5mm}
+.brand .m{font-family:"Inter",Arial,sans-serif;font-weight:700;letter-spacing:.22em;font-size:9pt}
+.brand .r{font-family:"Inter",Arial,sans-serif;font-size:8.2pt;color:var(--dim)}
+.meta{font-family:"Inter",Arial,sans-serif;font-size:9.2pt;color:var(--dim);margin-top:2mm}
+.sec{margin-top:7mm}
+.quote{border-left:2.5px solid var(--ochre);padding-left:4mm;font-size:11pt;line-height:1.5;margin:0 0 3mm}
+.pill{display:inline-block;font-family:"Inter",Arial,sans-serif;font-size:8pt;padding:.7mm 2.3mm;border-radius:6mm;
+ background:var(--pine-soft);color:var(--pine);font-weight:600;margin:0 1.5mm 1.5mm 0}
+.box{border:1px solid var(--rule);border-radius:3mm;padding:4.5mm;background:#fff}
+.hero{display:grid;grid-template-columns:1.2fr .8fr;gap:5mm;margin-top:4mm}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:3.5mm;margin-top:3mm}
+.metrics .num{font-size:17pt;font-weight:600;line-height:1}
+.metrics .cap{font-family:"Inter",Arial,sans-serif;font-size:7.8pt;color:var(--dim);margin-top:1.4mm}
+.rec{margin:0 0 2.5mm;padding-left:0;list-style:none}
+.rec li{margin:0 0 2.5mm;padding-left:4mm;border-left:2px solid var(--pine)}
+.foot{position:absolute;left:14mm;right:14mm;bottom:9mm;display:flex;justify-content:space-between;
+ font-family:"Inter",Arial,sans-serif;font-size:7.5pt;color:var(--faint);border-top:1px solid var(--rule);padding-top:2mm}
+@media print{html,body{background:#fff}
+ .page{margin:0;box-shadow:none;width:auto;min-height:auto;padding:0}
+ .page+.page{page-break-before:always}}
+</style></head><body>
+<div id="doc"></div>
+<script>
+const PROFILE = __PROFILE_JSON__;
+const P = PROFILE, N = P.narrative || {}, D = document.getElementById('doc');
+const esc = s => String(s == null ? '' : s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+const clamp = (s, n = 320) => { s = String(s || '').trim(); return s.length <= n ? s : s.slice(0, n).replace(/\s+\S*$/, '') + '…'; };
+
+const HEAD = `<div style="margin-top:7mm"><h1>${esc(P.person.name)}</h1>
+ <div class="meta">${esc(P.person.direction)} · ${esc(P.person.shift)} · группа ${esc(P.person.group)} · ${esc(P.person.from)} — ${esc(P.person.to)}</div></div>`;
+
+const metrics = `<div class="metrics">
+ <div><div class="num">${P.activity.pathPoints||0}</div><div class="cap">Путь</div></div>
+ <div><div class="num">${P.activity.experiencePoints||0}</div><div class="cap">Опыт</div></div>
+ <div><div class="num">${P.activity.touchpointsDone||0}<span style="font-size:11pt;color:var(--dim)">/${P.activity.touchpointsTotal||0}</span></div><div class="cap">Точки</div></div>
+ <div><div class="num">${(P.exchange.answersCount||0)+(P.exchange.questionsCount||0)}</div><div class="cap">Обмен</div></div>
+</div>`;
+
+const page1 = [
+  HEAD,
+  `<div class="sec"><div class="hero">
+    <div><p class="lede">${esc(N.overview||'')}</p></div>
+    <div class="box"><div class="tiny">Архетип по данным</div>
+     <h3 style="margin-top:2mm">${esc(N.archetype||'')}</h3>
+     <p class="tiny" style="margin:0">${esc(N.archetypeWhy||'')}</p></div>
+   </div>${metrics}</div>`,
+  `<div class="sec"><h2>1. Общая характеристика · Data-driven портрет</h2>
+   <p>${esc(N.overview||'')}</p></div>`
+].join('');
+
+const page2 = [
+  `<div class="sec"><h2>2. Поведенческий профиль</h2><p>${esc(N.behavior||'')}</p>
+   ${((P.exchange&&P.exchange.questionSamples)||[]).slice(0,1).map(t=>`<div class="quote">${esc(clamp(t,200))}</div><div class="tiny" style="margin:-1mm 0 3mm">вопрос</div>`).join('')}
+   ${((P.kopilka&&P.kopilka.quotes)||[]).slice(0,2).map(q=>`<div class="quote">${esc(clamp(q.text,200))}</div><div class="tiny" style="margin:-1mm 0 3mm">копилка · ${esc(q.tag)}</div>`).join('')}</div>`,
+  `<div class="sec"><h2>3. Психографический портрет</h2><p>${esc(N.psychographic||'')}</p>
+   ${((P.afterBlocks&&P.afterBlocks.items)||[]).slice(0,2).map(i=>`<div class="quote">${esc(clamp(i.text,220))}</div><div class="tiny" style="margin:-1mm 0 3mm">${esc(i.event)}</div>`).join('')}</div>`
+].join('');
+
+const recs = (N.recommendations||[]).map(r => `<li>${esc(r)}</li>`).join('');
+const tags = ((N.snapshot&&N.snapshot.tags)||[]).map(t => `<span class="pill">${esc(t)}</span>`).join('');
+const quotes = ((N.snapshot&&N.snapshot.quotes)||[]).map(q => `<div class="quote">${esc(clamp(q,220))}</div>`).join('');
+
+const page3 = [
+  `<div class="sec"><h2>4. Итоговое резюме и рекомендации</h2>
+   <p>${esc(N.insight||'')}</p>
+   <ul class="rec">${recs}</ul>
+   <div class="box" style="border-color:var(--pine);margin-top:2mm"><p style="margin:0;font-size:12pt">${esc(N.closing||'')}</p></div></div>`,
+  `<div class="sec"><h2>Слепок</h2><div class="box">
+    <div class="tiny" style="margin-bottom:2mm">Рейтинг</div><p style="margin:0 0 3mm">${esc((N.snapshot&&N.snapshot.ranks)||'—')}</p>
+    <div class="tiny" style="margin-bottom:2mm">Любимые теги</div><div style="margin-bottom:3mm">${tags||'<span class="muted">—</span>'}</div>
+    <div class="tiny" style="margin-bottom:2mm">Ключевые цитаты</div>${quotes||'<p class="muted">Цитат почти нет в цифровом следе.</p>'}
+    <div class="tiny" style="margin:3mm 0 1mm">Динамика энергии</div>
+    <p style="margin:0">${esc((N.snapshot&&N.snapshot.energy)||'')}</p>
+   </div></div>`,
+  `<div class="sec"><h2>Метод</h2><div class="box"><p class="tiny" style="margin:0">
+   Портрет собран в парадигме Data-driven profiling: активность, обмен опытом, копилка, состояние (зоны/энергия/причины) и осмысления после блоков.
+   Интерпретация — правила методологии «Машук», без внешних LLM. Мы описываем поведение по следам данных, а не по тестам самооценки.
+  </p></div></div>`
+].join('');
+
+const pages = [page1, page2, page3];
+D.innerHTML = pages.map((inner, i) => `<div class="page">
+ <div class="brand"><span class="m">МАШУК</span><span class="r">Data-driven профиль · 3</span></div>
+ ${inner}
+ <div class="foot"><span>${esc(P.person.name)} · ${esc(P.person.direction)} · ${esc(P.person.group)}</span>
+  <span>${i+1} / ${pages.length}</span></div></div>`).join('');
+window.PROFILE_PAGES = pages.length;
+</script></body></html>

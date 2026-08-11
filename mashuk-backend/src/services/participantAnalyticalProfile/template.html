@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Аналитический профиль участника — Машук</title>
+<style>
+@page{size:A4 portrait;margin:14mm 13mm 16mm}
+:root{--paper:#f7f4ef;--ink:#1f2430;--dim:#667084;--faint:#9aa3b2;--rule:#ddd6c8;
+ --pine:#245c4a;--pine-soft:#e4efe9;--ochre:#b87928;--ochre-soft:#f6edd8;--clay:#a84f48;--sky:#3f6f86}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:#7f838a}
+body{font:11.5pt/1.58 "Charter",Georgia,"Times New Roman",serif;color:var(--ink);
+ -webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{width:210mm;min-height:297mm;padding:15mm 14mm 18mm;background:var(--paper);margin:10mm auto;
+ box-shadow:0 2px 22px rgba(0,0,0,.28);position:relative}
+h1{font-size:24pt;line-height:1.12;margin:0;font-weight:600;letter-spacing:-.01em}
+h2{font-family:"Inter",Arial,sans-serif;font-size:8.2pt;letter-spacing:.15em;text-transform:uppercase;
+ color:var(--pine);font-weight:700;margin:0 0 3mm;padding-bottom:1.5mm;border-bottom:1px solid var(--rule)}
+h3{font-size:12pt;margin:0 0 1.5mm;font-weight:600}
+p{margin:0 0 3.2mm}
+.lede{font-size:12.2pt;line-height:1.5;color:#2b3240}
+.muted{color:var(--dim)}
+.tiny{font-size:8.3pt;color:var(--faint);font-family:"Inter",Arial,sans-serif;line-height:1.45}
+.brand{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--ink);padding-bottom:2.5mm}
+.brand .m{font-family:"Inter",Arial,sans-serif;font-weight:700;letter-spacing:.22em;font-size:9pt}
+.brand .r{font-family:"Inter",Arial,sans-serif;font-size:8.3pt;color:var(--dim)}
+.meta{font-family:"Inter",Arial,sans-serif;font-size:9.3pt;color:var(--dim);margin-top:2mm}
+.sec{margin-top:7mm}
+.quote{border-left:2.5px solid var(--ochre);padding-left:4mm;font-size:11pt;line-height:1.5;margin:0 0 3mm}
+.pill{display:inline-block;font-family:"Inter",Arial,sans-serif;font-size:8pt;padding:.7mm 2.3mm;border-radius:6mm;
+ background:var(--pine-soft);color:var(--pine);font-weight:600;margin:0 1.5mm 1.5mm 0}
+.box{border:1px solid var(--rule);border-radius:3mm;padding:4.5mm;background:#fff}
+.strength{display:grid;grid-template-columns:34mm 1fr;gap:3.5mm;padding:3mm 0;border-bottom:1px solid var(--rule)}
+.strength:last-child{border-bottom:0}
+.strength .n{font-family:"Inter",Arial,sans-serif;font-size:8pt;letter-spacing:.08em;text-transform:uppercase;color:var(--pine);padding-top:1mm}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:4mm;margin-top:3mm}
+.metrics .num{font-size:18pt;font-weight:600;line-height:1}
+.metrics .cap{font-family:"Inter",Arial,sans-serif;font-size:8pt;color:var(--dim);margin-top:1.5mm}
+.foot{position:absolute;left:14mm;right:14mm;bottom:9mm;display:flex;justify-content:space-between;
+ font-family:"Inter",Arial,sans-serif;font-size:7.5pt;color:var(--faint);border-top:1px solid var(--rule);padding-top:2mm}
+@media print{html,body{background:#fff}
+ .page{margin:0;box-shadow:none;width:auto;min-height:auto;padding:0}
+ .page+.page{page-break-before:always}}
+</style></head><body>
+<div id="doc"></div>
+<script>
+const PROFILE = __PROFILE_JSON__;
+const P = PROFILE, N = P.narrative || {}, D = document.getElementById('doc');
+const esc = s => String(s == null ? '' : s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+const clamp = (s, n = 320) => { s = String(s || '').trim(); return s.length <= n ? s : s.slice(0, n).replace(/\s+\S*$/, '') + '…'; };
+
+const HEAD = `<div style="margin-top:7mm"><h1>${esc(P.person.name)}</h1>
+ <div class="meta">${esc(P.person.direction)} · ${esc(P.person.shift)} · группа ${esc(P.person.group)} · ${esc(P.person.from)} — ${esc(P.person.to)}</div></div>`;
+
+const metrics = `<div class="metrics">
+ <div><div class="num">${P.activity.pathPoints||0}</div><div class="cap">Путь</div></div>
+ <div><div class="num">${P.activity.experiencePoints||0}</div><div class="cap">Опыт</div></div>
+ <div><div class="num">${P.activity.touchpointsDone||0}<span style="font-size:11pt;color:var(--dim)">/${P.activity.touchpointsTotal||0}</span></div><div class="cap">Точки</div></div>
+ <div><div class="num">${(P.kopilka&&P.kopilka.total)||0}</div><div class="cap">Копилка</div></div>
+</div>`;
+
+const page1 = [
+  HEAD,
+  `<div class="sec"><p class="lede">${esc(N.intro||'')}</p>${metrics}</div>`,
+  `<div class="sec"><h2>1. Общая характеристика</h2><p>${esc(N.intro||'')}</p>
+   ${(P.pointA||[]).slice(0,2).map(x=>`<div class="tiny" style="margin-bottom:1mm">${esc(x.q)}</div><div class="quote">${esc(clamp(x.a,220))}</div>`).join('')}</div>`,
+  `<div class="sec"><h2>2. Путь на форуме</h2><p>${esc(N.path||'')}</p></div>`
+].join('');
+
+const strengths = (N.strengths||[]).map(s =>
+  `<div class="strength"><div class="n">${esc(s.title)}</div><div>${esc(s.evidence)}</div></div>`
+).join('');
+
+const quotes = ((N.snapshot&&N.snapshot.quotes)||[]).map(q =>
+  `<div class="quote">${esc(clamp(q,240))}</div>`
+).join('');
+
+const page2 = [
+  `<div class="sec"><h2>3. Смыслы и ценности</h2><p>${esc(N.meanings||'')}</p>
+   ${((P.exchange&&P.exchange.questionSamples)||[]).slice(0,2).map(t=>`<div class="quote">${esc(clamp(t,200))}</div><div class="tiny" style="margin:-1mm 0 3mm">вопрос в обмене опытом</div>`).join('')}
+   ${((P.afterBlocks&&P.afterBlocks.items)||[]).slice(0,2).map(i=>`<div class="quote">${esc(clamp(i.text,220))}</div><div class="tiny" style="margin:-1mm 0 3mm">${esc(i.event)}</div>`).join('')}</div>`,
+  `<div class="sec"><h2>4. Сильные стороны</h2>${strengths||'<p class="muted">Недостаточно данных для уверенной разметки сильных сторон.</p>'}</div>`
+].join('');
+
+const tags = ((N.snapshot&&N.snapshot.tags)||[]).map(t => `<span class="pill">${esc(t)}</span>`).join('');
+const page3 = [
+  `<div class="sec"><h2>5. Итоговое резюме и рекомендации</h2><p>${esc(N.resume||'')}</p>
+   <div class="box" style="border-color:var(--pine);margin-top:3mm"><p style="margin:0;font-size:12pt">${esc(N.closing||'')}</p></div></div>`,
+  `<div class="sec"><h2>Слепок</h2>
+   <div class="box soft">
+    <div class="tiny" style="margin-bottom:2mm">Любимые теги</div><div style="margin-bottom:3mm">${tags||'<span class="muted">—</span>'}</div>
+    <div class="tiny" style="margin-bottom:2mm">Ключевые цитаты</div>${quotes||'<p class="muted">Цитат почти не осталось в цифровом следе.</p>'}
+    <div class="tiny" style="margin:3mm 0 1mm">Динамика энергии</div>
+    <p style="margin:0">${esc((N.snapshot&&N.snapshot.energy)||'')}</p>
+   </div></div>`,
+  `<div class="sec"><h2>Как это устроено</h2><div class="box"><p class="tiny" style="margin:0">
+   Аналитический профиль собран из активности (Путь/Опыт/точки), обмена опытом, копилки, проверок состояния и осмыслений после блоков.
+   Интерпретация построена правилами методологии форума «Машук» без внешней генерации текста. Пустые места означают отсутствие цифрового следа, а не оценку участника.
+  </p></div></div>`
+].join('');
+
+const pages = [page1, page2, page3];
+D.innerHTML = pages.map((inner, i) => `<div class="page">
+ <div class="brand"><span class="m">МАШУК</span><span class="r">Аналитический профиль · 2</span></div>
+ ${inner}
+ <div class="foot"><span>${esc(P.person.name)} · ${esc(P.person.direction)} · ${esc(P.person.group)}</span>
+  <span>${i+1} / ${pages.length}</span></div></div>`).join('');
+window.PROFILE_PAGES = pages.length;
+</script></body></html>

@@ -8,6 +8,8 @@ import { formatAnswerPreview } from '../utils/formatAnswerPreview';
 import { VkProfileLink } from './VkProfileLink';
 import { ParticipantAvatar } from './participants/ParticipantAvatar';
 import { ParticipantFinalProfileModal } from './participants/ParticipantFinalProfileModal';
+import { ParticipantAnalyticalProfileModal } from './participants/ParticipantAnalyticalProfileModal';
+import { ParticipantDataDrivenProfileModal } from './participants/ParticipantDataDrivenProfileModal';
 
 
 
@@ -290,6 +292,8 @@ export function ParticipantCardModal({
   const [piggyDayFilter, setPiggyDayFilter] = useState('');
 
   const [finalProfileOpen, setFinalProfileOpen] = useState(false);
+  const [analyticalProfileOpen, setAnalyticalProfileOpen] = useState(false);
+  const [dataDrivenProfileOpen, setDataDrivenProfileOpen] = useState(false);
 
   const [pointsTrack, setPointsTrack] = useState<'path' | 'experience'>('path');
   const [pointsAmount, setPointsAmount] = useState(10);
@@ -494,6 +498,20 @@ export function ParticipantCardModal({
               onClick={() => setFinalProfileOpen(true)}
             >
               Профиль участника
+            </button>
+            <button
+              type="button"
+              className="adm-btn adm-btn-sm adm-btn-secondary"
+              onClick={() => setAnalyticalProfileOpen(true)}
+            >
+              Профиль участника 2
+            </button>
+            <button
+              type="button"
+              className="adm-btn adm-btn-sm adm-btn-secondary"
+              onClick={() => setDataDrivenProfileOpen(true)}
+            >
+              Профиль участника 3
             </button>
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF')}>Выгрузить всё</button>
             {p.isBlocked
@@ -1705,6 +1723,18 @@ export function ParticipantCardModal({
       participantId={p.id}
       participantName={displayName}
       onClose={() => setFinalProfileOpen(false)}
+    />
+    <ParticipantAnalyticalProfileModal
+      open={analyticalProfileOpen}
+      participantId={p.id}
+      participantName={displayName}
+      onClose={() => setAnalyticalProfileOpen(false)}
+    />
+    <ParticipantDataDrivenProfileModal
+      open={dataDrivenProfileOpen}
+      participantId={p.id}
+      participantName={displayName}
+      onClose={() => setDataDrivenProfileOpen(false)}
     />
     </>
   );
