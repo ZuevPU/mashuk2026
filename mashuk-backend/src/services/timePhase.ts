@@ -306,10 +306,15 @@ export function getTouchpointAccess(
     return 'open';
   }
 
-  // Один день льготы: вчерашние точки ещё можно досдать (иначе при смене дня
-  // «Состояние»/«После блоков» за D−1 остаются пустыми навсегда).
+  // Один день льготы для осмыслений (until_midnight / until_day_rollover).
+  // Проверки состояния (hard_close) на D−1 НЕ досдаём — иначе «Дневная проверка»
+  // висит с «Ответить» всю ночь и следующий день.
   if (qDay === currentDay - 1) {
     if (publishTime && publishTime > now) return 'soon';
+    if (latePolicy === 'hard_close') return 'locked';
+    if (latePolicy === 'until_midnight' && closeTime) {
+      return now >= moscowAnswerDeadline(closeTime) ? 'locked' : 'overdue';
+    }
     return 'overdue';
   }
 

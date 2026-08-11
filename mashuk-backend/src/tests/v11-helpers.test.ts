@@ -50,6 +50,11 @@ describe('touchpoint access', () => {
   it('allows yesterday as overdue, locks older days', () => {
     assert.equal(getTouchpointAccess(2, 3, null), 'overdue');
     assert.equal(getTouchpointAccess(1, 3, null), 'locked');
+    // state_check hard_close: нет досдачи на D−1
+    assert.equal(
+      getTouchpointAccess(2, 3, null, new Date(), null, 'hard_close'),
+      'locked',
+    );
   });
 
   it('marks overdue when closeTime passed on current day', () => {

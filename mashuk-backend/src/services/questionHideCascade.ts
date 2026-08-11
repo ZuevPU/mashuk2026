@@ -8,8 +8,17 @@ import { questions } from '../db/schema.js';
 import { normalizeDayNumbers } from './questionAdminHelpers.js';
 import { questionMatchesTouchpointSlot } from './touchpointProgress.js';
 import { TOUCHPOINT_SLOTS } from './touchpointTemplates.js';
+import { normalizeStateCheckPhase } from './questionVisibilityKeys.js';
 
 type Q = typeof questions.$inferSelect;
+
+function isStateCheck(q: Q): boolean {
+  const kind = String(q.questionKind || q.reflectionKind || '').toLowerCase();
+  const block = (q.block || '').toLowerCase();
+  return q.type === 'checkin'
+    || kind === 'state_check'
+    || block.includes('проверк');
+}
 
 export function questionsAreVisibilityTwins(a: Q, b: Q): boolean {
   if (a.id === b.id) return true;
@@ -19,6 +28,14 @@ export function questionsAreVisibilityTwins(a: Q, b: Q): boolean {
   const daysB = normalizeDayNumbers(b.dayNumbers, b.dayNumber);
   if (!daysA.some(d => daysB.includes(d))) return false;
 
+  // Проверки состояния: одна фаза (утро/день/вечер) на день = близнецы,
+  // даже если timePoint пустой или заголовок чуть другой.
+  if (isStateCheck(a) && isStateCheck(b)) {
+    const pa = normalizeStateCheckPhase(a);
+    const pb = normalizeStateCheckPhase(b);
+    if (pa && pb && pa === pb) return true;
+  }
+
   for (const slot of TOUCHPOINT_SLOTS) {
     if (questionMatchesTouchpointSlot(a, slot) && questionMatchesTouchpointSlot(b, slot)) {
       return true;
@@ -27,15 +44,22 @@ export function questionsAreVisibilityTwins(a: Q, b: Q): boolean {
 
   const titleA = (a.title || '').trim().toLowerCase();
   const titleB = (b.title || '').trim().toLowerCase();
-  if (!titleA || titleA !== titleB) return false;
+  if (titleA && titleB) {
+    if (titleA === titleB) return true;
+    // «Дневная проверка» ≈ «Дневная проверка состояния»
+    if (titleA.includes(titleB) || titleB.includes(titleA)) {
+      const kindA = String(a.questionKind || a.reflectionKind || '').toLowerCase();
+      const kindB = String(b.questionKind || b.reflectionKind || '').toLowerCase();
+      if (kindA && kindB && kindA === kindB) return true;
+      if (isStateCheck(a) && isStateCheck(b)) return true;
+    }
+  }
 
   const kindA = String(a.questionKind || a.reflectionKind || '').toLowerCase();
   const kindB = String(b.questionKind || b.reflectionKind || '').toLowerCase();
-  if (kindA && kindB && kindA === kindB) return true;
+  if (kindA && kindB && kindA === kindB && titleA && titleA === titleB) return true;
 
-  const blockA = (a.block || '').trim().toLowerCase();
-  const blockB = (b.block || '').trim().toLowerCase();
-  return Boolean(blockA && blockA === blockB);
+  return false;
 }
 
 /** Apply isHidden to the question and all non-archived twins on the same shift. */

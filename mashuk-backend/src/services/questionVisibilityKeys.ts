@@ -14,13 +14,39 @@ type QLike = {
   isHidden?: boolean | null;
 };
 
+function isStateCheckQuestion(q: QLike): boolean {
+  const kind = String(q.questionKind || q.reflectionKind || '').toLowerCase();
+  const block = (q.block || '').toLowerCase();
+  return q.type === 'checkin'
+    || kind === 'state_check'
+    || block === 'проверка состояния'
+    || block.includes('проверк');
+}
+
+/** Нормализуем фазу: timePoint или эвристика по заголовку («Дневная…»). */
+export function normalizeStateCheckPhase(q: QLike): 'утро' | 'день' | 'вечер' | null {
+  const tp = (q.timePoint || '').trim().toLowerCase();
+  if (tp === 'утро' || tp === 'день' || tp === 'вечер') return tp;
+  const title = (q.title || '').toLowerCase();
+  if (/утр/.test(title)) return 'утро';
+  if (/дневн|днём|днем|обед/.test(title)) return 'день';
+  if (/вечер/.test(title)) return 'вечер';
+  return null;
+}
+
 /** Keys used to suppress twins of admin-hidden questions in participant lists. */
 export function visibilityKeysForQuestion(q: QLike): string[] {
   const days = normalizeDayNumbers(q.dayNumbers, q.dayNumber);
   const keys: string[] = [];
   const title = (q.title || '').trim().toLowerCase();
+  const phase = normalizeStateCheckPhase(q);
+
   for (const d of days) {
     if (title) keys.push(`${d}:title:${title}`);
+    // Шире, чем точный title: «Дневная проверка» / «Дневная проверка состояния»
+    if (isStateCheckQuestion(q) && phase) {
+      keys.push(`${d}:state:${phase}`);
+    }
     for (const slot of TOUCHPOINT_SLOTS) {
       if (questionMatchesTouchpointSlot(q, slot)) {
         keys.push(`${d}:slot:${slot.index}`);

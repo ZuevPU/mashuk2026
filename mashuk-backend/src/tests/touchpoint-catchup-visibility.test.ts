@@ -38,7 +38,7 @@ describe('touchpoint D-1 catch-up visibility', () => {
     assert.equal(questionVisibleToParticipant(q, participant, 5), false);
   });
 
-  it('allows yesterday state check', () => {
+  it('hides yesterday state check (hard_close — no D−1 catch-up)', () => {
     const q = {
       title: 'Утренняя проверка состояния',
       block: 'Проверка состояния',
@@ -49,7 +49,8 @@ describe('touchpoint D-1 catch-up visibility', () => {
       dayNumbers: [2],
       audienceType: 'all' as const,
     };
-    assert.equal(questionVisibleToParticipant(q, participant, 3), true);
+    assert.equal(questionVisibleToParticipant(q, participant, 3), false);
+    assert.equal(questionVisibleToParticipant(q, participant, 2), true);
   });
 });
 

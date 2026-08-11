@@ -26,8 +26,8 @@ describe('question hide twins', () => {
       ...hidden,
       id: 201,
       title: 'Дневная проверка',
+      timePoint: '', // пустой timePoint — фаза из заголовка
       isHidden: false,
-      // different window — still same slot
     };
     assert.equal(questionsAreVisibilityTwins(hidden as never, twin as never), true);
     const suppressed = buildSuppressedVisibilityKeys([hidden, twin]);

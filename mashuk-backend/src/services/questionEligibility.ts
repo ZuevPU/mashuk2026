@@ -89,10 +89,11 @@ export function questionVisibleToParticipant(
         return questionAudienceAllowsParticipant(q, participant);
       }
     }
-    // D−1 catch-up: getTouchpointAccess already allows yesterday as overdue,
-    // and listForumQuestions includes yesterday — visibility must not block submit.
+    // D−1 catch-up for sense-making only. State checks (hard_close) must not
+    // stay visible overnight with «Ответить».
     const yesterday = currentDay - 1;
     if (yesterday >= 1 && questionMatchesDay(q, yesterday)) {
+      if (lateAnswerPolicyForQuestion(q) === 'hard_close') return false;
       return questionAudienceAllowsParticipant(q, participant);
     }
     return false;
