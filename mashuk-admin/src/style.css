@@ -2976,9 +2976,57 @@ button.adm-dir-tlc { cursor: pointer; }
   font-size: 12.5px;
 }
 tr.adm-dir-me td { background: rgba(230, 174, 74, 0.09); }
+.adm-dir-anketa-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.adm-dir-anketa-card {
+  background: var(--m-bg);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 14px;
+}
+.adm-dir-anketa-card.is-on { border-color: rgba(230, 174, 74, 0.45); }
+.adm-dir-anketa-card-t {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.adm-dir-anketa-card.is-on .adm-dir-anketa-card-t { color: #b45309; }
+.adm-dir-anketa-bars {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  height: 56px;
+  margin: 12px 0 14px;
+}
+.adm-dir-anketa-bar {
+  flex: 1;
+  border-radius: 3px;
+  min-height: 10px;
+}
+.adm-dir-anketa-bar.is-empty {
+  height: 10px;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 3px,
+    rgba(110, 110, 115, 0.16) 3px,
+    rgba(110, 110, 115, 0.16) 6px
+  );
+}
+.adm-dir-anketa-bar.is-ok { background: #2f7d63; }
+.adm-dir-anketa-bar.is-bad { background: #b0524c; }
+.adm-dir-anketa-val {
+  font-size: 25px;
+  font-weight: 650;
+  display: flex;
+  align-items: baseline;
+}
 @media (max-width: 900px) {
   .adm-dir-grid2,
   .adm-dir-grid3 { grid-template-columns: 1fr; }
   .adm-dir-prof { grid-template-columns: 130px 1fr 64px; }
   .adm-dir-tl { grid-template-columns: repeat(4, 1fr); }
+  .adm-dir-anketa-cards { grid-template-columns: 1fr 1fr; }
 }

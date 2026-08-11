@@ -9,6 +9,10 @@ import {
   HBar,
   StackBar,
 } from './dayResultsUi';
+import { HubDirectionDynamics, type SeriesMetric } from './HubDirectionDynamics';
+import {
+  Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
 
 const ZONE_COLORS: Record<string, string> = {
   'Подъём': '#57bd9c',
@@ -107,6 +111,26 @@ type DirData = {
     dir: string; registered: number;
     cards: Array<{ day: number; main: { v: number | string; label: string } | null; tools: string[] }>;
   }>;
+  instruments: string[];
+  series: SeriesMetric[];
+  touchpoints: Array<{
+    index: number; name: string; short: string; kind: string; day: number;
+    all: number; byDir: Record<string, number>;
+  }>;
+  anketaBlocks: {
+    blocks: Array<{ key: string; label: string; forumMean: number | null; forumLow: number }>;
+    forumIdx: number | null;
+    rows: Array<{
+      dir: string; idx: number | null;
+      means: Array<{ key: string; mean: number | null; low: number }>;
+    }>;
+  };
+  anketaCards: Array<{
+    dir: string;
+    byDay: Record<string, { fill: number; idx: number | null; crit: number | null }>;
+  }>;
+  anketaForumByDay: Record<string, { fill: number; idx: number | null; crit: number | null }>;
+  dirColors: Record<string, string>;
 };
 
 function fmt(v: number | null | undefined, unit = ''): string {
@@ -133,6 +157,7 @@ export function HubDirectionScreen() {
   const [data, setData] = useState<DirData | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [anketaMetric, setAnketaMetric] = useState<'fill' | 'idx' | 'crit'>('fill');
 
   useEffect(() => {
     setLoading(true);
@@ -591,40 +616,308 @@ export function HubDirectionScreen() {
             </div>
           </DayResultsSection>
 
+          {data.series?.length > 0 && (
+            <HubDirectionDynamics
+              instruments={data.instruments}
+              series={data.series}
+              dirs={data.dirs.map(d => d.dir)}
+              dirColors={data.dirColors}
+              selectedDir={data.meta.selectedDir}
+            />
+          )}
+
           <DayResultsSection
-            title="По дням"
-            note="Чем закрыт каждый день и ключевое число выбранного направления."
+            title="Каждое направление по дням"
+            note="Одна лента на направление — чем закрыт каждый день и ключевое число."
           >
-            <DashCard>
-              <div className="adm-dir-tl">
-                {data.daySeries.map(d => {
-                  const on = d.day === selectedDay;
-                  let main: string | null = null;
-                  let sub = '';
-                  if (d.idx != null) { main = String(d.idx); sub = 'индекс дня'; }
-                  else if (d.neg != null) { main = `${d.neg}%`; sub = 'усталость и риск'; }
-                  else if (d.own != null) { main = `${d.own}%`; sub = 'присвоение'; }
-                  else if (d.exQ != null && d.exQ > 0) { main = String(d.exQ); sub = 'вопросов в обмене'; }
-                  return (
-                    <button
-                      key={d.day}
-                      type="button"
-                      className={`adm-dir-tlc ${main ? 'has' : ''} ${on ? 'is-on' : ''}`}
-                      onClick={() => setForumDay(String(d.day))}
-                    >
-                      <div className="d">День {d.day}</div>
-                      {main ? (
+            {data.timelines.map(t => (
+              <DashCard key={t.dir} title={`${t.dir} · ${t.registered}`}>
+                <div className="adm-dir-tl">
+                  {t.cards.map(c => (
+                    <div key={c.day} className={`adm-dir-tlc ${c.main ? 'has' : ''}`}>
+                      <div className="d">День {c.day}</div>
+                      {c.main ? (
                         <>
-                          <div className="k">{main}</div>
-                          <div className="s">{sub}</div>
+                          <div className="k">{c.main.v}</div>
+                          <div className="s">{c.main.label}</div>
                         </>
                       ) : (
                         <div className="s" style={{ marginTop: 16 }}>нет данных</div>
                       )}
-                    </button>
+                      {c.tools.length > 0 && (
+                        <div className="s" style={{ marginTop: 6 }}>{c.tools.join(' · ')}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </DashCard>
+            ))}
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Заполняемость точек осмысления"
+            note="Доля зарегистрированных в направлении, закрывших каждую точку. Не «сколько ответов», а какая часть трека дошла."
+          >
+            <DashCard>
+              <div className="adm-day-results-scroll">
+                <table className="adm-day-results-table">
+                  <thead>
+                    <tr>
+                      <th style={{ minWidth: 210 }}>Точка</th>
+                      <th style={{ textAlign: 'center' }}>Весь форум</th>
+                      {data.dirs.map(d => (
+                        <th key={d.dir} style={{ textAlign: 'center', maxWidth: 74, whiteSpace: 'normal' }}>
+                          {d.dir}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data.touchpoints ?? []).map(tp => (
+                      <tr key={tp.index}>
+                        <td>
+                          {tp.name}
+                          <div className="adm-muted" style={{ fontSize: 11 }}>{tp.kind} · день {tp.day}</div>
+                        </td>
+                        <td style={{ textAlign: 'center', fontWeight: 600 }} className="adm-muted">
+                          {tp.all}%
+                        </td>
+                        {data.dirs.map(d => {
+                          const v = tp.byDir[d.dir] ?? 0;
+                          const a = Math.max(0, Math.min(1, (v - 25) / 60));
+                          const bg = a > 0.62
+                            ? `rgba(87,189,156,${(a - 0.5) * 0.8})`
+                            : a < 0.38
+                              ? `rgba(226,104,94,${(0.5 - a) * 0.8})`
+                              : 'rgba(111,125,149,.13)';
+                          return (
+                            <td key={d.dir} style={{ padding: 4 }}>
+                              <span
+                                className="adm-dir-cell"
+                                style={{
+                                  background: bg,
+                                  fontWeight: d.dir === cur ? 600 : 400,
+                                  color: a < 0.28 ? '#b91c1c' : undefined,
+                                }}
+                              >
+                                {v}%
+                              </span>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="adm-day-results-callout">
+                Вечерняя проверка обычно собирает заметно меньше утренней у всех направлений сразу —
+                это чаще расписание, а не мотивация трека.
+              </p>
+            </DashCard>
+
+            <DashCard title="Точки всех направлений на одном графике">
+              <div style={{ width: '100%', height: 320 }}>
+                <ResponsiveContainer>
+                  <BarChart
+                    data={(data.touchpoints ?? []).map(tp => {
+                      const row: Record<string, string | number> = { short: tp.short };
+                      for (const d of data.dirs) row[d.dir] = tp.byDir[d.dir] ?? 0;
+                      return row;
+                    })}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                    <XAxis dataKey="short" tick={{ fontSize: 11 }} />
+                    <YAxis unit="%" tick={{ fontSize: 11 }} width={36} />
+                    <Tooltip />
+                    {data.dirs.map(d => (
+                      <Bar
+                        key={d.dir}
+                        dataKey={d.dir}
+                        fill={data.dirColors[d.dir]}
+                        fillOpacity={d.dir === cur ? 1 : 0.82}
+                        radius={[2, 2, 0, 0]}
+                      />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Анкета дня: оценки по направлениям"
+            note="Блоки программы против направлений. Цвет — место в ряду, не абсолют."
+          >
+            <DashCard>
+              <div className="adm-day-results-scroll">
+                <table className="adm-day-results-table">
+                  <thead>
+                    <tr>
+                      <th style={{ minWidth: 150 }}>Блок программы</th>
+                      <th style={{ textAlign: 'center' }}>Форум</th>
+                      {data.dirs.map(d => (
+                        <th key={d.dir} style={{ textAlign: 'center', maxWidth: 74, whiteSpace: 'normal' }}>
+                          {d.dir}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data.anketaBlocks?.blocks ?? []).map(b => {
+                      const vals = data.anketaBlocks.rows
+                        .map(r => r.means.find(m => m.key === b.key)?.mean)
+                        .filter((v): v is number => v != null)
+                        .sort((a, c) => c - a);
+                      return (
+                        <tr key={b.key}>
+                          <td>
+                            {b.label}
+                            <div className="adm-muted" style={{ fontSize: 11 }}>
+                              критика {b.forumLow}%
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'center', fontWeight: 600 }} className="adm-muted">
+                            {b.forumMean ?? '—'}
+                          </td>
+                          {data.anketaBlocks.rows.map(row => {
+                            const cell = row.means.find(m => m.key === b.key);
+                            const v = cell?.mean;
+                            const r = v != null && vals.length > 1 ? vals.indexOf(v) : -1;
+                            const a = r >= 0 ? 1 - r / (vals.length - 1) : 0.5;
+                            const bg = a > 0.66
+                              ? `rgba(87,189,156,${(a - 0.5) * 0.75})`
+                              : a < 0.34
+                                ? `rgba(226,104,94,${(0.5 - a) * 0.75})`
+                                : 'transparent';
+                            return (
+                              <td key={row.dir} style={{ padding: 4 }}>
+                                <span
+                                  className="adm-dir-cell"
+                                  style={{ background: bg, fontWeight: row.dir === cur ? 600 : 400 }}
+                                >
+                                  {v ?? '—'}
+                                </span>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                    <tr>
+                      <td style={{ fontWeight: 600 }}>Индекс дня</td>
+                      <td style={{ textAlign: 'center', fontWeight: 600 }}>
+                        {data.anketaBlocks?.forumIdx ?? '—'}
+                      </td>
+                      {(data.anketaBlocks?.rows ?? []).map(row => (
+                        <td
+                          key={row.dir}
+                          style={{
+                            textAlign: 'center',
+                            fontWeight: 600,
+                            color: (row.idx ?? 0) >= (data.anketaBlocks.forumIdx ?? 0)
+                              ? '#0f766e'
+                              : '#b91c1c',
+                          }}
+                        >
+                          {row.idx ?? '—'}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </DashCard>
+
+            <DashCard title="Карточки направлений по дням анкеты">
+              <div className="adm-dir-picker" style={{ marginTop: 0 }}>
+                {([
+                  ['fill', 'Заполняемость анкеты'],
+                  ['idx', 'Оценка дня'],
+                  ['crit', 'Оценок ниже 4'],
+                ] as const).map(([k, n]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className={`adm-dir-chip ${anketaMetric === k ? 'is-on' : ''}`}
+                    onClick={() => setAnketaMetric(k)}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div className="adm-dir-anketa-cards">
+                {(data.anketaCards ?? []).map(card => {
+                  const unit = anketaMetric === 'idx' ? '' : '%';
+                  const fa = data.anketaForumByDay?.[String(selectedDay)]?.[anketaMetric]
+                    ?? data.anketaForumByDay?.[Object.keys(data.anketaForumByDay || {}).slice(-1)[0] || '']?.[anketaMetric];
+                  const days = Object.keys(card.byDay).map(Number).sort((a, b) => a - b);
+                  const last = days.length ? days[days.length - 1] : null;
+                  const first = days.length ? days[0] : null;
+                  const curV = last != null ? card.byDay[String(last)]?.[anketaMetric] : null;
+                  const firstV = first != null ? card.byDay[String(first)]?.[anketaMetric] : null;
+                  const better = curV != null && fa != null
+                    ? (anketaMetric === 'crit' ? curV <= fa : curV >= fa)
+                    : null;
+                  return (
+                    <div
+                      key={card.dir}
+                      className={`adm-dir-anketa-card ${card.dir === cur ? 'is-on' : ''}`}
+                    >
+                      <div className="adm-dir-anketa-card-t">{card.dir}</div>
+                      <div className="adm-dir-anketa-bars">
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map(i => {
+                          const v = card.byDay[String(i)]?.[anketaMetric];
+                          if (v == null) {
+                            return <div key={i} className="adm-dir-anketa-bar is-empty" title={`День ${i}: нет`} />;
+                          }
+                          const rng = anketaMetric === 'idx' ? [4, 5] : anketaMetric === 'crit' ? [0, 25] : [0, 100];
+                          const norm = Math.max(0.12, Math.min(1, (v - rng[0]) / (rng[1] - rng[0])));
+                          const ok = fa == null
+                            ? true
+                            : (anketaMetric === 'crit' ? v <= fa : v >= fa);
+                          return (
+                            <div
+                              key={i}
+                              className={`adm-dir-anketa-bar ${ok ? 'is-ok' : 'is-bad'}`}
+                              style={{ height: Math.round(norm * 56) }}
+                              title={`День ${i}: ${v}${unit}`}
+                            />
+                          );
+                        })}
+                      </div>
+                      <div className="adm-dir-anketa-val">
+                        {curV == null ? '—' : `${curV}${unit}`}
+                        {firstV != null && curV != null && first != null && last != null && first !== last && (
+                          <span style={{
+                            marginLeft: 8,
+                            fontSize: 12.5,
+                            color: curV - firstV >= 0 ? '#0f766e' : '#b91c1c',
+                          }}>
+                            {curV - firstV >= 0 ? '▲' : '▼'} {Math.abs(curV - firstV).toFixed(1)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="adm-muted" style={{ fontSize: 11.5, marginTop: 5 }}>
+                        {days.length
+                          ? `день ${first}: ${firstV}${unit}${days.length > 1 ? ` → день ${last}` : ''}`
+                          : 'нет данных'}
+                        {fa != null && (
+                          <>
+                            <br />
+                            по форуму {fa}{unit}
+                            {better == null ? '' : (better ? ' · выше' : ' · ниже')}
+                          </>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
+              <p className="adm-day-results-callout">
+                Восемь столбиков — дни смены; пустой означает, что выгрузки нет.
+                Зелёный — выше форума, красный — ниже.
+              </p>
             </DashCard>
           </DayResultsSection>
 
@@ -678,33 +971,6 @@ export function HubDirectionScreen() {
             </DashCard>
           </DayResultsSection>
 
-          <DayResultsSection
-            title="Ленты всех направлений"
-            note="Одна лента на трек — без переключений видно, чем закрыт каждый день."
-          >
-            {data.timelines.map(t => (
-              <DashCard key={t.dir} title={`${t.dir} · ${t.registered}`}>
-                <div className="adm-dir-tl">
-                  {t.cards.map(c => (
-                    <div key={c.day} className={`adm-dir-tlc ${c.main ? 'has' : ''}`}>
-                      <div className="d">День {c.day}</div>
-                      {c.main ? (
-                        <>
-                          <div className="k">{c.main.v}</div>
-                          <div className="s">{c.main.label}</div>
-                        </>
-                      ) : (
-                        <div className="s" style={{ marginTop: 16 }}>нет данных</div>
-                      )}
-                      {c.tools.length > 0 && (
-                        <div className="s" style={{ marginTop: 6 }}>{c.tools.join(' · ')}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </DashCard>
-            ))}
-          </DayResultsSection>
         </>
       )}
     </div>

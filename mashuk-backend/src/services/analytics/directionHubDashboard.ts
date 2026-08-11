@@ -23,9 +23,14 @@ import { entryTags } from '../piggybankDict.js';
 import { getCalendarForumDay, getMoscowParts } from '../timePhase.js';
 import {
   isTouchpointQuestionForForumDay,
+  questionMatchesTouchpointSlot,
   touchpointCompletionRatio,
 } from '../touchpointProgress.js';
-import { EVENING_SCALE_KEYS, EVENING_SCALE_LABELS } from '../touchpointTemplates.js';
+import {
+  EVENING_SCALE_KEYS,
+  EVENING_SCALE_LABELS,
+  TOUCHPOINT_SLOTS,
+} from '../touchpointTemplates.js';
 import { collectEveningExportRows, type EveningExportRow } from '../exports/eveningExportData.js';
 import { roleLabel } from '../exports/exportLabels.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
@@ -140,12 +145,15 @@ function dayIndex(rows: EveningExportRow[]): number | null {
   return mean(per);
 }
 
-async function loadTouchpointPoints(
-  ids: number[],
-  throughDay: number,
-): Promise<Map<number, number>> {
+async function loadTouchpointBundle(ids: number[], throughDay: number) {
   const byPid = new Map<number, number>();
-  if (!ids.length) return byPid;
+  const empty = {
+    byPid,
+    published: [] as typeof questions.$inferSelect[],
+    answeredByPid: new Map<number, Set<number>>(),
+    eveningDays: new Map<number, Set<number>>(),
+  };
+  if (!ids.length) return empty;
   const qRows = await db.select().from(questions);
   const published = qRows.filter(q => isPublishedStatus(q.status));
   const eveningStates = await db.select({
@@ -180,8 +188,28 @@ async function loadTouchpointPoints(
     }
     byPid.set(id, tp);
   }
-  return byPid;
+  return { byPid, published, answeredByPid, eveningDays };
 }
+
+const SLOT_SHORT: Record<number, string> = {
+  1: 'Утро',
+  2: 'Направление',
+  3: 'День',
+  4: 'Уроки о важном',
+  5: 'Открытые уроки',
+  6: 'Вечер',
+  7: 'Итоги дня',
+};
+
+const SLOT_KIND: Record<number, string> = {
+  1: 'состояние',
+  2: 'осмысление',
+  3: 'состояние',
+  4: 'осмысление',
+  5: 'осмысление',
+  6: 'состояние',
+  7: 'итоги',
+};
 
 function buildStateSlice(rows: KindAnswerRow[], registered: number) {
   const people = new Set(rows.map(r => r.participantId));
@@ -333,7 +361,7 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
     { rows: stateAll },
     { rows: afterAll },
     eveningPack,
-    tpByPid,
+    tpBundle,
     scoreRows,
     pigRows,
     exQ,
@@ -347,7 +375,7 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
       day: null,
       includeDrafts: true,
     }),
-    loadTouchpointPoints(cohortIds, day),
+    loadTouchpointBundle(cohortIds, day),
     cohortIds.length
       ? db.select({
         id: participants.id,
@@ -392,6 +420,7 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
   const submittedAll = eveningRows.filter(r => r.status === 'сдано');
   const draftsAll = eveningRows.filter(r => r.status !== 'сдано');
 
+  const tpByPid = tpBundle.byPid;
   const scoreById = new Map(scoreRows.map(r => [r.id, r]));
   const catById = new Map(cats.map(c => [c.id, c]));
 
@@ -614,9 +643,20 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
     };
   }
 
-  const forum = sliceFor(null, day);
+  const sliceCache = new Map<string, ReturnType<typeof sliceFor>>();
+  const getSlice = (dir: string | null, forDay: number) => {
+    const key = `${dir ?? '__all'}|${forDay}`;
+    let s = sliceCache.get(key);
+    if (!s) {
+      s = sliceFor(dir, forDay);
+      sliceCache.set(key, s);
+    }
+    return s;
+  };
+
+  const forum = getSlice(null, day);
   const byDir: Record<string, ReturnType<typeof sliceFor>> = {};
-  for (const d of dirs) byDir[d] = sliceFor(d, day);
+  for (const d of dirs) byDir[d] = getSlice(d, day);
 
   // Day series for selected / all dirs
   const daySeries: Array<{
@@ -636,7 +676,7 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
       });
       continue;
     }
-    const s = sliceFor(selectedDir, d);
+    const s = getSlice(selectedDir, d);
     daySeries.push({
       day: d,
       idx: s.evening.idx,
@@ -648,6 +688,57 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
       kopCov: s.kop.n || s.kop.auto ? s.kop.cov : null,
     });
   }
+
+  // Series for interactive dynamics (instrument → metric → day)
+  type SeriesDef = { key: string; name: string; inst: string; unit: string; up: boolean };
+  const seriesDefs: SeriesDef[] = [
+    { key: 'st_neg', name: 'Усталость и риск', inst: 'Состояние', unit: '%', up: false },
+    { key: 'st_cov', name: 'Охват проверок состояния', inst: 'Состояние', unit: '%', up: true },
+    { key: 'ev_idx', name: 'Индекс дня', inst: 'Итоги дня', unit: '', up: true },
+    { key: 'ev_crit', name: 'Оценок ниже 4', inst: 'Итоги дня', unit: '%', up: false },
+    { key: 'ev_draft', name: 'Черновики анкеты', inst: 'Итоги дня', unit: '%', up: false },
+    { key: 'rf_own', name: 'Присвоение', inst: 'После блоков', unit: '%', up: true },
+    { key: 'rf_cov', name: 'Охват осмысления', inst: 'После блоков', unit: '%', up: true },
+    { key: 'kp_cov', name: 'Охват копилки', inst: 'Копилка', unit: '%', up: true },
+    { key: 'kp_act', name: 'Заметок с действием', inst: 'Копилка', unit: '%', up: true },
+    { key: 'ac_pts', name: 'Точки осмысления (среднее)', inst: 'Активность', unit: '', up: true },
+    { key: 'ac_exp0', name: 'Ни разу не в обмене опытом', inst: 'Активность', unit: '%', up: false },
+    { key: 'ac_today', name: 'Заходили в день среза', inst: 'Активность', unit: '%', up: true },
+    { key: 'ac_old', name: 'Выпали на 2+ дня', inst: 'Активность', unit: 'чел.', up: false },
+    { key: 'ex_sent', name: 'Подано вопросов', inst: 'Обмен опытом', unit: '', up: true },
+    { key: 'ex_ans', name: 'Написано ответов', inst: 'Обмен опытом', unit: '', up: true },
+  ];
+  const seriesKeys = ['all', ...dirs];
+  const series = seriesDefs.map(def => {
+    const data: Record<string, Record<string, number>> = {};
+    for (const k of seriesKeys) data[k] = {};
+    for (let d = 1; d <= currentDay; d++) {
+      for (const k of seriesKeys) {
+        const s = getSlice(k === 'all' ? null : k, d);
+        let v: number | null = null;
+        if (def.key === 'st_neg' && s.state.n) v = s.state.neg;
+        else if (def.key === 'st_cov' && s.state.n) v = s.state.cov;
+        else if (def.key === 'ev_idx') v = s.evening.idx;
+        else if (def.key === 'ev_crit' && s.evening.blocks.length) {
+          v = round1(s.evening.blocks.reduce((a, b) => a + b.low, 0) / s.evening.blocks.length);
+        } else if (def.key === 'ev_draft' && s.evening.n + (s.metrics.drafts ?? 0) >= 0 && s.evening.n > 0) {
+          v = s.metrics.drafts;
+        } else if (def.key === 'rf_own' && s.refl.n) v = s.refl.own;
+        else if (def.key === 'rf_cov' && s.refl.n) v = s.refl.cov;
+        else if (def.key === 'kp_cov' && (s.kop.n || s.kop.auto)) v = s.kop.cov;
+        else if (def.key === 'kp_act' && s.kop.n) v = s.kop.act;
+        else if (def.key === 'ac_pts' && d === day) v = s.act.points;
+        else if (def.key === 'ac_exp0' && d === day) v = s.act.exp0;
+        else if (def.key === 'ac_today' && d === day) v = s.act.today;
+        else if (def.key === 'ac_old' && d === day) v = s.act.old;
+        else if (def.key === 'ex_sent' && (s.exch.q || s.exch.a)) v = s.exch.q;
+        else if (def.key === 'ex_ans' && (s.exch.q || s.exch.a)) v = s.exch.a;
+        if (v != null) data[k][String(d)] = v;
+      }
+    }
+    return { ...def, data };
+  });
+  const instruments = [...new Set(seriesDefs.map(s => s.inst))];
 
   // Comparison matrix ranks
   const matrixKeys = PROFILE_METRICS;
@@ -699,7 +790,7 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
   const timelines = dirs.map(d => {
     const cards = [1, 2, 3, 4, 5, 6, 7, 8].map(dd => {
       if (dd > currentDay) return { day: dd, main: null as null | { v: number | string; label: string }, tools: [] as string[] };
-      const s = dd === day ? byDir[d] : sliceFor(d, dd);
+      const s = getSlice(d, dd);
       const tools: string[] = [];
       let main: { v: number | string; label: string } | null = null;
       if (s.evening.idx != null) {
@@ -731,6 +822,87 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
   const levels = ['Перенос в практику', 'Связь с собой', 'Тезис', 'Реакция'];
   const zones = ZONE_ORDER.map(k => ZONE_RU[k]);
   const smallDirs = dirs.filter(d => (regByDir.get(d) || 0) < 60);
+
+  // Заполняемость 7 точек осмысления × направления (за выбранный день)
+  const dayQs = tpBundle.published.filter(q => isTouchpointQuestionForForumDay(q, day));
+  const touchpoints = TOUCHPOINT_SLOTS.map(slot => {
+    const matched = dayQs.filter(q => questionMatchesTouchpointSlot(q, slot));
+    const qIds = new Set(matched.map(q => q.id));
+    const byDirPct: Record<string, number> = {};
+    const countFor = (list: Person[]) => {
+      if (!list.length) return 0;
+      let done = 0;
+      for (const p of list) {
+        const answered = tpBundle.answeredByPid.get(p.id) ?? new Set();
+        const hit = [...qIds].some(id => answered.has(id));
+        const eve = slot.index === 7 && (tpBundle.eveningDays.get(p.id)?.has(day) ?? false);
+        if (hit || eve) done += 1;
+      }
+      return pct(done, list.length);
+    };
+    byDirPct.all = countFor(people);
+    for (const d of dirs) byDirPct[d] = countFor(peopleByDir.get(d) ?? []);
+    return {
+      index: slot.index,
+      name: slot.title,
+      short: SLOT_SHORT[slot.index] ?? slot.title,
+      kind: SLOT_KIND[slot.index] ?? 'точка',
+      day,
+      all: byDirPct.all,
+      byDir: Object.fromEntries(dirs.map(d => [d, byDirPct[d]])),
+    };
+  });
+
+  // Анкета: матрица блоков × направлений + карточки fill/idx/crit по дням
+  const anketaBlocks = {
+    blocks: forum.evening.blocks.map(b => ({
+      key: b.key,
+      label: b.label,
+      forumMean: b.mean,
+      forumLow: b.low,
+    })),
+    forumIdx: forum.evening.idx,
+    rows: dirs.map(d => ({
+      dir: d,
+      idx: byDir[d].evening.idx,
+      means: byDir[d].evening.blocks.map(b => ({
+        key: b.key,
+        mean: b.mean,
+        low: b.low,
+      })),
+    })),
+  };
+
+  const anketaCards = dirs.map(d => {
+    const byDay: Record<string, { fill: number; idx: number | null; crit: number | null }> = {};
+    for (let dd = 1; dd <= currentDay; dd++) {
+      const s = getSlice(d, dd);
+      const reg = regByDir.get(d) || 1;
+      const fill = pct(s.evening.n, reg);
+      const crit = s.evening.blocks.length
+        ? round1(s.evening.blocks.reduce((a, b) => a + b.low, 0) / s.evening.blocks.length)
+        : null;
+      if (s.evening.n > 0 || s.metrics.drafts != null) {
+        byDay[String(dd)] = { fill, idx: s.evening.idx, crit };
+      }
+    }
+    return { dir: d, byDay };
+  });
+  const anketaForumByDay: Record<string, { fill: number; idx: number | null; crit: number | null }> = {};
+  for (let dd = 1; dd <= currentDay; dd++) {
+    const s = getSlice(null, dd);
+    const fill = pct(s.evening.n, people.length || 1);
+    const crit = s.evening.blocks.length
+      ? round1(s.evening.blocks.reduce((a, b) => a + b.low, 0) / s.evening.blocks.length)
+      : null;
+    if (s.evening.n > 0) {
+      anketaForumByDay[String(dd)] = { fill, idx: s.evening.idx, crit };
+    }
+  }
+
+  const dirColors: Record<string, string> = {};
+  const palette = ['#e6ae4a', '#79b8c9', '#57bd9c', '#e2685e', '#c98fb0', '#8fb98a', '#b0a0d0', '#6f7d95'];
+  dirs.forEach((d, i) => { dirColors[d] = palette[i % palette.length]; });
 
   return {
     filters: { ...filters, day },
@@ -802,6 +974,13 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
     },
     daySeries,
     timelines,
+    instruments,
+    series,
+    touchpoints,
+    anketaBlocks,
+    anketaCards,
+    anketaForumByDay,
+    dirColors,
     exportPath: selectedDir
       ? `/exports/direction?format=xlsx&direction=${encodeURIComponent(selectedDir)}&day=${day}`
       : undefined,

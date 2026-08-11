@@ -208,6 +208,9 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     assert.ok(Array.isArray(res.body.profile));
     assert.ok(Array.isArray(res.body.kpis));
     assert.ok(res.body.matrix);
+    assert.ok(Array.isArray(res.body.series));
+    assert.ok(Array.isArray(res.body.touchpoints));
+    assert.ok(res.body.anketaBlocks);
     assert.ok(Array.isArray(res.body.daySeries));
     assert.equal(res.body.daySeries.length, 8);
   });
