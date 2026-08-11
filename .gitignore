@@ -34,3 +34,5 @@ mashuk-backend/data/admin-exports/
 
 # Docker volumes
 *.local.yml
+
+.docx-preview/
