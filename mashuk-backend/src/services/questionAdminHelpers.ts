@@ -99,7 +99,12 @@ export function normalizeDayNumbers(
 
 export function enrichQuestionWritePayload(
   raw: Record<string, unknown>,
-  before?: { type?: string | null; answerType?: string | null },
+  before?: {
+    type?: string | null;
+    answerType?: string | null;
+    dayNumber?: number | null;
+    dayNumbers?: number[] | null;
+  },
 ): Record<string, unknown> {
   const out = { ...raw };
   if (out.answerType != null) {
@@ -112,10 +117,19 @@ export function enrichQuestionWritePayload(
     out.answerType = legacyTypeToAnswerType(before.type);
   }
 
-  const dn = normalizeDayNumbers(
-    out.dayNumbers as number[] | undefined,
-    out.dayNumber != null ? Number(out.dayNumber) : undefined,
-  );
+  // Partial PATCH must not reset day to 1 when day fields are omitted.
+  const hasDayInPatch =
+    (Array.isArray(out.dayNumbers) && (out.dayNumbers as unknown[]).length > 0)
+    || (out.dayNumber != null && Number(out.dayNumber) > 0);
+  const dn = hasDayInPatch
+    ? normalizeDayNumbers(
+      out.dayNumbers as number[] | undefined,
+      out.dayNumber != null ? Number(out.dayNumber) : undefined,
+    )
+    : normalizeDayNumbers(
+      before?.dayNumbers ?? undefined,
+      before?.dayNumber ?? undefined,
+    );
   out.dayNumbers = dn;
   out.dayNumber = dn[0] ?? 1;
 
