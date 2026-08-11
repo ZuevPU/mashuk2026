@@ -35,6 +35,10 @@ import { loadDayContext } from './dayStateController.js';
 import { resolveEveningSurveyDayForParticipant } from '../services/eveningSurveyDay.js';
 import { resolveHomeActiveCard } from '../services/homeActiveCard.js';
 import { resolveActiveShiftId } from '../services/shiftService.js';
+import {
+  buildSuppressedVisibilityKeys,
+  isSuppressedByHiddenTwin,
+} from '../services/questionVisibilityKeys.js';
 
 export const getHome = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
@@ -69,8 +73,9 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         eq(questions.status, 'published'),
         eq(questions.shiftId, shiftIdForQs),
       ));
-    // Скрытые админом не показываем в Home/CTA (свои уже данные ответы — только через список «Мои»).
-    const visiblePublished = publishedQuestions.filter(q => !q.isHidden);
+    // Скрытые админом и их близнецы не показываем в Home/CTA.
+    const suppressedKeys = buildSuppressedVisibilityKeys(publishedQuestions);
+    const visiblePublished = publishedQuestions.filter(q => !isSuppressedByHiddenTwin(q, suppressedKeys));
 
     const dayQuestions = publishedQuestions.filter(q =>
       isTouchpointQuestionForForumDay(q, currentDay));

@@ -45,6 +45,10 @@ import { questionMatchesDay } from '../services/questionAdminHelpers.js';
 import { evaluateMedalsForParticipantDetailed } from '../services/medalEvaluator.js';
 import { sendPushNotification } from '../services/pushService.js';
 import { participantAnswerSummary } from '../services/participantAnswerFormat.js';
+import {
+  buildSuppressedVisibilityKeys,
+  isSuppressedByHiddenTwin,
+} from '../services/questionVisibilityKeys.js';
 
 function exchangeQuestionAnswerable(status: string | null | undefined): boolean {
   return (status || '').trim().toLowerCase() === 'approved';
@@ -154,13 +158,14 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
     const attendedEventIds = new Set(userAttendance.map(a => a.eventId));
 
     // Answered (any day) for «Мои ответы»; unanswered only for today's forum day.
-    // Скрытые админом (`isHidden`) не отдаём для новых ответов — только свой уже сохранённый ответ.
+    // Скрытые админом (`isHidden`) и их близнецы не отдаём для новых ответов.
+    const suppressedKeys = buildSuppressedVisibilityKeys(list);
     const visible = list.filter(q => {
-      if (q.isHidden) {
-        return answeredIds.has(q.id) && questionAudienceAllowsParticipant(q, me);
-      }
       if (answeredIds.has(q.id)) {
         return questionAudienceAllowsParticipant(q, me);
+      }
+      if (isSuppressedByHiddenTwin(q, suppressedKeys)) {
+        return false;
       }
       // Не тянем весь хвост прошлых дней, но оставляем вчерашний день (D−1)
       // для досдачи — иначе при переходе D3→D4 точки D3 пропадают с нулями.
@@ -272,9 +277,30 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       db.select({ eventId: eventAttendance.eventId }).from(eventAttendance).where(eq(eventAttendance.participantId, req.participant!.id)),
     ]);
     const hasOwnAnswer = !!existingAnswer;
-    if (question.isHidden === true && !hasOwnAnswer) {
-      res.status(403).json({ error: 'Question hidden by organizers' });
-      return;
+    if (!hasOwnAnswer) {
+      if (question.isHidden === true) {
+        res.status(403).json({ error: 'Question hidden by organizers' });
+        return;
+      }
+      const siblings = await db.select({
+        id: questions.id,
+        title: questions.title,
+        type: questions.type,
+        block: questions.block,
+        timePoint: questions.timePoint,
+        questionKind: questions.questionKind,
+        reflectionKind: questions.reflectionKind,
+        dayNumber: questions.dayNumber,
+        dayNumbers: questions.dayNumbers,
+        isHidden: questions.isHidden,
+      }).from(questions).where(and(
+        eq(questions.status, 'published'),
+        question.shiftId != null ? eq(questions.shiftId, question.shiftId) : eq(questions.id, question.id),
+      ));
+      if (isSuppressedByHiddenTwin(question, buildSuppressedVisibilityKeys(siblings))) {
+        res.status(403).json({ error: 'Question hidden by organizers' });
+        return;
+      }
     }
     const settings = await getForumSettings();
     const { resolveActiveShiftId } = await import('../services/shiftService.js');
@@ -472,6 +498,29 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
     if (question.isHidden === true) {
       res.status(403).json({ error: 'Question hidden by organizers' });
       return;
+    }
+    // Близнец скрытого вопроса (тот же слот/день) тоже нельзя отвечать
+    {
+      const siblings = await db.select({
+        id: questions.id,
+        title: questions.title,
+        type: questions.type,
+        block: questions.block,
+        timePoint: questions.timePoint,
+        questionKind: questions.questionKind,
+        reflectionKind: questions.reflectionKind,
+        dayNumber: questions.dayNumber,
+        dayNumbers: questions.dayNumbers,
+        isHidden: questions.isHidden,
+      }).from(questions).where(and(
+        eq(questions.status, 'published'),
+        question.shiftId != null ? eq(questions.shiftId, question.shiftId) : eq(questions.id, question.id),
+      ));
+      const suppressed = buildSuppressedVisibilityKeys(siblings);
+      if (isSuppressedByHiddenTwin(question, suppressed)) {
+        res.status(403).json({ error: 'Question hidden by organizers' });
+        return;
+      }
     }
     if (!questionVisibleToParticipant(question, req.participant!, currentDay)) {
       res.status(403).json({ error: 'Question not available' });

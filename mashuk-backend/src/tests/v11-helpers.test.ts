@@ -110,7 +110,7 @@ describe('touchpoint access', () => {
     );
     assert.equal(
       lateAnswerPolicyForQuestion({ questionKind: 'after_blocks', title: 'После блоков' }),
-      'until_admin',
+      'until_midnight',
     );
     assert.equal(
       lateAnswerPolicyForQuestion({ questionKind: 'practices_vote' }),

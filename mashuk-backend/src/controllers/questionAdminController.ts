@@ -349,10 +349,22 @@ export const crudQuestions = {
     const patch = { ...enriched };
     if (patch.text === null) delete patch.text;
     delete (patch as Record<string, unknown>).requiresModeration;
-    const [updated] = await db.update(questions)
-      .set(patch as Partial<typeof questions.$inferInsert>)
-      .where(eq(questions.id, id))
-      .returning();
+
+    // Скрытие/показ — каскадом на близнецов (тот же слот/день), иначе в приложении
+    // остаётся другой published id с тем же названием.
+    const hideToggled = typeof patch.isHidden === 'boolean' && patch.isHidden !== before.isHidden;
+    if (hideToggled) {
+      const { setQuestionHiddenCascade } = await import('../services/questionHideCascade.js');
+      await setQuestionHiddenCascade(id, Boolean(patch.isHidden));
+      delete patch.isHidden;
+    }
+
+    const [updated] = Object.keys(patch).length
+      ? await db.update(questions)
+        .set(patch as Partial<typeof questions.$inferInsert>)
+        .where(eq(questions.id, id))
+        .returning()
+      : await db.select().from(questions).where(eq(questions.id, id)).limit(1);
     const wasPublished = before.status === 'published';
     const isPublished = updated?.status === 'published';
     if (updated?.pushOnPublish && isPublished && !wasPublished) {
@@ -621,10 +633,17 @@ export const crudQuestions = {
       await db.delete(answers).where(inArray(answers.questionId, ids));
       await db.delete(questionOptions).where(inArray(questionOptions.questionId, ids));
       await db.delete(questions).where(inArray(questions.id, ids));
-    } else if (action === 'hide') {
-      await db.update(questions).set({ isHidden: true }).where(inArray(questions.id, ids));
-    } else if (action === 'unhide') {
-      await db.update(questions).set({ isHidden: false }).where(inArray(questions.id, ids));
+    } else if (action === 'hide' || action === 'unhide') {
+      const { setQuestionHiddenCascade } = await import('../services/questionHideCascade.js');
+      const hide = action === 'hide';
+      const all = new Set<number>();
+      for (const qid of ids) {
+        const r = await setQuestionHiddenCascade(qid, hide);
+        for (const tid of r.ids) all.add(tid);
+      }
+      // ensure requested ids are covered even if cascade missed
+      await db.update(questions).set({ isHidden: hide }).where(inArray(questions.id, ids));
+      void all;
     } else if (action === 'publish') {
       await db.update(questions).set({ status: 'published', isHidden: false }).where(inArray(questions.id, ids));
     } else if (action === 'draft') {

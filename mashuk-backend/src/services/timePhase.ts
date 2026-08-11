@@ -251,13 +251,16 @@ export function lateAnswerPolicyForQuestion(q: {
     return 'hard_close';
   }
 
-  // «После блоков» / практики — висят, пока админ не снимет с публикации
-  if (kind === 'after_blocks' || kind === 'practices_vote') {
+  // Практики — висят, пока админ не скроет / не снимет
+  if (kind === 'practices_vote') {
     return 'until_admin';
   }
 
+  // «После блоков» и точки осмысления — до 00:00 МСК дня окна (как late catch-up),
+  // иначе «Ответить» висит всю ночь после closeTime.
   if (
-    kind === 'after_event'
+    kind === 'after_blocks'
+    || kind === 'after_event'
     || block === 'точки осмысления'
     || block.includes('точки осмысления')
     || title.includes('осмысление')
