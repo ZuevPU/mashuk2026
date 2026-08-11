@@ -305,6 +305,15 @@ export function HubForumScreen({
       {loadError && (
         <p className="adm-muted" style={{ margin: 0, color: '#ef4444', fontSize: 13 }}>{loadError}</p>
       )}
+      {Array.isArray(data?.diagnostics?.notes) && data.diagnostics.notes.length > 0 && (
+        <DashCard title="Почему пусто">
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.45 }}>
+            {(data.diagnostics.notes as string[]).map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        </DashCard>
+      )}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end' }}>
         {exports.map(item => (

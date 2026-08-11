@@ -531,6 +531,25 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
               Скопировать
             </button>
           </div>
+          <div className="form-row" style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              className="adm-btn adm-btn-primary"
+              onClick={() => act(async () => {
+                const res = await adminFetch('/questions/realign-touchpoint-windows', {
+                  method: 'POST',
+                  body: JSON.stringify({}),
+                }) as { updated?: number; note?: string };
+                await loadQuestions();
+                return res?.note || `Обновлено окон: ${res?.updated ?? 0}`;
+              }, 'Окна точек пересчитаны')}
+            >
+              Пересчитать окна точек
+            </button>
+            <span className="adm-muted" style={{ fontSize: 12 }}>
+              По startDate смены (если окна съехали — D3 было пустым при живых итогах дня)
+            </span>
+          </div>
         </div>
       )}
 

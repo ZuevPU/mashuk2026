@@ -225,6 +225,9 @@ export async function buildForumDayKpiSeries(
     if (s.eveningRatings == null || typeof s.eveningRatings !== 'object') continue;
     if (!eveningByDay.has(s.dayNumber)) eveningByDay.set(s.dayNumber, new Set());
     eveningByDay.get(s.dayNumber)!.add(s.participantId);
+    // Вечерняя анкета — тоже активность дня (иначе D3=0 при 639 итогах дня).
+    if (!activeByDay.has(s.dayNumber)) activeByDay.set(s.dayNumber, new Set());
+    activeByDay.get(s.dayNumber)!.add(s.participantId);
   }
 
   const daySeries: DayKpiPoint[] = days.map(day => {

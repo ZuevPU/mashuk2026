@@ -225,6 +225,23 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
     },
   };
 
+  const statePublished = stateCheck.activity?.questionsPublished ?? 0;
+  const afterPublished = afterBlocks.activity?.questionsPublished ?? 0;
+  const stateSubmitted = stateCheck.activity?.submitted ?? 0;
+  const afterSubmitted = afterBlocks.activity?.submitted ?? 0;
+  const eveningSubmitted = evening.activity?.submitted ?? 0;
+  const diagnosticsNotes: string[] = [];
+  if (selectedDay != null && eveningSubmitted > 0 && stateSubmitted === 0 && statePublished > 0) {
+    diagnosticsNotes.push(
+      `D${selectedDay}: итоги дня есть (${eveningSubmitted}), а проверка состояния пустая при ${statePublished} опубликованных вопросах — участники не ответили (часто сбиты окна publish/close). Запустите «Пересчитать окна точек».`,
+    );
+  }
+  if (selectedDay != null && eveningSubmitted > 0 && afterSubmitted === 0 && afterPublished > 0) {
+    diagnosticsNotes.push(
+      `D${selectedDay}: «После блоков» пусто при ${afterPublished} вопросах — ответов в базе нет. Можно досдать вчерашний день после пересчёта окон.`,
+    );
+  }
+
   return {
     filters: forumFilters,
     currentForumDay: pulse.currentForumDay,
@@ -234,16 +251,17 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
       touchpointCoveragePct,
       avgEnergy,
       riskFatiguePct,
-      eveningSubmitted: evening.activity?.submitted ?? 0,
+      eveningSubmitted,
       eveningFillPct: evening.activity?.fillRatePct ?? null,
-      afterBlocksSubmitted: afterBlocks.activity?.submitted ?? 0,
+      afterBlocksSubmitted: afterSubmitted,
       afterBlocksFillPct: afterBlocks.activity?.fillRatePct ?? null,
-      stateCheckSubmitted: stateCheck.activity?.submitted ?? 0,
+      stateCheckSubmitted: stateSubmitted,
       stateCheckFillPct: stateCheck.activity?.fillRatePct ?? null,
       phaseCounts: scPulse.phaseCounts ?? null,
       zeroActivityCount,
       cohortSize: cohort.length,
     },
+    diagnostics: { notes: diagnosticsNotes },
     pulse: mergedPulse,
     evening,
     afterBlocks,

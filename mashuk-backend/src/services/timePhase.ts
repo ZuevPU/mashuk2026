@@ -303,6 +303,13 @@ export function getTouchpointAccess(
     return 'open';
   }
 
+  // Один день льготы: вчерашние точки ещё можно досдать (иначе при смене дня
+  // «Состояние»/«После блоков» за D−1 остаются пустыми навсегда).
+  if (qDay === currentDay - 1) {
+    if (publishTime && publishTime > now) return 'soon';
+    return 'overdue';
+  }
+
   if (qDay < currentDay) return 'locked';
   if (qDay > currentDay) return 'soon';
   if (publishTime && publishTime > now) return 'soon';

@@ -47,8 +47,9 @@ describe('moscow phase', () => {
 });
 
 describe('touchpoint access', () => {
-  it('locks past forum days', () => {
-    assert.equal(getTouchpointAccess(2, 3, null), 'locked');
+  it('allows yesterday as overdue, locks older days', () => {
+    assert.equal(getTouchpointAccess(2, 3, null), 'overdue');
+    assert.equal(getTouchpointAccess(1, 3, null), 'locked');
   });
 
   it('marks overdue when closeTime passed on current day', () => {

@@ -157,8 +157,12 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
       if (answeredIds.has(q.id)) {
         return questionAudienceAllowsParticipant(q, me);
       }
-      // No carry-over of unfinished previous-day points into the new day.
-      if (!questionMatchesDay(q, currentDay)
+      // Не тянем весь хвост прошлых дней, но оставляем вчерашний день (D−1)
+      // для досдачи — иначе при переходе D3→D4 точки D3 пропадают с нулями.
+      const yesterday = currentDay > 1 ? currentDay - 1 : null;
+      const onToday = questionMatchesDay(q, currentDay);
+      const onYesterday = yesterday != null && questionMatchesDay(q, yesterday);
+      if (!onToday && !onYesterday
         && q.block !== 'Точка Б'
         && q.dayNumber !== 8) {
         return false;

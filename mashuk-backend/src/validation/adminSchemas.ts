@@ -169,6 +169,11 @@ export const seedTouchpointsSchema = z.object({
   overwrite: z.boolean().optional().default(false),
 }).strict();
 
+/** Пересчитать publish/close окон 7 точек по текущему startDate смены. */
+export const realignTouchpointWindowsSchema = z.object({
+  days: z.array(z.coerce.number().int().min(1).max(8)).optional(),
+}).strict();
+
 export const ADMIN_USER_ROLES = [
   'admin', 'director', 'analyst', 'curator', 'moderator', 'volunteer', 'organizer', 'gamification',
 ] as const;

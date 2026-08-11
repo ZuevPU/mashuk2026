@@ -22,7 +22,7 @@ import {
   eventCreateSchema, eventUpdateSchema,
   taskCreateSchema, taskUpdateSchema,
   questionCreateSchema, questionUpdateSchema,
-  copyQuestionsDaySchema, seedTouchpointsSchema,
+  copyQuestionsDaySchema, seedTouchpointsSchema, realignTouchpointWindowsSchema,
   dayAdviceUpsertSchema, pedagogicalRoleUpdateSchema, dayAdviceImportSchema,
   parseBody,
 } from '../validation/adminSchemas.js';
@@ -2006,6 +2006,57 @@ export const copyQuestionsDay = async (req: AdminRequest, res: Response): Promis
   res.json({ ok: true, created: created.length, questions: created, eveningQuestionnaireCopied: fromDay <= 7 && toDay <= 7 });
 };
 
+/**
+ * Пересчитать publish/close для точек осмысления по актуальному startDate.
+ * Типичный сбой: вопросы создали при старте 12 авг., потом startDate сдвинули на 8 авг. —
+ * окна D3 остались на 14 авг. и участники не могли ответить.
+ */
+export const realignTouchpointWindows = async (req: AdminRequest, res: Response): Promise<void> => {
+  const parsed = parseBody(realignTouchpointWindowsSchema, req.body ?? {});
+  if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
+  const shiftId = await resolveAdminShiftId(req);
+  const settings = await loadForumSettings();
+  if (!settings?.startDate) {
+    res.status(400).json({ error: 'В настройках форума не задана дата старта (startDate)' });
+    return;
+  }
+  const startDate = settings.startDate;
+  const daysFilter = parsed.data.days?.length ? new Set(parsed.data.days) : null;
+
+  const rows = await db.select().from(questions).where(eq(questions.shiftId, shiftId));
+  let updated = 0;
+  const samples: { id: number; title: string; dayNumber: number | null; publishTime: Date; closeTime: Date }[] = [];
+
+  for (const q of rows) {
+    const day = q.dayNumber;
+    if (day == null || day < 1) continue;
+    if (daysFilter && !daysFilter.has(day)) continue;
+    const slot = TOUCHPOINT_SLOTS.find(s => s.title === q.title);
+    if (!slot) continue;
+    const { publishTime, closeTime } = windowsForDay(startDate, day, slot);
+    const samePub = q.publishTime?.getTime() === publishTime.getTime();
+    const sameClose = q.closeTime?.getTime() === closeTime.getTime();
+    if (samePub && sameClose) continue;
+    await db.update(questions)
+      .set({ publishTime, closeTime })
+      .where(eq(questions.id, q.id));
+    updated += 1;
+    if (samples.length < 12) {
+      samples.push({ id: q.id, title: q.title, dayNumber: day, publishTime, closeTime });
+    }
+  }
+
+  res.json({
+    ok: true,
+    updated,
+    startDate,
+    samples,
+    note: updated
+      ? 'Окна точек пересчитаны по startDate. Участники смогут досдать вчерашний день (D−1).'
+      : 'Все окна уже совпадали с startDate — изменений нет.',
+  });
+};
+
 /** Развернуть шаблон 7 точек на выбранные дни */
 export const seedTouchpointsTemplate = async (req: AdminRequest, res: Response): Promise<void> => {
   const parsed = parseBody(seedTouchpointsSchema, req.body ?? {});
@@ -2015,7 +2066,11 @@ export const seedTouchpointsTemplate = async (req: AdminRequest, res: Response):
   const shiftId = await resolveAdminShiftId(req);
 
   const settings = await loadForumSettings();
-  const startDate = settings?.startDate || new Date('2026-08-12T00:00:00');
+  if (!settings?.startDate) {
+    res.status(400).json({ error: 'В настройках форума не задана дата старта (startDate)' });
+    return;
+  }
+  const startDate = settings.startDate;
   let created = 0;
 
   for (const day of days) {

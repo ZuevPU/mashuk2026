@@ -164,6 +164,7 @@ router.post('/questions/:id/practices-results/unpublish', requireAdminRole('sett
 router.post('/questions/:id/revoke-points', requireAdminRole('settings'), wrap(admin.revokeQuestionPoints));
 router.post('/questions/copy-day', requireAdminRole('settings'), wrap(admin.copyQuestionsDay));
 router.post('/questions/seed-touchpoints', requireAdminRole('settings'), wrap(admin.seedTouchpointsTemplate));
+router.post('/questions/realign-touchpoint-windows', requireAdminRole('settings'), wrap(admin.realignTouchpointWindows));
 router.post('/questions/backfill-points', requireAdminRole('settings'), wrap(admin.backfillQuestionPoints));
 
 router.get('/exchange', wrap(admin.listAllExchange));
