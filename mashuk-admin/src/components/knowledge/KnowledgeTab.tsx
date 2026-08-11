@@ -105,17 +105,24 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
     return [...new Set([...fromSettings, ...fromMaterials])].sort((a, b) => a - b);
   }, [totalDays, materials]);
 
+  const refreshMaterials = useCallback(async () => {
+    const matPath = statusFilter ? `/materials?status=${encodeURIComponent(statusFilter)}` : '/materials';
+    const matRes = await adminFetch(matPath);
+    setMaterials(matRes.materials || []);
+  }, [adminFetch, statusFilter]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const matPath = statusFilter ? `/materials?status=${encodeURIComponent(statusFilter)}` : '/materials';
-      const [matRes, typesRes, evRes, dirRes, spRes, fsRes] = await Promise.all([
+      const [matRes, typesRes, evRes, dirRes, spRes, fsRes, unlockRes] = await Promise.all([
         adminFetch(matPath),
         adminFetch('/material-types').catch(() => ({ types: [] })),
         adminFetch('/events'),
         adminFetch('/directions'),
         adminFetch('/program-speakers').catch(() => ({ speakers: [] })),
         adminFetch('/forum-settings').catch(() => ({ settings: {} })),
+        adminFetch('/kb-unlocks').catch(() => ({ unlocks: [] })),
       ]);
       setKbForumThreshold(fsRes.settings?.kbUnlockThreshold ?? 4);
       setTotalDays(fsRes.settings?.totalDays ?? 8);
@@ -124,7 +131,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
       setEvents(evRes.events || []);
       setDirections(dirRes.directions || []);
       setSpeakers(spRes.speakers || []);
-      setKbUnlocks((await adminFetch('/kb-unlocks')).unlocks || []);
+      setKbUnlocks(unlockRes.unlocks || []);
     } finally {
       setLoading(false);
     }
@@ -173,7 +180,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
 
   const buildCreateBody = (status: 'draft' | 'published', extra: Record<string, unknown> = {}) => {
     const tags = newMaterial.tags.split(',').map(s => s.trim()).filter(Boolean);
-    const audienceAll = newMaterial.kbSection === 'thematic' ? false : newMaterial.audienceAll;
+    const audienceAll = !!newMaterial.audienceAll;
     return {
       dayNumber: Number(newMaterial.dayNumber),
       eventId: newMaterial.isGeneral ? null : (newMaterial.eventId ? Number(newMaterial.eventId) : null),
@@ -207,8 +214,8 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
       alert('Для публикации укажите ссылку или сначала загрузите файл');
       return;
     }
-    if (newMaterial.kbSection === 'thematic' && !newMaterial.direction) {
-      alert('Для раздела «Тематические направления» выберите направление');
+    if (!newMaterial.audienceAll && !newMaterial.direction) {
+      alert('Выберите направление или отметьте «Для всех направлений»');
       return;
     }
     if (newMaterial.kbSection === 'open_lessons' && !newMaterial.kbSubsection) {
@@ -216,15 +223,19 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
       return;
     }
     act(async () => {
-      await adminFetch('/materials', {
+      const res = await adminFetch('/materials', {
         method: 'POST',
         body: JSON.stringify(buildCreateBody(status)),
       });
       setNewMaterial(keepContextAfterCreate(newMaterial));
-      await load();
+      if (res?.material) {
+        setMaterials(prev => [res.material as MaterialRow, ...prev]);
+      } else {
+        await refreshMaterials();
+      }
     }, status === 'published'
       ? 'Опубликован. Можно сразу добавить следующий тип к той же теме'
-      : 'Черновик сохранён. Можно сразу добавить следующий тип к той же теме');
+      : 'Черновик сохранён. Можно сразу добавить следующий тип к той же теме', { reload: false });
   };
 
   const uploadFile = async (file: File) => {
@@ -241,13 +252,13 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
       alert('Сначала укажите название материала');
       return;
     }
-    if (newMaterial.kbSection === 'thematic' && !newMaterial.direction) {
-      alert('Для раздела «Тематические направления» выберите направление');
+    if (!newMaterial.audienceAll && !newMaterial.direction) {
+      alert('Выберите направление или отметьте «Для всех направлений»');
       return;
     }
     act(async () => {
       const fileUrl = await uploadFile(file);
-      await adminFetch('/materials', {
+      const res = await adminFetch('/materials', {
         method: 'POST',
         body: JSON.stringify(buildCreateBody('draft', {
           fileUrl,
@@ -255,16 +266,16 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
         })),
       });
       setNewMaterial(keepContextAfterCreate(newMaterial));
-      await load();
-    }, 'Файл загружен. Можно сразу добавить следующий тип к той же теме');
+      if (res?.material) {
+        setMaterials(prev => [res.material as MaterialRow, ...prev]);
+      } else {
+        await refreshMaterials();
+      }
+    }, 'Файл загружен. Можно сразу добавить следующий тип к той же теме', { reload: false });
   };
 
   const openCard = (id: number) => {
     if (onOpenCard) onOpenCard(id);
-  };
-
-  const copyLink = (url: string) => {
-    navigator.clipboard.writeText(url).catch(() => {});
   };
 
   if (loading && materials.length === 0) return <p className="adm-muted">Загрузка базы знаний…</p>;
@@ -458,7 +469,6 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
                     ...newMaterial,
                     kbSection,
                     kbSubsection: kbSection === 'open_lessons' ? newMaterial.kbSubsection : '',
-                    audienceAll: kbSection === 'thematic' ? false : newMaterial.audienceAll,
                   });
                 }}
               >
@@ -581,43 +591,28 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
               />
             </div>
             <div className="adm-field">
-              <span className="adm-label">
-                {newMaterial.kbSection === 'thematic' ? 'Направление *' : 'Аудитория'}
-              </span>
-              {newMaterial.kbSection === 'thematic' ? (
-                <select
-                  className="adm-input"
-                  value={newMaterial.direction}
-                  onChange={e => setNewMaterial({ ...newMaterial, direction: e.target.value, audienceAll: false })}
-                >
-                  <option value="">У какого направления показывать</option>
-                  {directions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-                </select>
-              ) : (
-                <>
-                  <label className="adm-forum-check" style={{ display: 'block', marginBottom: 6 }}>
-                    <input
-                      type="checkbox"
-                      checked={newMaterial.audienceAll}
-                      onChange={e => setNewMaterial({
-                        ...newMaterial,
-                        audienceAll: e.target.checked,
-                        direction: e.target.checked ? '' : newMaterial.direction,
-                      })}
-                    />
-                    Для всех направлений
-                  </label>
-                  <select
-                    className="adm-input"
-                    value={newMaterial.direction}
-                    onChange={e => setNewMaterial({ ...newMaterial, direction: e.target.value, audienceAll: false })}
-                    disabled={newMaterial.audienceAll}
-                  >
-                    <option value="">Направление</option>
-                    {directions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-                  </select>
-                </>
-              )}
+              <span className="adm-label">Направление</span>
+              <label className="adm-forum-check adm-kb-audience-all">
+                <input
+                  type="checkbox"
+                  checked={newMaterial.audienceAll}
+                  onChange={e => setNewMaterial({
+                    ...newMaterial,
+                    audienceAll: e.target.checked,
+                    direction: e.target.checked ? '' : newMaterial.direction,
+                  })}
+                />
+                Для всех направлений
+              </label>
+              <select
+                className="adm-input"
+                value={newMaterial.direction}
+                onChange={e => setNewMaterial({ ...newMaterial, direction: e.target.value, audienceAll: false })}
+                disabled={newMaterial.audienceAll}
+              >
+                <option value="">У какого направления показывать</option>
+                {directions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+              </select>
             </div>
             <div className="adm-field">
               <span className="adm-label">Открытие для участника</span>
@@ -697,7 +692,6 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
                 <th>Аудитория</th>
                 <th>Привязка</th>
                 <th>Статус</th>
-                <th>Действия</th>
               </tr>
             </thead>
             <tbody>
@@ -710,16 +704,19 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
                   events={events}
                   directions={directions}
                   dayOptions={dayOptions}
-                  onCopyLink={copyLink}
                   onPreview={() => openDayPreview(m.dayNumber ?? 1)}
                   onSave={body => act(async () => {
-                    await adminFetch(`/materials/${m.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-                    await load();
-                  }, 'Сохранено')}
+                    const res = await adminFetch(`/materials/${m.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+                    if (res?.material) {
+                      setMaterials(prev => prev.map(x => (x.id === m.id ? { ...x, ...res.material } : x)));
+                    } else {
+                      await refreshMaterials();
+                    }
+                  }, 'Сохранено', { reload: false })}
                   onDelete={() => act(async () => {
                     await adminFetch(`/materials/${m.id}`, { method: 'DELETE' });
-                    await load();
-                  }, 'Удалено')}
+                    setMaterials(prev => prev.filter(x => x.id !== m.id));
+                  }, 'Удалено', { reload: false })}
                 />
               ))}
             </tbody>

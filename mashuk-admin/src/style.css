@@ -988,14 +988,30 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 .adm-kb-col-type { width: 110px; }
 .adm-kb-col-audience { width: 130px; }
 .adm-kb-col-bind { width: 150px; }
-.adm-kb-col-status { width: 110px; }
-.adm-kb-col-actions { width: 228px; }
+.adm-kb-col-status { width: 120px; }
+.adm-kb-audience-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--m-text);
+}
 .adm-kb-row--thematic td { background: rgba(0, 122, 255, 0.08); }
 .adm-kb-row--lessons_important td { background: rgba(175, 82, 222, 0.09); }
 .adm-kb-row--open_lessons td { background: rgba(52, 199, 89, 0.09); }
 .adm-kb-row--none td { background: rgba(142, 142, 147, 0.06); }
 .adm-kb-row-dirty td {
   box-shadow: inset 3px 0 0 #FF9500;
+}
+.adm-kb-actions-row td {
+  padding: 0 10px 12px !important;
+  border-bottom: 1px solid var(--kb-hairline) !important;
+  vertical-align: middle !important;
+}
+.adm-kb-actions-row + .adm-kb-card-row td {
+  border-top: none;
 }
 .adm-kb-speaker-btn {
   display: block;
@@ -1027,18 +1043,18 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   letter-spacing: -0.01em;
 }
 .adm-kb-row-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+  align-items: center;
   min-width: 0;
 }
 .adm-kb-row-actions .adm-kb-btn {
-  width: 100%;
-  min-width: 0;
+  min-width: 104px;
   height: 30px;
   min-height: 30px;
-  padding: 0 8px;
-  font-size: 11px;
+  padding: 0 12px;
+  font-size: 12px;
   border-radius: 8px;
 }
 .adm-kb-card-row td {

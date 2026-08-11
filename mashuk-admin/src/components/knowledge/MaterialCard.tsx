@@ -58,7 +58,6 @@ type Props = {
   dayOptions: number[];
   onSave: (body: Record<string, unknown>) => void;
   onDelete: () => void;
-  onCopyLink?: (url: string) => void;
   onPreview?: () => void;
 };
 
@@ -86,9 +85,7 @@ function mkDraft(m: MaterialRow): Draft {
 }
 
 function draftToBody(draft: Draft, statusOverride?: string): Record<string, unknown> {
-  const direction = draft.audienceAll && draft.kbSection !== 'thematic'
-    ? ''
-    : draft.direction;
+  const direction = draft.audienceAll ? '' : draft.direction;
   return {
     title: draft.title,
     url: draft.url || null,
@@ -128,7 +125,6 @@ export function MaterialCard({
   dayOptions,
   onSave,
   onDelete,
-  onCopyLink,
   onPreview,
 }: Props) {
   const [draft, setDraft] = useState<Draft>(() => mkDraft(material));
@@ -139,7 +135,6 @@ export function MaterialCard({
     : [...dayOptions, materialDay].sort((a, b) => a - b);
   const subOptions = kbSubsectionOptions(draft.kbSection);
   const sec = kbSectionMeta(draft.kbSection || material.kbSection);
-  const link = draft.url || draft.fileUrl || material.url || material.fileUrl;
 
   useEffect(() => {
     setDraft(mkDraft(material));
@@ -181,7 +176,6 @@ export function MaterialCard({
               ...d,
               kbSection: e.target.value,
               kbSubsection: e.target.value === 'open_lessons' ? d.kbSubsection : '',
-              audienceAll: e.target.value === 'thematic' ? false : d.audienceAll,
             }))}
           >
             <option value="">— раздел —</option>
@@ -276,31 +270,18 @@ export function MaterialCard({
           </select>
         </td>
         <td className="adm-kb-col-audience">
-          {draft.kbSection === 'thematic' ? (
-            <select
-              className="adm-input adm-kb-select"
-              value={draft.direction}
-              onChange={e => setDraft(d => ({ ...d, direction: e.target.value, audienceAll: false }))}
-            >
-              <option value="">— направление —</option>
-              {directions.map(dir => <option key={dir.id} value={dir.name}>{dir.name}</option>)}
-            </select>
-          ) : (
-            <>
-              <select
-                className="adm-input adm-kb-select"
-                value={draft.audienceAll ? '__all__' : (draft.direction || '')}
-                onChange={e => {
-                  const v = e.target.value;
-                  if (v === '__all__') setDraft(d => ({ ...d, audienceAll: true, direction: '' }));
-                  else setDraft(d => ({ ...d, audienceAll: false, direction: v }));
-                }}
-              >
-                <option value="__all__">Для всех</option>
-                {directions.map(dir => <option key={dir.id} value={dir.name}>{dir.name}</option>)}
-              </select>
-            </>
-          )}
+          <select
+            className="adm-input adm-kb-select"
+            value={draft.audienceAll ? '__all__' : (draft.direction || '')}
+            onChange={e => {
+              const v = e.target.value;
+              if (v === '__all__') setDraft(d => ({ ...d, audienceAll: true, direction: '' }));
+              else setDraft(d => ({ ...d, audienceAll: false, direction: v }));
+            }}
+          >
+            <option value="__all__">Для всех направлений</option>
+            {directions.map(dir => <option key={dir.id} value={dir.name}>{dir.name}</option>)}
+          </select>
         </td>
         <td className="adm-kb-col-bind">
           <label className="adm-forum-check" style={{ fontSize: 11, display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -348,7 +329,10 @@ export function MaterialCard({
             <option value="archived">Скрыт</option>
           </select>
         </td>
-        <td className="adm-kb-col-actions">
+      </tr>
+
+      <tr className={`${rowClass} adm-kb-actions-row`}>
+        <td colSpan={8}>
           <div className="adm-kb-row-actions">
             <button
               type="button"
@@ -380,15 +364,6 @@ export function MaterialCard({
             >
               Скрыть
             </button>
-            {link && onCopyLink && (
-              <button
-                type="button"
-                className="adm-kb-btn adm-kb-btn-ghost"
-                onClick={() => onCopyLink(link)}
-              >
-                Ссылка
-              </button>
-            )}
             {onPreview && (
               <button
                 type="button"
@@ -414,7 +389,7 @@ export function MaterialCard({
 
       {cardOpen && (
         <tr className="adm-kb-card-row">
-          <td colSpan={9}>
+          <td colSpan={8}>
             <div className="adm-kb-detail-card">
               <div className="adm-kb-detail-head">
                 <div>
@@ -442,7 +417,6 @@ export function MaterialCard({
                       ...d,
                       kbSection: e.target.value,
                       kbSubsection: e.target.value === 'open_lessons' ? d.kbSubsection : '',
-                      audienceAll: e.target.value === 'thematic' ? false : d.audienceAll,
                     }))}
                   >
                     <option value="">—</option>
@@ -579,45 +553,27 @@ export function MaterialCard({
                 </div>
                 <div className="adm-field">
                   <span className="adm-label">Аудитория</span>
-                  {draft.kbSection === 'thematic' ? (
-                    <select
-                      className="adm-input"
-                      value={draft.direction}
-                      onChange={e => setDraft(d => ({ ...d, direction: e.target.value, audienceAll: false }))}
-                    >
-                      <option value="">— направление —</option>
-                      {directions.map(dir => <option key={dir.id} value={dir.name}>{dir.name}</option>)}
-                    </select>
-                  ) : (
-                    <>
-                      <label className="adm-forum-check" style={{ display: 'block' }}>
-                        <input
-                          type="radio"
-                          checked={draft.audienceAll}
-                          onChange={() => setDraft(d => ({ ...d, audienceAll: true, direction: '' }))}
-                        />
-                        Для всех
-                      </label>
-                      <label className="adm-forum-check" style={{ display: 'block' }}>
-                        <input
-                          type="radio"
-                          checked={!draft.audienceAll}
-                          onChange={() => setDraft(d => ({ ...d, audienceAll: false }))}
-                        />
-                        Направление
-                      </label>
-                      {!draft.audienceAll && (
-                        <select
-                          className="adm-input"
-                          value={draft.direction}
-                          onChange={e => setDraft(d => ({ ...d, direction: e.target.value }))}
-                        >
-                          <option value="">—</option>
-                          {directions.map(dir => <option key={dir.id} value={dir.name}>{dir.name}</option>)}
-                        </select>
-                      )}
-                    </>
-                  )}
+                  <label className="adm-forum-check" style={{ display: 'block', marginBottom: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={draft.audienceAll}
+                      onChange={e => setDraft(d => ({
+                        ...d,
+                        audienceAll: e.target.checked,
+                        direction: e.target.checked ? '' : d.direction,
+                      }))}
+                    />
+                    Для всех направлений
+                  </label>
+                  <select
+                    className="adm-input"
+                    value={draft.direction}
+                    disabled={draft.audienceAll}
+                    onChange={e => setDraft(d => ({ ...d, direction: e.target.value, audienceAll: false }))}
+                  >
+                    <option value="">— направление —</option>
+                    {directions.map(dir => <option key={dir.id} value={dir.name}>{dir.name}</option>)}
+                  </select>
                 </div>
                 <div className="adm-field">
                   <span className="adm-label">Привязка к программе</span>
