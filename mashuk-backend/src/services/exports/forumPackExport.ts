@@ -36,11 +36,20 @@ import { createWorkbook, sendWorkbook } from './workbook.js';
 
 type Workbook = Awaited<ReturnType<typeof createWorkbook>>;
 
-function shiftFilters(base: AnalyticsFilters): AnalyticsFilters {
+function packFilters(base: AnalyticsFilters): AnalyticsFilters {
+  // Respect client mode/day from Штаб (D3 · 10 авг.). Only expand to whole shift when asked.
+  if (base.mode === 'shift' || base.day == null || base.day < 1) {
+    return {
+      ...base,
+      mode: 'shift',
+      day: null,
+      compareDays: [],
+    };
+  }
   return {
     ...base,
-    mode: 'shift',
-    day: null,
+    mode: 'day',
+    day: base.day,
     compareDays: [],
   };
 }
@@ -105,11 +114,18 @@ async function addKindSheet(
 
 async function addEveningSheets(
   wb: Workbook,
-  filters: { shiftId: number | null },
+  filters: {
+    shiftId: number | null;
+    day?: number | null;
+    direction?: string | null;
+    group?: string | null;
+  },
 ): Promise<{ answers: number; picks: number }> {
   const { rows, fields } = await collectEveningExportRows({
     shiftId: filters.shiftId,
-    day: null,
+    day: filters.day != null && filters.day > 0 ? filters.day : null,
+    direction: filters.direction?.trim() || undefined,
+    group: filters.group?.trim() || undefined,
   });
   const programEventFields = fields.filter(f => f.type === 'program_event');
 
@@ -342,20 +358,29 @@ async function addDayStatsSheet(wb: Workbook, days: number[]): Promise<void> {
 }
 
 /**
- * Полный пакет Штаб · Форум: одна книга со всеми ключевыми срезами смены
- * (состояние, итоги дня, после блоков, копилка, активность, обмен, статистика дней).
+ * Полный пакет Штаб · Форум.
+ * По умолчанию (mode=day&day=N) — только выбранный день фильтра штаба.
+ * mode=shift — вся смена.
  */
 export async function writeForumPackExport(req: AdminRequest, res: Response): Promise<void> {
-  const filters = shiftFilters(await resolveAnalyticsFilters(req));
+  const filters = packFilters(await resolveAnalyticsFilters(req));
   const shiftId = filters.shiftId ?? await resolveAdminShiftId(req);
   filters.shiftId = shiftId;
+  const dayScoped = filters.mode === 'day' && filters.day != null && filters.day > 0;
+  const day = dayScoped ? filters.day! : null;
+  const statsDays = dayScoped ? [day!] : [1, 2, 3, 4, 5, 6, 7, 8];
 
   const wb = await createWorkbook();
   addReadmeSheet(wb, [
-    'Полная выгрузка Штаб · Форум по всей смене (все дни).',
+    dayScoped
+      ? `Полная выгрузка Штаб · Форум за день форума D${day} (как в фильтре штаба).`
+      : 'Полная выгрузка Штаб · Форум по всей смене (все дни).',
     `Смена админки: ${shiftId ?? '—'}.`,
+    filters.direction ? `Направление: ${filters.direction}.` : '',
+    filters.group ? `Группа: ${filters.group}.` : '',
     'Листы: Состояние · Итоги дня · Открытые уроки · После блоков · Копилка · Активность · Обмен опытом · Статистика дней.',
-  ]);
+    'Активность и обмен опытом — справочно по смене (у них нет жёсткого дневного среза).',
+  ].filter(Boolean));
 
   const notes: string[] = [];
   const safe = async <T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> => {
@@ -368,18 +393,28 @@ export async function writeForumPackExport(req: AdminRequest, res: Response): Pr
   };
 
   const stateN = await safe('Состояние', () => addKindSheet(wb, 'Состояние', 'state_check', filters, req), 0);
-  const evening = await safe('Итоги дня', () => addEveningSheets(wb, { shiftId }), { answers: 0, picks: 0 });
+  const evening = await safe(
+    'Итоги дня',
+    () => addEveningSheets(wb, {
+      shiftId,
+      day,
+      direction: filters.direction,
+      group: filters.group,
+    }),
+    { answers: 0, picks: 0 },
+  );
   const afterN = await safe('После блоков', () => addKindSheet(wb, 'После блоков', 'after_blocks', filters, req), 0);
   const pigN = await safe('Копилка', () => addPiggybankSheet(wb, req), 0);
   const actN = await safe('Активность', () => addActivitySheet(wb, shiftId), 0);
   const exN = await safe('Обмен опытом', () => addExchangeSheet(wb, shiftId), 0);
   await safe('Статистика дней', async () => {
-    await addDayStatsSheet(wb, [1, 2, 3, 4, 5, 6, 7, 8]);
+    await addDayStatsSheet(wb, statsDays);
     return 0;
   }, 0);
 
   const readme = wb.getWorksheet('Описание') || wb.worksheets[0];
   if (readme) {
+    readme.addRow([`Срез: ${dayScoped ? `день форума D${day}` : 'вся смена'}`]);
     readme.addRow([`Состояние (строк): ${stateN}`]);
     readme.addRow([`Итоговые анкеты (участник×день): ${evening.answers}`]);
     readme.addRow([`Открытые уроки (выборы): ${evening.picks}`]);
@@ -387,10 +422,13 @@ export async function writeForumPackExport(req: AdminRequest, res: Response): Pr
     readme.addRow([`Копилка: ${pigN}`]);
     readme.addRow([`Активность (участников): ${actN}`]);
     readme.addRow([`Обмен опытом (строк): ${exN}`]);
-    readme.addRow(['Статистика дней: дни 1–8']);
+    readme.addRow([`Статистика дней: ${statsDays.join(', ')}`]);
     for (const n of notes) readme.addRow([n]);
   }
 
   const stamp = new Date().toISOString().slice(0, 10);
-  await sendWorkbook(res, wb, `forum_pack_shift_${stamp}.xlsx`);
+  const filename = dayScoped
+    ? `forum_pack_d${day}_${stamp}.xlsx`
+    : `forum_pack_shift_${stamp}.xlsx`;
+  await sendWorkbook(res, wb, filename);
 }

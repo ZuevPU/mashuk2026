@@ -18,42 +18,55 @@ function qs(params: Record<string, string | number | undefined | null>): string 
   return s ? `?${s}` : '';
 }
 
-/** Полная выгрузка Штаб · Форум за всю смену (все дни) — один XLSX. */
-export function forumPackExportItem(): HubExportItem {
+type HubExportScope = {
+  day: string;
+  direction?: string;
+  group?: string;
+};
+
+/** Полная выгрузка Штаб · Форум за выбранный день фильтра (не вся смена). */
+export function forumPackExportItem(scope: HubExportScope): HubExportItem {
   const stamp = new Date().toISOString().slice(0, 10);
   return {
     id: 'forum-pack',
-    label: 'Полный пакет форума',
-    path: `/exports/forum-pack${qs({ mode: 'shift' })}`,
-    filename: `forum_pack_shift_${stamp}.xlsx`,
+    label: `Пакет за D${scope.day}`,
+    path: `/exports/forum-pack${qs({
+      mode: 'day',
+      day: scope.day,
+      direction: scope.direction || undefined,
+      group: scope.group || undefined,
+    })}`,
+    filename: `forum_pack_d${scope.day}_${stamp}.xlsx`,
   };
 }
 
-export function forumExportItems(day: string): HubExportItem[] {
+export function forumExportItems(scope: HubExportScope | string): HubExportItem[] {
+  const s: HubExportScope = typeof scope === 'string' ? { day: scope } : scope;
+  const { day, direction, group } = s;
   return [
     {
       id: 'state',
       label: 'Состояние',
-      path: `/exports/state-checks${qs({ mode: 'day', day })}`,
+      path: `/exports/state-checks${qs({ mode: 'day', day, direction, group })}`,
       filename: `state_checks_d${day}.xlsx`,
     },
     {
       id: 'evening',
       label: 'Итоговая анкета',
-      path: `/exports/evening-summary${qs({ mode: 'day', day })}`,
+      path: `/exports/evening-summary${qs({ mode: 'day', day, direction, group })}`,
       filename: `evening_d${day}.xlsx`,
     },
     {
       id: 'after',
       label: 'После блоков',
-      path: `/exports/after-blocks${qs({ mode: 'day', day })}`,
+      path: `/exports/after-blocks${qs({ mode: 'day', day, direction, group })}`,
       filename: `after_blocks_d${day}.xlsx`,
     },
     {
       id: 'piggybank',
       label: 'Копилка',
-      path: `/exports/piggybank${qs({ format: 'xlsx' })}`,
-      filename: 'piggybank.xlsx',
+      path: `/exports/piggybank${qs({ format: 'xlsx', day, direction, group })}`,
+      filename: `piggybank_d${day}.xlsx`,
     },
     {
       id: 'activity',

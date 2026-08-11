@@ -73,7 +73,7 @@ export function HubForumScreen({
   onLensChange: (lens: HubLens) => void;
 }) {
   const {
-    adminFetch, forumDay, setDirection, setGroup, setTab, meta, ageCategory, activity,
+    adminFetch, forumDay, direction, group, setDirection, setGroup, setTab, meta, ageCategory, activity,
   } = useInsights();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<any>(null);
@@ -145,9 +145,14 @@ export function HubForumScreen({
 
   const kpi = data.kpi ?? {};
   const pulse = data.pulse?.emotionalPulse ?? {};
-  const exports = forumExportItems(String(selectedDay));
-  const openDirection = (direction: string) => {
-    setDirection(direction);
+  const exportScope = {
+    day: String(selectedDay),
+    direction: direction || undefined,
+    group: group || undefined,
+  };
+  const exports = forumExportItems(exportScope);
+  const openDirection = (nextDirection: string) => {
+    setDirection(nextDirection);
     setGroup('');
     onLensChange('direction');
   };
@@ -178,12 +183,12 @@ export function HubForumScreen({
           type="button"
           className="adm-btn adm-btn-primary adm-btn-sm"
           onClick={() => {
-            void downloadHubExport(forumPackExportItem()).catch((err: unknown) => {
+            void downloadHubExport(forumPackExportItem(exportScope)).catch((err: unknown) => {
               window.alert(err instanceof Error ? err.message : 'Не удалось скачать файл');
             });
           }}
         >
-          Выгрузить всё
+          Выгрузить всё · D{selectedDay}
         </button>
       </div>
 

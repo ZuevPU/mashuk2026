@@ -232,6 +232,7 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
       '/api/admin/exports/activity?format=xlsx',
       '/api/admin/exports/exchange?format=xlsx',
       '/api/admin/exports/day/stats?day=1&format=xlsx',
+      '/api/admin/exports/forum-pack?mode=day&day=1',
       '/api/admin/exports/forum-pack?mode=shift',
     ];
     for (const path of paths) {
