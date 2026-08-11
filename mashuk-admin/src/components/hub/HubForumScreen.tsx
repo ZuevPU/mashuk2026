@@ -40,7 +40,7 @@ import { StateReasonsByDirectionTable } from './StateReasonsByDirectionTable';
 import { RoleDirectionHeatmap } from './RoleDirectionHeatmap';
 import { TouchpointSlotChart } from './TouchpointSlotChart';
 import { PiggybankDirectionMatrix } from './PiggybankDirectionMatrix';
-import { downloadAllHubExports, downloadHubExport, forumExportItems } from './hubExports';
+import { downloadHubExport, forumExportItems, forumPackExportItem } from './hubExports';
 import { hubFilterParams } from './hubQuery';
 import type { HubLens } from './HubTab';
 
@@ -173,7 +173,7 @@ export function HubForumScreen({
         <button
           type="button"
           className="adm-btn adm-btn-primary adm-btn-sm"
-          onClick={() => { void downloadAllHubExports(exports); }}
+          onClick={() => { void downloadHubExport(forumPackExportItem()); }}
         >
           Выгрузить всё
         </button>

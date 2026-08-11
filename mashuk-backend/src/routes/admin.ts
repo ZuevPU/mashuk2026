@@ -236,6 +236,7 @@ router.get('/exports/evening-summary', P('exports', 'export'), wrap(exportsCtrl.
 router.get('/exports/after-blocks', P('exports', 'export'), wrap(exportsCtrl.exportAfterBlocksHandler));
 router.get('/exports/state-checks', P('exports', 'export'), wrap(exportsCtrl.exportStateChecksHandler));
 router.get('/exports/direction-pack', P('exports', 'export'), wrap(exportsCtrl.exportDirectionPackHandler));
+router.get('/exports/forum-pack', P('exports', 'export'), wrap(exportsCtrl.exportForumPackHandler));
 router.get('/exports/roles-experiments', P('exports', 'export'), wrap(exportsCtrl.exportRolesExperimentsHandler));
 router.get('/exports/reflections', P('exports', 'export'), wrap(exportsCtrl.exportReflectionsHandler));
 router.get('/exports/participant/:id/answers', P('exports', 'export'), wrap(exportsCtrl.exportParticipantAnswersHandler));

@@ -18,6 +18,17 @@ function qs(params: Record<string, string | number | undefined | null>): string 
   return s ? `?${s}` : '';
 }
 
+/** Полная выгрузка Штаб · Форум за всю смену (все дни) — один XLSX. */
+export function forumPackExportItem(): HubExportItem {
+  const stamp = new Date().toISOString().slice(0, 10);
+  return {
+    id: 'forum-pack',
+    label: 'Полный пакет форума',
+    path: `/exports/forum-pack${qs({ mode: 'shift' })}`,
+    filename: `forum_pack_shift_${stamp}.xlsx`,
+  };
+}
+
 export function forumExportItems(day: string): HubExportItem[] {
   return [
     {
@@ -48,18 +59,20 @@ export function forumExportItems(day: string): HubExportItem[] {
       id: 'activity',
       label: 'Активность',
       path: '/exports/activity',
-      filename: 'activity.xlsx',
+      filename: 'activity.csv',
+      kind: 'csv',
     },
     {
       id: 'exchange',
       label: 'Обмен опытом',
       path: '/exports/exchange',
-      filename: 'exchange.xlsx',
+      filename: 'exchange.csv',
+      kind: 'csv',
     },
     {
       id: 'day-stats',
       label: 'Статистика дня',
-      path: `/exports/day/stats${qs({ day })}`,
+      path: `/exports/day/stats${qs({ day, format: 'xlsx' })}`,
       filename: `day_stats_d${day}.xlsx`,
     },
   ];

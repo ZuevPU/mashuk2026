@@ -61,6 +61,34 @@ export async function exportDayWorkbookHandler(req: AdminRequest, res: Response)
 export async function exportDayStatsHandler(req: AdminRequest, res: Response): Promise<void> {
   const day = Number(req.query.day) || 1;
   const stats = await computeDayExportStats(day);
+  const format = String(req.query.format || 'json').toLowerCase();
+  if (format === 'xlsx') {
+    const { sendSimpleXlsx } = await import('../services/exports/workbook.js');
+    const bt = stats.byTouchpointType || {};
+    await sendSimpleXlsx(
+      res,
+      `day_stats_d${day}.xlsx`,
+      'Статистика дня',
+      [
+        'Метрика', 'Значение',
+      ],
+      [
+        ['День', stats.day],
+        ['Точек осмысления (слоты)', stats.touchpointQuestions],
+        ['Опубликовано вопросов', stats.publishedQuestions],
+        ['Строк ответов', stats.answerRows],
+        ['Участников с ответами', stats.participantsWithAnswers],
+        ['checkin: вопросов', bt.checkin?.questions ?? 0],
+        ['checkin: с ответами', bt.checkin?.answers ?? 0],
+        ['direction: вопросов', bt.direction?.questions ?? 0],
+        ['direction: с ответами', bt.direction?.answers ?? 0],
+        ['evening: вопросов', bt.evening?.questions ?? 0],
+        ['evening: с ответами', bt.evening?.answers ?? 0],
+        ['Зоны эмоций', JSON.stringify(stats.emotionZones || {})],
+      ],
+    );
+    return;
+  }
   res.json(stats);
 }
 
@@ -189,6 +217,11 @@ export const exportStateChecksHandler = async (req: AdminRequest, res: Response)
 export const exportDirectionPackHandler = async (req: AdminRequest, res: Response) => {
   const { writeDirectionPackExport } = await import('../services/exports/directionPackExport.js');
   await writeDirectionPackExport(req, res);
+};
+
+export const exportForumPackHandler = async (req: AdminRequest, res: Response) => {
+  const { writeForumPackExport } = await import('../services/exports/forumPackExport.js');
+  await writeForumPackExport(req, res);
 };
 
 export const exportRolesExperimentsHandler = async (_req: AdminRequest, res: Response) => {
