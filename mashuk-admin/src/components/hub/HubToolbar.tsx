@@ -9,13 +9,14 @@ const LENS_LABELS: Record<HubLens, string> = {
   activity: 'Активность',
   piggybank: 'Копилка',
   afterBlocks: 'После блоков',
+  exchange: 'Обмен опытом',
   direction: 'Направление',
   groups: 'Группы',
   participant: 'Участник',
 };
 
 const LENS_ORDER: HubLens[] = [
-  'forum', 'dayResults', 'state', 'activity', 'piggybank', 'afterBlocks',
+  'forum', 'dayResults', 'state', 'activity', 'piggybank', 'afterBlocks', 'exchange',
   'direction', 'groups', 'participant',
 ];
 

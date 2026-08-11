@@ -2655,3 +2655,42 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   .adm-refl-quad { height: 520px; }
   .adm-refl-lvrow { grid-template-columns: 120px 1fr 64px; }
 }
+
+/* Штаб · Обмен опытом */
+.adm-exch-flow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+.adm-exch-fcol { text-align: center; }
+.adm-exch-fbars {
+  display: flex;
+  gap: 5px;
+  align-items: flex-end;
+  height: 170px;
+  justify-content: center;
+}
+.adm-exch-fbars div {
+  width: 26px;
+  border-radius: 4px 4px 0 0;
+  min-height: 2px;
+}
+.adm-exch-roles {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+.adm-exch-role {
+  flex: 1 1 120px;
+  background: var(--m-bg);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+}
+.adm-exch-role-v {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}

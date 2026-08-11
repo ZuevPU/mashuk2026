@@ -11,6 +11,7 @@ import { buildPiggybankDirectionMatrix } from '../services/analytics/piggybankDi
 import { buildParticipantDayFeed } from '../services/analytics/participantDayFeed.js';
 import { buildActivityHubDashboard } from '../services/analytics/activityHubDashboard.js';
 import { buildAfterBlocksHubDashboard } from '../services/analytics/afterBlocksHubDashboard.js';
+import { buildExchangeHubDashboard } from '../services/analytics/exchangeHubDashboard.js';
 import { buildPiggybankHubDashboard } from '../services/analytics/piggybankHubDashboard.js';
 import { buildStateDashboard } from '../services/analytics/stateDashboard.js';
 
@@ -47,6 +48,11 @@ export async function getHubPiggybankHandler(req: AdminRequest, res: Response): 
 export async function getHubAfterBlocksHandler(req: AdminRequest, res: Response): Promise<void> {
   const filters = await resolveAnalyticsFilters(req);
   res.json(await buildAfterBlocksHubDashboard(filters, req));
+}
+
+export async function getHubExchangeHandler(req: AdminRequest, res: Response): Promise<void> {
+  const filters = await resolveAnalyticsFilters(req);
+  res.json(await buildExchangeHubDashboard(filters, req));
 }
 
 export async function getHubGroupsHandler(req: AdminRequest, res: Response): Promise<void> {

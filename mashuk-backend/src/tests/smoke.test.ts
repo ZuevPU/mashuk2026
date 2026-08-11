@@ -164,6 +164,23 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     ));
   });
 
+  it('GET /api/admin/analytics/hub/exchange with token', async () => {
+    const token = await getAdminBearerToken(app);
+    const res = await request(app)
+      .get('/api/admin/analytics/hub/exchange?mode=day&day=4')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(res.status, 200);
+    assert.ok(res.body.meta);
+    assert.ok(Array.isArray(res.body.byDay));
+    assert.ok(Array.isArray(res.body.ladder));
+    assert.ok(Array.isArray(res.body.gaps));
+    assert.ok(Array.isArray(res.body.daySeries));
+    assert.equal(res.body.daySeries.length, 8);
+    assert.ok(!(res.body.dirs as { dir: string }[]).some(
+      d => String(d.dir).toLowerCase().includes('организатор'),
+    ));
+  });
+
   it('GET /api/admin/tasks with token', async () => {
     const token = await getAdminBearerToken(app);
     const res = await request(app)

@@ -6,6 +6,7 @@ import { HubActivityScreen } from './HubActivityScreen';
 import { HubAfterBlocksScreen } from './HubAfterBlocksScreen';
 import { HubDayResultsScreen } from './HubDayResultsScreen';
 import { HubDirectionScreen } from './HubDirectionScreen';
+import { HubExchangeScreen } from './HubExchangeScreen';
 import { HubForumScreen } from './HubForumScreen';
 import { HubGroupsScreen } from './HubGroupsScreen';
 import { HubParticipantScreen } from './HubParticipantScreen';
@@ -13,7 +14,7 @@ import { HubPiggybankScreen } from './HubPiggybankScreen';
 import { HubStateScreen } from './HubStateScreen';
 
 export type HubLens =
-  | 'forum' | 'dayResults' | 'state' | 'activity' | 'piggybank' | 'afterBlocks'
+  | 'forum' | 'dayResults' | 'state' | 'activity' | 'piggybank' | 'afterBlocks' | 'exchange'
   | 'direction' | 'groups' | 'participant';
 
 /**
@@ -55,6 +56,7 @@ function HubShell({ onOpenCard }: { onOpenCard: (id: number) => void }) {
       {lens === 'activity' && <HubActivityScreen />}
       {lens === 'piggybank' && <HubPiggybankScreen />}
       {lens === 'afterBlocks' && <HubAfterBlocksScreen />}
+      {lens === 'exchange' && <HubExchangeScreen />}
       {lens === 'direction' && <HubDirectionScreen onOpenCard={onOpenCard} />}
       {lens === 'groups' && <HubGroupsScreen onLensChange={setLens} />}
       {lens === 'participant' && <HubParticipantScreen onOpenCard={onOpenCard} />}
