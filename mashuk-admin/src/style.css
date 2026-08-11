@@ -717,6 +717,46 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   line-height: 1.3;
   white-space: nowrap;
 }
+.adm-kb-inline-table td { vertical-align: top; }
+.adm-kb-row-dirty td { background: #FFFBEB; }
+.adm-kb-speaker-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--m-border, #e5e5e5);
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--m-accent, #0A7B6F);
+  cursor: pointer;
+  line-height: 1.3;
+}
+.adm-kb-speaker-btn:hover {
+  border-color: var(--m-accent, #0A7B6F);
+  background: #F3FAF8;
+}
+.adm-kb-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 160px;
+}
+.adm-kb-card-row td {
+  background: #F7F8F6;
+  padding: 0 !important;
+  border-bottom: 2px solid var(--m-accent, #0A7B6F);
+}
+.adm-kb-detail-card {
+  padding: 14px 16px 16px;
+}
+.adm-kb-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
 .adm-kb-preview-section {
   margin-bottom: 10px;
   padding: 8px;

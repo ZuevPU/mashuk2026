@@ -15,7 +15,7 @@ export const KB_SECTIONS = [
   },
   {
     key: 'open_lessons',
-    label: 'Открыть уроки',
+    label: 'Открытые уроки',
     color: '#0F8A5F',
     tint: '#E8F7F0',
     subsections: [

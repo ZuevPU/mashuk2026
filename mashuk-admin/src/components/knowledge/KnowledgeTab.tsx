@@ -199,7 +199,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
       return;
     }
     if (newMaterial.kbSection === 'open_lessons' && !newMaterial.kbSubsection) {
-      alert('Выберите подраздел для «Открыть уроки»');
+      alert('Выберите подраздел для «Открытые уроки»');
       return;
     }
     act(async () => {
@@ -264,7 +264,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             ? `База знаний · ${materials.length} материалов`
             : `База знаний · ${filtered.length} из ${materials.length} материалов`
         }
-        hint="Разделы: тематические направления, уроки о важном, открыть уроки. Одна тема + несколько типов (презентация, видео…) — укажите одинаковую «Тему», они пойдут подряд у участника. После сохранения форма оставляет раздел/тему/спикеров."
+        hint="Разделы: тематические направления, уроки о важном, открытые уроки. Одна тема + несколько типов (презентация, видео…) — укажите одинаковую «Тему», они пойдут подряд у участника. После сохранения форма оставляет раздел/тему/спикеров."
       >
         {setTab && (
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setTab('events')}>
@@ -660,13 +660,17 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
           </div>
         </div>
 
-        <table className="adm-table">
+        <p className="adm-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
+          Правьте поля прямо в таблице → «Сохранить» / «Опубликовать» / «Черновик» / «Скрыть» / «Удалить».
+          Клик по спикеру открывает карточку со всеми параметрами.
+        </p>
+        <table className="adm-table adm-kb-inline-table">
           <thead>
             <tr>
               <th>Раздел / тема</th>
-              <th>Дата</th>
+              <th>День</th>
               <th>Спикер</th>
-              <th>Название материала</th>
+              <th>Название / ссылка</th>
               <th>Тип</th>
               <th>Аудитория</th>
               <th>Привязка</th>
