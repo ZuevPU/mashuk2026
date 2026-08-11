@@ -1,3 +1,15 @@
+/** Направления для фильтра Штаба — без «Организатор форума». */
+export function isOrganizerDirection(name: string | null | undefined): boolean {
+  const d = (name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!d) return false;
+  return d === 'организатор форума' || d === 'организатор' || d.includes('организатор форума');
+}
+
+/** Список направлений участника для селекта Штаба (и «Итоги дня», и «Состояние», и дальше). */
+export function hubDirections(directions: string[] | null | undefined): string[] {
+  return (directions ?? []).filter(d => !isOrganizerDirection(d));
+}
+
 /** Общие query-параметры фильтров «Штаба» для analytics/hub и dashboards. */
 export function hubFilterParams(opts: {
   mode?: string;

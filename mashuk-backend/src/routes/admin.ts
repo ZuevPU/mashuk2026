@@ -287,6 +287,7 @@ router.post('/analytics/refresh', requireAdminRole('settings'), wrap(analyticsCt
 router.get('/analytics/hub/forum', P('analytics', 'read'), wrap(hubCtrl.getHubForumHandler));
 router.get('/analytics/hub/forum-extras', P('analytics', 'read'), wrap(hubCtrl.getHubForumExtrasHandler));
 router.get('/analytics/hub/day-results', P('analytics', 'read'), wrap(hubCtrl.getHubDayResultsHandler));
+router.get('/analytics/hub/state', P('analytics', 'read'), wrap(hubCtrl.getHubStateHandler));
 router.get('/analytics/hub/groups', P('analytics', 'read'), wrap(hubCtrl.getHubGroupsHandler));
 router.get('/analytics/hub/piggybank-matrix', P('analytics', 'read'), wrap(hubCtrl.getHubPiggybankMatrixHandler));
 router.get('/analytics/hub/participant-feed', P('analytics', 'read'), wrap(hubCtrl.getHubParticipantFeedHandler));

@@ -7,6 +7,7 @@ import {
 import { roleLabel } from '../exports/exportLabels.js';
 import type { EveningField } from '../eveningQuestionnaireConfig.js';
 import { getForumSettings } from '../helpers.js';
+import { isOrganizerDirection } from '../leaderboardQuery.js';
 import { getMoscowParts } from '../timePhase.js';
 import { EVENING_SCALE_KEYS } from '../touchpointTemplates.js';
 import { buildPracticeRecommendNps, extractPracticeScores } from './practiceRecommendNps.js';
@@ -385,7 +386,9 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
   const dayFilter = days.length === 1 ? days[0] : null;
 
   const cohort = await loadCohortParticipants(filters, req);
-  const cohortSize = cohort.filter(p => p.onboardingCompletedAt).length;
+  const cohortSize = cohort.filter(
+    p => p.onboardingCompletedAt && !isOrganizerDirection(p.direction),
+  ).length;
 
   const { rows, fields, diagnostics } = await collectEveningExportRows({
     shiftId: filters.shiftId,
@@ -397,8 +400,9 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
     includeDrafts: true,
   });
 
-  const submittedRows = rows.filter(r => r.status === 'сдано');
-  const draftRows = rows.filter(r => r.status === 'черновик');
+  const nonOrgRows = rows.filter(r => !isOrganizerDirection(r.directionName || r.p.direction));
+  const submittedRows = nonOrgRows.filter(r => r.status === 'сдано');
+  const draftRows = nonOrgRows.filter(r => r.status === 'черновик');
 
   const scaleFields = fields.filter(isScaleField);
   // шкалы с данными + канонические ключи, если есть ответы
@@ -479,6 +483,7 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
   const cohortByDir = new Map<string, number>();
   for (const p of cohort) {
     if (!p.onboardingCompletedAt) continue;
+    if (isOrganizerDirection(p.direction)) continue;
     const d = (p.direction || '—').trim() || '—';
     cohortByDir.set(d, (cohortByDir.get(d) || 0) + 1);
   }
@@ -498,7 +503,9 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
       activityQ: filters.activity ?? undefined,
       includeDrafts: false,
     });
-    const allSubmitted = all.rows.filter(r => r.status === 'сдано');
+    const allSubmitted = all.rows.filter(
+      r => r.status === 'сдано' && !isOrganizerDirection(r.directionName || r.p.direction),
+    );
     const allScales = all.fields.filter(isScaleField);
     daySeries = seriesDays.map(day => {
       const dayRows = allSubmitted.filter(r => r.dayNumber === day);

@@ -2424,3 +2424,87 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   .adm-day-results-spine-nm { font-size: 12px; }
   .adm-day-results-legend-hint { margin-left: 0; width: 100%; }
 }
+
+/* Штаб · Состояние */
+.adm-state-phases {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.adm-state-phase {
+  background: var(--m-surface);
+  border: 1px solid var(--m-border);
+  border-radius: 10px;
+  padding: 16px;
+}
+.adm-state-phase h3 {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.adm-state-col {
+  display: flex;
+  flex-direction: column-reverse;
+  height: 190px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.adm-state-col div {
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #11151d;
+}
+.adm-state-quote {
+  border-left: 2px solid #e2685e;
+  padding: 2px 0 2px 14px;
+  margin: 14px 0;
+  font-size: 13.5px;
+}
+.adm-state-quote-m {
+  display: block;
+  color: var(--m-text-secondary);
+  font-size: 11.5px;
+  margin-top: 5px;
+}
+.adm-state-hist {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 130px;
+}
+.adm-state-hist > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+.adm-state-hist-b {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  min-height: 2px;
+}
+.adm-state-hist-x {
+  font-size: 11px;
+  color: var(--m-text-secondary);
+}
+.adm-state-rule {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--m-border);
+  font-size: 13.5px;
+}
+.adm-state-rule:last-child { border-bottom: 0; }
+.adm-state-rule-w {
+  color: #b45309;
+  font-weight: 600;
+  font-size: 12.5px;
+}
+@media (max-width: 860px) {
+  .adm-state-phases { grid-template-columns: 1fr; }
+}

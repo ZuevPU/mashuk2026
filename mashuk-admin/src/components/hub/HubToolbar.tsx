@@ -1,15 +1,17 @@
 import { useInsights } from '../insights/InsightsContext';
 import type { HubLens } from './HubTab';
+import { hubDirections, isOrganizerDirection } from './hubQuery';
 
 const LENS_LABELS: Record<HubLens, string> = {
   forum: 'Форум',
   dayResults: 'Итоги дня',
+  state: 'Состояние',
   direction: 'Направление',
   groups: 'Группы',
   participant: 'Участник',
 };
 
-const LENS_ORDER: HubLens[] = ['forum', 'dayResults', 'direction', 'groups', 'participant'];
+const LENS_ORDER: HubLens[] = ['forum', 'dayResults', 'state', 'direction', 'groups', 'participant'];
 
 /** Свой маленький тулбар вместо InsightsChrome — тот тащит таб-бар старых 14 дашбордов. */
 export function HubToolbar({
@@ -32,6 +34,9 @@ export function HubToolbar({
     setActivity,
     meta,
   } = useInsights();
+
+  const directionOptions = hubDirections(meta?.filters?.directions);
+  const directionValue = isOrganizerDirection(direction) ? '' : direction;
 
   return (
     <div className="adm-insights-toolbar card adm-forum-block">
@@ -68,11 +73,11 @@ export function HubToolbar({
           Направление
           <select
             className="adm-input"
-            value={direction}
+            value={directionValue}
             onChange={e => { setDirection(e.target.value); setGroup(''); }}
           >
-            <option value="">Все</option>
-            {(meta?.filters?.directions ?? []).map(d => (
+            <option value="">Все направления</option>
+            {directionOptions.map(d => (
               <option key={d} value={d}>{d}</option>
             ))}
           </select>
