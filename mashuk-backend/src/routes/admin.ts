@@ -290,6 +290,7 @@ router.get('/analytics/hub/day-results', P('analytics', 'read'), wrap(hubCtrl.ge
 router.get('/analytics/hub/state', P('analytics', 'read'), wrap(hubCtrl.getHubStateHandler));
 router.get('/analytics/hub/activity', P('analytics', 'read'), wrap(hubCtrl.getHubActivityHandler));
 router.get('/analytics/hub/piggybank', P('analytics', 'read'), wrap(hubCtrl.getHubPiggybankHandler));
+router.get('/analytics/hub/after-blocks', P('analytics', 'read'), wrap(hubCtrl.getHubAfterBlocksHandler));
 router.get('/analytics/hub/groups', P('analytics', 'read'), wrap(hubCtrl.getHubGroupsHandler));
 router.get('/analytics/hub/piggybank-matrix', P('analytics', 'read'), wrap(hubCtrl.getHubPiggybankMatrixHandler));
 router.get('/analytics/hub/participant-feed', P('analytics', 'read'), wrap(hubCtrl.getHubParticipantFeedHandler));

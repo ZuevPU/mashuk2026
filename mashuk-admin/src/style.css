@@ -2601,3 +2601,57 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 @media (max-width: 860px) {
   .adm-piggy-fstep { grid-template-columns: 120px 1fr 44px; }
 }
+
+/* Штаб · После блоков */
+.adm-refl-lvrow {
+  display: grid;
+  grid-template-columns: minmax(140px, 190px) 1fr 74px;
+  gap: 12px;
+  align-items: center;
+  margin: 11px 0;
+}
+.adm-refl-vl {
+  font-size: 13px;
+  color: var(--m-text-secondary);
+  text-align: right;
+}
+.adm-refl-quad {
+  position: relative;
+  height: 420px;
+  border: 1px solid var(--m-border);
+  border-radius: 10px;
+  background: linear-gradient(to right, rgba(226, 104, 94, 0.05), rgba(87, 189, 156, 0.05));
+  margin-bottom: 8px;
+}
+.adm-refl-qline {
+  position: absolute;
+  background: var(--m-border);
+}
+.adm-refl-pt {
+  position: absolute;
+  transform: translate(-50%, 50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.adm-refl-plb {
+  position: absolute;
+  transform: translate(-50%, 50%);
+  font-size: 11px;
+  color: var(--m-text-secondary);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.adm-refl-qtag {
+  position: absolute;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--m-text-secondary);
+  max-width: 42%;
+  line-height: 1.35;
+}
+@media (max-width: 860px) {
+  .adm-refl-quad { height: 520px; }
+  .adm-refl-lvrow { grid-template-columns: 120px 1fr 64px; }
+}

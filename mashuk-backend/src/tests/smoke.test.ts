@@ -145,6 +145,25 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     ));
   });
 
+  it('GET /api/admin/analytics/hub/after-blocks with token', async () => {
+    const token = await getAdminBearerToken(app);
+    const res = await request(app)
+      .get('/api/admin/analytics/hub/after-blocks?mode=day&day=3')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(res.status, 200);
+    assert.ok(res.body.meta);
+    assert.ok(typeof res.body.meta.own === 'number');
+    assert.ok(Array.isArray(res.body.levelDist));
+    assert.equal(res.body.levelDist.length, 4);
+    assert.ok(Array.isArray(res.body.events));
+    assert.ok(Array.isArray(res.body.subtopics));
+    assert.ok(Array.isArray(res.body.daySeries));
+    assert.equal(res.body.daySeries.length, 8);
+    assert.ok(!(res.body.dirs as { dir: string }[]).some(
+      d => String(d.dir).toLowerCase().includes('организатор'),
+    ));
+  });
+
   it('GET /api/admin/tasks with token', async () => {
     const token = await getAdminBearerToken(app);
     const res = await request(app)
