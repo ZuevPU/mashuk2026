@@ -154,6 +154,20 @@ async function ensureQuestionAnswerAccrualCap(pool: ReturnType<typeof createPool
   `);
 }
 
+/** Allow multiple successful QR scans/day for repeatable tasks (0063). */
+async function ensureQrRepeatableScansSchema(pool: ReturnType<typeof createPool>): Promise<void> {
+  const { rows } = await pool.query<{ ok: number }>(
+    `SELECT 1 AS ok FROM pg_indexes
+     WHERE schemaname = 'public' AND indexname = 'task_qr_scans_success_uniq'
+     LIMIT 1`,
+  );
+  if (rows.length === 0) return;
+  const sqlPath = path.join(__dirname, '../../drizzle/0063_qr_repeatable_scans.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  console.warn('Repair: applying 0063_qr_repeatable_scans.sql (drop success unique)');
+  await pool.query(sql);
+}
+
 /** Apply exchange categories migration if table missing (0061). */
 async function ensureExchangeCategoriesSchema(pool: ReturnType<typeof createPool>): Promise<void> {
   const { rows } = await pool.query<{ ok: number }>(
@@ -212,6 +226,7 @@ export async function runMigrations(): Promise<void> {
     await ensureAnswersPointsLogSchema(pool);
     await ensureQuestionAnswerAccrualCap(pool);
     await ensureExchangeCategoriesSchema(pool);
+    await ensureQrRepeatableScansSchema(pool);
     await pool.end();
   }
 }

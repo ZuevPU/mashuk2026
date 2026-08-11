@@ -347,6 +347,8 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
         participantId: req.participant!.id,
         deviceKey: requestDeviceKey,
         forumDay,
+        executionType: task.executionType,
+        dailyRepeatLimit: task.dailyRepeatLimit,
       });
       if (!qrGuard.ok) {
         if (qrGuard.outcome === 'blocked_duplicate' || qrGuard.outcome === 'blocked_device') {
@@ -478,7 +480,9 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
           });
         } catch (err) {
           if (isUniqueViolation(err)) {
-            res.status(400).json({ error: 'Вы уже выполнили это QR-задание' });
+            res.status(400).json({
+              error: 'Не удалось зафиксировать повторный QR-скан. Обновите приложение и попробуйте снова.',
+            });
             return;
           }
           throw err;

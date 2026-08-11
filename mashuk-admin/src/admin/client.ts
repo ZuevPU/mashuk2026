@@ -258,12 +258,19 @@ export async function adminDownloadBinary(path: string, filename: string) {
 
 export async function adminFetchHtml(path: string): Promise<string> {
   const base = getAdminApiBase();
+  if (import.meta.env.PROD && !API_BASE) {
+    throw new Error('Не задан VITE_API_URL. Укажите его в Timeweb Apps и пересоберите админку.');
+  }
   const token = getAdminToken();
   if (!token) throw new Error('Не авторизован');
   const res = await fetch(`${base}${path}`, {
     headers: adminAuthHeaders(),
   });
+  if (res.status === 401) {
+    setAdminToken(null);
+    throw new Error('Сессия истекла. Войдите снова.');
+  }
   const text = await res.text();
-  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+  if (!res.ok) throw new Error(parseAdminErrorResponse(res.status, text));
   return text;
 }

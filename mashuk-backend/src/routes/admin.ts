@@ -8,6 +8,7 @@ import { adminLogin } from '../controllers/adminAuthController.js';
 import { adminDeleteOrgThread, adminListOrgThreads, adminReplyOrgThread } from '../controllers/orgController.js';
 import * as rights from '../controllers/adminRightsController.js';
 import * as profilePdf from '../controllers/adminProfilePdfController.js';
+import * as participantProfile from '../controllers/adminParticipantProfileController.js';
 import * as pushAdmin from '../controllers/pushAdminController.js';
 import * as piggyAdmin from '../controllers/adminPiggybankController.js';
 import { adminUploadImage } from '../controllers/pushBannerController.js';
@@ -31,6 +32,7 @@ const wrap = (fn: Parameters<typeof asyncHandler>[0]): RequestHandler => asyncHa
 router.get('/participants', P('participants', 'read'), wrap(admin.listParticipants));
 router.get('/participants/groups', P('participants', 'read'), wrap(admin.listParticipantGroups));
 router.get('/participants/:id/card', P('participants', 'read'), wrap(p0.getParticipantCard));
+router.get('/participants/:id/profile', P('participants', 'read'), wrap(participantProfile.getAdminParticipantFinalProfile));
 router.get('/participants/:id/activity', P('participants', 'read'), wrap(p0.getParticipantActivity));
 router.get('/participants/:id/admin-actions', P('participants', 'read'), wrap(p0.getParticipantAdminActions));
 router.post('/participants/:id/tasks/:taskId/complete', P('participants', 'confirm'), wrap(p0.adminCompleteParticipantTaskHandler));

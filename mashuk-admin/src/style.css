@@ -3110,3 +3110,64 @@ tr.adm-dir-me td { background: rgba(230, 174, 74, 0.09); }
   .adm-dir-tl { grid-template-columns: repeat(4, 1fr); }
   .adm-dir-anketa-cards { grid-template-columns: 1fr 1fr; }
 }
+
+/* Итоговый HTML-профиль участника (модалка поверх карточки) */
+.adm-final-profile-backdrop {
+  z-index: 1800;
+  padding: 16px;
+  backdrop-filter: blur(6px);
+}
+.adm-modal.adm-final-profile-modal {
+  max-width: min(980px, 96vw);
+  width: 100%;
+  height: min(92vh, 980px);
+  max-height: 92vh;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22);
+}
+.adm-final-profile-topbar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: #faf8f4;
+}
+.adm-final-profile-title {
+  font-size: 15px;
+  font-weight: 650;
+}
+.adm-final-profile-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.adm-final-profile-body {
+  flex: 1;
+  min-height: 0;
+  background: #8c8f94;
+}
+.adm-final-profile-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #8c8f94;
+}
+@media (max-width: 639px) {
+  .adm-final-profile-backdrop { padding: 0; align-items: flex-end; }
+  .adm-modal.adm-final-profile-modal {
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 16px 16px 0 0;
+  }
+  .adm-final-profile-topbar { flex-wrap: wrap; }
+}

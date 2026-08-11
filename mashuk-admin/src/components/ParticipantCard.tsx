@@ -7,6 +7,7 @@ import { formatAnswerPreview } from '../utils/formatAnswerPreview';
 
 import { VkProfileLink } from './VkProfileLink';
 import { ParticipantAvatar } from './participants/ParticipantAvatar';
+import { ParticipantFinalProfileModal } from './participants/ParticipantFinalProfileModal';
 
 
 
@@ -288,6 +289,8 @@ export function ParticipantCardModal({
 
   const [piggyDayFilter, setPiggyDayFilter] = useState('');
 
+  const [finalProfileOpen, setFinalProfileOpen] = useState(false);
+
   const [pointsTrack, setPointsTrack] = useState<'path' | 'experience'>('path');
   const [pointsAmount, setPointsAmount] = useState(10);
   const [pointsReason, setPointsReason] = useState('');
@@ -408,7 +411,7 @@ export function ParticipantCardModal({
   const displayName = `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Участник';
 
   return (
-
+    <>
     <div className="adm-modal-backdrop adm-participant-card-backdrop" onClick={onClose} role="presentation">
 
       <div
@@ -485,6 +488,13 @@ export function ParticipantCardModal({
                 return res.deliveryStatusHint || res.deliveryStatus || 'Пуш отправлен';
               }, 'Пуш отправлен');
             }}>Отправить пуш</button>
+            <button
+              type="button"
+              className="adm-btn adm-btn-sm adm-btn-secondary"
+              onClick={() => setFinalProfileOpen(true)}
+            >
+              Профиль участника
+            </button>
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF')}>Выгрузить всё</button>
             {p.isBlocked
               ? (
@@ -1690,6 +1700,13 @@ export function ParticipantCardModal({
 
     </div>
 
+    <ParticipantFinalProfileModal
+      open={finalProfileOpen}
+      participantId={p.id}
+      participantName={displayName}
+      onClose={() => setFinalProfileOpen(false)}
+    />
+    </>
   );
 
 }

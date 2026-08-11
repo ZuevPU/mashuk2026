@@ -713,7 +713,7 @@ export const taskQrScans = pgTable('task_qr_scans', {
   index('task_qr_scans_participant_id_idx').on(table.participantId),
   index('task_qr_scans_device_key_idx').on(table.deviceKey),
   index('task_qr_scans_outcome_idx').on(table.outcome),
-  // Partial unique (participant_id, task_id, forum_day) WHERE outcome='success' — migration 0056
+  // Lookup index for success rows — migration 0063 (unique removed to allow repeatable QR)
 ]);
 
 export const taskTeamConfirmations = pgTable('task_team_confirmations', {
