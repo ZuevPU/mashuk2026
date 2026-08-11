@@ -477,7 +477,7 @@ export function HubActivityScreen() {
 
           <DayResultsSection
             title="Динамика по дням форума"
-            note="Доля заходивших за день. Сравнивать дни можно только по срезу на одно и то же время суток."
+            note="Доля участников с цифровой активностью за день (ответы, баллы, копилка; сегодня — ещё lastActiveAt). Сравнивать дни лучше по срезу на одно время суток."
           >
             <DashCard>
               <div className="adm-day-results-dyn">

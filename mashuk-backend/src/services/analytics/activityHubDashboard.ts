@@ -1,11 +1,13 @@
-import { inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { db } from '../../db/index.js';
-import { answers, participantDayState, participants, questions } from '../../db/schema.js';
+import {
+  answers, participantDayState, participants, piggybank, pointsLog, questions,
+} from '../../db/schema.js';
 import { getForumSettings } from '../helpers.js';
 import { isOrganizerDirection } from '../leaderboardQuery.js';
 import { isPublishedStatus } from '../publishStatus.js';
-import { getMoscowParts } from '../timePhase.js';
+import { getCalendarForumDay, getMoscowParts } from '../timePhase.js';
 import {
   isTouchpointQuestionForForumDay,
   touchpointCompletionRatio,
@@ -31,6 +33,83 @@ import {
 function isDropped(lastActiveAt: Date | null | undefined, nowKey: string): boolean {
   const b = lastActiveBucket(lastActiveAt, nowKey);
   return b === 'old' || b === 'never';
+}
+
+/**
+ * Уникальные участники с цифровой активностью по дням форума
+ * (ответы, баллы, копилка) — для сквозной динамики «заходили за день».
+ */
+async function loadActivePeopleByDay(
+  ids: number[],
+  startDate: Date | null | undefined,
+  totalDays: number,
+  currentDay: number,
+): Promise<Map<number, Set<number>>> {
+  const byDay = new Map<number, Set<number>>();
+  for (let d = 1; d <= 8; d++) byDay.set(d, new Set());
+  if (!ids.length) return byDay;
+
+  const add = (day: number | null | undefined, pid: number) => {
+    if (day == null || day < 1 || day > 8 || day > currentDay) return;
+    byDay.get(day)!.add(pid);
+  };
+
+  const ans = await db.select({
+    participantId: answers.participantId,
+    createdAt: answers.createdAt,
+    dayNumber: questions.dayNumber,
+  }).from(answers)
+    .innerJoin(questions, eq(answers.questionId, questions.id))
+    .where(inArray(answers.participantId, ids));
+
+  for (const a of ans) {
+    const cal = startDate && a.createdAt
+      ? getCalendarForumDay(startDate, a.createdAt, totalDays)
+      : a.dayNumber;
+    add(cal, a.participantId);
+  }
+
+  const logs = await db.select({
+    participantId: pointsLog.participantId,
+    forumDay: pointsLog.forumDay,
+    createdAt: pointsLog.createdAt,
+  }).from(pointsLog).where(and(
+    inArray(pointsLog.participantId, ids),
+    isNull(pointsLog.revokedAt),
+  ));
+  for (const l of logs) {
+    const cal = l.forumDay
+      ?? (startDate && l.createdAt
+        ? getCalendarForumDay(startDate, l.createdAt, totalDays)
+        : null);
+    add(cal, l.participantId);
+  }
+
+  const pig = await db.select({
+    participantId: piggybank.participantId,
+    forumDay: piggybank.forumDay,
+    createdAt: piggybank.createdAt,
+  }).from(piggybank).where(and(
+    inArray(piggybank.participantId, ids),
+    isNull(piggybank.deletedAt),
+  ));
+  for (const p of pig) {
+    const cal = p.forumDay
+      ?? (startDate && p.createdAt
+        ? getCalendarForumDay(startDate, p.createdAt, totalDays)
+        : null);
+    add(cal, p.participantId);
+  }
+
+  const dayStates = await db.select({
+    participantId: participantDayState.participantId,
+    dayNumber: participantDayState.dayNumber,
+  }).from(participantDayState).where(inArray(participantDayState.participantId, ids));
+  for (const s of dayStates) {
+    add(s.dayNumber, s.participantId);
+  }
+
+  return byDay;
 }
 
 async function loadTouchpointCounts(
@@ -222,16 +301,36 @@ export async function buildActivityHubDashboard(filters: AnalyticsFilters, req?:
     .map(([h, n]) => ({ h, n }))
     .sort((a, b) => a.h - b.h);
 
-  const daySeries = [1, 2, 3, 4, 5, 6, 7, 8].map(day => ({
-    day,
-    todayPct: day === throughDay
-      ? round1((today / Math.max(1, people.length)) * 100)
-      : null,
-    old: day === throughDay ? old : null,
-    zeroExpPct: day === throughDay
-      ? round1((zeroExp / Math.max(1, people.length)) * 100)
-      : null,
-  }));
+  const totalDays = settings.totalDays ?? 8;
+  const activeByDay = await loadActivePeopleByDay(
+    ids,
+    settings.startDate ?? null,
+    totalDays,
+    currentDay,
+  );
+  // Сегодня дополнительно — lastActiveAt (как в KPI «заходили сегодня»)
+  for (const p of people) {
+    if (lastActiveBucket(p.lastActiveAt, nowKey) === 'today') {
+      activeByDay.get(currentDay)?.add(p.id);
+    }
+  }
+
+  const peopleN = Math.max(1, people.length);
+  const daySeries = [1, 2, 3, 4, 5, 6, 7, 8].map(day => {
+    if (day > currentDay) {
+      return { day, todayPct: null as number | null, old: null as number | null, zeroExpPct: null as number | null };
+    }
+    const activeN = activeByDay.get(day)?.size ?? 0;
+    return {
+      day,
+      todayPct: round1((activeN / peopleN) * 100),
+      // выпадение и нулевой опыт — срезовые метрики «сейчас», не восстанавливаются по дням
+      old: day === currentDay ? old + never : null,
+      zeroExpPct: day === currentDay
+        ? round1((zeroExp / peopleN) * 100)
+        : null,
+    };
+  });
 
   const pathArr = scoreRows.map(r => r.pathPoints ?? 0);
   const corrNote = pathArr.length && pointsArr.length
