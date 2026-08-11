@@ -4,22 +4,22 @@ export const KB_SECTIONS = [
   {
     key: 'thematic',
     label: 'Тематические направления',
-    color: '#1D5BD6',
-    tint: '#DCE8FF',
+    color: '#007AFF',
+    tint: 'rgba(0, 122, 255, 0.12)',
     hasDirections: true,
   },
   {
     key: 'lessons_important',
     label: 'Уроки о важном',
-    color: '#7C3AED',
-    tint: '#F0E7FF',
+    color: '#AF52DE',
+    tint: 'rgba(175, 82, 222, 0.12)',
     hasDirections: false,
   },
   {
     key: 'open_lessons',
     label: 'Открытые уроки',
-    color: '#0B7A4F',
-    tint: '#D8F5E7',
+    color: '#34C759',
+    tint: 'rgba(52, 199, 89, 0.12)',
     hasDirections: false,
     subsections: [
       { key: 'open', label: 'Открытые уроки' },

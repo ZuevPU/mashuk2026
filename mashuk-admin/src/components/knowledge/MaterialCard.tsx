@@ -213,11 +213,10 @@ export function MaterialCard({
             <div
               className="adm-kb-section-chip"
               style={{
-                background: '#fff',
+                background: sec.tint,
                 color: sec.color,
-                borderColor: sec.color,
-                marginTop: 4,
-                display: 'inline-flex',
+                borderColor: 'transparent',
+                marginTop: 6,
               }}
             >
               {sec.label}
@@ -249,9 +248,7 @@ export function MaterialCard({
           >
             {speakerSummary(draft.speakerIds, speakers, material.speakerName)}
           </button>
-          <div className="adm-muted" style={{ fontSize: 10, marginTop: 2 }}>
-            клик → все поля
-          </div>
+          <div className="adm-kb-speaker-hint">карточка</div>
         </td>
         <td className="adm-kb-col-title">
           <input
@@ -355,7 +352,7 @@ export function MaterialCard({
           <div className="adm-kb-row-actions">
             <button
               type="button"
-              className="adm-btn adm-btn-sm adm-btn-primary"
+              className="adm-kb-btn adm-kb-btn-primary"
               disabled={!dirty}
               onClick={() => persist()}
               title="Сохранить текущие поля"
@@ -364,21 +361,21 @@ export function MaterialCard({
             </button>
             <button
               type="button"
-              className="adm-btn adm-btn-sm adm-btn-secondary"
+              className="adm-kb-btn adm-kb-btn-secondary"
               onClick={() => persist('published')}
             >
               Опубликовать
             </button>
             <button
               type="button"
-              className="adm-btn adm-btn-sm adm-btn-secondary"
+              className="adm-kb-btn adm-kb-btn-secondary"
               onClick={() => persist('draft')}
             >
               Черновик
             </button>
             <button
               type="button"
-              className="adm-btn adm-btn-sm adm-btn-secondary"
+              className="adm-kb-btn adm-kb-btn-secondary"
               onClick={() => persist('archived')}
             >
               Скрыть
@@ -386,7 +383,7 @@ export function MaterialCard({
             {link && onCopyLink && (
               <button
                 type="button"
-                className="adm-btn adm-btn-sm adm-btn-ghost"
+                className="adm-kb-btn adm-kb-btn-ghost"
                 onClick={() => onCopyLink(link)}
               >
                 Ссылка
@@ -395,7 +392,7 @@ export function MaterialCard({
             {onPreview && (
               <button
                 type="button"
-                className="adm-btn adm-btn-sm adm-btn-ghost"
+                className="adm-kb-btn adm-kb-btn-ghost"
                 onClick={onPreview}
               >
                 Превью
@@ -403,7 +400,7 @@ export function MaterialCard({
             )}
             <button
               type="button"
-              className="adm-btn adm-btn-sm btn-danger"
+              className="adm-kb-btn adm-kb-btn-danger"
               onClick={() => {
                 if (!confirmDelete('Удалить материал?')) return;
                 onDelete();
@@ -420,14 +417,13 @@ export function MaterialCard({
           <td colSpan={9}>
             <div className="adm-kb-detail-card">
               <div className="adm-kb-detail-head">
-                <strong>Карточка материала #{material.id}</strong>
-                <span className="adm-muted" style={{ fontSize: 12 }}>
-                  Все параметры · спикеры · условия открытия
-                </span>
+                <div>
+                  <strong>Карточка материала #{material.id}</strong>
+                  <p className="adm-kb-panel-sub">Все параметры · спикеры · условия открытия</p>
+                </div>
                 <button
                   type="button"
-                  className="adm-btn adm-btn-sm adm-btn-ghost"
-                  style={{ marginLeft: 'auto' }}
+                  className="adm-kb-btn adm-kb-btn-ghost"
                   onClick={() => {
                     setDraft(mkDraft(material));
                     setCardOpen(false);
@@ -701,22 +697,22 @@ export function MaterialCard({
                   )}
                 </div>
               </div>
-              <div className="adm-kb-row-actions" style={{ marginTop: 12 }}>
-                <button type="button" className="adm-btn adm-btn-primary" onClick={() => persist()}>
+              <div className="adm-kb-actions adm-kb-actions-detail">
+                <button type="button" className="adm-kb-btn adm-kb-btn-primary" onClick={() => persist()}>
                   Сохранить
                 </button>
-                <button type="button" className="adm-btn adm-btn-secondary" onClick={() => persist('published')}>
+                <button type="button" className="adm-kb-btn adm-kb-btn-secondary" onClick={() => persist('published')}>
                   Опубликовать
                 </button>
-                <button type="button" className="adm-btn adm-btn-secondary" onClick={() => persist('draft')}>
-                  Сохранить черновик
+                <button type="button" className="adm-kb-btn adm-kb-btn-secondary" onClick={() => persist('draft')}>
+                  Черновик
                 </button>
-                <button type="button" className="adm-btn adm-btn-secondary" onClick={() => persist('archived')}>
+                <button type="button" className="adm-kb-btn adm-kb-btn-secondary" onClick={() => persist('archived')}>
                   Скрыть
                 </button>
                 <button
                   type="button"
-                  className="adm-btn btn-danger"
+                  className="adm-kb-btn adm-kb-btn-danger"
                   onClick={() => {
                     if (!confirmDelete('Удалить материал?')) return;
                     onDelete();
@@ -726,7 +722,7 @@ export function MaterialCard({
                 </button>
                 <button
                   type="button"
-                  className="adm-btn adm-btn-ghost"
+                  className="adm-kb-btn adm-kb-btn-ghost"
                   onClick={() => {
                     setDraft(mkDraft(material));
                     setCardOpen(false);

@@ -270,7 +270,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   if (loading && materials.length === 0) return <p className="adm-muted">Загрузка базы знаний…</p>;
 
   return (
-    <div className="adm-forum">
+    <div className="adm-forum adm-kb">
       <AdminPageHero
         title={
           filtered.length === materials.length
@@ -280,7 +280,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
         hint="Разделы: тематические направления, уроки о важном, открытые уроки. Одна тема + несколько типов (презентация, видео…) — укажите одинаковую «Тему», они пойдут подряд у участника. После сохранения форма оставляет раздел/тему/спикеров."
       >
         {setTab && (
-          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setTab('events')}>
+          <button type="button" className="adm-kb-btn adm-kb-btn-secondary" onClick={() => setTab('events')}>
             Перейти к программе
           </button>
         )}
@@ -288,12 +288,14 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
 
       <MaterialTypesPanel adminFetch={adminFetch} act={act} />
 
-      <div className="card adm-forum-block">
-        <h3>Разблокировка БЗ (участник + день)</h3>
-        <p className="adm-muted" style={{ fontSize: 12, marginBottom: 8 }}>
-          Порог форума по умолчанию: ≥ {kbForumThreshold} из 7 точек осмысления за день (настройка «Форум»).
-        </p>
-        <div className="form-row">
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Разблокировка БЗ</h3>
+          <p className="adm-kb-panel-sub">
+            Порог форума: ≥ {kbForumThreshold} из 7 точек осмысления за день
+          </p>
+        </div>
+        <div className="adm-kb-toolbar">
           <input
             type="number"
             className="adm-input"
@@ -302,21 +304,20 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             placeholder="ID участника"
           />
           <select
-            className="adm-input"
+            className="adm-input adm-kb-control-sm"
             value={kbUnlockForm.dayNumber}
             onChange={e => setKbUnlockForm({ ...kbUnlockForm, dayNumber: Number(e.target.value) })}
-            style={{ width: 110 }}
             title="День смены"
           >
             {dayOptions.map(d => (
               <option key={d} value={d}>День {d}</option>
             ))}
           </select>
-          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => {
+          <button type="button" className="adm-kb-btn adm-kb-btn-secondary" onClick={() => {
             const id = Number(kbUnlockForm.participantId);
             if (id) openCard(id);
-          }}>Открыть карточку</button>
-          <button type="button" className="adm-btn" onClick={() => act(async () => {
+          }}>Карточка</button>
+          <button type="button" className="adm-kb-btn adm-kb-btn-primary" onClick={() => act(async () => {
             await adminFetch('/kb-unlocks', {
               method: 'POST',
               body: JSON.stringify({
@@ -328,34 +329,41 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
           }, 'БЗ разблокирована')}>Разблокировать</button>
         </div>
         {kbUnlocks.length > 0 && (
-          <table className="adm-table" style={{ marginTop: 8 }}>
-            <thead><tr><th>Участник</th><th>День</th><th>Когда</th><th /></tr></thead>
-            <tbody>
-              {kbUnlocks.slice(0, 30).map(u => (
-                <tr key={u.id}>
-                  <td>{u.participantId}</td>
-                  <td>{u.dayNumber}</td>
-                  <td>{u.unlockedAt ? new Date(u.unlockedAt).toLocaleString('ru-RU') : '—'}</td>
-                  <td>
-                    <button type="button" className="adm-btn btn-danger" onClick={() => {
-                      if (!confirmDelete('Отозвать разблокировку БЗ?')) return;
-                      act(async () => {
-                        await adminFetch(`/kb-unlocks/${u.participantId}/${u.dayNumber}`, { method: 'DELETE' });
-                        await refreshUnlocks();
-                      }, 'Отозвано');
-                    }}>Отозвать</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="adm-table-scroll adm-kb-mini-scroll">
+            <table className="adm-table adm-kb-mini-table">
+              <thead><tr><th>Участник</th><th>День</th><th>Когда</th><th /></tr></thead>
+              <tbody>
+                {kbUnlocks.slice(0, 30).map(u => (
+                  <tr key={u.id}>
+                    <td>{u.participantId}</td>
+                    <td>{u.dayNumber}</td>
+                    <td>{u.unlockedAt ? new Date(u.unlockedAt).toLocaleString('ru-RU') : '—'}</td>
+                    <td>
+                      <button type="button" className="adm-kb-btn adm-kb-btn-danger" onClick={() => {
+                        if (!confirmDelete('Отозвать разблокировку БЗ?')) return;
+                        act(async () => {
+                          await adminFetch(`/kb-unlocks/${u.participantId}/${u.dayNumber}`, { method: 'DELETE' });
+                          await refreshUnlocks();
+                        }, 'Отозвано');
+                      }}>Отозвать</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      <div className="card adm-forum-block">
-        <h3>Материалы</h3>
-        <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-          <input className="adm-input" placeholder="Поиск по названию" value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Материалы</h3>
+          <p className="adm-kb-panel-sub">
+            Фильтры · предпросмотр · создание · правка в таблице
+          </p>
+        </div>
+        <div className="adm-kb-toolbar">
+          <input className="adm-input adm-kb-search" placeholder="Поиск" value={search} onChange={e => setSearch(e.target.value)} />
           <select className="adm-input" value={dayFilter} onChange={e => setDayFilter(e.target.value)}>
             <option value="">Все дни</option>
             {dayOptions.map(d => (
@@ -384,10 +392,9 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             <option value="archived">Архив</option>
           </select>
           <select
-            className="adm-input"
+            className="adm-input adm-kb-control-sm"
             value={previewDay}
             onChange={e => setPreviewDay(Number(e.target.value))}
-            style={{ width: 120 }}
             title="День для предпросмотра"
           >
             {dayOptions.map(d => (
@@ -396,15 +403,15 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
           </select>
           <button
             type="button"
-            className="adm-btn adm-btn-secondary adm-btn-sm"
+            className="adm-kb-btn adm-kb-btn-secondary"
             onClick={() => {
               if (previewOpen) setPreviewOpen(false);
               else openDayPreview(previewDay);
             }}
           >
-            {previewOpen ? 'Скрыть предпросмотр' : 'Предпросмотр'}
+            {previewOpen ? 'Скрыть превью' : 'Превью'}
           </button>
-          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => load()}>Обновить</button>
+          <button type="button" className="adm-kb-btn adm-kb-btn-secondary" onClick={() => load()}>Обновить</button>
         </div>
 
         {previewOpen && (
@@ -421,12 +428,14 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
           </div>
         )}
 
-        <div className="adm-kb-create card" style={{ marginBottom: 16, padding: 16, background: '#FAFAF8' }}>
-          <h4 style={{ margin: '0 0 8px' }}>Новый материал</h4>
-          <p className="adm-muted" style={{ fontSize: 12, margin: '0 0 12px' }}>
-            Чтобы презентация, видео и конспект шли подряд у участника — заполните одну и ту же «Тему» и не очищайте форму между добавлениями типов.
-          </p>
-          <div className="adm-kb-section-legend" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+        <div className="adm-kb-create">
+          <div className="adm-kb-panel-head">
+            <h4>Новый материал</h4>
+            <p className="adm-kb-panel-sub">
+              Одна «Тема» для презентации, видео и конспекта — материалы одного спикера идут рядом
+            </p>
+          </div>
+          <div className="adm-kb-section-legend">
             {KB_SECTIONS.map(s => (
               <span
                 key={s.key}
@@ -637,7 +646,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
               )}
             </div>
           </div>
-          <div className="form-row" style={{ marginTop: 12, marginBottom: 0 }}>
+          <div className="adm-kb-create-extra">
             <label className="adm-forum-check">
               <input
                 type="checkbox"
@@ -646,7 +655,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
               />
               Общий материал (без привязки к событию)
             </label>
-            <label className="adm-field" style={{ minWidth: 220 }}>
+            <label className="adm-field adm-kb-file-field">
               <span className="adm-label">Или загрузить файл</span>
               <input
                 type="file"
@@ -660,22 +669,21 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
               />
             </label>
           </div>
-          <div className="adm-forum-actions">
-            <button type="button" className="adm-btn adm-btn-secondary" onClick={() => createMaterial('draft')}>
-              Сохранить черновик
+          <div className="adm-kb-actions">
+            <button type="button" className="adm-kb-btn adm-kb-btn-secondary" onClick={() => createMaterial('draft')}>
+              Черновик
             </button>
-            <button type="button" className="adm-btn adm-btn-primary" onClick={() => createMaterial('published')}>
+            <button type="button" className="adm-kb-btn adm-kb-btn-primary" onClick={() => createMaterial('published')}>
               Опубликовать
             </button>
-            <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setNewMaterial(emptyMaterial())}>
-              Очистить форму
+            <button type="button" className="adm-kb-btn adm-kb-btn-ghost" onClick={() => setNewMaterial(emptyMaterial())}>
+              Очистить
             </button>
           </div>
         </div>
 
-        <p className="adm-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
-          Правьте поля прямо в таблице → «Сохранить» / «Опубликовать» / «Черновик» / «Скрыть» / «Удалить».
-          Клик по спикеру открывает карточку со всеми параметрами. Внутри раздела — по фамилии спикера, преза и остальные материалы рядом.
+        <p className="adm-kb-table-hint">
+          Правка в таблице · клик по спикеру открывает карточку · внутри раздела — по фамилии, преза и материалы рядом
         </p>
         <div className="adm-table-scroll adm-kb-table-scroll">
           <table className="adm-table adm-kb-inline-table">
