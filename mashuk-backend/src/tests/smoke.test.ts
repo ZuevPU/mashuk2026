@@ -34,6 +34,11 @@ describe('smoke', () => {
     assert.equal(res.status, 401);
   });
 
+  it('GET /api/admin/analytics/hub/day-results without token returns 401', async () => {
+    const res = await request(app).get('/api/admin/analytics/hub/day-results?mode=day&day=2');
+    assert.equal(res.status, 401);
+  });
+
   it('GET /api/auth/me', async () => {
     const res = await request(app).get('/api/auth/me');
     if (process.env.SKIP_VK_SIGN === 'true') {
@@ -71,6 +76,19 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
       .set('Authorization', `Bearer ${token}`);
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body.participants));
+  });
+
+  it('GET /api/admin/analytics/hub/day-results with token', async () => {
+    const token = await getAdminBearerToken(app);
+    const res = await request(app)
+      .get('/api/admin/analytics/hub/day-results?mode=day&day=2')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(res.status, 200);
+    assert.ok(res.body.meta);
+    assert.ok(Array.isArray(res.body.blocks));
+    assert.ok(Array.isArray(res.body.heat));
+    assert.ok(Array.isArray(res.body.daySeries));
+    assert.equal(res.body.daySeries.length, 8);
   });
 
   it('GET /api/admin/tasks with token', async () => {

@@ -2,12 +2,13 @@ import { useState } from 'react';
 import type { Tab } from '../../tabs';
 import { InsightsProvider } from '../insights/InsightsContext';
 import { HubToolbar } from './HubToolbar';
+import { HubDayResultsScreen } from './HubDayResultsScreen';
 import { HubDirectionScreen } from './HubDirectionScreen';
 import { HubForumScreen } from './HubForumScreen';
 import { HubGroupsScreen } from './HubGroupsScreen';
 import { HubParticipantScreen } from './HubParticipantScreen';
 
-export type HubLens = 'forum' | 'direction' | 'groups' | 'participant';
+export type HubLens = 'forum' | 'dayResults' | 'direction' | 'groups' | 'participant';
 
 /**
  * Единый дашборд «Штаб» — линзы (форум/направление/группы/участник) в одной вкладке,
@@ -43,6 +44,7 @@ function HubShell({ onOpenCard }: { onOpenCard: (id: number) => void }) {
     <div className="adm-dash-stack">
       <HubToolbar lens={lens} onLensChange={setLens} />
       {lens === 'forum' && <HubForumScreen onLensChange={setLens} />}
+      {lens === 'dayResults' && <HubDayResultsScreen />}
       {lens === 'direction' && <HubDirectionScreen onOpenCard={onOpenCard} />}
       {lens === 'groups' && <HubGroupsScreen onLensChange={setLens} />}
       {lens === 'participant' && <HubParticipantScreen onOpenCard={onOpenCard} />}
