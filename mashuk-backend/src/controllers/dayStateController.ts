@@ -13,6 +13,7 @@ import {
   resolveEveningConfigForDay,
   type EveningQuestionnaireConfig,
 } from '../services/eveningQuestionnaireConfig.js';
+import { getScheduleDayPublished } from '../services/eveningScheduleGate.js';
 import { getForumSettings, resolveEffectiveCurrentDay } from '../services/helpers.js';
 import { resolveEveningSurveyDayForParticipant } from '../services/eveningSurveyDay.js';
 import {
@@ -201,9 +202,13 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
 
     const eveningConfig = resolveEveningConfigForDay(settings, dayNumber);
     const opensAt = getEveningOpensAtMsk(eveningConfig);
-    if (!isEveningOpenForConfig(eveningConfig) && process.env.NODE_ENV !== 'test') {
+    const scheduleDayPublished = await getScheduleDayPublished(dayNumber);
+    if (
+      !isEveningOpenForConfig(eveningConfig, new Date(), { scheduleDayPublished })
+      && process.env.NODE_ENV !== 'test'
+    ) {
       res.status(400).json({
-        error: eveningConfig.forceUnpublished
+        error: eveningConfig.forceUnpublished || scheduleDayPublished === false
           ? 'Итоговая анкета снята с публикации'
           : `Итоговая анкета доступна с ${opensAt} МСК (или после публикации организатором)`,
       });
@@ -339,7 +344,12 @@ export async function loadDayContext(
   const askTomorrowRole = dayNumber >= 1 && dayNumber <= 6;
   const config: EveningQuestionnaireConfig = resolveEveningConfigForDay(settings, dayNumber);
   const opensAt = getEveningOpensAtMsk(config);
-  const eveningOpen = dayNumber >= 1 && dayNumber <= 7 && isEveningOpenForConfig(config, now);
+  const scheduleDayPublished = dayNumber >= 1 && dayNumber <= 7
+    ? await getScheduleDayPublished(dayNumber)
+    : null;
+  const eveningOpen = dayNumber >= 1 && dayNumber <= 7 && isEveningOpenForConfig(config, now, {
+    scheduleDayPublished,
+  });
   const draft = state?.eveningDraft as {
     step?: number;
     form?: Record<string, unknown>;

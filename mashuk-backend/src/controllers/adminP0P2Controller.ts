@@ -184,18 +184,50 @@ export const publishScheduleDay = async (req: AdminRequest, res: Response): Prom
     .where(and(eq(events.dayNumber, dayNumber), eq(events.shiftId, shiftId)));
 
   // Publishing a newer day advances "current day for participants" so Home
-  // schedule («Далее») and Program open on that day without a second click.
-  const { getShiftById, updateShift } = await import('../services/shiftService.js');
+  // day focus / schedule («Далее») / Program open on that day without a second click.
+  const {
+    getShiftById, updateShift, shiftOpsToForumShape, clearShiftCaches,
+  } = await import('../services/shiftService.js');
   const shift = await getShiftById(shiftId);
+  const prevCurrentDay = shift?.currentDay ?? 1;
   let advancedCurrentDay: number | null = null;
-  if (shift && dayNumber > (shift.currentDay ?? 1)) {
-    await updateShift(shiftId, { currentDay: dayNumber });
+  const shiftPatch: { currentDay?: number; eveningQuestionnaireByDay?: Record<string, unknown> } = {};
+  // Always sync participant "today" to the published day when it moves forward
+  // (focus, touchpoints, state checks). Re-publish of an older day does not roll back.
+  if (shift && dayNumber > prevCurrentDay) {
+    shiftPatch.currentDay = dayNumber;
     advancedCurrentDay = dayNumber;
+  } else if (shift && dayNumber === prevCurrentDay) {
+    // Same day re-publish: still touch currentDay so mirror/cache refresh is guaranteed.
+    shiftPatch.currentDay = dayNumber;
   }
 
+  // Re-publishing a day clears evening «снята с публикации» from a prior hide,
+  // so the questionnaire can follow opensAtMsk / «Опубликовать сейчас» again.
+  if (shift && dayNumber >= 1 && dayNumber <= 7) {
+    const { resolveEveningConfigForDay } = await import('../services/eveningQuestionnaireConfig.js');
+    const byDay = {
+      ...((shift.eveningQuestionnaireByDay as Record<string, Record<string, unknown>> | null) || {}),
+    };
+    const resolved = resolveEveningConfigForDay(shiftOpsToForumShape(shift) as never, dayNumber);
+    if (resolved.forceUnpublished) {
+      const { forceUnpublished: _fu, ...rest } = resolved;
+      byDay[String(dayNumber)] = rest;
+      shiftPatch.eveningQuestionnaireByDay = byDay;
+    }
+  }
+
+  let updatedCurrentDay = prevCurrentDay;
+  if (Object.keys(shiftPatch).length) {
+    const updated = await updateShift(shiftId, shiftPatch);
+    updatedCurrentDay = updated?.currentDay ?? shiftPatch.currentDay ?? prevCurrentDay;
+  }
+
+  // Always bust settings/active-shift caches so Home day focus switches immediately
+  // (updateShift clears only when status=active; publish must be authoritative).
+  clearShiftCaches();
   const { clearCache } = await import('../services/cache.js');
   clearCache(`events_day_${shiftId}_${dayNumber}`);
-  clearCache('forumSettings');
 
   await logAdminAction({
     req, actionType: 'schedule_publish', section: 'events', objectId: dayNumber,
@@ -203,6 +235,7 @@ export const publishScheduleDay = async (req: AdminRequest, res: Response): Prom
       version: nextVersion,
       events: dayEvents.length,
       currentDayAdvancedTo: advancedCurrentDay,
+      eveningPublishFlagsCleared: !!shiftPatch.eveningQuestionnaireByDay,
     },
     isCritical: true,
   });
@@ -211,7 +244,7 @@ export const publishScheduleDay = async (req: AdminRequest, res: Response): Prom
     ok: true,
     version: snap,
     eventsCount: dayEvents.length,
-    currentDay: advancedCurrentDay ?? shift?.currentDay ?? dayNumber,
+    currentDay: updatedCurrentDay,
   });
 };
 
@@ -329,20 +362,46 @@ export const crudScheduleDays = {
 export const draftScheduleDay = async (req: AdminRequest, res: Response): Promise<void> => {
   const dayNumber = Number(req.body.dayNumber);
   if (!dayNumber) { res.status(400).json({ error: 'dayNumber required' }); return; }
-  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const {
+    resolveAdminShiftId, getShiftById, updateShift, shiftOpsToForumShape, clearShiftCaches,
+  } = await import('../services/shiftService.js');
   const shiftId = await resolveAdminShiftId(req);
   // Hide day from participants; keep event drafts ready for re-publish
   await db.update(events).set({ dayPublished: false })
     .where(and(eq(events.dayNumber, dayNumber), eq(events.shiftId, shiftId)));
   await db.update(scheduleDays).set({ isPublished: false })
     .where(and(eq(scheduleDays.dayNumber, dayNumber), eq(scheduleDays.shiftId, shiftId)));
+
+  // Evening survey is independent of schedule flags — also hide it for this day
+  // so «Скрыть» / снятие дня с публикации не оставляет итоговую анкету висеть.
+  let eveningUnpublished = false;
+  if (dayNumber >= 1 && dayNumber <= 7) {
+    const shift = await getShiftById(shiftId);
+    if (shift) {
+      const { resolveEveningConfigForDay } = await import('../services/eveningQuestionnaireConfig.js');
+      const byDay = {
+        ...((shift.eveningQuestionnaireByDay as Record<string, Record<string, unknown>> | null) || {}),
+      };
+      const resolved = resolveEveningConfigForDay(shiftOpsToForumShape(shift) as never, dayNumber);
+      const {
+        forcePublished: _fp,
+        forcePublishedAt: _fpa,
+        ...rest
+      } = resolved;
+      byDay[String(dayNumber)] = { ...rest, forceUnpublished: true };
+      await updateShift(shiftId, { eveningQuestionnaireByDay: byDay });
+      eveningUnpublished = true;
+    }
+  }
+
+  clearShiftCaches();
   const { clearCache } = await import('../services/cache.js');
   clearCache(`events_day_${shiftId}_${dayNumber}`);
   await logAdminAction({
     req, actionType: 'schedule_draft', section: 'events', objectId: dayNumber,
-    newValue: { shiftId }, isCritical: true,
+    newValue: { shiftId, eveningUnpublished }, isCritical: true,
   });
-  res.json({ ok: true });
+  res.json({ ok: true, eveningUnpublished });
 };
 
 export const getParticipantActivity = async (req: AdminRequest, res: Response): Promise<void> => {

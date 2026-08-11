@@ -1032,6 +1032,8 @@ export const getAdminEveningQuestionnaire = async (req: AdminRequest, res: Respo
   const settings = shift ? shiftOpsToForumShape(shift) : null;
   const config = resolveEveningConfigForDay(settings as never, day);
   const opensAtMsk = getEveningOpensAtMsk(config);
+  const { getScheduleDayPublished } = await import('../services/eveningScheduleGate.js');
+  const scheduleDayPublished = await getScheduleDayPublished(day, shiftId);
   res.json({
     day,
     shiftId,
@@ -1040,7 +1042,8 @@ export const getAdminEveningQuestionnaire = async (req: AdminRequest, res: Respo
     opensAtMsk,
     forcePublished: !!config.forcePublished,
     forceUnpublished: !!config.forceUnpublished,
-    isOpenNow: isEveningOpenForConfig(config),
+    scheduleDayPublished,
+    isOpenNow: isEveningOpenForConfig(config, new Date(), { scheduleDayPublished }),
   });
 };
 
@@ -1098,17 +1101,44 @@ export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
       forcePublished = false;
       forceUnpublished = false;
     }
-    const { forcePublished: _fp, forceUnpublished: _fu, ...rest } = next;
+    const {
+      forcePublished: _fp,
+      forcePublishedAt: _fpa,
+      forceUnpublished: _fu,
+      ...rest
+    } = next;
+    const keepAt = forcePublished
+      && forcePublishedRaw !== true
+      && existing.forcePublishedAt
+      ? existing.forcePublishedAt
+      : undefined;
     next = {
       ...rest,
-      ...(forcePublished ? { forcePublished: true } : {}),
+      ...(forcePublished ? {
+        forcePublished: true,
+        forcePublishedAt: forcePublishedRaw === true ? new Date().toISOString() : keepAt,
+      } : {}),
       ...(forceUnpublished ? { forceUnpublished: true } : {}),
     };
   } else {
-    if (bodyConfig?.forcePublished) next = { ...next, forcePublished: true };
-    else if (existing.forcePublished) next = { ...next, forcePublished: true };
+    if (bodyConfig?.forcePublished) {
+      next = {
+        ...next,
+        forcePublished: true,
+        forcePublishedAt: bodyConfig.forcePublishedAt || existing.forcePublishedAt || new Date().toISOString(),
+      };
+    } else if (existing.forcePublished) {
+      next = {
+        ...next,
+        forcePublished: true,
+        ...(existing.forcePublishedAt ? { forcePublishedAt: existing.forcePublishedAt } : {}),
+      };
+    }
     if (bodyConfig?.forceUnpublished) {
-      const { forcePublished: _fp, ...rest } = { ...next, forceUnpublished: true as const };
+      const { forcePublished: _fp, forcePublishedAt: _fpa, ...rest } = {
+        ...next,
+        forceUnpublished: true as const,
+      };
       next = rest;
     } else if (existing.forceUnpublished && !next.forcePublished) {
       next = { ...next, forceUnpublished: true };
@@ -1144,6 +1174,8 @@ export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
   clearShiftCaches();
   const shape = updated ? shiftOpsToForumShape(updated) : shiftOpsToForumShape(current);
   const resolved = resolveEveningConfigForDay(shape as never, day);
+  const { getScheduleDayPublished } = await import('../services/eveningScheduleGate.js');
+  const scheduleDayPublished = await getScheduleDayPublished(day, shiftId);
   res.json({
     ok: true,
     shiftId,
@@ -1151,7 +1183,8 @@ export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
     opensAtMsk: getEveningOpensAtMsk(resolved),
     forcePublished: !!resolved.forcePublished,
     forceUnpublished: !!resolved.forceUnpublished,
-    isOpenNow: isEveningOpenForConfig(resolved),
+    scheduleDayPublished,
+    isOpenNow: isEveningOpenForConfig(resolved, new Date(), { scheduleDayPublished }),
   });
 };
 

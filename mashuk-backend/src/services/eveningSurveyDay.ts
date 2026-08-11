@@ -6,6 +6,7 @@ import {
   resolveEveningConfigForDay,
   type EveningQuestionnaireConfig,
 } from './eveningQuestionnaireConfig.js';
+import { getScheduleDayPublished } from './eveningScheduleGate.js';
 import { getMoscowParts, resolveEffectiveCurrentDay } from './timePhase.js';
 
 type EveningSettings = {
@@ -52,7 +53,10 @@ export async function resolveEveningSurveyDayForParticipant(
 
   const prev = effective - 1;
   const prevConfig = resolveEveningConfigForDay(settings as never, prev);
-  const previousDayOpen = isEveningOpenForConfig(prevConfig, now);
+  const prevDayPublished = await getScheduleDayPublished(prev);
+  const previousDayOpen = isEveningOpenForConfig(prevConfig, now, {
+    scheduleDayPublished: prevDayPublished,
+  });
 
   let previousDayCompleted = false;
   if (previousDayOpen) {

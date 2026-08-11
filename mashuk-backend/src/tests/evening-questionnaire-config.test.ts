@@ -44,6 +44,7 @@ describe('eveningQuestionnaireConfig', () => {
   it('isEveningOpenForConfig respects opensAtMsk and forcePublished', () => {
     const at2130 = new Date('2026-07-01T18:30:00.000Z'); // 21:30 MSK
     const at2045 = new Date('2026-07-01T17:45:00.000Z'); // 20:45 MSK
+    const at0730 = new Date('2026-07-02T04:30:00.000Z'); // 07:30 MSK next day
     assert.equal(
       isEveningOpenForConfig({ steps: [], opensAtMsk: '21:00' }, at2130),
       true,
@@ -53,8 +54,34 @@ describe('eveningQuestionnaireConfig', () => {
       false,
     );
     assert.equal(
-      isEveningOpenForConfig({ steps: [], opensAtMsk: '22:00', forcePublished: true }, at2045),
+      isEveningOpenForConfig({
+        steps: [],
+        opensAtMsk: '22:00',
+        forcePublished: true,
+        forcePublishedAt: '2026-07-01T17:00:00.000Z',
+      }, at2045),
       true,
+    );
+    // Legacy forcePublished without timestamp must not hang after the evening window
+    assert.equal(
+      isEveningOpenForConfig({ steps: [], opensAtMsk: '22:00', forcePublished: true }, at0730),
+      false,
+    );
+    // Fresh force expires after 01:00 MSK
+    assert.equal(
+      isEveningOpenForConfig({
+        steps: [],
+        opensAtMsk: '22:00',
+        forcePublished: true,
+        forcePublishedAt: '2026-07-01T17:00:00.000Z',
+      }, at0730),
+      false,
+    );
+    assert.equal(
+      isEveningOpenForConfig({ steps: [], opensAtMsk: '22:00' }, at2130, {
+        scheduleDayPublished: false,
+      }),
+      false,
     );
     assert.equal(getEveningOpensAtMsk({ steps: [] }), '22:00');
     assert.equal(getEveningOpensAtMsk({ steps: [], opensAtMsk: '9:05' }), '09:05');

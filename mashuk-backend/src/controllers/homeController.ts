@@ -7,7 +7,7 @@ import {
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
   getForumSettings, formatTime, getMoscowPhase, isEveningWrapWindow,
-  getForumOperationalDateKey, resolveEffectiveCurrentDay,
+  getForumOperationalDateKey, resolveParticipantForumDay,
   resolveLiveProgramDay, stateCheckTimePointOrder,
   lateAnswerPolicyForQuestion,
 } from '../services/helpers.js';
@@ -42,15 +42,29 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const participant = req.participant!;
     const settings = await getForumSettings();
     const now = new Date();
-    const currentDay = resolveEffectiveCurrentDay(settings, now);
     const totalDays = settings.totalDays ?? 8;
     const timeSlot = getMoscowPhase(now);
     let eveningWrap = isEveningWrapWindow(now);
 
-    const [focus] = await db.select().from(dayFocus)
-      .where(eq(dayFocus.dayNumber, currentDay)).limit(1);
-
     const shiftIdForQs = await resolveActiveShiftId();
+    const publishedDayRows = await db.select({ dayNumber: scheduleDays.dayNumber })
+      .from(scheduleDays)
+      .where(and(
+        eq(scheduleDays.shiftId, shiftIdForQs),
+        eq(scheduleDays.isPublished, true),
+      ));
+    const publishedDays = publishedDayRows.map(r => r.dayNumber);
+    const liveProgramDay = resolveLiveProgramDay(settings, publishedDays, now);
+    // Focus + touchpoints must follow the same live day as schedule.
+    // Publishing day N opens program via resolveLiveProgramDay even if admin
+    // currentDay lagged — without this, Home kept «yesterday» points/focus.
+    const currentDay = resolveParticipantForumDay(settings, publishedDays, now);
+
+    const [focus] = await db.select().from(dayFocus)
+      .where(and(
+        eq(dayFocus.dayNumber, currentDay),
+        eq(dayFocus.shiftId, shiftIdForQs),
+      )).limit(1);
     const publishedQuestions = await db.select().from(questions)
       .where(and(
         eq(questions.status, 'published'),
@@ -74,8 +88,9 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       overdue: access === 'overdue',
     });
 
+    // Only today's points — do not keep yesterday's overdue/locked in Home.
     const missed = publishedQuestions
-      .filter(q => !answeredIds.has(q.id))
+      .filter(q => !answeredIds.has(q.id) && questionMatchesDay(q, currentDay))
       .map(q => {
         const access = getQuestionAccess(q, currentDay, now);
         return enrichMissed(q, access);
@@ -122,15 +137,6 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       const access = getQuestionAccess(q, currentDay, now);
       return access === 'open' || access === 'overdue';
     });
-
-    const publishedDayRows = await db.select({ dayNumber: scheduleDays.dayNumber })
-      .from(scheduleDays)
-      .where(and(
-        eq(scheduleDays.shiftId, shiftIdForQs),
-        eq(scheduleDays.isPublished, true),
-      ));
-    const publishedDays = publishedDayRows.map(r => r.dayNumber);
-    const liveProgramDay = resolveLiveProgramDay(settings, publishedDays, now);
 
     const [dayMeta] = await db.select().from(scheduleDays).where(and(
       eq(scheduleDays.dayNumber, liveProgramDay),

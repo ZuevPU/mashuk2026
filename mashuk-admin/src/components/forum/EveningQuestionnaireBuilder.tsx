@@ -21,14 +21,19 @@ import {
 type Props = {
   adminFetch: (path: string, opts?: RequestInit) => Promise<any>;
   act: (fn: () => Promise<unknown>, msg?: string) => void;
+  /** Current forum day — so «Снять с публикации» applies to the live day by default. */
+  initialDay?: number;
 };
 
 const EMPTY_CONFIG: EveningQuestionnaireConfig = {
   steps: [{ id: 'step_1', title: 'Новый шаг', fields: [] }],
 };
 
-export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
-  const [day, setDay] = useState(1);
+export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay }: Props) {
+  const [day, setDay] = useState(() => {
+    const d = Number(initialDay);
+    return Number.isFinite(d) && d >= 1 && d <= 7 ? d : 1;
+  });
   const [config, setConfig] = useState<EveningQuestionnaireConfig>(EMPTY_CONFIG);
   const [opensAtMsk, setOpensAtMsk] = useState('22:00');
   const [forcePublished, setForcePublished] = useState(false);
@@ -71,6 +76,12 @@ export function EveningQuestionnaireBuilder({ adminFetch, act }: Props) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const d = Number(initialDay);
+    if (!Number.isFinite(d) || d < 1 || d > 7) return;
+    setDay(prev => (prev === d ? prev : d));
+  }, [initialDay]);
 
   useEffect(() => {
     loadDay(day).catch(() => {});

@@ -207,6 +207,22 @@ export function resolveLiveProgramDay(
 }
 
 /**
+ * Forum day for Home focus / touchpoints / question list.
+ * Aligns with published schedule so publishing day N does not leave
+ * yesterday's points visible when currentDay lag or cache is stale.
+ */
+export function resolveParticipantForumDay(
+  settings: { currentDay?: number | null; totalDays?: number | null; startDate?: Date | null },
+  publishedDays: number[],
+  now = new Date(),
+): number {
+  return Math.max(
+    resolveEffectiveCurrentDay(settings, now),
+    resolveLiveProgramDay(settings, publishedDays, now),
+  );
+}
+
+/**
  * Как долго можно отвечать после closeTime:
  * - hard_close — сразу закрыть (проверка состояния)
  * - until_midnight — до 00:00 МСК дня окна (точки осмысления)

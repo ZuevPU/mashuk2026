@@ -4,6 +4,7 @@ import {
   resolveLiveProgramDay,
   resolveLiveScheduleDateKey,
   resolveLiveScheduleDay,
+  resolveParticipantForumDay,
 } from '../services/timePhase.js';
 
 describe('resolveLiveScheduleDay', () => {
@@ -61,6 +62,18 @@ describe('resolveLiveScheduleDay', () => {
     assert.equal(
       resolveLiveProgramDay({ ...settings, currentDay: 1 }, [1, 3], now),
       1,
+    );
+  });
+
+  it('participant forum day follows published schedule when currentDay lags', () => {
+    const now = new Date('2026-08-12T15:00:00+03:00'); // calendar day 1
+    assert.equal(
+      resolveParticipantForumDay({ ...settings, currentDay: 3 }, [1, 2, 3, 4], now),
+      4,
+    );
+    assert.equal(
+      resolveParticipantForumDay({ ...settings, currentDay: 4 }, [1, 2, 3, 4], now),
+      4,
     );
   });
 });

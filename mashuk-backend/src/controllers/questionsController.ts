@@ -3,7 +3,7 @@ import { eq, and, or, asc, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   questions, questionOptions, answers, exchangeQuestions, exchangeAnswers, exchangeCategories,
-  participants, events, eventAttendance,
+  participants, events, eventAttendance, scheduleDays,
 } from '../db/schema.js';
 import { env } from '../config/env.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
@@ -12,6 +12,7 @@ import {
   countWords,
   getForumSettings,
   resolveEffectiveCurrentDay,
+  resolveParticipantForumDay,
   toTouchpointUiStatus,
   isSameMoscowCalendarDay,
   getMoscowParts,
@@ -83,13 +84,31 @@ function isLessonReflectionQuestion(q: { title?: string | null; block?: string |
   return t.includes('осмысление урока') || t.includes('слот 1') || t.includes('слот 2');
 }
 
+async function participantForumDayForShift(
+  settings: Awaited<ReturnType<typeof getForumSettings>>,
+  shiftId: number,
+  now = new Date(),
+): Promise<number> {
+  const publishedDayRows = await db.select({ dayNumber: scheduleDays.dayNumber })
+    .from(scheduleDays)
+    .where(and(
+      eq(scheduleDays.shiftId, shiftId),
+      eq(scheduleDays.isPublished, true),
+    ));
+  return resolveParticipantForumDay(
+    settings,
+    publishedDayRows.map(r => r.dayNumber),
+    now,
+  );
+}
+
 export const listForumQuestions = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const now = new Date();
     const settings = await getForumSettings();
-    const currentDay = resolveEffectiveCurrentDay(settings, now);
     const { resolveActiveShiftId } = await import('../services/shiftService.js');
     const shiftId = await resolveActiveShiftId();
+    const currentDay = await participantForumDayForShift(settings, shiftId, now);
     const list = await db.select().from(questions)
       .where(and(
         eq(questions.shiftId, shiftId),
@@ -205,7 +224,9 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       return;
     }
     const settings = await getForumSettings();
-    const currentDay = resolveEffectiveCurrentDay(settings, new Date());
+    const { resolveActiveShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveActiveShiftId();
+    const currentDay = await participantForumDayForShift(settings, shiftId, new Date());
     const attendedEventIds = new Set(userAttendance.map(a => a.eventId));
 
     // Свой ответ можно открыть даже если день вопроса уже прошёл
@@ -375,7 +396,9 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
     }
     const now = new Date();
     const settings = await getForumSettings();
-    const currentDay = resolveEffectiveCurrentDay(settings, now);
+    const { resolveActiveShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveActiveShiftId();
+    const currentDay = await participantForumDayForShift(settings, shiftId, now);
     const access = getQuestionAccess(question, currentDay, now);
     const latePolicy = lateAnswerPolicyForQuestion(question);
     if (access === 'locked' || access === 'soon') {

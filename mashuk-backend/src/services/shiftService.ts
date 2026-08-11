@@ -227,11 +227,13 @@ export async function updateShift(id: number, patch: Partial<typeof shifts.$infe
     .set({ ...patch, updatedAt: new Date() })
     .where(eq(shifts.id, id))
     .returning();
-  if (row?.status === 'active') {
+  if (!row) return null;
+  if (row.status === 'active') {
     await mirrorShiftToForumSettings(row);
-    clearShiftCaches();
   }
-  return row ?? null;
+  // Always invalidate — currentDay / evening flags must reach participants immediately.
+  clearShiftCaches();
+  return row;
 }
 
 /**

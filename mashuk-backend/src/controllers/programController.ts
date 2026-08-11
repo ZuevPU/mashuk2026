@@ -207,10 +207,14 @@ export const getKnowledgeBaseDays = async (req: ParticipantRequest, res: Respons
     const settings = await getForumSettings();
     const totalDays = settings.totalDays ?? 8;
     const now = new Date();
+    const shiftId = await resolveActiveShiftId();
     const days: Record<string, unknown>[] = [];
     for (let day = 1; day <= totalDays; day++) {
       const access = await evaluateKbDayAccess(req.participant!.id, day, settings, now);
-      const [focus] = await db.select().from(dayFocus).where(eq(dayFocus.dayNumber, day)).limit(1);
+      const [focus] = await db.select().from(dayFocus).where(and(
+        eq(dayFocus.dayNumber, day),
+        eq(dayFocus.shiftId, shiftId),
+      )).limit(1);
       days.push({
         day,
         ...access,
@@ -556,7 +560,10 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
       : await db.select().from(materials).where(dayOrGeneral);
     const now = new Date();
     const access = await evaluateKbDayAccess(req.participant!.id, day, settings, now);
-    const [focus] = await db.select().from(dayFocus).where(eq(dayFocus.dayNumber, day)).limit(1);
+    const [focus] = await db.select().from(dayFocus).where(and(
+      eq(dayFocus.dayNumber, day),
+      eq(dayFocus.shiftId, shiftId),
+    )).limit(1);
     const opensOn = getForumDayDateLabel(settings.startDate ?? null, day);
 
     const filtered = mats.filter(m => {

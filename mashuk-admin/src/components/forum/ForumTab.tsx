@@ -165,18 +165,41 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const publishScheduleDay = (dayNumber: number) => {
     if (!confirm(`Опубликовать расписание дня ${dayNumber} для участников?\n\nДо публикации участники не видят этот день, даже если события уже внесены.`)) return;
     act(async () => {
-      await adminFetch('/schedule/publish', {
+      const published = await adminFetch('/schedule/publish', {
         method: 'POST',
         body: JSON.stringify({ dayNumber }),
-      });
+      }) as { currentDay?: number };
       const r = await adminFetch('/schedule/versions');
       setScheduleDays(r.days || []);
       setScheduleVersions(r.versions || []);
+      // Refresh current day + day-focus form so admin matches what participants see.
+      const fs = (await adminFetch('/forum-settings')).settings;
+      setForumSettings(fs);
+      const focusList = (await adminFetch('/day-focus')).focus || [];
+      setDayFocusList(focusList);
+      const liveDay = Number(published.currentDay ?? fs?.currentDay ?? dayNumber) || dayNumber;
+      const f = focusList.find((d: { dayNumber: number }) => d.dayNumber === liveDay);
+      if (f) {
+        const text = f.text || '';
+        setDayFocusForm({
+          dayNumber: liveDay,
+          title: f.title || '',
+          text,
+          textHtml: f.textHtml || (text ? plainFocusToHtml(text) : ''),
+          keyQuestion: f.keyQuestion || '',
+        });
+      } else {
+        setDayFocusForm({ dayNumber: liveDay, title: '', text: '', textHtml: '', keyQuestion: '' });
+      }
     }, `День ${dayNumber} опубликован`);
   };
 
   const unpublishScheduleDay = (dayNumber: number) => {
-    if (!confirm(`Скрыть день ${dayNumber} у участников? События останутся в админке как черновик дня.`)) return;
+    if (!confirm(
+      `Скрыть день ${dayNumber} у участников?\n\n`
+      + 'События останутся в админке как черновик дня. '
+      + 'Итоговая анкета вечера за этот день тоже будет снята с публикации.',
+    )) return;
     act(async () => {
       await adminFetch('/schedule/draft', {
         method: 'POST',
@@ -737,7 +760,11 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       </div>
 
       <div className="card adm-forum-block">
-        <EveningQuestionnaireBuilder adminFetch={adminFetch} act={act} />
+        <EveningQuestionnaireBuilder
+          adminFetch={adminFetch}
+          act={act}
+          initialDay={currentDay}
+        />
       </div>
 
       <div className="card adm-forum-block">

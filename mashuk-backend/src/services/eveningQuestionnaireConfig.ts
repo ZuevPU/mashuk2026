@@ -132,6 +132,8 @@ export type EveningQuestionnaireConfig = {
   opensAtMsk?: string;
   /** Admin forced the questionnaire open for this day (before opensAtMsk). */
   forcePublished?: boolean;
+  /** ISO timestamp when forcePublished was set — expires at next 01:00 MSK. */
+  forcePublishedAt?: string;
   /** Admin hid the questionnaire — overrides schedule and forcePublished. */
   forceUnpublished?: boolean;
 };
@@ -140,12 +142,41 @@ export const DEFAULT_EVENING_OPENS_AT_MSK = '22:00';
 
 function eveningPublishMeta(
   config: EveningQuestionnaireConfig,
-): Pick<EveningQuestionnaireConfig, 'opensAtMsk' | 'forcePublished' | 'forceUnpublished'> {
-  const meta: Pick<EveningQuestionnaireConfig, 'opensAtMsk' | 'forcePublished' | 'forceUnpublished'> = {};
+): Pick<EveningQuestionnaireConfig, 'opensAtMsk' | 'forcePublished' | 'forcePublishedAt' | 'forceUnpublished'> {
+  const meta: Pick<
+    EveningQuestionnaireConfig,
+    'opensAtMsk' | 'forcePublished' | 'forcePublishedAt' | 'forceUnpublished'
+  > = {};
   if (config.opensAtMsk?.trim()) meta.opensAtMsk = config.opensAtMsk.trim();
   if (config.forcePublished) meta.forcePublished = true;
+  if (config.forcePublishedAt?.trim()) meta.forcePublishedAt = config.forcePublishedAt.trim();
   if (config.forceUnpublished) meta.forceUnpublished = true;
   return meta;
+}
+
+const MSK_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/** «Опубликовать сейчас» действует до 01:00 МСК после московского дня установки. */
+export function forcePublishedExpiresAt(forcedAt: Date): Date {
+  const parts = getMoscowParts(forcedAt);
+  const mskWall = new Date(forcedAt.getTime() + MSK_OFFSET_MS);
+  if (parts.totalMinutes >= 60) {
+    mskWall.setUTCDate(mskWall.getUTCDate() + 1);
+  }
+  mskWall.setUTCHours(1, 0, 0, 0);
+  return new Date(mskWall.getTime() - MSK_OFFSET_MS);
+}
+
+/** Early force-open is active only with a fresh forcePublishedAt (legacy flag alone does not hang all day). */
+export function isForcePublishedActive(
+  config: EveningQuestionnaireConfig | null | undefined,
+  now = new Date(),
+): boolean {
+  if (!config?.forcePublished) return false;
+  if (!config.forcePublishedAt) return false;
+  const forcedAt = new Date(config.forcePublishedAt);
+  if (Number.isNaN(forcedAt.getTime())) return false;
+  return now.getTime() < forcePublishedExpiresAt(forcedAt).getTime();
 }
 
 /** Normalize "21:00" / "9:30" → "HH:MM", or null if invalid. */
@@ -169,18 +200,22 @@ function opensAtToMinutes(hhmm: string): number {
 }
 
 /**
- * Evening questionnaire window: from opensAtMsk (or forcePublished) until 01:00 MSK.
- * forceUnpublished always wins (admin hide). Matches previous 22:00–01:00 behaviour.
+ * Evening questionnaire window: from opensAtMsk until 01:00 MSK.
+ * forcePublished (with forcePublishedAt) opens early until that same 01:00 cutoff.
+ * forceUnpublished always wins. Optional scheduleDayPublished=false hides the survey
+ * when the forum day was taken off publication («Скрыть» день).
  */
 export function isEveningOpenForConfig(
   config: EveningQuestionnaireConfig | null | undefined,
   now = new Date(),
+  opts?: { scheduleDayPublished?: boolean | null },
 ): boolean {
   if (config?.forceUnpublished) return false;
-  if (config?.forcePublished) return true;
+  if (opts?.scheduleDayPublished === false) return false;
   const { totalMinutes } = getMoscowParts(now);
   const openMinutes = opensAtToMinutes(getEveningOpensAtMsk(config));
-  return totalMinutes >= openMinutes || totalMinutes < 60;
+  if (totalMinutes >= openMinutes || totalMinutes < 60) return true;
+  return isForcePublishedActive(config, now);
 }
 
 const SCALE_LABELS: Record<string, string> = {
@@ -308,12 +343,17 @@ export function resolveEveningConfigForDay(
   dayNumber: number,
 ): EveningQuestionnaireConfig {
   const byDay = settings?.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null;
+  const dayEntry = byDay?.[String(dayNumber)];
   let config: EveningQuestionnaireConfig;
-  if (byDay?.[String(dayNumber)]?.steps?.length) {
-    config = byDay[String(dayNumber)];
+  if (dayEntry?.steps?.length) {
+    config = dayEntry;
   } else {
     const global = settings?.eveningQuestionnaireConfig as EveningQuestionnaireConfig | null;
     config = global?.steps?.length ? global : DEFAULT_EVENING_QUESTIONNAIRE_CONFIG;
+    // Day stub may only carry publish flags (e.g. after «Скрыть» day).
+    if (dayEntry) {
+      config = { ...config, ...eveningPublishMeta(dayEntry) };
+    }
   }
   if (dayNumber >= 1 && dayNumber <= 7) {
     return normalizeExperimentStep(stripPointBFromEveningConfig(config));
