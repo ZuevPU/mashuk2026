@@ -2508,3 +2508,47 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 @media (max-width: 860px) {
   .adm-state-phases { grid-template-columns: 1fr; }
 }
+
+/* Штаб · Активность */
+.adm-activity-matrix {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.adm-activity-qd {
+  border: 1px solid var(--m-border);
+  border-radius: 10px;
+  padding: 16px;
+  min-height: 120px;
+  background: var(--m-bg);
+}
+.adm-activity-qd-nm {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.adm-activity-qd-cnt {
+  font-size: 28px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.adm-activity-axes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+  color: var(--m-text-secondary);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.adm-activity-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 860px) {
+  .adm-activity-matrix,
+  .adm-activity-grid2 { grid-template-columns: 1fr; }
+}

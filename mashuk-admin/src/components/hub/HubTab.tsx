@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Tab } from '../../tabs';
 import { InsightsProvider } from '../insights/InsightsContext';
 import { HubToolbar } from './HubToolbar';
+import { HubActivityScreen } from './HubActivityScreen';
 import { HubDayResultsScreen } from './HubDayResultsScreen';
 import { HubDirectionScreen } from './HubDirectionScreen';
 import { HubForumScreen } from './HubForumScreen';
@@ -9,7 +10,7 @@ import { HubGroupsScreen } from './HubGroupsScreen';
 import { HubParticipantScreen } from './HubParticipantScreen';
 import { HubStateScreen } from './HubStateScreen';
 
-export type HubLens = 'forum' | 'dayResults' | 'state' | 'direction' | 'groups' | 'participant';
+export type HubLens = 'forum' | 'dayResults' | 'state' | 'activity' | 'direction' | 'groups' | 'participant';
 
 /**
  * Единый дашборд «Штаб» — линзы (форум/направление/группы/участник) в одной вкладке,
@@ -47,6 +48,7 @@ function HubShell({ onOpenCard }: { onOpenCard: (id: number) => void }) {
       {lens === 'forum' && <HubForumScreen onLensChange={setLens} />}
       {lens === 'dayResults' && <HubDayResultsScreen />}
       {lens === 'state' && <HubStateScreen />}
+      {lens === 'activity' && <HubActivityScreen />}
       {lens === 'direction' && <HubDirectionScreen onOpenCard={onOpenCard} />}
       {lens === 'groups' && <HubGroupsScreen onLensChange={setLens} />}
       {lens === 'participant' && <HubParticipantScreen onOpenCard={onOpenCard} />}
