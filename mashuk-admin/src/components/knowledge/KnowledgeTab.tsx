@@ -140,6 +140,16 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const speakerLabel = (m: MaterialRow) => {
+      if (m.speakerIds?.length) {
+        const names = speakers
+          .filter(s => m.speakerIds!.includes(s.id))
+          .map(s => s.name)
+          .filter(Boolean);
+        if (names.length) return names.join('; ');
+      }
+      return m.speakerName || '';
+    };
     return materials
       .filter(m => {
         if (dayFilter && String(m.dayNumber ?? '') !== dayFilter) return false;
@@ -149,14 +159,17 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
           if (m.eventId != null || m.isGeneral !== true) return false;
         } else if (eventFilter && String(m.eventId ?? '') !== eventFilter) return false;
         if (q) {
-          const hay = `${m.title || ''} ${m.topicTitle || ''} ${m.speakerName || ''}`.toLowerCase();
+          const hay = `${m.title || ''} ${m.topicTitle || ''} ${speakerLabel(m)}`.toLowerCase();
           if (!hay.includes(q)) return false;
         }
         return true;
       })
       .slice()
-      .sort(compareKbMaterials);
-  }, [materials, search, dayFilter, directionFilter, eventFilter, sectionFilter]);
+      .sort((a, b) => compareKbMaterials(
+        { ...a, speakerName: speakerLabel(a) },
+        { ...b, speakerName: speakerLabel(b) },
+      ));
+  }, [materials, speakers, search, dayFilter, directionFilter, eventFilter, sectionFilter]);
 
   const buildCreateBody = (status: 'draft' | 'published', extra: Record<string, unknown> = {}) => {
     const tags = newMaterial.tags.split(',').map(s => s.trim()).filter(Boolean);
@@ -662,46 +675,48 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
 
         <p className="adm-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
           Правьте поля прямо в таблице → «Сохранить» / «Опубликовать» / «Черновик» / «Скрыть» / «Удалить».
-          Клик по спикеру открывает карточку со всеми параметрами.
+          Клик по спикеру открывает карточку со всеми параметрами. Внутри раздела — по фамилии спикера, преза и остальные материалы рядом.
         </p>
-        <table className="adm-table adm-kb-inline-table">
-          <thead>
-            <tr>
-              <th>Раздел / тема</th>
-              <th>День</th>
-              <th>Спикер</th>
-              <th>Название / ссылка</th>
-              <th>Тип</th>
-              <th>Аудитория</th>
-              <th>Привязка</th>
-              <th>Статус</th>
-              <th>Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(m => (
-              <MaterialCard
-                key={m.id}
-                material={m}
-                typeOptions={materialTypes}
-                speakers={speakers}
-                events={events}
-                directions={directions}
-                dayOptions={dayOptions}
-                onCopyLink={copyLink}
-                onPreview={() => openDayPreview(m.dayNumber ?? 1)}
-                onSave={body => act(async () => {
-                  await adminFetch(`/materials/${m.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-                  await load();
-                }, 'Сохранено')}
-                onDelete={() => act(async () => {
-                  await adminFetch(`/materials/${m.id}`, { method: 'DELETE' });
-                  await load();
-                }, 'Удалено')}
-              />
-            ))}
-          </tbody>
-        </table>
+        <div className="adm-table-scroll adm-kb-table-scroll">
+          <table className="adm-table adm-kb-inline-table">
+            <thead>
+              <tr>
+                <th>Раздел / тема</th>
+                <th>День</th>
+                <th>Спикер</th>
+                <th>Название / ссылка</th>
+                <th>Тип</th>
+                <th>Аудитория</th>
+                <th>Привязка</th>
+                <th>Статус</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(m => (
+                <MaterialCard
+                  key={m.id}
+                  material={m}
+                  typeOptions={materialTypes}
+                  speakers={speakers}
+                  events={events}
+                  directions={directions}
+                  dayOptions={dayOptions}
+                  onCopyLink={copyLink}
+                  onPreview={() => openDayPreview(m.dayNumber ?? 1)}
+                  onSave={body => act(async () => {
+                    await adminFetch(`/materials/${m.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+                    await load();
+                  }, 'Сохранено')}
+                  onDelete={() => act(async () => {
+                    await adminFetch(`/materials/${m.id}`, { method: 'DELETE' });
+                    await load();
+                  }, 'Удалено')}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
         {filtered.length === 0 && <p className="adm-muted">Нет материалов по фильтрам</p>}
       </div>
     </div>

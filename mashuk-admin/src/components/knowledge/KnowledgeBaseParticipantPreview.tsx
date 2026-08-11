@@ -40,9 +40,12 @@ function materialHref(m: MaterialRow): string | null {
 }
 
 function groupKey(m: MaterialRow, speakers: ProgramSpeaker[]): string {
-  const topic = (m.topicTitle || m.title || '').trim().toLowerCase();
-  const sp = speakerName(m, speakers).toLowerCase();
-  return `${topic}\0${sp}`;
+  if (m.speakerIds?.length) {
+    return `s:${[...m.speakerIds].map(Number).filter(Number.isFinite).sort((a, b) => a - b).join(',')}`;
+  }
+  const sp = speakerName(m, speakers).trim().toLowerCase();
+  if (sp && sp !== '—') return `n:${sp}`;
+  return `t:${(m.topicTitle || m.title || '').trim().toLowerCase()}`;
 }
 
 export function KnowledgeBaseParticipantPreview({
@@ -79,7 +82,11 @@ export function KnowledgeBaseParticipantPreview({
       const meta = kbSectionMeta(sectionKey);
       const groups = new Map<string, MaterialRow[]>();
       const gOrder: string[] = [];
-      for (const m of mats) {
+      const sorted = mats.slice().sort((a, b) => compareKbMaterials(
+        { ...a, speakerName: speakerName(a, speakers) },
+        { ...b, speakerName: speakerName(b, speakers) },
+      ));
+      for (const m of sorted) {
         const k = `${m.kbSubsection || ''}\0${m.direction || ''}\0${groupKey(m, speakers)}`;
         if (!groups.has(k)) {
           groups.set(k, []);
@@ -95,9 +102,12 @@ export function KnowledgeBaseParticipantPreview({
         groups: gOrder.map(k => {
           const items = groups.get(k)!;
           const first = items[0];
+          const topic = first.topicTitle
+            || [...new Set(items.map(i => i.topicTitle || i.title).filter(Boolean))].join(' · ')
+            || first.title;
           return {
             key: k,
-            topic: first.topicTitle || first.title,
+            topic,
             speaker: speakerName(first, speakers),
             sub: kbSubsectionLabel(first.kbSection, first.kbSubsection),
             direction: first.direction,

@@ -164,12 +164,18 @@ export function MaterialCard({
     || String(ev.id) === draft.eventId,
   );
 
+  const sectionKey = draft.kbSection || material.kbSection || '';
+  const rowClass = [
+    sectionKey ? `adm-kb-row--${sectionKey}` : 'adm-kb-row--none',
+    dirty ? 'adm-kb-row-dirty' : '',
+  ].filter(Boolean).join(' ');
+
   return (
     <>
-      <tr className={dirty ? 'adm-kb-row-dirty' : undefined}>
-        <td style={{ minWidth: 170 }}>
+      <tr className={rowClass}>
+        <td className="adm-kb-col-section">
           <select
-            className="adm-input adm-input-narrow"
+            className="adm-input adm-kb-select"
             value={draft.kbSection}
             onChange={e => setDraft(d => ({
               ...d,
@@ -185,7 +191,7 @@ export function MaterialCard({
           </select>
           {draft.kbSection === 'open_lessons' && (
             <select
-              className="adm-input adm-input-narrow"
+              className="adm-input adm-kb-select"
               style={{ marginTop: 4 }}
               value={draft.kbSubsection}
               onChange={e => setDraft(d => ({ ...d, kbSubsection: e.target.value }))}
@@ -207,7 +213,7 @@ export function MaterialCard({
             <div
               className="adm-kb-section-chip"
               style={{
-                background: sec.tint,
+                background: '#fff',
                 color: sec.color,
                 borderColor: sec.color,
                 marginTop: 4,
@@ -218,9 +224,9 @@ export function MaterialCard({
             </div>
           )}
         </td>
-        <td>
+        <td className="adm-kb-col-day">
           <select
-            className="adm-input adm-input-narrow"
+            className="adm-input adm-kb-select-sm"
             value={draft.dayNumber}
             onChange={e => setDraft(d => ({
               ...d,
@@ -234,7 +240,7 @@ export function MaterialCard({
             ))}
           </select>
         </td>
-        <td style={{ minWidth: 120 }}>
+        <td className="adm-kb-col-speaker">
           <button
             type="button"
             className="adm-kb-speaker-btn"
@@ -247,7 +253,7 @@ export function MaterialCard({
             клик → все поля
           </div>
         </td>
-        <td style={{ minWidth: 180 }}>
+        <td className="adm-kb-col-title">
           <input
             className="adm-input"
             value={draft.title}
@@ -262,9 +268,9 @@ export function MaterialCard({
             placeholder="https://…"
           />
         </td>
-        <td>
+        <td className="adm-kb-col-type">
           <select
-            className="adm-input adm-input-narrow"
+            className="adm-input adm-kb-select"
             value={draft.type}
             onChange={e => setDraft(d => ({ ...d, type: e.target.value }))}
           >
@@ -272,10 +278,10 @@ export function MaterialCard({
             {typeOptions.map(t => <option key={t.key} value={t.key}>{t.name}</option>)}
           </select>
         </td>
-        <td style={{ minWidth: 120 }}>
+        <td className="adm-kb-col-audience">
           {draft.kbSection === 'thematic' ? (
             <select
-              className="adm-input adm-input-narrow"
+              className="adm-input adm-kb-select"
               value={draft.direction}
               onChange={e => setDraft(d => ({ ...d, direction: e.target.value, audienceAll: false }))}
             >
@@ -285,7 +291,7 @@ export function MaterialCard({
           ) : (
             <>
               <select
-                className="adm-input adm-input-narrow"
+                className="adm-input adm-kb-select"
                 value={draft.audienceAll ? '__all__' : (draft.direction || '')}
                 onChange={e => {
                   const v = e.target.value;
@@ -299,7 +305,7 @@ export function MaterialCard({
             </>
           )}
         </td>
-        <td style={{ minWidth: 140 }}>
+        <td className="adm-kb-col-bind">
           <label className="adm-forum-check" style={{ fontSize: 11, display: 'flex', gap: 4, alignItems: 'center' }}>
             <input
               type="checkbox"
@@ -314,7 +320,7 @@ export function MaterialCard({
           </label>
           {!draft.isGeneral && (
             <select
-              className="adm-input adm-input-narrow"
+              className="adm-input adm-kb-select"
               style={{ marginTop: 4 }}
               value={draft.eventId}
               onChange={e => {
@@ -334,9 +340,9 @@ export function MaterialCard({
             </select>
           )}
         </td>
-        <td>
+        <td className="adm-kb-col-status">
           <select
-            className="adm-input adm-input-narrow"
+            className="adm-input adm-kb-select"
             value={draft.status}
             onChange={e => setDraft(d => ({ ...d, status: e.target.value }))}
           >
@@ -345,7 +351,7 @@ export function MaterialCard({
             <option value="archived">Скрыт</option>
           </select>
         </td>
-        <td>
+        <td className="adm-kb-col-actions">
           <div className="adm-kb-row-actions">
             <button
               type="button"

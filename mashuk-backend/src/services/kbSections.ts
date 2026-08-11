@@ -4,22 +4,22 @@ export const KB_SECTIONS = [
   {
     key: 'thematic',
     label: 'Тематические направления',
-    color: '#2F6FED',
-    tint: '#EAF1FF',
+    color: '#1D5BD6',
+    tint: '#DCE8FF',
     hasDirections: true,
   },
   {
     key: 'lessons_important',
     label: 'Уроки о важном',
-    color: '#C45C26',
-    tint: '#FFF1E8',
+    color: '#7C3AED',
+    tint: '#F0E7FF',
     hasDirections: false,
   },
   {
     key: 'open_lessons',
     label: 'Открытые уроки',
-    color: '#0F8A5F',
-    tint: '#E8F7F0',
+    color: '#0B7A4F',
+    tint: '#D8F5E7',
     hasDirections: false,
     subsections: [
       { key: 'open', label: 'Открытые уроки' },
@@ -118,32 +118,44 @@ function subsectionRank(key: string | null | undefined): number {
   return i >= 0 ? i : 50;
 }
 
-/** Стабильная сортировка: раздел → подраздел → направление → тема → тип → sortOrder → id. */
+/** Фамилия для алфавита: первое слово «Фамилия Имя …». */
+export function speakerSortKey(name: string | null | undefined): string {
+  const s = (name || '').trim();
+  if (!s) return '\uffff';
+  const primary = s.split(/[;]/)[0]?.trim() || s;
+  const surname = primary.split(/\s+/)[0] || primary;
+  return surname.toLocaleLowerCase('ru');
+}
+
+/** Раздел → подраздел → направление → фамилия спикера → тема → тип → sortOrder → id. */
 export function compareKbMaterials(a: KbSortableMaterial, b: KbSortableMaterial): number {
   return (
     sectionRank(a.kbSection) - sectionRank(b.kbSection)
     || subsectionRank(a.kbSubsection) - subsectionRank(b.kbSubsection)
     || (a.direction || '').localeCompare(b.direction || '', 'ru')
-    || (a.topicTitle || a.title || '').localeCompare(b.topicTitle || b.title || '', 'ru')
+    || speakerSortKey(a.speakerName).localeCompare(speakerSortKey(b.speakerName), 'ru')
     || (a.speakerName || '').localeCompare(b.speakerName || '', 'ru')
+    || (a.topicTitle || a.title || '').localeCompare(b.topicTitle || b.title || '', 'ru')
     || materialTypeRank(a.type) - materialTypeRank(b.type)
     || (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
     || (a.id ?? 0) - (b.id ?? 0)
   );
 }
 
+/** Группа участника: один спикер → преза + остальные материалы рядом. */
 export function topicGroupKey(m: {
   topicTitle?: string | null;
   title?: string | null;
   speakerName?: string | null;
   speakerIds?: unknown;
 }): string {
-  const topic = (m.topicTitle || m.title || '').trim().toLowerCase();
   const ids = Array.isArray(m.speakerIds)
     ? [...m.speakerIds].map(Number).filter(Number.isFinite).sort((a, b) => a - b).join(',')
     : '';
   const speaker = (m.speakerName || '').trim().toLowerCase();
-  return `${topic}\0${ids || speaker}`;
+  if (ids) return `s:${ids}`;
+  if (speaker) return `n:${speaker}`;
+  return `t:${(m.topicTitle || m.title || '').trim().toLowerCase()}`;
 }
 
 export function publicKbSectionsCatalog() {

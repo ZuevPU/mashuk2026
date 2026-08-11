@@ -4,20 +4,20 @@ export const KB_SECTIONS = [
   {
     key: 'thematic',
     label: 'Тематические направления',
-    color: '#2F6FED',
-    tint: '#EAF1FF',
+    color: '#1D5BD6',
+    tint: '#DCE8FF',
   },
   {
     key: 'lessons_important',
     label: 'Уроки о важном',
-    color: '#C45C26',
-    tint: '#FFF1E8',
+    color: '#7C3AED',
+    tint: '#F0E7FF',
   },
   {
     key: 'open_lessons',
     label: 'Открытые уроки',
-    color: '#0F8A5F',
-    tint: '#E8F7F0',
+    color: '#0B7A4F',
+    tint: '#D8F5E7',
     subsections: [
       { key: 'open', label: 'Открытые уроки' },
       { key: 'practices', label: 'Педагогические / наставнические практики' },
