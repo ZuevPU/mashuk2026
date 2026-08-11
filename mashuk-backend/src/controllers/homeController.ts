@@ -9,7 +9,6 @@ import {
   getForumSettings, formatTime, getMoscowPhase, isEveningWrapWindow,
   getForumOperationalDateKey, resolveParticipantForumDay,
   resolveLiveProgramDay, stateCheckTimePointOrder,
-  lateAnswerPolicyForQuestion,
 } from '../services/helpers.js';
 import {
   getEventLiveStatus,
@@ -97,11 +96,9 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       })
       .filter(q => q.access === 'open' || q.access === 'overdue' || q.access === 'locked');
 
+    // Only still-fillable misses for today — locked previous/closed slots stay buried.
     const activeMissed = missed.filter(q => q.access === 'open' || q.access === 'overdue');
-    // Просроченные проверки состояния не показываем — окно закрыто
-    const lockedMissed = missed.filter(q => (
-      q.access === 'locked' && lateAnswerPolicyForQuestion(q) !== 'hard_close'
-    ));
+    const lockedMissed: typeof missed = [];
 
     const availableTasks = await db.select().from(tasks)
       .where(and(
@@ -305,16 +302,18 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     });
     const dayTouchpointsCompleted = touchpointItems.filter(i => i.state === 'done').length;
 
+    // Missed banner = overdue (still fillable) only. Locked slots from a closed
+    // window / previous day must not nag on a freshly published day.
     const missedToday = touchpointItems
-      .filter(i => i.state === 'overdue' || i.state === 'locked')
+      .filter(i => i.state === 'overdue')
       .map(i => ({
-        id: i.id,
+        id: typeof i.id === 'number' ? i.id : Number(i.id) || 0,
         title: i.title ?? '',
-        state: i.state as 'overdue' | 'locked',
-      }));
+        state: 'overdue' as const,
+      }))
+      .filter(i => i.id > 0);
     const missedTodayCount = missedToday.length;
-    const ctaQuestionId = touchpointItems.find(i => i.state === 'overdue')?.id
-      ?? missedToday[0]?.id;
+    const ctaQuestionId = missedToday[0]?.id ?? null;
     const dayMissedCount = missedTodayCount;
 
     const pathProg = await getLevelProgress(participant.pathPoints ?? 0, 'path');
@@ -356,6 +355,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         if (answeredIds.has(q.id)) return false;
         const kind = String(q.questionKind || q.reflectionKind || '').toLowerCase();
         if (kind !== 'after_blocks') return false;
+        if (!questionMatchesDay(q, currentDay)) return false;
         if (!questionVisibleToParticipant(q, participant, currentDay)) return false;
         const access = getQuestionAccess(q, currentDay, now);
         return access === 'open' || access === 'overdue';
@@ -476,7 +476,14 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       counts: {
         availableQuestions: publishedQuestions.filter(q => {
           if (answeredIds.has(q.id)) return false;
+          if (!questionMatchesDay(q, currentDay) && q.block !== 'Точка Б' && q.dayNumber !== 8) {
+            return false;
+          }
           if (!questionVisibleToParticipant(q, participant, currentDay)) return false;
+          // Evening stub is not a list question until opensAt (shown via eveningCard).
+          const isEve = /итоговая анкета/i.test(q.title || '')
+            || (q.block || '').toLowerCase().includes('итоги дня');
+          if (isEve && !eveningQuestionnaire.available) return false;
           const access = getQuestionAccess(q, currentDay, now);
           return access === 'open' || access === 'overdue';
         }).length,

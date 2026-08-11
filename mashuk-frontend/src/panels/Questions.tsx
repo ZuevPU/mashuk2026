@@ -652,7 +652,8 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   const answeredToday = questions.filter(q => q.status === 'done' && q.answeredToday);
   const answeredEarlier = questions.filter(q => q.status === 'done' && !q.answeredToday);
   const myAnswers = questions.filter(q => q.status === 'done');
-  const locked = questions.filter(q => q.status === 'locked' && !isEveningDaySummaryQuestion(q));
+  // Previous-day / closed windows are not listed — new day does not show «Заморожено».
+  const locked: typeof questions = [];
   const peerApprovedCount = exchange
     .filter(q => (q.moderationStatus || '').toLowerCase() === 'approved').length;
 

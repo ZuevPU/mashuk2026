@@ -40,6 +40,7 @@ import {
   questionAudienceAllowsParticipant,
   questionVisibleToParticipant,
 } from '../services/questionEligibility.js';
+import { questionMatchesDay } from '../services/questionAdminHelpers.js';
 import { evaluateMedalsForParticipantDetailed } from '../services/medalEvaluator.js';
 import { sendPushNotification } from '../services/pushService.js';
 import { participantAnswerSummary } from '../services/participantAnswerFormat.js';
@@ -151,10 +152,16 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
     const answerByQuestion = new Map(userAnswers.map(a => [a.questionId, a]));
     const attendedEventIds = new Set(userAttendance.map(a => a.eventId));
 
-    // Текущий день + уже отвеченные (в т.ч. прошлых дней) — чтобы можно было перечитать свои ответы
+    // Answered (any day) for «Мои ответы»; unanswered only for today's forum day.
     const visible = list.filter(q => {
       if (answeredIds.has(q.id)) {
         return questionAudienceAllowsParticipant(q, me);
+      }
+      // No carry-over of unfinished previous-day points into the new day.
+      if (!questionMatchesDay(q, currentDay)
+        && q.block !== 'Точка Б'
+        && q.dayNumber !== 8) {
+        return false;
       }
       return questionVisibleToParticipant(q, me, currentDay, { attendedEventIds });
     });
@@ -206,8 +213,8 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
         // Unanswered evening stub is never listed — real UI is Home/Questions eveningCard at opensAt.
         if (isEveningSummaryStubQuestion(q)) return false;
         if (q.access === 'soon') return false;
-        // Проверка состояния после окна — скрываем, чтобы нельзя было ответить
-        if (q.access === 'locked' && q.latePolicy === 'hard_close') return false;
+        // Locked = day/window over — do not show «Заморожено» from previous or closed slots.
+        if (q.access === 'locked') return false;
         const sw = q.showWhen as { questionId?: number; optionValues?: string[] } | null;
         if (sw?.questionId && Array.isArray(sw.optionValues) && sw.optionValues.length) {
           const parentAns = answerByQuestion.get(sw.questionId);

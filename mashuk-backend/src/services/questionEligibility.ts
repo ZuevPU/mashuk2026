@@ -81,9 +81,10 @@ export function questionVisibleToParticipant(
     return questionAudienceAllowsParticipant(q, participant);
   }
   if (!questionMatchesDay(q, currentDay)) {
-    // «После блоков» / практики — доступны в следующие дни, пока админ не снимет
+    // Практики могут оставаться открытыми после дня публикации.
+    // Точки/осмысления прошлого дня НЕ переносим — новый день = чистый срез.
     const kind = String(q.questionKind || q.reflectionKind || '').toLowerCase();
-    if (kind === 'after_blocks' || kind === 'practices_vote') {
+    if (kind === 'practices_vote') {
       const days = normalizeDayNumbers(q.dayNumbers ?? undefined, q.dayNumber ?? undefined);
       const earliest = days.length ? Math.min(...days) : (q.dayNumber ?? 1);
       if (currentDay >= earliest) {
