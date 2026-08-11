@@ -39,21 +39,101 @@ function pathOf(parent: string | null, leaf: string | null): string | null {
 function extractText(data: unknown): string {
   if (data == null) return '';
   if (typeof data === 'string') {
+    const trimmed = data.trim();
+    if (!trimmed) return '';
     try {
-      return extractText(JSON.parse(data));
+      return extractText(JSON.parse(trimmed));
     } catch {
-      return data.trim();
+      return trimmed;
     }
   }
-  if (typeof data !== 'object' || Array.isArray(data)) return String(data);
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const t = extractText(item);
+      if (t) return t;
+    }
+    return '';
+  }
+  if (typeof data !== 'object') return String(data);
   const o = data as Record<string, unknown>;
-  if (typeof o.text === 'string' && o.text.trim()) return o.text.trim();
-  if (typeof o.reason === 'string' && o.reason.trim()) return o.reason.trim();
+  for (const key of ['text', 'reason', 'reflection', 'comment', 'content', 'body', 'message', 'value', 'answer']) {
+    const v = o[key];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
   return '';
 }
 
+function pickFromListItem(raw: unknown, outerParentTitle: string | null, outerParentId: number | null): AfterBlocksPick | null {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    const text = raw.trim();
+    if (!text) return null;
+    return {
+      text,
+      eventTitle: null,
+      eventId: null,
+      parentEventTitle: outerParentTitle,
+      parentEventId: outerParentId,
+      pathLabel: pathOf(outerParentTitle, null),
+    };
+  }
+  if (typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const text = typeof r.text === 'string'
+    ? r.text.trim()
+    : (typeof r.reflection === 'string'
+      ? r.reflection.trim()
+      : (typeof r.comment === 'string'
+        ? r.comment.trim()
+        : (typeof r.value === 'string' ? r.value.trim() : extractText(r))));
+  const eventTitle = typeof r.eventTitle === 'string'
+    ? r.eventTitle
+    : (typeof r.title === 'string'
+      ? r.title
+      : (typeof r.topicTitle === 'string' ? r.topicTitle : null));
+  const parentEventTitle = typeof r.parentEventTitle === 'string'
+    ? r.parentEventTitle
+    : outerParentTitle;
+  const parentEventId = asNum(r.parentEventId) ?? outerParentId;
+  if (!text && !eventTitle && !parentEventTitle) return null;
+  return {
+    text: text || '',
+    eventTitle,
+    eventId: asNum(r.eventId ?? r.id),
+    parentEventTitle,
+    parentEventId,
+    pathLabel: pathOf(parentEventTitle, eventTitle),
+  };
+}
+
 export function parseAfterBlocksPicks(data: unknown): AfterBlocksPick[] {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+  if (data == null) return [];
+
+  if (typeof data === 'string') {
+    const trimmed = data.trim();
+    if (!trimmed) return [];
+    try {
+      return parseAfterBlocksPicks(JSON.parse(trimmed));
+    } catch {
+      return [{
+        text: trimmed,
+        eventTitle: null,
+        eventId: null,
+        parentEventTitle: null,
+        parentEventId: null,
+        pathLabel: null,
+      }];
+    }
+  }
+
+  if (Array.isArray(data)) {
+    const items = data
+      .map(raw => pickFromListItem(raw, null, null))
+      .filter((x): x is AfterBlocksPick => Boolean(x));
+    return items;
+  }
+
+  if (typeof data !== 'object') {
     const text = extractText(data);
     return text
       ? [{
@@ -68,51 +148,49 @@ export function parseAfterBlocksPicks(data: unknown): AfterBlocksPick[] {
   }
 
   const o = data as Record<string, unknown>;
+  // Некоторые клиенты кладут payload в value / data / answer (не разворачиваем скаляры вроде энергии).
+  for (const wrapKey of ['value', 'data', 'answer', 'payload']) {
+    const inner = o[wrapKey];
+    if (!inner || inner === data) continue;
+    if (typeof inner === 'object') {
+      const nested = parseAfterBlocksPicks(inner);
+      if (nested.length) return nested;
+      continue;
+    }
+    if (typeof inner === 'string') {
+      const t = inner.trim();
+      if (t.startsWith('{') || t.startsWith('[')) {
+        const nested = parseAfterBlocksPicks(t);
+        if (nested.length) return nested;
+      }
+    }
+  }
+
   const parentEventTitle = typeof o.parentEventTitle === 'string' ? o.parentEventTitle : null;
   const parentEventId = asNum(o.parentEventId);
 
-  const toItem = (eventTitle: string | null, eventIdRaw: unknown, text: string): AfterBlocksPick => {
-    const eventId = asNum(eventIdRaw);
-    return {
-      text,
-      eventTitle,
-      eventId,
-      parentEventTitle,
-      parentEventId,
-      pathLabel: pathOf(parentEventTitle, eventTitle),
-    };
-  };
-
-  const nestedLists = [o.reflections, o.items, o.picks].filter(Array.isArray) as unknown[][];
+  const nestedLists = [o.reflections, o.items, o.picks, o.answers, o.blocks, o.entries]
+    .filter(Array.isArray) as unknown[][];
   for (const list of nestedLists) {
     if (!list.length) continue;
-    const items = list.map((raw) => {
-      if (!raw || typeof raw !== 'object') return null;
-      const r = raw as Record<string, unknown>;
-      const text = typeof r.text === 'string'
-        ? r.text.trim()
-        : (typeof r.reflection === 'string' ? r.reflection.trim() : '');
-      if (!text) return null;
-      const eventTitle = typeof r.eventTitle === 'string'
-        ? r.eventTitle
-        : (typeof r.title === 'string' ? r.title : null);
-      if (typeof r.parentEventTitle === 'string' && !parentEventTitle) {
-        // keep outer parent; per-item parent handled via path when present
-      }
-      const item = toItem(eventTitle, r.eventId ?? r.id, text);
-      if (typeof r.parentEventTitle === 'string') {
-        item.parentEventTitle = r.parentEventTitle;
-        item.parentEventId = asNum(r.parentEventId);
-        item.pathLabel = pathOf(item.parentEventTitle, item.eventTitle);
-      }
-      return item;
-    }).filter((x): x is AfterBlocksPick => Boolean(x));
+    const items = list
+      .map(raw => pickFromListItem(raw, parentEventTitle, parentEventId))
+      .filter((x): x is AfterBlocksPick => Boolean(x));
     if (items.length) return items;
   }
 
   const text = extractText(data);
-  const eventTitle = typeof o.eventTitle === 'string' ? o.eventTitle : null;
-  const item = toItem(eventTitle, o.eventId, text);
+  const eventTitle = typeof o.eventTitle === 'string'
+    ? o.eventTitle
+    : (typeof o.title === 'string' ? o.title : null);
+  const item: AfterBlocksPick = {
+    text: text || '',
+    eventTitle,
+    eventId: asNum(o.eventId),
+    parentEventTitle,
+    parentEventId,
+    pathLabel: pathOf(parentEventTitle, eventTitle),
+  };
   if (!item.text && !item.pathLabel) return [];
   return [item];
 }

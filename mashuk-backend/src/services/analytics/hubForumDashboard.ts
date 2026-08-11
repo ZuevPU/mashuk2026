@@ -92,25 +92,67 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
   };
   const scPulse = stateCheck.emotionalPulse ?? {};
 
-  const completionByDirection = pulse.activity.completionByDirection ?? [];
-  const byDirection = completionByDirection.map(row => ({
-    direction: row.direction,
-    registered: row.registered,
-    activeParticipants: row.activeParticipants,
-    activityRatePct: row.activityRatePct,
-  }));
+  const registered = pulse.activity.registered ?? cohort.length;
+  const selectedDay = forumFilters.day != null && forumFilters.day >= 1 ? forumFilters.day : null;
+  const daySeries = (pulse.activity.daySeries ?? []) as {
+    day: number;
+    active?: number;
+    coveragePct?: number;
+    registered?: number;
+  }[];
+  const dayRow = selectedDay != null ? daySeries.find(r => r.day === selectedDay) : null;
 
-  /** Зарегистрированы, но 0 активности — по completionByDirection: registered − active. */
+  /**
+   * В режиме дня KPI «активны / охват» берём из daySeries выбранного дня форума.
+   * pulse.activeToday — календарный «сегодня» по lastActiveAt и ломает сравнение D1/D2/D3.
+   */
+  const activeToday = dayRow?.active ?? pulse.activity.activeToday ?? 0;
+  const touchpointCoveragePct = dayRow?.coveragePct != null
+    ? dayRow.coveragePct
+    : (registered ? Math.round((activeToday / registered) * 1000) / 10 : 0);
+
+  const byDirectionDaySeries = (pulse.activity.byDirectionDaySeries ?? []) as {
+    direction: string;
+    day: number;
+    active?: number;
+    registered?: number;
+    coveragePct?: number;
+  }[];
+
+  const completionByDirection = pulse.activity.completionByDirection ?? [];
+  const byDirection = selectedDay != null && byDirectionDaySeries.some(r => r.day === selectedDay)
+    ? byDirectionDaySeries
+      .filter(r => r.day === selectedDay)
+      .map(row => ({
+        direction: row.direction,
+        registered: row.registered ?? registered,
+        activeParticipants: row.active ?? 0,
+        activityRatePct: row.coveragePct ?? 0,
+      }))
+    : completionByDirection.map(row => ({
+      direction: row.direction,
+      registered: row.registered,
+      activeParticipants: row.activeParticipants,
+      activityRatePct: row.activityRatePct,
+    }));
+
+  /** Зарегистрированы, но 0 активности — за выбранный день форума, иначе по срезу направлений. */
   const zeroActivityCount = byDirection.reduce(
     (sum, row) => sum + Math.max(0, (row.registered ?? 0) - (row.activeParticipants ?? 0)),
     0,
   );
 
-  const registered = pulse.activity.registered ?? cohort.length;
-  const activeToday = pulse.activity.activeToday ?? 0;
-  const touchpointCoveragePct = registered
-    ? Math.round((activeToday / registered) * 1000) / 10
-    : 0;
+  const energyByDay = (scPulse.energyByDay ?? []) as {
+    day: number;
+    avg: number | null;
+    responses?: number;
+    riskFatiguePct?: number | null;
+  }[];
+  const energyDayRow = selectedDay != null
+    ? energyByDay.find(r => r.day === selectedDay)
+    : null;
+  const avgEnergy = energyDayRow?.avg ?? scPulse.avgEnergy ?? null;
+  const riskFatiguePct = energyDayRow?.riskFatiguePct ?? scPulse.riskFatiguePct ?? null;
 
   /** Метрики направлений для radar / сравнений (нормировка 0–100 на фронте по max). */
   const energyRows = (scPulse.energyByDirectionDay ?? []) as {
@@ -174,8 +216,8 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
     ...pulse,
     emotionalPulse: {
       ...pulse.emotionalPulse,
-      avgEnergy: scPulse.avgEnergy ?? null,
-      riskFatiguePct: scPulse.riskFatiguePct ?? null,
+      avgEnergy,
+      riskFatiguePct,
       phaseCounts: scPulse.phaseCounts ?? pulse.activity?.stateChecks ?? null,
       topReasons: scPulse.topReasons ?? pulse.stateReasons?.topTokens ?? [],
       energyByDay: scPulse.energyByDay ?? [],
@@ -200,8 +242,8 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
       registered,
       activeToday,
       touchpointCoveragePct,
-      avgEnergy: scPulse.avgEnergy ?? null,
-      riskFatiguePct: scPulse.riskFatiguePct ?? null,
+      avgEnergy,
+      riskFatiguePct,
       eveningSubmitted: evening.activity?.submitted ?? 0,
       eveningFillPct: evening.activity?.fillRatePct ?? null,
       afterBlocksSubmitted: afterBlocks.activity?.submitted ?? 0,

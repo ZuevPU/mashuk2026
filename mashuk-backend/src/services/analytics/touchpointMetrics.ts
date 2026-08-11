@@ -17,14 +17,26 @@ import {
 
 type QuestionRow = typeof questions.$inferSelect;
 
+function questionMatchesDays(q: QuestionRow, dayNumbers: number[]): boolean {
+  if (!dayNumbers.length) return true;
+  const days: number[] = [];
+  if (q.dayNumber != null && q.dayNumber >= 1) days.push(q.dayNumber);
+  if (Array.isArray(q.dayNumbers)) {
+    for (const d of q.dayNumbers) {
+      if (typeof d === 'number' && d >= 1 && !days.includes(d)) days.push(d);
+    }
+  }
+  return days.some(d => dayNumbers.includes(d));
+}
+
 async function loadPublishedQuestions(dayNumbers: number[], shiftId?: number | null): Promise<QuestionRow[]> {
   const conditions = [];
   if (shiftId != null) conditions.push(eq(questions.shiftId, shiftId));
-  if (dayNumbers.length) conditions.push(inArray(questions.dayNumber, dayNumbers));
+  // Day filter in JS: SQL dayNumber alone misses multi-day questions (dayNumbers JSON).
   const rows = conditions.length
     ? await db.select().from(questions).where(and(...conditions))
     : await db.select().from(questions);
-  return rows.filter(q => isPublishedStatus(q.status) && q.dayNumber != null && dayNumbers.includes(q.dayNumber));
+  return rows.filter(q => isPublishedStatus(q.status) && questionMatchesDays(q, dayNumbers));
 }
 
 async function loadCohortAnswers(participantIds: number[], questionIds?: number[]) {

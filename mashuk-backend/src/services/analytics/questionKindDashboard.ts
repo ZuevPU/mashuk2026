@@ -220,6 +220,7 @@ export async function collectKindAnswerRows(
 
     if (mode === 'after_blocks') {
       const parsedItems = parseAfterBlocksItems(r.a.answerData);
+      let pushed = 0;
       for (const parsed of parsedItems) {
         if (!parsed.text && !parsed.pathLabel) continue;
         rows.push({
@@ -236,6 +237,32 @@ export async function collectKindAnswerRows(
           eventId: parsed.eventId,
           parentEventTitle: parsed.parentEventTitle,
           parentEventId: parsed.parentEventId,
+          emotion: null,
+          emotionZone: null,
+          energy: null,
+          timePoint: q.timePoint ?? null,
+          filledAt: r.a.createdAt ? formatTsMsk(r.a.createdAt) : null,
+          createdAt: r.a.createdAt ?? null,
+        });
+        pushed += 1;
+      }
+      // Ответ есть в БД, но формат не разобрался — всё равно выгружаем строку, чтобы файл не был пустым.
+      if (!pushed && r.a.answerData != null) {
+        const fallback = extractAnswerText(r.a.answerData);
+        rows.push({
+          answerId: r.a.id,
+          participantId: r.p.id,
+          name: fullName(r.p),
+          direction,
+          group,
+          day,
+          questionId: q.id,
+          questionTitle: q.title || q.text || `Вопрос #${q.id}`,
+          answer: fallback || '(ответ без распознанного текста)',
+          eventTitle: null,
+          eventId: null,
+          parentEventTitle: null,
+          parentEventId: null,
           emotion: null,
           emotionZone: null,
           energy: null,

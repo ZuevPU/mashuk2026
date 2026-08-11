@@ -22,7 +22,21 @@ type HubExportScope = {
   day: string;
   direction?: string;
   group?: string;
+  ageCategory?: string;
+  activity?: string;
 };
+
+function scopeQs(scope: HubExportScope, extra: Record<string, string | number | undefined | null> = {}) {
+  return qs({
+    mode: 'day',
+    day: scope.day,
+    direction: scope.direction || undefined,
+    group: scope.group || undefined,
+    ageCategory: scope.ageCategory || undefined,
+    activity: scope.activity || undefined,
+    ...extra,
+  });
+}
 
 /** Полная выгрузка Штаб · Форум за выбранный день фильтра (не вся смена). */
 export function forumPackExportItem(scope: HubExportScope): HubExportItem {
@@ -30,42 +44,44 @@ export function forumPackExportItem(scope: HubExportScope): HubExportItem {
   return {
     id: 'forum-pack',
     label: `Пакет за D${scope.day}`,
-    path: `/exports/forum-pack${qs({
-      mode: 'day',
-      day: scope.day,
-      direction: scope.direction || undefined,
-      group: scope.group || undefined,
-    })}`,
+    path: `/exports/forum-pack${scopeQs(scope)}`,
     filename: `forum_pack_d${scope.day}_${stamp}.xlsx`,
   };
 }
 
 export function forumExportItems(scope: HubExportScope | string): HubExportItem[] {
   const s: HubExportScope = typeof scope === 'string' ? { day: scope } : scope;
-  const { day, direction, group } = s;
+  const { day } = s;
   return [
     {
       id: 'state',
       label: 'Состояние',
-      path: `/exports/state-checks${qs({ mode: 'day', day, direction, group })}`,
+      path: `/exports/state-checks${scopeQs(s)}`,
       filename: `sostoyanie_d${day}.xlsx`,
     },
     {
       id: 'evening',
       label: 'Итоговая анкета',
-      path: `/exports/evening-summary${qs({ mode: 'day', day, direction, group })}`,
+      path: `/exports/evening-summary${scopeQs(s)}`,
       filename: `itogovaya_anketa_d${day}.xlsx`,
     },
     {
       id: 'after',
       label: 'После блоков',
-      path: `/exports/after-blocks${qs({ mode: 'day', day, direction, group })}`,
+      path: `/exports/after-blocks${scopeQs(s)}`,
       filename: `posle_blokov_d${day}.xlsx`,
     },
     {
       id: 'piggybank',
       label: 'Копилка',
-      path: `/exports/piggybank${qs({ format: 'xlsx', day, direction, group })}`,
+      path: `/exports/piggybank${qs({
+        format: 'xlsx',
+        day,
+        direction: s.direction || undefined,
+        group: s.group || undefined,
+        ageCategory: s.ageCategory || undefined,
+        activity: s.activity || undefined,
+      })}`,
       filename: `kopilka_d${day}.xlsx`,
     },
     {

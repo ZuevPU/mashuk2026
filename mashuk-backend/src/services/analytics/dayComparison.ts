@@ -107,12 +107,28 @@ function groupOf(p: CohortP): string {
   return (p.groupName || 'без группы').trim() || 'без группы';
 }
 
+function questionDaysOf(q: { dayNumber?: number | null; dayNumbers?: number[] | null }): number[] {
+  const out: number[] = [];
+  if (q.dayNumber != null && q.dayNumber >= 1) out.push(q.dayNumber);
+  if (Array.isArray(q.dayNumbers)) {
+    for (const d of q.dayNumbers) {
+      if (typeof d === 'number' && d >= 1 && !out.includes(d)) out.push(d);
+    }
+  }
+  return out;
+}
+
 async function loadPublishedQuestions(dayNumbers: number[], shiftId?: number | null) {
   if (!dayNumbers.length) return [];
-  const conditions = [inArray(questions.dayNumber, dayNumbers)];
+  const conditions = [];
   if (shiftId != null) conditions.push(eq(questions.shiftId, shiftId));
-  const rows = await db.select().from(questions).where(and(...conditions));
-  return rows.filter(q => isPublishedStatus(q.status) && q.dayNumber != null && dayNumbers.includes(q.dayNumber));
+  const rows = conditions.length
+    ? await db.select().from(questions).where(and(...conditions))
+    : await db.select().from(questions);
+  return rows.filter(q =>
+    isPublishedStatus(q.status)
+    && questionDaysOf(q).some(d => dayNumbers.includes(d)),
+  );
 }
 
 async function loadCohortAnswers(participantIds: number[], questionIds: number[]) {
@@ -162,7 +178,10 @@ export async function buildForumDayKpiSeries(
   const qIdsByDay = new Map<number, Set<number>>();
   const qByTypeByDay = new Map<number, Map<string, Set<number>>>();
   for (const q of allQs) {
-    const d = q.dayNumber!;
+    const d = q.dayNumber
+      ?? questionDaysOf(q).find(n => days.includes(n))
+      ?? null;
+    if (d == null || !days.includes(d)) continue;
     if (!qIdsByDay.has(d)) qIdsByDay.set(d, new Set());
     qIdsByDay.get(d)!.add(q.id);
     if (!qByTypeByDay.has(d)) {
