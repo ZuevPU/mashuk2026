@@ -99,10 +99,16 @@ function isEveningSummaryStubQuestion(q: {
   questionKind?: string | null;
 }): boolean {
   const block = (q.block || '').toLowerCase();
-  const title = (q.title || '').toLowerCase();
   if (block.includes('итоги дня') || /итоговая анкета/i.test(q.title || '')) return true;
   const eveningSlot = TOUCHPOINT_SLOTS.find(s => isEveningTouchpointSlot(s));
-  return !!eveningSlot && questionMatchesTouchpointSlot(q, eveningSlot);
+  if (!eveningSlot) return false;
+  return questionMatchesTouchpointSlot({
+    title: q.title || '',
+    type: q.type || '',
+    block: q.block || '',
+    timePoint: q.timePoint || null,
+    questionKind: q.questionKind || null,
+  }, eveningSlot);
 }
 
 async function participantForumDayForShift(
