@@ -8,9 +8,10 @@ import { HubDirectionScreen } from './HubDirectionScreen';
 import { HubForumScreen } from './HubForumScreen';
 import { HubGroupsScreen } from './HubGroupsScreen';
 import { HubParticipantScreen } from './HubParticipantScreen';
+import { HubPiggybankScreen } from './HubPiggybankScreen';
 import { HubStateScreen } from './HubStateScreen';
 
-export type HubLens = 'forum' | 'dayResults' | 'state' | 'activity' | 'direction' | 'groups' | 'participant';
+export type HubLens = 'forum' | 'dayResults' | 'state' | 'activity' | 'piggybank' | 'direction' | 'groups' | 'participant';
 
 /**
  * Единый дашборд «Штаб» — линзы (форум/направление/группы/участник) в одной вкладке,
@@ -49,6 +50,7 @@ function HubShell({ onOpenCard }: { onOpenCard: (id: number) => void }) {
       {lens === 'dayResults' && <HubDayResultsScreen />}
       {lens === 'state' && <HubStateScreen />}
       {lens === 'activity' && <HubActivityScreen />}
+      {lens === 'piggybank' && <HubPiggybankScreen />}
       {lens === 'direction' && <HubDirectionScreen onOpenCard={onOpenCard} />}
       {lens === 'groups' && <HubGroupsScreen onLensChange={setLens} />}
       {lens === 'participant' && <HubParticipantScreen onOpenCard={onOpenCard} />}

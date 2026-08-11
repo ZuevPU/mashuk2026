@@ -7,12 +7,15 @@ const LENS_LABELS: Record<HubLens, string> = {
   dayResults: 'Итоги дня',
   state: 'Состояние',
   activity: 'Активность',
+  piggybank: 'Копилка',
   direction: 'Направление',
   groups: 'Группы',
   participant: 'Участник',
 };
 
-const LENS_ORDER: HubLens[] = ['forum', 'dayResults', 'state', 'activity', 'direction', 'groups', 'participant'];
+const LENS_ORDER: HubLens[] = [
+  'forum', 'dayResults', 'state', 'activity', 'piggybank', 'direction', 'groups', 'participant',
+];
 
 /** Свой маленький тулбар вместо InsightsChrome — тот тащит таб-бар старых 14 дашбордов. */
 export function HubToolbar({
