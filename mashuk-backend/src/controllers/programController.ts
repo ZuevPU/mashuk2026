@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { eq, and, asc, lte, or, isNull, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { events, eventAttendance, materials, questions, answers, scheduleDays, dayFocus, kbDayUnlocks, programSpeakers, participantDayState } from '../db/schema.js';
+import { events, eventAttendance, materials, materialTypes, questions, answers, scheduleDays, dayFocus, kbDayUnlocks, programSpeakers, participantDayState } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
   getForumSettings, formatTime, getForumOperationalDateKey,
@@ -103,13 +103,27 @@ export function isMaterialUnlockedForParticipant(
   return touchpointsCompleted >= required;
 }
 
-function mapMaterialForClient(m: typeof materials.$inferSelect, now: Date) {
+function mapMaterialForClient(
+  m: typeof materials.$inferSelect,
+  now: Date,
+  opts?: {
+    speakerName?: string | null;
+    typeName?: string | null;
+  },
+) {
   const type = (m.type || '').toLowerCase();
-  let typeLabel = '📎 Материал';
-  if (type === 'notes' || type === 'конспект') typeLabel = '📄 Конспект';
-  else if (type === 'pdf' || type === 'presentation') typeLabel = '🖼 PDF';
-  else if (type === 'video' || type === 'vk') typeLabel = '🎥 VK Video';
-  else if (type === 'links' || type === 'resources') typeLabel = '🔗 Ресурсы';
+  let typeLabel = opts?.typeName || 'Материал';
+  if (!opts?.typeName) {
+    if (type === 'notes' || type === 'конспект') typeLabel = 'Конспект';
+    else if (type === 'pdf' || type === 'presentation') typeLabel = 'Презентация';
+    else if (type === 'video' || type === 'vk') typeLabel = 'Видео';
+    else if (type === 'audio') typeLabel = 'Аудио';
+    else if (type === 'links' || type === 'resources' || type === 'link') typeLabel = 'Ресурсы';
+    else if (type === 'article' || type === 'document') typeLabel = 'Документ';
+  }
+
+  const speakerName = opts?.speakerName || m.speakerName || null;
+  const topicTitle = m.topicTitle || m.eventTitle || null;
 
   return {
     id: m.id,
@@ -117,12 +131,17 @@ function mapMaterialForClient(m: typeof materials.$inferSelect, now: Date) {
     type: m.type,
     typeLabel,
     description: m.description,
-    url: m.url,
+    url: m.url || m.fileUrl || null,
     isNew: materialIsNew(m, now),
-    speakerName: m.speakerName,
-    speakerInitials: m.speakerInitials || (m.speakerName ? m.speakerName.slice(0, 2).toUpperCase() : undefined),
+    speakerName,
+    speakerInitials: m.speakerInitials || (speakerName ? speakerName.slice(0, 2).toUpperCase() : undefined),
     eventTitle: m.eventTitle,
-    topic: m.eventTitle || m.title,
+    topic: topicTitle || m.title,
+    topicTitle,
+    kbSection: m.kbSection,
+    kbSubsection: m.kbSubsection,
+    direction: m.direction,
+    sortOrder: m.sortOrder ?? 0,
   };
 }
 
@@ -584,7 +603,52 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
     const unlockedMaterials = access.unlocked
       ? filtered.filter(m => isMaterialUnlockedForParticipant(m, access.touchpointsCompleted, forumDefaultN))
       : [];
-    const mapped = unlockedMaterials.map(m => mapMaterialForClient(m, now));
+
+    const {
+      compareKbMaterials,
+      publicKbSectionsCatalog,
+      kbSubsectionLabel,
+      topicGroupKey,
+    } = await import('../services/kbSections.js');
+
+    const speakerIdSet = new Set<number>();
+    for (const m of unlockedMaterials) {
+      const ids = (m.speakerIds as number[] | null) || [];
+      for (const id of ids) {
+        if (Number.isFinite(id)) speakerIdSet.add(Number(id));
+      }
+    }
+    const speakerRows = speakerIdSet.size
+      ? await db.select().from(programSpeakers).where(inArray(programSpeakers.id, [...speakerIdSet]))
+      : [];
+    const speakerById = new Map(speakerRows.map(s => [s.id, s.name]));
+
+    const typeRows = await db.select().from(materialTypes);
+    const typeNameByKey = new Map(typeRows.map(t => [t.key, t.name]));
+
+    const mapped = unlockedMaterials
+      .map(m => {
+        const ids = ((m.speakerIds as number[] | null) || []).map(Number).filter(Number.isFinite);
+        const names = ids.map(id => speakerById.get(id)).filter(Boolean) as string[];
+        const speakerName = names.length ? names.join('; ') : m.speakerName;
+        const client = mapMaterialForClient(m, now, {
+          speakerName,
+          typeName: m.type ? (typeNameByKey.get(m.type) || null) : null,
+        });
+        return {
+          ...client,
+          speakerIds: ids,
+          sectionLabel: publicKbSectionsCatalog().find(s => s.key === client.kbSection)?.label ?? null,
+          subsectionLabel: kbSubsectionLabel(client.kbSection, client.kbSubsection),
+          groupKey: topicGroupKey({
+            topicTitle: client.topicTitle,
+            title: client.title,
+            speakerName: client.speakerName,
+            speakerIds: ids,
+          }),
+        };
+      })
+      .sort(compareKbMaterials);
 
     let lockMessage: string | null = null;
     if (!access.unlocked) {
@@ -606,6 +670,7 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
       dayDescription: focus?.text ?? null,
       opensOn,
       lockMessage,
+      sections: publicKbSectionsCatalog(),
       materials: mapped,
     });
   } catch (error) {

@@ -2773,6 +2773,39 @@ function normalizeMaterialKbUnlock(body: Record<string, unknown>): {
   return out;
 }
 
+async function normalizeMaterialKbSections(body: Record<string, unknown>, opts?: { partial?: boolean }) {
+  const { normalizeKbSection, normalizeKbSubsection } = await import('../services/kbSections.js');
+  const out: {
+    kbSection?: string | null;
+    kbSubsection?: string | null;
+    topicTitle?: string | null;
+    sortOrder?: number | null;
+  } = {};
+  if (!opts?.partial || body.kbSection !== undefined) {
+    out.kbSection = normalizeKbSection(body.kbSection);
+  }
+  const sectionForSub = normalizeKbSection(
+    out.kbSection !== undefined ? out.kbSection : body.kbSection,
+  );
+  if (!opts?.partial || body.kbSubsection !== undefined || body.kbSection !== undefined) {
+    out.kbSubsection = normalizeKbSubsection(sectionForSub, body.kbSubsection);
+  }
+  if (!opts?.partial || body.topicTitle !== undefined) {
+    out.topicTitle = body.topicTitle != null && String(body.topicTitle).trim()
+      ? String(body.topicTitle).trim().slice(0, 255)
+      : null;
+  }
+  if (!opts?.partial || body.sortOrder !== undefined) {
+    if (body.sortOrder === null || body.sortOrder === '') {
+      out.sortOrder = 0;
+    } else {
+      const n = Number(body.sortOrder);
+      out.sortOrder = Number.isFinite(n) ? Math.round(n) : 0;
+    }
+  }
+  return out;
+}
+
 export const crudMaterials = {
   list: async (req: AdminRequest, res: Response) => {
     const shiftId = await resolveAdminShiftId(req);
@@ -2790,6 +2823,7 @@ export const crudMaterials = {
       return;
     }
     const kb = normalizeMaterialKbUnlock(body);
+    const sections = await normalizeMaterialKbSections(body);
     let tags = body.tags;
     if (Array.isArray(tags)) {
       const { ensureThematicTagRegistry } = await import('../services/thematicTagRegistry.js');
@@ -2818,6 +2852,7 @@ export const crudMaterials = {
       isNew: body.isNew !== false,
       status,
       ...kb,
+      ...sections,
     }).returning();
     res.json({ material: m });
   },
@@ -2825,7 +2860,8 @@ export const crudMaterials = {
     const id = Number(req.params.id);
     const body = req.body as Record<string, unknown>;
     const kb = normalizeMaterialKbUnlock(body);
-    const patch: Record<string, unknown> = { ...kb };
+    const sections = await normalizeMaterialKbSections(body, { partial: true });
+    const patch: Record<string, unknown> = { ...kb, ...sections };
     if (body.title !== undefined) {
       const title = String(body.title ?? '').trim();
       if (!title) {

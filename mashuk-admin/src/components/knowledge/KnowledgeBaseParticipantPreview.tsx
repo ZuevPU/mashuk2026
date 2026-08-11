@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { ProgramSpeaker } from '../program/types';
 import { speakerFullLabel } from '../speakers/speakerFormat';
 import type { MaterialRow } from './MaterialCard';
+import { KB_SECTIONS, compareKbMaterials, kbSectionMeta, kbSubsectionLabel } from './kbSections';
 
 type Props = {
   day: number;
@@ -19,8 +20,9 @@ function typeLabel(type: string | null | undefined, typeOptions: Props['typeOpti
   if (found?.name) return found.name;
   const t = type.toLowerCase();
   if (t === 'notes' || t === 'конспект') return 'Конспект';
-  if (t === 'pdf' || t === 'presentation') return 'PDF';
-  if (t === 'video' || t === 'vk') return 'VK Video';
+  if (t === 'pdf' || t === 'presentation') return 'Презентация';
+  if (t === 'video' || t === 'vk') return 'Видео';
+  if (t === 'audio') return 'Аудио';
   if (t === 'links' || t === 'resources' || t === 'link') return 'Ресурсы';
   return type;
 }
@@ -35,6 +37,12 @@ function speakerName(m: MaterialRow, speakers: ProgramSpeaker[]): string {
 
 function materialHref(m: MaterialRow): string | null {
   return m.url || m.fileUrl || null;
+}
+
+function groupKey(m: MaterialRow, speakers: ProgramSpeaker[]): string {
+  const topic = (m.topicTitle || m.title || '').trim().toLowerCase();
+  const sp = speakerName(m, speakers).toLowerCase();
+  return `${topic}\0${sp}`;
 }
 
 export function KnowledgeBaseParticipantPreview({
@@ -53,9 +61,52 @@ export function KnowledgeBaseParticipantPreview({
     () => materials
       .filter(m => Number(m.dayNumber) === day && (m.status || 'published') === 'published')
       .slice()
-      .sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ru')),
+      .sort(compareKbMaterials),
     [materials, day],
   );
+
+  const sections = useMemo(() => {
+    const bySec = new Map<string, MaterialRow[]>();
+    for (const m of dayMats) {
+      const key = m.kbSection || 'other';
+      const arr = bySec.get(key) || [];
+      arr.push(m);
+      bySec.set(key, arr);
+    }
+    const order = [...KB_SECTIONS.map(s => s.key), 'other'];
+    return order.filter(k => bySec.has(k)).map(sectionKey => {
+      const mats = bySec.get(sectionKey)!;
+      const meta = kbSectionMeta(sectionKey);
+      const groups = new Map<string, MaterialRow[]>();
+      const gOrder: string[] = [];
+      for (const m of mats) {
+        const k = `${m.kbSubsection || ''}\0${m.direction || ''}\0${groupKey(m, speakers)}`;
+        if (!groups.has(k)) {
+          groups.set(k, []);
+          gOrder.push(k);
+        }
+        groups.get(k)!.push(m);
+      }
+      return {
+        sectionKey,
+        label: meta?.label || 'Без раздела',
+        color: meta?.color || '#666',
+        tint: meta?.tint || '#F4F4F4',
+        groups: gOrder.map(k => {
+          const items = groups.get(k)!;
+          const first = items[0];
+          return {
+            key: k,
+            topic: first.topicTitle || first.title,
+            speaker: speakerName(first, speakers),
+            sub: kbSubsectionLabel(first.kbSection, first.kbSubsection),
+            direction: first.direction,
+            items,
+          };
+        }),
+      };
+    });
+  }, [dayMats, speakers]);
 
   const openMaterial = (m: MaterialRow) => {
     const href = materialHref(m);
@@ -111,44 +162,46 @@ export function KnowledgeBaseParticipantPreview({
           {dayMats.length === 0 ? (
             <div className="adm-kb-preview-empty">Нет опубликованных материалов на этот день</div>
           ) : (
-            <div className="adm-kb-preview-table-card">
-              <table className="adm-kb-preview-table">
-                <thead>
-                  <tr>
-                    <th>Тип</th>
-                    <th>Название</th>
-                    <th>Спикер</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {dayMats.map(m => (
-                    <tr key={m.id}>
-                      <td className="adm-kb-preview-type">{typeLabel(m.type, typeOptions)}</td>
-                      <td>
+            sections.map(sec => (
+              <div
+                key={sec.sectionKey}
+                className="adm-kb-preview-section"
+                style={{ ['--kb-sec' as string]: sec.color, ['--kb-sec-tint' as string]: sec.tint }}
+              >
+                <div className="adm-kb-preview-section-title">{sec.label}</div>
+                {sec.groups.map(g => (
+                  <div key={g.key} className="adm-kb-preview-topic">
+                    <div className="adm-kb-preview-topic-name">{g.topic}</div>
+                    <div className="adm-kb-preview-topic-speaker">
+                      {g.speaker}
+                      {g.direction ? ` · ${g.direction}` : ''}
+                      {g.sub && g.sub !== '—' ? ` · ${g.sub}` : ''}
+                    </div>
+                    {g.items.map(m => (
+                      <div key={m.id} className="adm-kb-preview-artifact">
                         <button
                           type="button"
                           className="adm-kb-preview-title-btn"
                           onClick={() => openMaterial(m)}
+                          style={{ flex: 1 }}
                         >
+                          <span className="adm-kb-preview-type">{typeLabel(m.type, typeOptions)}</span>
+                          {' '}
                           <span className="adm-kb-preview-title">{m.title || '—'}</span>
                         </button>
-                      </td>
-                      <td className="adm-kb-preview-speaker">{speakerName(m, speakers)}</td>
-                      <td>
                         <button
                           type="button"
                           className="adm-kb-preview-piggy"
                           onClick={() => savePiggy(m)}
                         >
-                          {savedIds.has(m.id) ? 'В копилке' : 'В копилку'}
+                          {savedIds.has(m.id) ? '✓' : '+'}
                         </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ))
           )}
 
           {toast && (
@@ -158,7 +211,7 @@ export function KnowledgeBaseParticipantPreview({
           )}
 
           <div className="adm-kb-preview-hint">
-            Интерактивный макет экрана участника. В копилку в превью не уходит на сервер.
+            Интерактивный макет: разделы цветом, артефакты одной темы подряд. В копилку в превью не уходит на сервер.
           </div>
         </div>
       </div>

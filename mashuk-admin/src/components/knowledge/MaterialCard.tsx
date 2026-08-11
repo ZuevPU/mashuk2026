@@ -4,6 +4,7 @@ import type { ProgramSpeaker } from '../program/types';
 import { speakerFullLabel } from '../speakers/speakerFormat';
 import { confirmDelete } from '../../admin/confirmDelete';
 import { RowActionsMenu } from '../participants/RowActionsMenu';
+import { KB_SECTIONS, kbSectionMeta, kbSubsectionLabel, kbSubsectionOptions } from './kbSections';
 
 export type MaterialRow = {
   id: number;
@@ -22,6 +23,10 @@ export type MaterialRow = {
   speakerIds?: number[];
   kbUnlockMode?: 'immediate' | 'touchpoints' | string | null;
   kbUnlockMinTouchpoints?: number | null;
+  kbSection?: string | null;
+  kbSubsection?: string | null;
+  topicTitle?: string | null;
+  sortOrder?: number | null;
 };
 
 type Draft = {
@@ -39,6 +44,10 @@ type Draft = {
   audienceAll: boolean;
   kbUnlockMode: 'immediate' | 'touchpoints';
   kbUnlockMinTouchpoints: number | '';
+  kbSection: string;
+  kbSubsection: string;
+  topicTitle: string;
+  sortOrder: number | '';
 };
 
 type Props = {
@@ -87,6 +96,10 @@ function mkDraft(m: MaterialRow): Draft {
     audienceAll: !m.direction,
     kbUnlockMode: (m.kbUnlockMode === 'immediate' ? 'immediate' : 'touchpoints') as 'immediate' | 'touchpoints',
     kbUnlockMinTouchpoints: m.kbUnlockMinTouchpoints != null ? m.kbUnlockMinTouchpoints : '',
+    kbSection: m.kbSection || '',
+    kbSubsection: m.kbSubsection || '',
+    topicTitle: m.topicTitle || '',
+    sortOrder: m.sortOrder != null ? m.sortOrder : '',
   };
 }
 
@@ -120,10 +133,14 @@ export function MaterialCard({
     ? new Date(material.createdAt).toLocaleDateString('ru-RU')
     : '—';
   const typeName = typeOptions.find(t => t.key === material.type)?.name || material.type || '—';
+  const sec = kbSectionMeta(material.kbSection);
   const audienceStr = material.direction ? material.direction : 'Для всех';
+  const subOptions = kbSubsectionOptions(draft.kbSection);
 
   const persist = (statusOverride?: string) => {
-    const direction = draft.audienceAll ? '' : draft.direction;
+    const direction = draft.audienceAll && draft.kbSection !== 'thematic'
+      ? ''
+      : draft.direction;
     const nextStatus = statusOverride ?? draft.status;
     onSave({
       title: draft.title,
@@ -141,6 +158,10 @@ export function MaterialCard({
       kbUnlockMinTouchpoints: draft.kbUnlockMode === 'touchpoints' && draft.kbUnlockMinTouchpoints !== ''
         ? draft.kbUnlockMinTouchpoints
         : null,
+      kbSection: draft.kbSection || null,
+      kbSubsection: draft.kbSection === 'open_lessons' ? (draft.kbSubsection || null) : null,
+      topicTitle: draft.topicTitle.trim() || null,
+      sortOrder: draft.sortOrder === '' ? 0 : draft.sortOrder,
     });
     setEditing(false);
   };
@@ -148,6 +169,25 @@ export function MaterialCard({
   if (!editing) {
     return (
       <tr ref={rowRef}>
+        <td>
+          {sec ? (
+            <span className="adm-kb-section-chip" style={{ background: sec.tint, color: sec.color, borderColor: sec.color }}>
+              {sec.label}
+            </span>
+          ) : (
+            <span className="adm-muted">—</span>
+          )}
+          {material.kbSubsection && (
+            <div className="adm-muted" style={{ fontSize: 10, marginTop: 4 }}>
+              {kbSubsectionLabel(material.kbSection, material.kbSubsection)}
+            </div>
+          )}
+          {material.topicTitle && (
+            <div className="adm-muted" style={{ fontSize: 10, marginTop: 2 }} title="Тема группировки">
+              Тема: {material.topicTitle}
+            </div>
+          )}
+        </td>
         <td className="adm-muted" style={{ fontSize: 11 }}>{dateStr}</td>
         <td style={{ fontSize: 11, maxWidth: 140 }}>{speakerLabel(material.speakerIds || [], speakers, material.speakerName)}</td>
         <td>{material.title}</td>
@@ -188,6 +228,44 @@ export function MaterialCard({
 
   return (
     <tr ref={rowRef} className="adm-material-edit-row">
+      <td style={{ minWidth: 200 }}>
+        <select
+          className="adm-input adm-input-narrow"
+          value={draft.kbSection}
+          onChange={e => setDraft(d => ({
+            ...d,
+            kbSection: e.target.value,
+            kbSubsection: e.target.value === 'open_lessons' ? d.kbSubsection : '',
+            audienceAll: e.target.value === 'thematic' ? false : d.audienceAll,
+          }))}
+        >
+          <option value="">— раздел —</option>
+          {KB_SECTIONS.map(s => (
+            <option key={s.key} value={s.key}>{s.label}</option>
+          ))}
+        </select>
+        {draft.kbSection === 'open_lessons' && (
+          <select
+            className="adm-input adm-input-narrow"
+            style={{ marginTop: 4 }}
+            value={draft.kbSubsection}
+            onChange={e => setDraft(d => ({ ...d, kbSubsection: e.target.value }))}
+          >
+            <option value="">— подраздел —</option>
+            {subOptions.map(s => (
+              <option key={s.key} value={s.key}>{s.label}</option>
+            ))}
+          </select>
+        )}
+        <input
+          className="adm-input"
+          style={{ marginTop: 4 }}
+          value={draft.topicTitle}
+          onChange={e => setDraft(d => ({ ...d, topicTitle: e.target.value }))}
+          placeholder="Тема (для группировки)"
+        />
+        <div className="adm-muted" style={{ fontSize: 10 }}>{dateStr}</div>
+      </td>
       <td>
         <select
           className="adm-input adm-input-narrow"
@@ -203,7 +281,6 @@ export function MaterialCard({
             <option key={d} value={d}>День {d}</option>
           ))}
         </select>
-        <div className="adm-muted" style={{ fontSize: 10 }}>{dateStr}</div>
       </td>
       <td style={{ minWidth: 160 }}>
         <SpeakerMultiPick
@@ -223,19 +300,32 @@ export function MaterialCard({
         </select>
       </td>
       <td>
-        <label className="adm-forum-check" style={{ display: 'block', fontSize: 11 }}>
-          <input type="radio" checked={draft.audienceAll} onChange={() => setDraft(d => ({ ...d, audienceAll: true, direction: '' }))} />
-          Для всех
-        </label>
-        <label className="adm-forum-check" style={{ display: 'block', fontSize: 11 }}>
-          <input type="radio" checked={!draft.audienceAll} onChange={() => setDraft(d => ({ ...d, audienceAll: false }))} />
-          Направление
-        </label>
-        {!draft.audienceAll && (
-          <select className="adm-input adm-input-narrow" value={draft.direction} onChange={e => setDraft(d => ({ ...d, direction: e.target.value }))}>
-            <option value="">—</option>
+        {draft.kbSection === 'thematic' ? (
+          <select
+            className="adm-input adm-input-narrow"
+            value={draft.direction}
+            onChange={e => setDraft(d => ({ ...d, direction: e.target.value, audienceAll: false }))}
+          >
+            <option value="">— направление —</option>
             {directions.map(dir => <option key={dir.id} value={dir.name}>{dir.name}</option>)}
           </select>
+        ) : (
+          <>
+            <label className="adm-forum-check" style={{ display: 'block', fontSize: 11 }}>
+              <input type="radio" checked={draft.audienceAll} onChange={() => setDraft(d => ({ ...d, audienceAll: true, direction: '' }))} />
+              Для всех
+            </label>
+            <label className="adm-forum-check" style={{ display: 'block', fontSize: 11 }}>
+              <input type="radio" checked={!draft.audienceAll} onChange={() => setDraft(d => ({ ...d, audienceAll: false }))} />
+              Направление
+            </label>
+            {!draft.audienceAll && (
+              <select className="adm-input adm-input-narrow" value={draft.direction} onChange={e => setDraft(d => ({ ...d, direction: e.target.value }))}>
+                <option value="">—</option>
+                {directions.map(dir => <option key={dir.id} value={dir.name}>{dir.name}</option>)}
+              </select>
+            )}
+          </>
         )}
       </td>
       <td>
@@ -299,9 +389,6 @@ export function MaterialCard({
               onChange={e => setDraft(d => ({ ...d, kbUnlockMinTouchpoints: e.target.value === '' ? '' : Number(e.target.value) }))}
             />
           )}
-          <p className="adm-muted" style={{ fontSize: 10, margin: '4px 0 0' }}>
-            У участника сейчас разблокировка по дню (порог форума + kb-unlocks).
-          </p>
         </div>
       </td>
       <td>

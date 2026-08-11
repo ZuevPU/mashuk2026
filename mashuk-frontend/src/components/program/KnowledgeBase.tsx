@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { Checkbox, CustomSelect, Button } from '@vkontakte/vkui';
 import { openExternalUrl } from '../../utils/openUrl';
 import { apiPost } from '../../api/client';
 import { PIGGYBANK_SOURCES, PIGGYBANK_TAGS, inferSourceFromEventTitle } from '../../data/piggybank';
+import { KB_SECTIONS, kbSectionMeta, kbSubsectionLabel } from './kbSections';
 
 interface Material {
   id: number;
@@ -16,7 +17,22 @@ interface Material {
   speakerName?: string;
   speakerInitials?: string;
   topic?: string;
+  topicTitle?: string | null;
   eventTitle?: string;
+  kbSection?: string | null;
+  kbSubsection?: string | null;
+  sectionLabel?: string | null;
+  subsectionLabel?: string | null;
+  direction?: string | null;
+  groupKey?: string;
+}
+
+interface KbSectionMeta {
+  key: string;
+  label: string;
+  color: string;
+  tint: string;
+  subsections?: { key: string; label: string }[];
 }
 
 interface KnowledgeBaseProps {
@@ -30,11 +46,45 @@ interface KnowledgeBaseProps {
     lockReason?: string | null;
     lockMessage?: string | null;
     materials?: Material[];
+    sections?: KbSectionMeta[];
     day?: number;
     dayTitle?: string;
     dayDescription?: string | null;
     opensOn?: string | null;
   } | null;
+}
+
+type TopicGroup = {
+  key: string;
+  topic: string;
+  speakerName: string;
+  direction?: string | null;
+  subsection?: string | null;
+  items: Material[];
+};
+
+function buildGroups(list: Material[]): TopicGroup[] {
+  const order: string[] = [];
+  const map = new Map<string, TopicGroup>();
+  for (const m of list) {
+    const key = m.groupKey
+      || `${(m.topicTitle || m.topic || m.title || '').toLowerCase()}\0${(m.speakerName || '').toLowerCase()}`;
+    let g = map.get(key);
+    if (!g) {
+      g = {
+        key,
+        topic: m.topicTitle || m.topic || m.title,
+        speakerName: m.speakerName || '—',
+        direction: m.direction,
+        subsection: m.kbSubsection,
+        items: [],
+      };
+      map.set(key, g);
+      order.push(key);
+    }
+    g.items.push(m);
+  }
+  return order.map(k => map.get(k)!);
 }
 
 export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
@@ -44,7 +94,88 @@ export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
   const [piggySource, setPiggySource] = useState('');
   const [piggyStep, setPiggyStep] = useState<'tags' | 'source'>('tags');
   const [toast, setToast] = useState<string | null>(null);
+  const [sectionFilter, setSectionFilter] = useState<string>('all');
   const routeNavigator = useRouteNavigator();
+
+  const catalog = kb?.sections?.length ? kb.sections : KB_SECTIONS.map(s => ({
+    key: s.key,
+    label: s.label,
+    color: s.color,
+    tint: s.tint,
+  }));
+
+  const materials = kb?.materials ?? [];
+
+  const presentSections = useMemo(() => {
+    const keys = new Set(materials.map(m => m.kbSection).filter(Boolean) as string[]);
+    const known = catalog.filter(s => keys.has(s.key));
+    const hasOther = materials.some(m => !m.kbSection);
+    return { known, hasOther };
+  }, [materials, catalog]);
+
+  const visible = useMemo(() => {
+    if (sectionFilter === 'all') return materials;
+    if (sectionFilter === 'other') return materials.filter(m => !m.kbSection);
+    return materials.filter(m => m.kbSection === sectionFilter);
+  }, [materials, sectionFilter]);
+
+  const blocks = useMemo(() => {
+    const bySection = new Map<string, Material[]>();
+    for (const m of visible) {
+      const sk = m.kbSection || 'other';
+      const arr = bySection.get(sk) || [];
+      arr.push(m);
+      bySection.set(sk, arr);
+    }
+    const sectionOrder = [
+      ...catalog.map(s => s.key),
+      'other',
+    ];
+    return sectionOrder
+      .filter(k => bySection.has(k))
+      .map(sectionKey => {
+        const mats = bySection.get(sectionKey)!;
+        const meta = kbSectionMeta(sectionKey) || catalog.find(s => s.key === sectionKey);
+        const color = meta?.color || '#666';
+        const tint = meta?.tint || '#F4F4F4';
+        const label = meta?.label || (sectionKey === 'other' ? 'Без раздела' : sectionKey);
+
+        if (sectionKey === 'thematic') {
+          const dirs = [...new Set(mats.map(m => m.direction || 'Общее'))];
+          return {
+            sectionKey,
+            label,
+            color,
+            tint,
+            chunks: dirs.map(dir => ({
+              title: dir,
+              groups: buildGroups(mats.filter(m => (m.direction || 'Общее') === dir)),
+            })),
+          };
+        }
+        if (sectionKey === 'open_lessons') {
+          const subs = ['open', 'practices', 'reverse', ''];
+          const chunks = subs
+            .map(sub => {
+              const list = mats.filter(m => (m.kbSubsection || '') === sub);
+              if (!list.length) return null;
+              return {
+                title: kbSubsectionLabel('open_lessons', sub || null) || 'Без подраздела',
+                groups: buildGroups(list),
+              };
+            })
+            .filter(Boolean) as { title: string; groups: TopicGroup[] }[];
+          return { sectionKey, label, color, tint, chunks };
+        }
+        return {
+          sectionKey,
+          label,
+          color,
+          tint,
+          chunks: [{ title: null as string | null, groups: buildGroups(mats) }],
+        };
+      });
+  }, [visible, catalog]);
 
   if (!kb) return null;
 
@@ -89,8 +220,6 @@ export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
       </div>
     );
   }
-
-  const materials = kb.materials ?? [];
 
   const openPiggyDialog = (m: Material) => {
     setPendingMaterial(m);
@@ -140,48 +269,96 @@ export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
         {kb.ruleLabel || <>Материалы открываются когда пройдено <strong style={{ color: '#FF5500' }}>≥ 4 из 7 точек осмысления</strong> за день</>}
       </div>
 
+      {materials.length > 0 && (
+        <div className="kb-section-chips" role="tablist" aria-label="Разделы базы знаний">
+          <button
+            type="button"
+            className={`kb-section-chip${sectionFilter === 'all' ? ' active' : ''}`}
+            onClick={() => setSectionFilter('all')}
+          >
+            Все
+          </button>
+          {presentSections.known.map(s => (
+            <button
+              key={s.key}
+              type="button"
+              className={`kb-section-chip${sectionFilter === s.key ? ' active' : ''}`}
+              style={{
+                ['--kb-sec' as string]: s.color,
+                ['--kb-sec-tint' as string]: s.tint,
+              }}
+              onClick={() => setSectionFilter(s.key)}
+            >
+              {s.label}
+            </button>
+          ))}
+          {presentSections.hasOther && (
+            <button
+              type="button"
+              className={`kb-section-chip${sectionFilter === 'other' ? ' active' : ''}`}
+              onClick={() => setSectionFilter('other')}
+            >
+              Без раздела
+            </button>
+          )}
+        </div>
+      )}
+
       {materials.length === 0 ? (
         <div style={{ textAlign: 'center', color: '#888', padding: 16, fontSize: 12 }}>Материалы появятся после мероприятий</div>
+      ) : visible.length === 0 ? (
+        <div style={{ textAlign: 'center', color: '#888', padding: 16, fontSize: 12 }}>В этом разделе пока пусто</div>
       ) : (
-        <div className="kb-table-card">
-          <table className="kb-table">
-            <thead>
-              <tr>
-                <th>Тип</th>
-                <th>Название</th>
-                <th>Спикер</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {materials.map(m => (
-                <tr key={m.id}>
-                  <td className="kb-table-type">{m.typeLabel || m.type || 'Материал'}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="kb-table-title-btn"
-                      onClick={() => m.url && openExternalUrl(m.url)}
-                      disabled={!m.url}
-                    >
-                      <span className="kb-table-title">{m.title}</span>
-                      {m.isNew && <span className="kb-mat-new">Новый</span>}
-                    </button>
-                  </td>
-                  <td className="kb-table-speaker">{m.speakerName || '—'}</td>
-                  <td className="kb-table-action">
-                    <button
-                      type="button"
-                      className="kb-piggy-btn"
-                      onClick={() => openPiggyDialog(m)}
-                    >
-                      {savedIds.has(m.id) ? 'В копилке' : 'В копилку'}
-                    </button>
-                  </td>
-                </tr>
+        <div className="kb-sections">
+          {blocks.map(block => (
+            <section
+              key={block.sectionKey}
+              className="kb-section-block"
+              style={{ ['--kb-sec' as string]: block.color, ['--kb-sec-tint' as string]: block.tint }}
+            >
+              {(sectionFilter === 'all' || blocks.length > 1) && (
+                <h3 className="kb-section-title">{block.label}</h3>
+              )}
+              {block.chunks.map((chunk, idx) => (
+                <div key={`${block.sectionKey}-${chunk.title || idx}`} className="kb-section-chunk">
+                  {chunk.title && <div className="kb-chunk-title">{chunk.title}</div>}
+                  {chunk.groups.map(group => (
+                    <article key={group.key} className="kb-topic-card">
+                      <div className="kb-topic-head">
+                        <div className="kb-topic-name">{group.topic}</div>
+                        <div className="kb-topic-speaker">{group.speakerName}</div>
+                      </div>
+                      <div className="kb-artifact-row">
+                        {group.items.map(m => (
+                          <div key={m.id} className="kb-artifact">
+                            <button
+                              type="button"
+                              className="kb-artifact-open"
+                              onClick={() => m.url && openExternalUrl(m.url)}
+                              disabled={!m.url}
+                            >
+                              <span className="kb-artifact-type">{m.typeLabel || m.type || 'Материал'}</span>
+                              <span className="kb-artifact-title">
+                                {m.title}
+                                {m.isNew && <span className="kb-mat-new">Новый</span>}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              className="kb-piggy-btn"
+                              onClick={() => openPiggyDialog(m)}
+                            >
+                              {savedIds.has(m.id) ? 'В копилке' : 'В копилку'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
               ))}
-            </tbody>
-          </table>
+            </section>
+          ))}
         </div>
       )}
 

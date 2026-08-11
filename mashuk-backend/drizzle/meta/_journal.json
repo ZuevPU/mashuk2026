@@ -428,6 +428,13 @@
       "when": 1840000000000,
       "tag": "0061_exchange_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1841000000000,
+      "tag": "0062_materials_kb_sections",
+      "breakpoints": true
     }
   ]
 }

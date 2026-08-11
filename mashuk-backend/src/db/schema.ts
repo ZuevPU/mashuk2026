@@ -591,10 +591,19 @@ export const materials = pgTable('materials', {
   fileUrl: varchar('file_url', { length: 500 }),
   kbUnlockMode: varchar('kb_unlock_mode', { length: 32 }).default('touchpoints').notNull(),
   kbUnlockMinTouchpoints: integer('kb_unlock_min_touchpoints'),
+  /** thematic | lessons_important | open_lessons */
+  kbSection: varchar('kb_section', { length: 40 }),
+  /** open | practices | reverse — только для open_lessons */
+  kbSubsection: varchar('kb_subsection', { length: 40 }),
+  /** Тема для группировки нескольких типов артефактов подряд */
+  topicTitle: varchar('topic_title', { length: 255 }),
+  sortOrder: integer('sort_order').default(0),
 }, (table) => [
   index('materials_shift_id_idx').on(table.shiftId),
   index('materials_event_id_idx').on(table.eventId),
   index('materials_day_number_idx').on(table.dayNumber),
+  index('materials_kb_section_idx').on(table.kbSection),
+  index('materials_topic_title_idx').on(table.topicTitle),
 ]);
 
 export const eventAttendance = pgTable('event_attendance', {
