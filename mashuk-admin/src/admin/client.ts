@@ -200,21 +200,60 @@ export function downloadDataUrl(dataUrl: string, filename: string): void {
 
 export async function adminDownloadBinary(path: string, filename: string) {
   const base = getAdminApiBase();
+  if (import.meta.env.PROD && !API_BASE) {
+    throw new Error('Не задан VITE_API_URL. Укажите его в Timeweb Apps и пересоберите админку.');
+  }
   const token = getAdminToken();
   if (!token) throw new Error('Не авторизован');
   const res = await fetch(`${base}${path}`, {
     headers: adminAuthHeaders(),
   });
+  if (res.status === 401) {
+    setAdminToken(null);
+    throw new Error('Сессия истекла. Войдите снова.');
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(parseAdminErrorResponse(res.status, text));
   }
-  const blob = await res.blob();
+  const buf = await res.arrayBuffer();
+  if (!buf.byteLength) throw new Error('Сервер вернул пустой файл');
+
+  const head = new Uint8Array(buf.slice(0, 8));
+  const asText = new TextDecoder().decode(head);
+  const looksZip = head[0] === 0x50 && head[1] === 0x4b; // PK — xlsx/zip
+  const looksPdf = asText.startsWith('%PDF');
+  const looksHtml = asText.trimStart().startsWith('<!') || asText.trimStart().startsWith('<html');
+  const looksJson = asText.trimStart().startsWith('{') || asText.trimStart().startsWith('[');
+  const lowerName = filename.toLowerCase();
+
+  if (looksHtml) {
+    throw new Error('API вернул HTML вместо файла. Проверьте VITE_API_URL и пересоберите админку.');
+  }
+  if (lowerName.endsWith('.xlsx') && !looksZip) {
+    if (looksJson) {
+      throw new Error('Сервер вернул JSON вместо Excel. Обновите админку/бэкенд или скачайте «Выгрузить всё» заново.');
+    }
+    throw new Error(
+      'Файл не является Excel (.xlsx). Часто это CSV/текст, сохранённый с неверным расширением — обновите страницу (Ctrl+F5) после деплоя.',
+    );
+  }
+  if (lowerName.endsWith('.pdf') && !looksPdf) {
+    throw new Error('Сервер вернул не PDF. Попробуйте ещё раз или проверьте права экспорта.');
+  }
+
+  const ct = res.headers.get('content-type') || 'application/octet-stream';
+  const blob = new Blob([buf], { type: ct });
+  const objectUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = objectUrl;
   a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(a.href);
+  a.remove();
+  // Не отзывать сразу — иначе Chrome/Edge иногда сохраняют битый/пустой файл.
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }
 
 export async function adminFetchHtml(path: string): Promise<string> {

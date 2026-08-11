@@ -667,7 +667,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
                 type="button"
                 className="adm-btn adm-btn-secondary adm-btn-sm"
                 onClick={() => act(
-                  () => adminDownloadBinary('/exports/exchange', 'exchange.csv'),
+                  () => adminDownloadBinary('/exports/exchange?format=csv', 'exchange.csv'),
                   'Файл скачан',
                 )}
               >

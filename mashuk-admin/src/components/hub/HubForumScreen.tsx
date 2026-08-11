@@ -165,7 +165,11 @@ export function HubForumScreen({
             key={item.id}
             type="button"
             className="adm-btn adm-btn-secondary adm-btn-sm"
-            onClick={() => { void downloadHubExport(item); }}
+            onClick={() => {
+              void downloadHubExport(item).catch((err: unknown) => {
+                window.alert(err instanceof Error ? err.message : 'Не удалось скачать файл');
+              });
+            }}
           >
             Скачать · {item.label}
           </button>
@@ -173,7 +177,11 @@ export function HubForumScreen({
         <button
           type="button"
           className="adm-btn adm-btn-primary adm-btn-sm"
-          onClick={() => { void downloadHubExport(forumPackExportItem()); }}
+          onClick={() => {
+            void downloadHubExport(forumPackExportItem()).catch((err: unknown) => {
+              window.alert(err instanceof Error ? err.message : 'Не удалось скачать файл');
+            });
+          }}
         >
           Выгрузить всё
         </button>

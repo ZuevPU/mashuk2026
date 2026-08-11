@@ -655,7 +655,7 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadCsv('/exports/point-a-b-summary', 'point_a_b_summary.csv')}>
             Точка А → Б
           </button>
-          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadCsv('/exports/activity', 'activity.csv')}>
+          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadCsv('/exports/activity?format=csv', 'activity.csv')}>
             Активность (touchpoints)
           </button>
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadJson(`/exports/day/stats?day=${forumDay}`, `day_stats_d${forumDay}.json`)}>

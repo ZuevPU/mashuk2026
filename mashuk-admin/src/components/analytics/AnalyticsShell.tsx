@@ -200,13 +200,13 @@ function sliceExportCtas(
     return [
       {
         label: 'Активность',
-        path: '/exports/activity',
-        file: 'activity.csv',
+        path: '/exports/activity?format=xlsx',
+        file: 'activity.xlsx',
       },
       {
         label: 'Статистика дня',
-        path: `/exports/day/stats${qs({ day })}`,
-        file: `day_stats_d${day}.json`,
+        path: `/exports/day/stats${qs({ day, format: 'xlsx' })}`,
+        file: `day_stats_d${day}.xlsx`,
       },
     ];
   }

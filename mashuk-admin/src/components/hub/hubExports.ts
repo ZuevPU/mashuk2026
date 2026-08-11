@@ -58,16 +58,14 @@ export function forumExportItems(day: string): HubExportItem[] {
     {
       id: 'activity',
       label: 'Активность',
-      path: '/exports/activity',
-      filename: 'activity.csv',
-      kind: 'csv',
+      path: `/exports/activity${qs({ format: 'xlsx' })}`,
+      filename: 'activity.xlsx',
     },
     {
       id: 'exchange',
       label: 'Обмен опытом',
-      path: '/exports/exchange',
-      filename: 'exchange.csv',
-      kind: 'csv',
+      path: `/exports/exchange${qs({ format: 'xlsx' })}`,
+      filename: 'exchange.xlsx',
     },
     {
       id: 'day-stats',

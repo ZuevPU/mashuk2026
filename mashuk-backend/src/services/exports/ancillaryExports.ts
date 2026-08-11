@@ -634,7 +634,11 @@ export async function writePointsManualExport(res: Response): Promise<void> {
   );
 }
 
-export async function writeExchangeFullExport(res: Response): Promise<void> {
+export async function writeExchangeFullExport(
+  res: Response,
+  opts?: { format?: string },
+): Promise<void> {
+  const format = String(opts?.format || 'xlsx').toLowerCase();
   const { exchangeCategories } = await import('../../db/schema.js');
   const qs = await db.select({ q: exchangeQuestions, p: participants, c: exchangeCategories })
     .from(exchangeQuestions)
@@ -644,18 +648,26 @@ export async function writeExchangeFullExport(res: Response): Promise<void> {
     .from(exchangeAnswers)
     .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
     .leftJoin(exchangeQuestions, eq(exchangeAnswers.questionId, exchangeQuestions.id));
-  sendCsv(
-    res,
-    'exchange.csv',
-    'kind,id,participant_id,name,direction,category,text,status,time,points',
-    [
-      ...qs.map(r => [
-        'question', r.q.id, r.p?.id, fullName(r.p), r.p?.direction,
-        r.c?.slug || '', r.q.text, r.q.moderationStatus, r.q.createdAt, '',
-      ]),
-      ...ans.map(r => ['answer', r.a.id, r.p?.id, fullName(r.p), r.p?.direction, '', r.a.text, '', r.a.createdAt, '']),
-    ],
-  );
+  const rows = [
+    ...qs.map(r => [
+      'вопрос', r.q.id, r.p?.id ?? '', fullName(r.p), r.p?.direction ?? '',
+      r.c?.slug || '', r.q.text, r.q.moderationStatus,
+      r.q.createdAt ? new Date(r.q.createdAt).toISOString() : '',
+    ]),
+    ...ans.map(r => [
+      'ответ', r.a.id, r.p?.id ?? '', fullName(r.p), r.p?.direction ?? '',
+      '', r.a.text, '',
+      r.a.createdAt ? new Date(r.a.createdAt).toISOString() : '',
+    ]),
+  ];
+  const headers = [
+    'Тип', 'ID', 'ID участника', 'ФИО', 'Направление', 'Категория', 'Текст', 'Статус', 'Время',
+  ];
+  if (format === 'csv') {
+    sendCsv(res, 'exchange.csv', headers.join(','), rows);
+    return;
+  }
+  await sendSimpleXlsx(res, 'exchange.xlsx', 'Обмен опытом', headers, rows);
 }
 
 const ORG_STATUS_RU: Record<string, string> = {
@@ -791,13 +803,19 @@ export async function writeOrgDirectorExport(
   await sendWorkbook(res, wb, 'org_director.xlsx');
 }
 
-export async function writeActivityExport(res: Response): Promise<void> {
-  const allP = await db.select().from(participants).where(and(
+export async function writeActivityExport(
+  res: Response,
+  opts?: { format?: string; shiftId?: number | null },
+): Promise<void> {
+  const format = String(opts?.format || 'xlsx').toLowerCase();
+  const shiftId = opts?.shiftId ?? await resolveActiveShiftId();
+  const pConds = [
     isNull(participants.selfDeletedAt),
     ne(sql`LOWER(${participants.direction})`, 'организатор форума'),
-  ));
+  ];
+  if (shiftId != null) pConds.push(eq(participants.shiftId, shiftId));
+  const allP = await db.select().from(participants).where(and(...pConds));
   const ids = allP.map(p => p.id);
-  const shiftId = await resolveActiveShiftId();
   const now = new Date();
   const published = await db.select().from(questions)
     .where(and(
@@ -824,7 +842,7 @@ export async function writeActivityExport(res: Response): Promise<void> {
   }
 
   const dayQsCache = new Map<number, typeof published>();
-  for (let d = 1; d <= 7; d++) {
+  for (let d = 1; d <= 8; d++) {
     dayQsCache.set(d, published.filter(q => isTouchpointQuestionForForumDay(q, d)));
   }
 
@@ -836,7 +854,7 @@ export async function writeActivityExport(res: Response): Promise<void> {
       eveningRatings: participantDayState.eveningRatings,
     }).from(participantDayState).where(inArray(participantDayState.participantId, ids));
     for (const s of eveningStates) {
-      if (s.dayNumber < 1 || s.dayNumber > 7) continue;
+      if (s.dayNumber < 1 || s.dayNumber > 8) continue;
       if (s.eveningRatings == null || typeof s.eveningRatings !== 'object') continue;
       let set = eveningDoneByPid.get(s.participantId);
       if (!set) {
@@ -847,28 +865,31 @@ export async function writeActivityExport(res: Response): Promise<void> {
     }
   }
 
+  const headers = [
+    'ID участника', 'ФИО', 'Направление', 'Группа', 'Последняя активность',
+    'Баллы Путь', 'Баллы Опыт', 'Точки осмысления',
+  ];
   const rows = allP.map(p => {
     const answeredIds = answersByPid.get(p.id) ?? new Set<number>();
     const eveningDays = eveningDoneByPid.get(p.id) ?? new Set<number>();
     let tp = 0;
-    for (let d = 1; d <= 7; d++) {
+    for (let d = 1; d <= 8; d++) {
       const dayQs = dayQsCache.get(d) ?? [];
       tp += touchpointCompletionRatio(dayQs, answeredIds, d, {
         eveningDone: eveningDays.has(d),
       }).completed;
     }
     return [
-      String(p.id), fullName(p), p.direction ?? '', p.groupName ?? '',
+      p.id, fullName(p), p.direction ?? '', p.groupName ?? '',
       p.lastActiveAt ? new Date(p.lastActiveAt).toISOString() : '',
-      String(p.pathPoints ?? 0), String(p.experiencePoints ?? 0), String(tp),
+      p.pathPoints ?? 0, p.experiencePoints ?? 0, tp,
     ];
   });
-  sendCsv(
-    res,
-    'activity.csv',
-    'ID участника,ФИО,Направление,Группа,Последняя активность,Баллы Путь,Баллы Опыт,Точки осмысления',
-    rows,
-  );
+  if (format === 'csv') {
+    sendCsv(res, 'activity.csv', headers.join(','), rows);
+    return;
+  }
+  await sendSimpleXlsx(res, 'activity.xlsx', 'Активность', headers, rows);
 }
 
 export async function writePointABSummaryExport(res: Response): Promise<void> {

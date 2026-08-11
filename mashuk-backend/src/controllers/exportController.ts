@@ -364,7 +364,10 @@ export const exportMedalsHandler = async (req: AdminRequest, res: Response) => {
 };
 export const exportModerationLogHandler = (_req: AdminRequest, res: Response) => writeModerationLogExport(res);
 export const exportPointsManualHandler = (_req: AdminRequest, res: Response) => writePointsManualExport(res);
-export const exportExchangeHandler = (_req: AdminRequest, res: Response) => writeExchangeFullExport(res);
+export const exportExchangeHandler = (req: AdminRequest, res: Response) => {
+  const format = String(req.query.format || 'xlsx').toLowerCase();
+  return writeExchangeFullExport(res, { format: format === 'csv' ? 'csv' : 'xlsx' });
+};
 export const exportOrgDirectorHandler = async (req: AdminRequest, res: Response) => {
   const { resolveAdminShiftId } = await import('../services/shiftService.js');
   const status = typeof req.query.status === 'string' && req.query.status.trim()
@@ -375,7 +378,14 @@ export const exportOrgDirectorHandler = async (req: AdminRequest, res: Response)
     status,
   });
 };
-export const exportActivityHandler = (_req: AdminRequest, res: Response) => writeActivityExport(res);
+export const exportActivityHandler = async (req: AdminRequest, res: Response) => {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const format = String(req.query.format || 'xlsx').toLowerCase();
+  await writeActivityExport(res, {
+    format: format === 'csv' ? 'csv' : 'xlsx',
+    shiftId: await resolveAdminShiftId(req),
+  });
+};
 export const exportPointABHandler = (_req: AdminRequest, res: Response) => writePointABSummaryExport(res);
 export const exportDelayedMeasureHandler = (_req: AdminRequest, res: Response) => writeDelayedMeasureTemplate(res);
 export const exportFinalProfilesZipHandler = (_req: AdminRequest, res: Response) => writeFinalProfilesZip(res);
