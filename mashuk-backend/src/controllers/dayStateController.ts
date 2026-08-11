@@ -242,7 +242,6 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
     // Точка 7 «Итоги дня»: eveningRatings уже записаны выше.
     // Если есть вопрос-маркер — синхронизируем answers; баллы — всегда один раз за день.
     const summaryConds = [
-      eq(questions.dayNumber, dayNumber),
       eq(questions.status, 'published'),
       or(
         eq(questions.block, 'Итоги дня'),
@@ -254,8 +253,11 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
     if (participantShiftId != null) {
       summaryConds.push(eq(questions.shiftId, participantShiftId));
     }
-    const [summaryQ] = await db.select().from(questions)
-      .where(and(...summaryConds)).limit(1);
+    const summaryCandidates = await db.select().from(questions).where(and(...summaryConds));
+    const { questionMatchesDay } = await import('../services/questionAdminHelpers.js');
+    const summaryQ = summaryCandidates.find(q => questionMatchesDay(q, dayNumber))
+      ?? summaryCandidates.find(q => q.dayNumber === dayNumber)
+      ?? null;
     if (summaryQ) {
       const [existing] = await db.select().from(answers)
         .where(and(

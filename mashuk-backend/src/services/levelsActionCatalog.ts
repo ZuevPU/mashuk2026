@@ -15,12 +15,13 @@ export type ActionCatalogDef = {
 export const LEVEL_THRESHOLD_ACTION_TYPES = new Set(['path_level', 'exp_level']);
 
 export const ACTION_CATALOG: ActionCatalogDef[] = [
-  { actionType: 'state_check_morning', displayName: 'Утренняя проверка состояния', track: 'path', group: 'path', pointsPerUnit: 5, maxAccruals: 8 },
-  { actionType: 'state_check_day', displayName: 'Дневная проверка состояния', track: 'path', group: 'path', pointsPerUnit: 5, maxAccruals: 8 },
-  { actionType: 'state_check_evening', displayName: 'Вечерняя проверка состояния', track: 'path', group: 'path', pointsPerUnit: 5, maxAccruals: 8 },
+  // Cap > 8: retries / mis-attributed forumDay must not silently stop XP mid-shift.
+  { actionType: 'state_check_morning', displayName: 'Утренняя проверка состояния', track: 'path', group: 'path', pointsPerUnit: 5, maxAccruals: 24 },
+  { actionType: 'state_check_day', displayName: 'Дневная проверка состояния', track: 'path', group: 'path', pointsPerUnit: 5, maxAccruals: 24 },
+  { actionType: 'state_check_evening', displayName: 'Вечерняя проверка состояния', track: 'path', group: 'path', pointsPerUnit: 5, maxAccruals: 24 },
   // High cap: each open touchpoint + depth bonus both use this action (~2 rows/answer).
   { actionType: 'question_answer', displayName: 'Точка осмысления (ответ)', track: 'path', group: 'path', pointsPerUnit: 5, maxAccruals: 10000 },
-  { actionType: 'evening_complete', displayName: 'Итоги дня', track: 'path', group: 'path', pointsPerUnit: 15, maxAccruals: 8 },
+  { actionType: 'evening_complete', displayName: 'Итоги дня', track: 'path', group: 'path', pointsPerUnit: 15, maxAccruals: 16 },
   { actionType: 'point_a_complete', displayName: 'Точка А (вход)', track: 'path', group: 'path', pointsPerUnit: 20, maxAccruals: 1 },
   { actionType: 'point_b_complete', displayName: 'Точка Б (выход)', track: 'path', group: 'path', pointsPerUnit: 30, maxAccruals: 1 },
   { actionType: 'exchange_question', displayName: 'Вопрос в «Общении»', track: 'path', group: 'path', pointsPerUnit: 3, maxAccruals: 30 },

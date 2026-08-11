@@ -81,8 +81,6 @@ export function questionVisibleToParticipant(
     return questionAudienceAllowsParticipant(q, participant);
   }
   if (!questionMatchesDay(q, currentDay)) {
-    // Практики могут оставаться открытыми после дня публикации.
-    // Точки/осмысления прошлого дня НЕ переносим — новый день = чистый срез.
     const kind = String(q.questionKind || q.reflectionKind || '').toLowerCase();
     if (kind === 'practices_vote') {
       const days = normalizeDayNumbers(q.dayNumbers ?? undefined, q.dayNumber ?? undefined);
@@ -90,6 +88,12 @@ export function questionVisibleToParticipant(
       if (currentDay >= earliest) {
         return questionAudienceAllowsParticipant(q, participant);
       }
+    }
+    // D−1 catch-up: getTouchpointAccess already allows yesterday as overdue,
+    // and listForumQuestions includes yesterday — visibility must not block submit.
+    const yesterday = currentDay - 1;
+    if (yesterday >= 1 && questionMatchesDay(q, yesterday)) {
+      return questionAudienceAllowsParticipant(q, participant);
     }
     return false;
   }

@@ -281,10 +281,9 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       }
       : null;
     const dayTouchpointsTotal = TOUCHPOINT_SLOTS.length;
-    // Slot 7: completed evening form for the current forum day (eveningRatings), not only marker answers.
-    const eveningDoneForTouchpoints = currentDay === eveningSurveyDay
-      ? !!eveningQuestionnaire.completed
-      : !!dayContext.eveningQuestionnaire?.completed;
+    // Slot 7 for DISPLAYED day (currentDay). Catch-up evening form may still target D−1
+    // via eveningSurveyDay — that must not flip today's dots / open state.
+    const eveningDoneForTouchpoints = !!dayContext.eveningQuestionnaire?.completed;
     const touchpointItemsRaw = buildTouchpointItemsForDay(
       dayQuestions,
       answeredIds,
@@ -293,13 +292,13 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       now,
       { eveningDone: eveningDoneForTouchpoints },
     );
-    // Until evening opensAt (or force-publish), slot 7 stays pending — not active/overdue.
-    const eveningSlotOpen = !!eveningQuestionnaire.open;
+    // Until today's evening opensAt (or force-publish), slot 7 stays pending — not active/overdue.
+    const eveningSlotOpenForDisplay = !!dayContext.eveningQuestionnaire?.open;
     const touchpointItems = touchpointItemsRaw.map(item => {
       const isEveningSlot = /итоговая анкета/i.test(item.title || '')
         || (item.block || '').includes('Итог');
       if (!isEveningSlot || item.state === 'done') return item;
-      if (!eveningSlotOpen) return { ...item, state: 'pending' as const };
+      if (!eveningSlotOpenForDisplay) return { ...item, state: 'pending' as const };
       return item;
     });
     const dayTouchpointsCompleted = touchpointItems.filter(i => i.state === 'done').length;

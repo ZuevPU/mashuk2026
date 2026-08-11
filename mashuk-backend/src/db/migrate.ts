@@ -152,6 +152,18 @@ async function ensureQuestionAnswerAccrualCap(pool: ReturnType<typeof createPool
     WHERE action_type = 'question_answer'
       AND (max_accruals IS NULL OR max_accruals < 10000)
   `);
+  await pool.query(`
+    UPDATE levels_config
+    SET max_accruals = 24
+    WHERE action_type IN ('state_check_morning', 'state_check_day', 'state_check_evening')
+      AND (max_accruals IS NULL OR max_accruals < 24)
+  `);
+  await pool.query(`
+    UPDATE levels_config
+    SET max_accruals = 16
+    WHERE action_type = 'evening_complete'
+      AND (max_accruals IS NULL OR max_accruals < 16)
+  `);
 }
 
 /** Allow multiple successful QR scans/day for repeatable tasks (0063). */

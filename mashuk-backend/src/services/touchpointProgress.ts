@@ -9,9 +9,24 @@ export const TOUCHPOINT_BLOCKS = new Set(['Проверка состояния',
 
 type QuestionRow = typeof questions.$inferSelect;
 
+type TouchpointMatchQuestion = {
+  title?: string | null;
+  type?: string | null;
+  block?: string | null;
+  timePoint?: string | null;
+  questionKind?: string | null;
+  reflectionKind?: string | null;
+};
+
+function isSenseMakingQuestion(q: TouchpointMatchQuestion): boolean {
+  if ((q.block || '') === 'Точки осмысления') return true;
+  const kind = String(q.questionKind || q.reflectionKind || '').toLowerCase();
+  return kind === 'after_blocks' || kind === 'after_event';
+}
+
 /** Сопоставление вопроса со слотом шаблона (точное название или тип/блок/время). */
 export function questionMatchesTouchpointSlot(
-  q: Pick<QuestionRow, 'title' | 'type' | 'block' | 'timePoint' | 'questionKind'>,
+  q: TouchpointMatchQuestion,
   slot: TouchpointSlot,
 ): boolean {
   if ((q.title || '').trim() === slot.title) return true;
@@ -19,15 +34,16 @@ export function questionMatchesTouchpointSlot(
   if (slot.type === 'checkin') {
     const tp = (q.timePoint || '').trim();
     if (tp !== slot.timePoint) return false;
-    if ((q.block || '') !== slot.block) return false;
     // Accept any question in the state-check block/slot (admin may use type scale/open)
     return q.type === 'checkin'
       || q.questionKind === 'state_check'
-      || (q.block || '') === 'Проверка состояния';
+      || q.reflectionKind === 'state_check'
+      || (q.block || '') === 'Проверка состояния'
+      || (q.block || '').toLowerCase().includes('проверк');
   }
 
   if (slot.block === 'Точки осмысления') {
-    if ((q.block || '') !== 'Точки осмысления') return false;
+    if (!isSenseMakingQuestion(q)) return false;
     const title = (q.title || '').toLowerCase();
     if (slot.title === 'Осмысление по направлению') {
       if (title.includes('осмысление урока') || title.includes('слот')) return false;
@@ -44,7 +60,11 @@ export function questionMatchesTouchpointSlot(
   }
 
   if (slot.title === 'Итоговая анкета по дню') {
-    return q.block === 'Итоги дня' || (q.block || '').includes('Итог');
+    const kind = String(q.questionKind || q.reflectionKind || '').toLowerCase();
+    return q.block === 'Итоги дня'
+      || (q.block || '').includes('Итог')
+      || kind === 'day_summary'
+      || kind === 'evening_summary';
   }
 
   return false;
@@ -87,7 +107,15 @@ export function findTouchpointQuestionForSlot(
 
 export function isTouchpointQuestionForForumDay(q: QuestionRow, forumDay: number): boolean {
   if (!questionMatchesDay(q, forumDay)) return false;
-  if (!TOUCHPOINT_BLOCKS.has(q.block || '')) return false;
+  const kind = String(q.questionKind || q.reflectionKind || '').toLowerCase();
+  const inTouchpointFamily = TOUCHPOINT_BLOCKS.has(q.block || '')
+    || q.type === 'checkin'
+    || kind === 'state_check'
+    || kind === 'after_blocks'
+    || kind === 'after_event'
+    || kind === 'day_summary'
+    || kind === 'evening_summary';
+  if (!inTouchpointFamily) return false;
   return TOUCHPOINT_SLOTS.some(s => questionMatchesTouchpointSlot(q, s));
 }
 

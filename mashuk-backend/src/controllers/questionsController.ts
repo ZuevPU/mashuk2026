@@ -39,6 +39,7 @@ import {
   getQuestionAccess,
   questionAudienceAllowsParticipant,
   questionVisibleToParticipant,
+  resolveQuestionDayForAccess,
 } from '../services/questionEligibility.js';
 import { questionMatchesDay } from '../services/questionAdminHelpers.js';
 import { evaluateMedalsForParticipantDetailed } from '../services/medalEvaluator.js';
@@ -806,7 +807,9 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
     }
 
     const actionType = pointsActionForQuestion(question);
-    const forumDay = question.dayNumber ?? undefined;
+    // Attribute XP / day-complete bonus to the live forum day being answered,
+    // not the template's first dayNumber (multi-day copies often keep dayNumber=1).
+    const forumDay = resolveQuestionDayForAccess(question, currentDay);
     // Pass numeric points including 0 so catalog default is not used when admin set 0.
     const pointsOverride = typeof question.points === 'number' ? question.points : undefined;
     const pointsResult = actionType === 'point_b_complete'

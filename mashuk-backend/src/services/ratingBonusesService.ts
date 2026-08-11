@@ -1,12 +1,11 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  answers, participants, pointsLog, questions, taskSubmissions, tasks,
+  answers, participantDayState, participants, pointsLog, questions, taskSubmissions, tasks,
 } from '../db/schema.js';
-import { TOUCHPOINT_SLOTS } from './touchpointTemplates.js';
 import {
-  findTouchpointQuestionForSlot,
   isTouchpointQuestionForForumDay,
+  touchpointCompletionRatio,
 } from './touchpointProgress.js';
 import { awardPoints, getLevel, type PointTrack } from './pointsService.js';
 import { sendPushNotification } from './pushService.js';
@@ -40,10 +39,23 @@ async function touchpointsDoneForDay(participantId: number, dayNumber: number): 
   const ans = await db.select({ questionId: answers.questionId }).from(answers)
     .where(eq(answers.participantId, participantId));
   const answered = new Set(ans.map(a => a.questionId));
-  return TOUCHPOINT_SLOTS.every(slot => {
-    const q = findTouchpointQuestionForSlot(dayQs, slot);
-    return q != null && answered.has(q.id);
+
+  // Align with Home dots: any twin counts + eveningRatings closes slot 7.
+  const [dayState] = await db.select({
+    eveningRatings: participantDayState.eveningRatings,
+  }).from(participantDayState).where(and(
+    eq(participantDayState.participantId, participantId),
+    eq(participantDayState.dayNumber, dayNumber),
+  )).limit(1);
+  const eveningDone = !!(
+    dayState?.eveningRatings
+    && typeof dayState.eveningRatings === 'object'
+  );
+
+  const { completed, expected } = touchpointCompletionRatio(dayQs, answered, dayNumber, {
+    eveningDone,
   });
+  return expected > 0 && completed >= expected;
 }
 
 async function hasBonusForDay(

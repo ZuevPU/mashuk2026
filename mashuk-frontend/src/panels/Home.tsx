@@ -173,6 +173,16 @@ export const HomePanel: React.FC<{
     reload();
   }, [isRegistered, initComplete, activePanel, id, routeNavigator]);
 
+  // After answering a touchpoint on Questions, return to Home — refresh галочки/баллы.
+  useEffect(() => {
+    if (activePanel !== id) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') reload();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [activePanel, id]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
     if (params.get('evening') === '1') setShowEvening(true);
