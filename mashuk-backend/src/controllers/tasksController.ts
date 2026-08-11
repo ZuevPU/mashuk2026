@@ -319,8 +319,13 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
     const forumDay = isQrSubmit
       ? (await resolveForumDayForNewEntry())
       : 0;
-    if ((methods.includes('qr') || qrToken) && !isQrInValidWindow(task, now, forumDay || null)) {
-      res.status(400).json({ error: 'QR-код задания сейчас не активен' });
+    const needsQrWindow = methods.includes('qr')
+      || task.confirmationType === 'qr'
+      || !!qrToken;
+    if (needsQrWindow && !isQrInValidWindow(task, now, forumDay || null)) {
+      res.status(400).json({
+        error: 'QR-код задания сейчас не активен. Сканируйте только в указанное в админке время и дни.',
+      });
       return;
     }
     if (!isTaskSubmissionOpen(task, now)) {
@@ -544,7 +549,9 @@ export const resolveTaskQr = async (req: ParticipantRequest, res: Response): Pro
     const now = new Date();
     const forumDay = await resolveForumDayForNewEntry();
     if (!isQrInValidWindow(task, now, forumDay)) {
-      res.status(400).json({ error: 'QR-код задания сейчас не активен' });
+      res.status(400).json({
+        error: 'QR-код задания сейчас не активен. Сканируйте только в указанное в админке время и дни.',
+      });
       return;
     }
 

@@ -77,7 +77,9 @@ export const volunteerConfirm = async (req: AdminRequest & VkAuthRequest, res: R
     const now = new Date();
     const forumDay = await resolveForumDayForNewEntry();
     if (!isQrInValidWindow(task, now, forumDay)) {
-      res.status(400).json({ error: 'QR-код задания сейчас не активен' });
+      res.status(400).json({
+        error: 'QR-код задания сейчас не активен. Подтверждение только в указанное в админке время и дни.',
+      });
       return;
     }
 

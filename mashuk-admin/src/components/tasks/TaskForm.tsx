@@ -393,12 +393,13 @@ export function TaskForm({
               ))}
             </div>
             <span className="adm-muted" style={{ fontSize: 11, display: 'block', marginTop: 6 }}>
-              QR можно активировать только в указанный промежуток времени и только в выбранные дни форума
+              Ежедневно в эти часы (МСК) в выбранные дни. Пример: зарядка 06:30–08:05 в дни 4–7 —
+              вне этого интервала скан не засчитается
               {draft.dayNumbers.length
-                ? ` (сейчас: ${draft.dayNumbers.map(d => `Д${d}`).join(', ')})`
+                ? ` (дни: ${draft.dayNumbers.map(d => `Д${d}`).join(', ')})`
                 : ''}.
-              {!draft.qrValidFromLocal && !draft.qrValidToLocal
-                ? ' Если время не задано — ограничение только по дням.'
+              {!draft.qrValidFromLocal || !draft.qrValidToLocal
+                ? ' Задайте оба времени «с» и «до», иначе окно может быть шире, чем нужно.'
                 : ''}
             </span>
           </div>

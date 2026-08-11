@@ -101,35 +101,64 @@ function mskDayBounds(now: Date): { start: Date; end: Date } {
   return { start, end };
 }
 
+function asValidDate(value: Date | string | null | undefined): Date | null {
+  if (value == null || value === '') return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Admin time-only saves are anchored on 2000-01-01; those skip absolute calendar bounds. */
+function isTimeOnlyAnchor(d: Date): boolean {
+  return getMoscowParts(d).dateKey.startsWith('2000-01-01');
+}
+
+function isWithinMskClockWindow(now: Date, from: Date | null, to: Date | null): boolean {
+  if (!from && !to) return true;
+  const nowMin = getMoscowParts(now).totalMinutes;
+  const fromMin = from ? getMoscowParts(from).totalMinutes : 0;
+  const toMin = to ? getMoscowParts(to).totalMinutes : (24 * 60 - 1);
+  if (!Number.isFinite(nowMin) || !Number.isFinite(fromMin) || !Number.isFinite(toMin)) {
+    return false; // fail closed
+  }
+  if (fromMin <= toMin) {
+    return nowMin >= fromMin && nowMin <= toMin;
+  }
+  // Overnight window, e.g. 22:00 → 02:00
+  return nowMin >= fromMin || nowMin <= toMin;
+}
+
 /**
- * QR window repeats every selected forum day as a clock interval in MSK.
- * `qrValidFrom` / `qrValidTo` contribute only their Moscow time-of-day;
- * calendar dates on those timestamps are ignored.
- * When `forumDay` is provided, it must be in the task's dayNumbers.
+ * QR is active only when ALL apply:
+ * 1) Moscow clock time is inside qrValidFrom..qrValidTo time-of-day (repeats each selected day)
+ * 2) optional forumDay ∈ task.dayNumbers
+ * 3) for legacy full datetimes (not 2000-01-01 anchors): now is also inside the absolute [from, to]
  */
 export function isQrInValidWindow(
   task: {
-    qrValidFrom?: Date | null;
-    qrValidTo?: Date | null;
+    qrValidFrom?: Date | string | null;
+    qrValidTo?: Date | string | null;
     dayNumbers?: number[] | null;
     dayNumber?: number | null;
   },
   now = new Date(),
   forumDay?: number | null,
 ): boolean {
-  const from = task.qrValidFrom ? new Date(task.qrValidFrom) : null;
-  const to = task.qrValidTo ? new Date(task.qrValidTo) : null;
-  if (from || to) {
-    const nowMin = getMoscowParts(now).totalMinutes;
-    const fromMin = from ? getMoscowParts(from).totalMinutes : 0;
-    const toMin = to ? getMoscowParts(to).totalMinutes : (24 * 60 - 1);
-    if (fromMin <= toMin) {
-      if (nowMin < fromMin || nowMin > toMin) return false;
-    } else if (nowMin < fromMin && nowMin > toMin) {
-      // Overnight window, e.g. 22:00 → 02:00
-      return false;
-    }
+  const from = asValidDate(task.qrValidFrom ?? null);
+  const to = asValidDate(task.qrValidTo ?? null);
+
+  // Invalid stored bounds must not open the QR.
+  if (task.qrValidFrom != null && task.qrValidFrom !== '' && !from) return false;
+  if (task.qrValidTo != null && task.qrValidTo !== '' && !to) return false;
+
+  if ((from || to) && !isWithinMskClockWindow(now, from, to)) {
+    return false;
   }
+
+  // Legacy admin datetime-local ranges: also require absolute calendar bounds.
+  const realFrom = from && !isTimeOnlyAnchor(from) ? from : null;
+  const realTo = to && !isTimeOnlyAnchor(to) ? to : null;
+  if (realFrom && now < realFrom) return false;
+  if (realTo && now > realTo) return false;
 
   if (forumDay != null && forumDay > 0) {
     const days = taskDayNumbers(task as Pick<typeof tasks.$inferSelect, 'dayNumbers' | 'dayNumber'>);
