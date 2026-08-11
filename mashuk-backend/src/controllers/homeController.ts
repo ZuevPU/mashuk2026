@@ -69,6 +69,8 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         eq(questions.status, 'published'),
         eq(questions.shiftId, shiftIdForQs),
       ));
+    // Скрытые админом не показываем в Home/CTA (свои уже данные ответы — только через список «Мои»).
+    const visiblePublished = publishedQuestions.filter(q => !q.isHidden);
 
     const dayQuestions = publishedQuestions.filter(q =>
       isTouchpointQuestionForForumDay(q, currentDay));
@@ -88,7 +90,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     });
 
     // Only today's points — do not keep yesterday's overdue/locked in Home.
-    const missed = publishedQuestions
+    const missed = visiblePublished
       .filter(q => !answeredIds.has(q.id) && questionMatchesDay(q, currentDay))
       .map(q => {
         const access = getQuestionAccess(q, currentDay, now);
@@ -119,7 +121,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const stateCheckOrder = stateCheckTimePointOrder(now);
     let priorityQuestion: typeof publishedQuestions[0] | undefined;
     for (const tp of stateCheckOrder) {
-      priorityQuestion = publishedQuestions.find(q => {
+      priorityQuestion = visiblePublished.find(q => {
         if (answeredIds.has(q.id) || q.block !== 'Проверка состояния') return false;
         if (!questionMatchesDay(q, currentDay)) return false;
         if ((q.timePoint || '') !== tp) return false;
@@ -128,7 +130,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       });
       if (priorityQuestion) break;
     }
-    const pointB = publishedQuestions.find(q => {
+    const pointB = visiblePublished.find(q => {
       if (answeredIds.has(q.id)) return false;
       if (!(q.block === 'Точка Б' || q.dayNumber === 8)) return false;
       const access = getQuestionAccess(q, currentDay, now);
@@ -216,7 +218,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     }
 
     const missedCount = activeMissed.filter(q => q.overdue).length + lockedMissed.length;
-    const pointBQuestion = publishedQuestions.find(q => q.block === 'Точка Б');
+    const pointBQuestion = visiblePublished.find(q => q.block === 'Точка Б');
     const hasPointB = !!(participant.pointBAnswers && (
       Array.isArray(participant.pointBAnswers)
         ? participant.pointBAnswers.length > 0
@@ -351,7 +353,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       delayedSurvey: delayedSurveyCard,
     });
 
-    const unansweredAfterBlocks = publishedQuestions
+    const unansweredAfterBlocks = visiblePublished
       .filter(q => {
         if (answeredIds.has(q.id)) return false;
         const kind = String(q.questionKind || q.reflectionKind || '').toLowerCase();

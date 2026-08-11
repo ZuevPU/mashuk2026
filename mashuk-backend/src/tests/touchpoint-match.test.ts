@@ -26,6 +26,54 @@ describe('touchpoint slot matching', () => {
     assert.equal(found?.id, 99);
   });
 
+  it('does not offer hidden question as touchpoint CTA', () => {
+    const hidden = {
+      id: 50,
+      title: 'Утренняя проверка состояния',
+      type: 'checkin',
+      block: 'Проверка состояния',
+      timePoint: 'утро',
+      questionKind: 'state_check',
+      dayNumber: 1,
+      dayNumbers: [1],
+      isHidden: true,
+      publishTime: new Date('2026-07-31T05:00:00Z'),
+      closeTime: new Date('2026-07-31T07:00:00Z'),
+    };
+    assert.equal(findTouchpointQuestionForSlot([hidden as never], morningSlot), undefined);
+    const items = buildTouchpointItemsForDay(
+      [hidden as never],
+      new Set(),
+      1,
+      1,
+      new Date('2026-07-31T06:00:00Z'),
+    );
+    assert.equal(items[0].state, 'pending');
+    assert.notEqual(items[0].id, 50);
+  });
+
+  it('prefers visible twin over hidden for CTA', () => {
+    const hidden = {
+      id: 100,
+      title: 'Утренняя проверка состояния',
+      type: 'checkin',
+      block: 'Проверка состояния',
+      timePoint: 'утро',
+      questionKind: 'state_check',
+      dayNumber: 1,
+      dayNumbers: [1],
+      isHidden: true,
+      publishTime: new Date('2026-07-31T05:00:00Z'),
+      closeTime: new Date('2026-07-31T07:00:00Z'),
+    };
+    const visible = { ...hidden, id: 80, isHidden: false };
+    const found = findTouchpointQuestionForSlot([hidden, visible] as never, morningSlot, {
+      currentDay: 1,
+      now: new Date('2026-07-31T06:00:00Z'),
+    });
+    assert.equal(found?.id, 80);
+  });
+
   it('matches sense-making without requiring type=open', () => {
     const q = {
       id: 11,

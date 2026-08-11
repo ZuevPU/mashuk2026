@@ -154,7 +154,11 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
     const attendedEventIds = new Set(userAttendance.map(a => a.eventId));
 
     // Answered (any day) for «Мои ответы»; unanswered only for today's forum day.
+    // Скрытые админом (`isHidden`) не отдаём для новых ответов — только свой уже сохранённый ответ.
     const visible = list.filter(q => {
+      if (q.isHidden) {
+        return answeredIds.has(q.id) && questionAudienceAllowsParticipant(q, me);
+      }
       if (answeredIds.has(q.id)) {
         return questionAudienceAllowsParticipant(q, me);
       }
@@ -268,8 +272,8 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       db.select({ eventId: eventAttendance.eventId }).from(eventAttendance).where(eq(eventAttendance.participantId, req.participant!.id)),
     ]);
     const hasOwnAnswer = !!existingAnswer;
-    if (question.isHidden && !hasOwnAnswer) {
-      res.status(403).json({ error: 'Question not available' });
+    if (question.isHidden === true && !hasOwnAnswer) {
+      res.status(403).json({ error: 'Question hidden by organizers' });
       return;
     }
     const settings = await getForumSettings();
@@ -465,7 +469,11 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
       });
       return;
     }
-    if (question.isHidden || !questionVisibleToParticipant(question, req.participant!, currentDay)) {
+    if (question.isHidden === true) {
+      res.status(403).json({ error: 'Question hidden by organizers' });
+      return;
+    }
+    if (!questionVisibleToParticipant(question, req.participant!, currentDay)) {
       res.status(403).json({ error: 'Question not available' });
       return;
     }

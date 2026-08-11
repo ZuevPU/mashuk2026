@@ -76,14 +76,18 @@ export type FindTouchpointOpts = {
   now?: Date;
 };
 
-/** Prefer answered twin, then currently open/overdue, then newest id. */
+function isHiddenQuestion(q: { isHidden?: boolean | null }): boolean {
+  return q.isHidden === true;
+}
+
+/** Prefer answered twin, then currently open/overdue, then newest id. Hidden questions are never a CTA target. */
 export function findTouchpointQuestionForSlot(
   candidates: QuestionRow[],
   slot: TouchpointSlot,
   opts?: FindTouchpointOpts,
 ): QuestionRow | undefined {
   const matched = candidates
-    .filter(q => questionMatchesTouchpointSlot(q, slot))
+    .filter(q => questionMatchesTouchpointSlot(q, slot) && !isHiddenQuestion(q))
     .sort((a, b) => b.id - a.id);
   if (matched.length === 0) return undefined;
 
@@ -134,6 +138,7 @@ export async function loadPublishedTouchpointQuestions(currentDay: number, shift
     ))
     : await db.select().from(questions).where(eq(questions.status, 'published'));
   return list.filter(q => {
+    if (isHiddenQuestion(q)) return false;
     const days = [1, 2, 3, 4, 5, 6, 7].filter(d => d <= currentDay && questionMatchesDay(q, d));
     return days.some(d => isTouchpointQuestionForForumDay(q, d));
   });
@@ -168,18 +173,20 @@ export function buildTouchpointItemsForDay(
   const dayQs = dayQuestions.filter(q => questionMatchesDay(q, dayNumber));
   const eveningDone = opts?.eveningDone === true;
   return TOUCHPOINT_SLOTS.map(slot => {
-    const matched = dayQs.filter(q => questionMatchesTouchpointSlot(q, slot));
+    const matchedAll = dayQs.filter(q => questionMatchesTouchpointSlot(q, slot));
     const eveningSlotDone = eveningDone && isEveningTouchpointSlot(slot);
-    if (matched.length === 0) {
+    const done = eveningSlotDone || matchedAll.some(q => answeredIds.has(q.id));
+    // CTA только из нескрытых; скрытые учитываем лишь для «уже ответил».
+    const q = findTouchpointQuestionForSlot(dayQs, slot, { answeredIds, currentDay, now });
+    if (!q) {
+      const answeredHidden = matchedAll.find(x => answeredIds.has(x.id));
       return {
-        id: slot.index,
-        title: slot.title,
-        state: eveningSlotDone ? 'done' as const : 'pending' as const,
+        id: done && answeredHidden ? answeredHidden.id : slot.index,
+        title: answeredHidden?.title || slot.title,
+        state: done ? 'done' as const : 'pending' as const,
         block: slot.block,
       };
     }
-    const done = eveningSlotDone || matched.some(q => answeredIds.has(q.id));
-    const q = findTouchpointQuestionForSlot(dayQs, slot, { answeredIds, currentDay, now })!;
     const access = getQuestionAccess(q, currentDay, now);
     let state: TouchpointItem['state'] = 'pending';
     if (done) state = 'done';

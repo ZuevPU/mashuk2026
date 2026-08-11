@@ -11,6 +11,19 @@ import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
 describe('touchpoint D-1 catch-up visibility', () => {
   const participant = { directionId: 1, groupId: 2, pedagogicalRole: 'guide' };
 
+  it('hides isHidden questions from participants', () => {
+    const q = {
+      title: 'Скрытый вопрос',
+      block: 'Точки осмысления',
+      questionKind: 'after_blocks',
+      dayNumber: 3,
+      dayNumbers: [3],
+      audienceType: 'all' as const,
+      isHidden: true,
+    };
+    assert.equal(questionVisibleToParticipant(q, participant, 3), false);
+  });
+
   it('allows yesterday sense-making question for submit/list', () => {
     const q = {
       title: 'Осмысление по направлению',

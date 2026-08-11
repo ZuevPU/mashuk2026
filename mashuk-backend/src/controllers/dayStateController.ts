@@ -255,8 +255,9 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
     }
     const summaryCandidates = await db.select().from(questions).where(and(...summaryConds));
     const { questionMatchesDay } = await import('../services/questionAdminHelpers.js');
-    const summaryQ = summaryCandidates.find(q => questionMatchesDay(q, dayNumber))
-      ?? summaryCandidates.find(q => q.dayNumber === dayNumber)
+    const visibleSummary = summaryCandidates.filter(q => !q.isHidden);
+    const summaryQ = visibleSummary.find(q => questionMatchesDay(q, dayNumber))
+      ?? visibleSummary.find(q => q.dayNumber === dayNumber)
       ?? null;
     if (summaryQ) {
       const [existing] = await db.select().from(answers)
