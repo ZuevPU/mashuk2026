@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SpeakerMultiPick } from '../program/ProgramCatalogs';
 import type { ProgramSpeaker } from '../program/types';
 import { speakerFullLabel } from '../speakers/speakerFormat';
 import { confirmDelete } from '../../admin/confirmDelete';
-import { RowActionsMenu } from '../participants/RowActionsMenu';
-import { KB_SECTIONS, kbSectionMeta, kbSubsectionLabel, kbSubsectionOptions } from './kbSections';
+import { KB_SECTIONS, kbSectionMeta, kbSubsectionOptions } from './kbSections';
 
 export type MaterialRow = {
   id: number;
@@ -56,29 +55,12 @@ type Props = {
   speakers: ProgramSpeaker[];
   events: { id: number; dayNumber: number; title: string }[];
   directions: { id: number; name: string }[];
-  /** Дни смены для выбора (1…totalDays) */
   dayOptions: number[];
   onSave: (body: Record<string, unknown>) => void;
   onDelete: () => void;
   onCopyLink?: (url: string) => void;
   onPreview?: () => void;
 };
-
-function speakerLabel(ids: number[], speakers: ProgramSpeaker[], fallback?: string | null): string {
-  if (ids.length) {
-    return speakers.filter(s => ids.includes(s.id)).map(speakerFullLabel).join('; ') || '—';
-  }
-  return fallback || '—';
-}
-
-function bindingLabel(m: MaterialRow, events: Props['events']): string {
-  if (m.isGeneral) return 'Общий';
-  if (m.eventId) {
-    const ev = events.find(e => e.id === m.eventId);
-    return ev ? `Блок: Д${ev.dayNumber} · ${ev.title}` : `Событие #${m.eventId}`;
-  }
-  return '—';
-}
 
 function mkDraft(m: MaterialRow): Draft {
   return {
@@ -103,6 +85,40 @@ function mkDraft(m: MaterialRow): Draft {
   };
 }
 
+function draftToBody(draft: Draft, statusOverride?: string): Record<string, unknown> {
+  const direction = draft.audienceAll && draft.kbSection !== 'thematic'
+    ? ''
+    : draft.direction;
+  return {
+    title: draft.title,
+    url: draft.url || null,
+    fileUrl: draft.fileUrl || null,
+    type: draft.type || null,
+    status: statusOverride ?? draft.status,
+    tags: draft.tags,
+    speakerIds: draft.speakerIds,
+    dayNumber: draft.dayNumber,
+    eventId: draft.isGeneral ? null : (draft.eventId ? Number(draft.eventId) : null),
+    direction: direction || null,
+    isGeneral: draft.isGeneral,
+    kbUnlockMode: draft.kbUnlockMode,
+    kbUnlockMinTouchpoints: draft.kbUnlockMode === 'touchpoints' && draft.kbUnlockMinTouchpoints !== ''
+      ? draft.kbUnlockMinTouchpoints
+      : null,
+    kbSection: draft.kbSection || null,
+    kbSubsection: draft.kbSection === 'open_lessons' ? (draft.kbSubsection || null) : null,
+    topicTitle: draft.topicTitle.trim() || null,
+    sortOrder: draft.sortOrder === '' ? 0 : draft.sortOrder,
+  };
+}
+
+function speakerSummary(ids: number[], speakers: ProgramSpeaker[], fallback?: string | null): string {
+  if (ids.length) {
+    return speakers.filter(s => ids.includes(s.id)).map(s => s.name).join(', ') || '—';
+  }
+  return fallback?.trim() || 'Без спикера';
+}
+
 export function MaterialCard({
   material,
   typeOptions,
@@ -115,302 +131,608 @@ export function MaterialCard({
   onCopyLink,
   onPreview,
 }: Props) {
-  const rowRef = useRef<HTMLTableRowElement>(null);
-  const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => mkDraft(material));
+  const [cardOpen, setCardOpen] = useState(false);
   const materialDay = material.dayNumber ?? 1;
   const days = dayOptions.includes(materialDay)
     ? dayOptions
     : [...dayOptions, materialDay].sort((a, b) => a - b);
+  const subOptions = kbSubsectionOptions(draft.kbSection);
+  const sec = kbSectionMeta(draft.kbSection || material.kbSection);
+  const link = draft.url || draft.fileUrl || material.url || material.fileUrl;
 
   useEffect(() => {
     setDraft(mkDraft(material));
-    setEditing(false);
   }, [material]);
 
-  const link = draft.url || draft.fileUrl || material.url || material.fileUrl;
-  const dateStr = material.createdAt
-    ? new Date(material.createdAt).toLocaleDateString('ru-RU')
-    : '—';
-  const typeName = typeOptions.find(t => t.key === material.type)?.name || material.type || '—';
-  const sec = kbSectionMeta(material.kbSection);
-  const audienceStr = material.direction ? material.direction : 'Для всех';
-  const subOptions = kbSubsectionOptions(draft.kbSection);
+  const dirty = useMemo(() => {
+    const base = mkDraft(material);
+    return JSON.stringify(base) !== JSON.stringify(draft);
+  }, [material, draft]);
 
   const persist = (statusOverride?: string) => {
-    const direction = draft.audienceAll && draft.kbSection !== 'thematic'
-      ? ''
-      : draft.direction;
-    const nextStatus = statusOverride ?? draft.status;
-    onSave({
-      title: draft.title,
-      url: draft.url || null,
-      fileUrl: draft.fileUrl || null,
-      type: draft.type || null,
-      status: nextStatus,
-      tags: draft.tags,
-      speakerIds: draft.speakerIds,
-      dayNumber: draft.dayNumber,
-      eventId: draft.isGeneral ? null : (draft.eventId ? Number(draft.eventId) : null),
-      direction: direction || null,
-      isGeneral: draft.isGeneral,
-      kbUnlockMode: draft.kbUnlockMode,
-      kbUnlockMinTouchpoints: draft.kbUnlockMode === 'touchpoints' && draft.kbUnlockMinTouchpoints !== ''
-        ? draft.kbUnlockMinTouchpoints
-        : null,
-      kbSection: draft.kbSection || null,
-      kbSubsection: draft.kbSection === 'open_lessons' ? (draft.kbSubsection || null) : null,
-      topicTitle: draft.topicTitle.trim() || null,
-      sortOrder: draft.sortOrder === '' ? 0 : draft.sortOrder,
-    });
-    setEditing(false);
+    onSave(draftToBody(draft, statusOverride));
+    if (statusOverride) {
+      setDraft(d => ({ ...d, status: statusOverride }));
+    }
+    setCardOpen(false);
   };
 
-  if (!editing) {
-    return (
-      <tr ref={rowRef}>
-        <td>
-          {sec ? (
-            <span className="adm-kb-section-chip" style={{ background: sec.tint, color: sec.color, borderColor: sec.color }}>
-              {sec.label}
-            </span>
-          ) : (
-            <span className="adm-muted">—</span>
-          )}
-          {material.kbSubsection && (
-            <div className="adm-muted" style={{ fontSize: 10, marginTop: 4 }}>
-              {kbSubsectionLabel(material.kbSection, material.kbSubsection)}
-            </div>
-          )}
-          {material.topicTitle && (
-            <div className="adm-muted" style={{ fontSize: 10, marginTop: 2 }} title="Тема группировки">
-              Тема: {material.topicTitle}
-            </div>
-          )}
-        </td>
-        <td className="adm-muted" style={{ fontSize: 11 }}>{dateStr}</td>
-        <td style={{ fontSize: 11, maxWidth: 140 }}>{speakerLabel(material.speakerIds || [], speakers, material.speakerName)}</td>
-        <td>{material.title}</td>
-        <td>{typeName}</td>
-        <td>{audienceStr}</td>
-        <td style={{ fontSize: 11 }}>{bindingLabel(material, events)}</td>
-        <td>{material.status === 'published' ? 'Опубликован' : material.status === 'archived' ? 'Скрыт' : 'Черновик'}</td>
-        <td>
-          <RowActionsMenu
-            actions={[
-              { label: 'Редактировать', onClick: () => setEditing(true) },
-              ...(material.status !== 'published' ? [{
-                label: 'Опубликовать',
-                onClick: () => onSave({ status: 'published' }),
-              }] : []),
-              ...(link && onCopyLink ? [{ label: 'Скопировать ссылку', onClick: () => onCopyLink(link) }] : []),
-              ...(onPreview ? [{ label: 'Превью', onClick: onPreview }] : []),
-              ...(material.status !== 'archived' ? [{
-                label: 'Скрыть',
-                onClick: () => onSave({ status: 'archived' }),
-              }] : [{
-                label: 'Вернуть из архива',
-                onClick: () => onSave({ status: 'draft' }),
-              }]),
-              {
-                label: 'Удалить',
-                onClick: () => {
-                  if (!confirmDelete('Удалить материал?')) return;
-                  onDelete();
-                },
-              },
-            ]}
-          />
-        </td>
-      </tr>
-    );
-  }
+  const eventsForDay = events.filter(ev =>
+    !draft.dayNumber
+    || ev.dayNumber === draft.dayNumber
+    || String(ev.id) === draft.eventId,
+  );
 
   return (
-    <tr ref={rowRef} className="adm-material-edit-row">
-      <td style={{ minWidth: 200 }}>
-        <select
-          className="adm-input adm-input-narrow"
-          value={draft.kbSection}
-          onChange={e => setDraft(d => ({
-            ...d,
-            kbSection: e.target.value,
-            kbSubsection: e.target.value === 'open_lessons' ? d.kbSubsection : '',
-            audienceAll: e.target.value === 'thematic' ? false : d.audienceAll,
-          }))}
-        >
-          <option value="">— раздел —</option>
-          {KB_SECTIONS.map(s => (
-            <option key={s.key} value={s.key}>{s.label}</option>
-          ))}
-        </select>
-        {draft.kbSection === 'open_lessons' && (
+    <>
+      <tr className={dirty ? 'adm-kb-row-dirty' : undefined}>
+        <td style={{ minWidth: 170 }}>
           <select
             className="adm-input adm-input-narrow"
-            style={{ marginTop: 4 }}
-            value={draft.kbSubsection}
-            onChange={e => setDraft(d => ({ ...d, kbSubsection: e.target.value }))}
+            value={draft.kbSection}
+            onChange={e => setDraft(d => ({
+              ...d,
+              kbSection: e.target.value,
+              kbSubsection: e.target.value === 'open_lessons' ? d.kbSubsection : '',
+              audienceAll: e.target.value === 'thematic' ? false : d.audienceAll,
+            }))}
           >
-            <option value="">— подраздел —</option>
-            {subOptions.map(s => (
+            <option value="">— раздел —</option>
+            {KB_SECTIONS.map(s => (
               <option key={s.key} value={s.key}>{s.label}</option>
             ))}
           </select>
-        )}
-        <input
-          className="adm-input"
-          style={{ marginTop: 4 }}
-          value={draft.topicTitle}
-          onChange={e => setDraft(d => ({ ...d, topicTitle: e.target.value }))}
-          placeholder="Тема (для группировки)"
-        />
-        <div className="adm-muted" style={{ fontSize: 10 }}>{dateStr}</div>
-      </td>
-      <td>
-        <select
-          className="adm-input adm-input-narrow"
-          value={draft.dayNumber}
-          onChange={e => setDraft(d => ({
-            ...d,
-            dayNumber: Number(e.target.value),
-            eventId: '',
-          }))}
-          title="День смены"
-        >
-          {days.map(d => (
-            <option key={d} value={d}>День {d}</option>
-          ))}
-        </select>
-      </td>
-      <td style={{ minWidth: 160 }}>
-        <SpeakerMultiPick
-          speakers={speakers}
-          selectedIds={draft.speakerIds}
-          onChange={ids => setDraft(d => ({ ...d, speakerIds: ids }))}
-        />
-      </td>
-      <td>
-        <input className="adm-input adm-input-narrow" value={draft.title} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} />
-        <input className="adm-input" style={{ marginTop: 4 }} value={draft.url} onChange={e => setDraft(d => ({ ...d, url: e.target.value }))} placeholder="URL" />
-      </td>
-      <td>
-        <select className="adm-input adm-input-narrow" value={draft.type} onChange={e => setDraft(d => ({ ...d, type: e.target.value }))}>
-          <option value="">—</option>
-          {typeOptions.map(t => <option key={t.key} value={t.key}>{t.name}</option>)}
-        </select>
-      </td>
-      <td>
-        {draft.kbSection === 'thematic' ? (
+          {draft.kbSection === 'open_lessons' && (
+            <select
+              className="adm-input adm-input-narrow"
+              style={{ marginTop: 4 }}
+              value={draft.kbSubsection}
+              onChange={e => setDraft(d => ({ ...d, kbSubsection: e.target.value }))}
+            >
+              <option value="">— подраздел —</option>
+              {subOptions.map(s => (
+                <option key={s.key} value={s.key}>{s.label}</option>
+              ))}
+            </select>
+          )}
+          <input
+            className="adm-input"
+            style={{ marginTop: 4 }}
+            value={draft.topicTitle}
+            onChange={e => setDraft(d => ({ ...d, topicTitle: e.target.value }))}
+            placeholder="Тема"
+          />
+          {sec && (
+            <div
+              className="adm-kb-section-chip"
+              style={{
+                background: sec.tint,
+                color: sec.color,
+                borderColor: sec.color,
+                marginTop: 4,
+                display: 'inline-flex',
+              }}
+            >
+              {sec.label}
+            </div>
+          )}
+        </td>
+        <td>
           <select
             className="adm-input adm-input-narrow"
-            value={draft.direction}
-            onChange={e => setDraft(d => ({ ...d, direction: e.target.value, audienceAll: false }))}
+            value={draft.dayNumber}
+            onChange={e => setDraft(d => ({
+              ...d,
+              dayNumber: Number(e.target.value),
+              eventId: '',
+            }))}
+            title="День смены"
           >
-            <option value="">— направление —</option>
-            {directions.map(dir => <option key={dir.id} value={dir.name}>{dir.name}</option>)}
+            {days.map(d => (
+              <option key={d} value={d}>Д{d}</option>
+            ))}
           </select>
-        ) : (
-          <>
-            <label className="adm-forum-check" style={{ display: 'block', fontSize: 11 }}>
-              <input type="radio" checked={draft.audienceAll} onChange={() => setDraft(d => ({ ...d, audienceAll: true, direction: '' }))} />
-              Для всех
-            </label>
-            <label className="adm-forum-check" style={{ display: 'block', fontSize: 11 }}>
-              <input type="radio" checked={!draft.audienceAll} onChange={() => setDraft(d => ({ ...d, audienceAll: false }))} />
-              Направление
-            </label>
-            {!draft.audienceAll && (
-              <select className="adm-input adm-input-narrow" value={draft.direction} onChange={e => setDraft(d => ({ ...d, direction: e.target.value }))}>
-                <option value="">—</option>
+        </td>
+        <td style={{ minWidth: 120 }}>
+          <button
+            type="button"
+            className="adm-kb-speaker-btn"
+            title="Открыть карточку всех параметров"
+            onClick={() => setCardOpen(true)}
+          >
+            {speakerSummary(draft.speakerIds, speakers, material.speakerName)}
+          </button>
+          <div className="adm-muted" style={{ fontSize: 10, marginTop: 2 }}>
+            клик → все поля
+          </div>
+        </td>
+        <td style={{ minWidth: 180 }}>
+          <input
+            className="adm-input"
+            value={draft.title}
+            onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
+            placeholder="Название"
+          />
+          <input
+            className="adm-input"
+            style={{ marginTop: 4 }}
+            value={draft.url}
+            onChange={e => setDraft(d => ({ ...d, url: e.target.value }))}
+            placeholder="https://…"
+          />
+        </td>
+        <td>
+          <select
+            className="adm-input adm-input-narrow"
+            value={draft.type}
+            onChange={e => setDraft(d => ({ ...d, type: e.target.value }))}
+          >
+            <option value="">—</option>
+            {typeOptions.map(t => <option key={t.key} value={t.key}>{t.name}</option>)}
+          </select>
+        </td>
+        <td style={{ minWidth: 120 }}>
+          {draft.kbSection === 'thematic' ? (
+            <select
+              className="adm-input adm-input-narrow"
+              value={draft.direction}
+              onChange={e => setDraft(d => ({ ...d, direction: e.target.value, audienceAll: false }))}
+            >
+              <option value="">— направление —</option>
+              {directions.map(dir => <option key={dir.id} value={dir.name}>{dir.name}</option>)}
+            </select>
+          ) : (
+            <>
+              <select
+                className="adm-input adm-input-narrow"
+                value={draft.audienceAll ? '__all__' : (draft.direction || '')}
+                onChange={e => {
+                  const v = e.target.value;
+                  if (v === '__all__') setDraft(d => ({ ...d, audienceAll: true, direction: '' }));
+                  else setDraft(d => ({ ...d, audienceAll: false, direction: v }));
+                }}
+              >
+                <option value="__all__">Для всех</option>
                 {directions.map(dir => <option key={dir.id} value={dir.name}>{dir.name}</option>)}
               </select>
-            )}
-          </>
-        )}
-      </td>
-      <td>
-        <label className="adm-forum-check" style={{ fontSize: 11 }}>
-          <input type="checkbox" checked={draft.isGeneral} onChange={e => setDraft(d => ({ ...d, isGeneral: e.target.checked, eventId: e.target.checked ? '' : d.eventId }))} />
-          Общий
-        </label>
-        {!draft.isGeneral && (
-          <select
-            className="adm-input adm-input-narrow"
-            value={draft.eventId}
-            onChange={e => {
-              const eventId = e.target.value;
-              const ev = events.find(x => String(x.id) === eventId);
-              setDraft(d => ({
+            </>
+          )}
+        </td>
+        <td style={{ minWidth: 140 }}>
+          <label className="adm-forum-check" style={{ fontSize: 11, display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={draft.isGeneral}
+              onChange={e => setDraft(d => ({
                 ...d,
-                eventId,
-                ...(ev ? { dayNumber: ev.dayNumber } : {}),
-              }));
-            }}
-          >
-            <option value="">— блок —</option>
-            {events
-              .filter(ev =>
-                !draft.dayNumber
-                || ev.dayNumber === draft.dayNumber
-                || String(ev.id) === draft.eventId,
-              )
-              .map(ev => (
+                isGeneral: e.target.checked,
+                eventId: e.target.checked ? '' : d.eventId,
+              }))}
+            />
+            Общий
+          </label>
+          {!draft.isGeneral && (
+            <select
+              className="adm-input adm-input-narrow"
+              style={{ marginTop: 4 }}
+              value={draft.eventId}
+              onChange={e => {
+                const eventId = e.target.value;
+                const ev = events.find(x => String(x.id) === eventId);
+                setDraft(d => ({
+                  ...d,
+                  eventId,
+                  ...(ev ? { dayNumber: ev.dayNumber } : {}),
+                }));
+              }}
+            >
+              <option value="">— блок —</option>
+              {eventsForDay.map(ev => (
                 <option key={ev.id} value={String(ev.id)}>Д{ev.dayNumber} · {ev.title}</option>
               ))}
-          </select>
-        )}
-        <div style={{ marginTop: 8, fontSize: 11 }}>
-          <span className="adm-label" style={{ display: 'block', marginBottom: 4 }}>Условие открытия (учёт)</span>
-          <label className="adm-forum-check" style={{ display: 'block' }}>
-            <input
-              type="radio"
-              checked={draft.kbUnlockMode === 'immediate'}
-              onChange={() => setDraft(d => ({ ...d, kbUnlockMode: 'immediate', kbUnlockMinTouchpoints: '' }))}
-            />
-            Открыт сразу
-          </label>
-          <label className="adm-forum-check" style={{ display: 'block' }}>
-            <input
-              type="radio"
-              checked={draft.kbUnlockMode === 'touchpoints'}
-              onChange={() => setDraft(d => ({ ...d, kbUnlockMode: 'touchpoints', kbUnlockMinTouchpoints: d.kbUnlockMinTouchpoints === '' ? 4 : d.kbUnlockMinTouchpoints }))}
-            />
-            После ≥ N точек осмысления
-          </label>
-          {draft.kbUnlockMode === 'touchpoints' && (
-            <input
-              type="number"
-              min={1}
-              max={7}
-              className="adm-input adm-input-narrow"
-              style={{ marginTop: 4, width: 56 }}
-              value={draft.kbUnlockMinTouchpoints === '' ? '' : draft.kbUnlockMinTouchpoints}
-              placeholder="4"
-              onChange={e => setDraft(d => ({ ...d, kbUnlockMinTouchpoints: e.target.value === '' ? '' : Number(e.target.value) }))}
-            />
+            </select>
           )}
-        </div>
-      </td>
-      <td>
-        <select className="adm-input adm-input-narrow" value={draft.status} onChange={e => setDraft(d => ({ ...d, status: e.target.value }))}>
-          <option value="draft">Черновик</option>
-          <option value="published">Опубликован</option>
-          <option value="archived">Скрыт</option>
-        </select>
-      </td>
-      <td>
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => persist('draft')}>
-            Сохранить черновик
-          </button>
-          <button type="button" className="adm-btn adm-btn-sm adm-btn-primary" onClick={() => persist('published')}>
-            Опубликовать
-          </button>
-          <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => { setDraft(mkDraft(material)); setEditing(false); }}>
-            Отмена
-          </button>
-        </div>
-      </td>
-    </tr>
+        </td>
+        <td>
+          <select
+            className="adm-input adm-input-narrow"
+            value={draft.status}
+            onChange={e => setDraft(d => ({ ...d, status: e.target.value }))}
+          >
+            <option value="draft">Черновик</option>
+            <option value="published">Опубликован</option>
+            <option value="archived">Скрыт</option>
+          </select>
+        </td>
+        <td>
+          <div className="adm-kb-row-actions">
+            <button
+              type="button"
+              className="adm-btn adm-btn-sm adm-btn-primary"
+              disabled={!dirty}
+              onClick={() => persist()}
+              title="Сохранить текущие поля"
+            >
+              Сохранить
+            </button>
+            <button
+              type="button"
+              className="adm-btn adm-btn-sm adm-btn-secondary"
+              onClick={() => persist('published')}
+            >
+              Опубликовать
+            </button>
+            <button
+              type="button"
+              className="adm-btn adm-btn-sm adm-btn-secondary"
+              onClick={() => persist('draft')}
+            >
+              Черновик
+            </button>
+            <button
+              type="button"
+              className="adm-btn adm-btn-sm adm-btn-secondary"
+              onClick={() => persist('archived')}
+            >
+              Скрыть
+            </button>
+            {link && onCopyLink && (
+              <button
+                type="button"
+                className="adm-btn adm-btn-sm adm-btn-ghost"
+                onClick={() => onCopyLink(link)}
+              >
+                Ссылка
+              </button>
+            )}
+            {onPreview && (
+              <button
+                type="button"
+                className="adm-btn adm-btn-sm adm-btn-ghost"
+                onClick={onPreview}
+              >
+                Превью
+              </button>
+            )}
+            <button
+              type="button"
+              className="adm-btn adm-btn-sm btn-danger"
+              onClick={() => {
+                if (!confirmDelete('Удалить материал?')) return;
+                onDelete();
+              }}
+            >
+              Удалить
+            </button>
+          </div>
+        </td>
+      </tr>
+
+      {cardOpen && (
+        <tr className="adm-kb-card-row">
+          <td colSpan={9}>
+            <div className="adm-kb-detail-card">
+              <div className="adm-kb-detail-head">
+                <strong>Карточка материала #{material.id}</strong>
+                <span className="adm-muted" style={{ fontSize: 12 }}>
+                  Все параметры · спикеры · условия открытия
+                </span>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-sm adm-btn-ghost"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={() => {
+                    setDraft(mkDraft(material));
+                    setCardOpen(false);
+                  }}
+                >
+                  Закрыть
+                </button>
+              </div>
+              <div className="adm-forum-grid-2" style={{ marginTop: 10 }}>
+                <label className="adm-field">
+                  <span className="adm-label">Раздел</span>
+                  <select
+                    className="adm-input"
+                    value={draft.kbSection}
+                    onChange={e => setDraft(d => ({
+                      ...d,
+                      kbSection: e.target.value,
+                      kbSubsection: e.target.value === 'open_lessons' ? d.kbSubsection : '',
+                      audienceAll: e.target.value === 'thematic' ? false : d.audienceAll,
+                    }))}
+                  >
+                    <option value="">—</option>
+                    {KB_SECTIONS.map(s => (
+                      <option key={s.key} value={s.key}>{s.label}</option>
+                    ))}
+                  </select>
+                </label>
+                {draft.kbSection === 'open_lessons' ? (
+                  <label className="adm-field">
+                    <span className="adm-label">Подраздел</span>
+                    <select
+                      className="adm-input"
+                      value={draft.kbSubsection}
+                      onChange={e => setDraft(d => ({ ...d, kbSubsection: e.target.value }))}
+                    >
+                      <option value="">—</option>
+                      {subOptions.map(s => (
+                        <option key={s.key} value={s.key}>{s.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <label className="adm-field">
+                    <span className="adm-label">Тема (группировка)</span>
+                    <input
+                      className="adm-input"
+                      value={draft.topicTitle}
+                      onChange={e => setDraft(d => ({ ...d, topicTitle: e.target.value }))}
+                    />
+                  </label>
+                )}
+                {draft.kbSection === 'open_lessons' && (
+                  <label className="adm-field">
+                    <span className="adm-label">Тема (группировка)</span>
+                    <input
+                      className="adm-input"
+                      value={draft.topicTitle}
+                      onChange={e => setDraft(d => ({ ...d, topicTitle: e.target.value }))}
+                    />
+                  </label>
+                )}
+                <label className="adm-field">
+                  <span className="adm-label">Название</span>
+                  <input
+                    className="adm-input"
+                    value={draft.title}
+                    onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
+                  />
+                </label>
+                <label className="adm-field">
+                  <span className="adm-label">Ссылка</span>
+                  <input
+                    className="adm-input"
+                    value={draft.url}
+                    onChange={e => setDraft(d => ({ ...d, url: e.target.value }))}
+                  />
+                </label>
+                <label className="adm-field">
+                  <span className="adm-label">Файл (URL)</span>
+                  <input
+                    className="adm-input"
+                    value={draft.fileUrl}
+                    onChange={e => setDraft(d => ({ ...d, fileUrl: e.target.value }))}
+                  />
+                </label>
+                <label className="adm-field">
+                  <span className="adm-label">Тип</span>
+                  <select
+                    className="adm-input"
+                    value={draft.type}
+                    onChange={e => setDraft(d => ({ ...d, type: e.target.value }))}
+                  >
+                    <option value="">—</option>
+                    {typeOptions.map(t => <option key={t.key} value={t.key}>{t.name}</option>)}
+                  </select>
+                </label>
+                <label className="adm-field">
+                  <span className="adm-label">День</span>
+                  <select
+                    className="adm-input"
+                    value={draft.dayNumber}
+                    onChange={e => setDraft(d => ({
+                      ...d,
+                      dayNumber: Number(e.target.value),
+                      eventId: '',
+                    }))}
+                  >
+                    {days.map(d => (
+                      <option key={d} value={d}>День {d}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="adm-field">
+                  <span className="adm-label">Статус</span>
+                  <select
+                    className="adm-input"
+                    value={draft.status}
+                    onChange={e => setDraft(d => ({ ...d, status: e.target.value }))}
+                  >
+                    <option value="draft">Черновик</option>
+                    <option value="published">Опубликован</option>
+                    <option value="archived">Скрыт</option>
+                  </select>
+                </label>
+                <label className="adm-field">
+                  <span className="adm-label">Порядок</span>
+                  <input
+                    type="number"
+                    className="adm-input"
+                    value={draft.sortOrder === '' ? '' : draft.sortOrder}
+                    onChange={e => setDraft(d => ({
+                      ...d,
+                      sortOrder: e.target.value === '' ? '' : Number(e.target.value),
+                    }))}
+                  />
+                </label>
+                <div className="adm-field">
+                  <span className="adm-label">Спикеры</span>
+                  <SpeakerMultiPick
+                    speakers={speakers}
+                    selectedIds={draft.speakerIds}
+                    onChange={ids => setDraft(d => ({ ...d, speakerIds: ids }))}
+                  />
+                  {draft.speakerIds.length > 0 && (
+                    <p className="adm-muted" style={{ fontSize: 11, margin: '6px 0 0' }}>
+                      {draft.speakerIds
+                        .map(id => speakers.find(s => s.id === id))
+                        .filter(Boolean)
+                        .map(s => speakerFullLabel(s!))
+                        .join(' · ')}
+                    </p>
+                  )}
+                </div>
+                <div className="adm-field">
+                  <span className="adm-label">Аудитория</span>
+                  {draft.kbSection === 'thematic' ? (
+                    <select
+                      className="adm-input"
+                      value={draft.direction}
+                      onChange={e => setDraft(d => ({ ...d, direction: e.target.value, audienceAll: false }))}
+                    >
+                      <option value="">— направление —</option>
+                      {directions.map(dir => <option key={dir.id} value={dir.name}>{dir.name}</option>)}
+                    </select>
+                  ) : (
+                    <>
+                      <label className="adm-forum-check" style={{ display: 'block' }}>
+                        <input
+                          type="radio"
+                          checked={draft.audienceAll}
+                          onChange={() => setDraft(d => ({ ...d, audienceAll: true, direction: '' }))}
+                        />
+                        Для всех
+                      </label>
+                      <label className="adm-forum-check" style={{ display: 'block' }}>
+                        <input
+                          type="radio"
+                          checked={!draft.audienceAll}
+                          onChange={() => setDraft(d => ({ ...d, audienceAll: false }))}
+                        />
+                        Направление
+                      </label>
+                      {!draft.audienceAll && (
+                        <select
+                          className="adm-input"
+                          value={draft.direction}
+                          onChange={e => setDraft(d => ({ ...d, direction: e.target.value }))}
+                        >
+                          <option value="">—</option>
+                          {directions.map(dir => <option key={dir.id} value={dir.name}>{dir.name}</option>)}
+                        </select>
+                      )}
+                    </>
+                  )}
+                </div>
+                <div className="adm-field">
+                  <span className="adm-label">Привязка к программе</span>
+                  <label className="adm-forum-check" style={{ display: 'block' }}>
+                    <input
+                      type="checkbox"
+                      checked={draft.isGeneral}
+                      onChange={e => setDraft(d => ({
+                        ...d,
+                        isGeneral: e.target.checked,
+                        eventId: e.target.checked ? '' : d.eventId,
+                      }))}
+                    />
+                    Общий материал
+                  </label>
+                  {!draft.isGeneral && (
+                    <select
+                      className="adm-input"
+                      style={{ marginTop: 6 }}
+                      value={draft.eventId}
+                      onChange={e => {
+                        const eventId = e.target.value;
+                        const ev = events.find(x => String(x.id) === eventId);
+                        setDraft(d => ({
+                          ...d,
+                          eventId,
+                          ...(ev ? { dayNumber: ev.dayNumber } : {}),
+                        }));
+                      }}
+                    >
+                      <option value="">— блок —</option>
+                      {eventsForDay.map(ev => (
+                        <option key={ev.id} value={String(ev.id)}>Д{ev.dayNumber} · {ev.title}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div className="adm-field">
+                  <span className="adm-label">Условие открытия</span>
+                  <label className="adm-forum-check" style={{ display: 'block' }}>
+                    <input
+                      type="radio"
+                      checked={draft.kbUnlockMode === 'immediate'}
+                      onChange={() => setDraft(d => ({
+                        ...d,
+                        kbUnlockMode: 'immediate',
+                        kbUnlockMinTouchpoints: '',
+                      }))}
+                    />
+                    Открыт сразу
+                  </label>
+                  <label className="adm-forum-check" style={{ display: 'block' }}>
+                    <input
+                      type="radio"
+                      checked={draft.kbUnlockMode === 'touchpoints'}
+                      onChange={() => setDraft(d => ({
+                        ...d,
+                        kbUnlockMode: 'touchpoints',
+                        kbUnlockMinTouchpoints: d.kbUnlockMinTouchpoints === '' ? 4 : d.kbUnlockMinTouchpoints,
+                      }))}
+                    />
+                    После ≥ N точек осмысления
+                  </label>
+                  {draft.kbUnlockMode === 'touchpoints' && (
+                    <input
+                      type="number"
+                      min={1}
+                      max={7}
+                      className="adm-input"
+                      style={{ width: 72, marginTop: 6 }}
+                      value={draft.kbUnlockMinTouchpoints === '' ? '' : draft.kbUnlockMinTouchpoints}
+                      onChange={e => setDraft(d => ({
+                        ...d,
+                        kbUnlockMinTouchpoints: e.target.value === '' ? '' : Number(e.target.value),
+                      }))}
+                    />
+                  )}
+                </div>
+              </div>
+              <div className="adm-kb-row-actions" style={{ marginTop: 12 }}>
+                <button type="button" className="adm-btn adm-btn-primary" onClick={() => persist()}>
+                  Сохранить
+                </button>
+                <button type="button" className="adm-btn adm-btn-secondary" onClick={() => persist('published')}>
+                  Опубликовать
+                </button>
+                <button type="button" className="adm-btn adm-btn-secondary" onClick={() => persist('draft')}>
+                  Сохранить черновик
+                </button>
+                <button type="button" className="adm-btn adm-btn-secondary" onClick={() => persist('archived')}>
+                  Скрыть
+                </button>
+                <button
+                  type="button"
+                  className="adm-btn btn-danger"
+                  onClick={() => {
+                    if (!confirmDelete('Удалить материал?')) return;
+                    onDelete();
+                  }}
+                >
+                  Удалить
+                </button>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-ghost"
+                  onClick={() => {
+                    setDraft(mkDraft(material));
+                    setCardOpen(false);
+                  }}
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
