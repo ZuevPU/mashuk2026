@@ -232,6 +232,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       settings,
       hasPointB,
       pointBQuestionId: pointB?.id ?? pointBQuestion?.id ?? null,
+      directionId: participant.directionId ?? null,
     });
     const eveningContext = eveningSurveyDay !== currentDay
       ? await loadDayContext(participant.id, eveningSurveyDay, participant.pedagogicalRole, {
@@ -239,6 +240,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         settings,
         hasPointB,
         pointBQuestionId: pointB?.id ?? pointBQuestion?.id ?? null,
+        directionId: participant.directionId ?? null,
       })
       : dayContext;
     const eveningQuestionnaire = {

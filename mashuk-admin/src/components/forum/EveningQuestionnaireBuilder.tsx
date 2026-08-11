@@ -18,18 +18,42 @@ import {
   type ProgramPickNode,
 } from './programEventTree';
 
+type DirectionOpt = { id: number; name: string };
+
 type Props = {
   adminFetch: (path: string, opts?: RequestInit) => Promise<any>;
   act: (fn: () => Promise<unknown>, msg?: string) => void;
   /** Current forum day — so «Снять с публикации» applies to the live day by default. */
   initialDay?: number;
+  /** Optional; if omitted, loaded from /directions. */
+  directions?: DirectionOpt[];
 };
 
 const EMPTY_CONFIG: EveningQuestionnaireConfig = {
   steps: [{ id: 'step_1', title: 'Новый шаг', fields: [] }],
 };
 
-export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay }: Props) {
+function filterConfigForDirectionPreview(
+  config: EveningQuestionnaireConfig,
+  directionId: number | null,
+): EveningQuestionnaireConfig {
+  if (directionId == null) return config;
+  return {
+    ...config,
+    steps: config.steps
+      .map(step => ({
+        ...step,
+        fields: step.fields.filter(f => {
+          const ids = f.audienceDirectionIds || [];
+          if (!ids.length) return true;
+          return ids.includes(directionId);
+        }),
+      }))
+      .filter(step => step.fields.length > 0),
+  };
+}
+
+export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, directions: directionsProp }: Props) {
   const [day, setDay] = useState(() => {
     const d = Number(initialDay);
     return Number.isFinite(d) && d >= 1 && d <= 7 ? d : 1;
@@ -41,9 +65,12 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay }: Pro
   const [isOpenNow, setIsOpenNow] = useState(false);
   const [copyFromDay, setCopyFromDay] = useState(1);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewDirectionId, setPreviewDirectionId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [programEvents, setProgramEvents] = useState<ProgramEventRow[]>([]);
   const [roles, setRoles] = useState<{ roleKey: string; name: string }[]>([]);
+  const [directionsLocal, setDirectionsLocal] = useState<DirectionOpt[]>([]);
+  const directions = directionsProp?.length ? directionsProp : directionsLocal;
 
   const applyPublishState = (res: {
     opensAtMsk?: string;
@@ -97,6 +124,16 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay }: Pro
       })
       .catch(() => setRoles([]));
   }, [adminFetch]);
+
+  useEffect(() => {
+    if (directionsProp?.length) return;
+    adminFetch('/directions')
+      .then((res: { directions?: DirectionOpt[] }) => {
+        const list = [...(res.directions || [])].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+        setDirectionsLocal(list.map(d => ({ id: d.id, name: d.name })));
+      })
+      .catch(() => setDirectionsLocal([]));
+  }, [adminFetch, directionsProp]);
 
   useEffect(() => {
     adminFetch('/events')
@@ -170,6 +207,30 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay }: Pro
       const steps = prev.steps.map((s, si) => {
         if (si !== stepIndex) return s;
         const fields = s.fields.map((f, fi) => (fi === fieldIndex ? { ...f, ...patch } : f));
+        return { ...s, fields };
+      });
+      return { ...prev, steps };
+    });
+  };
+
+  /** Set directions on a field and sync to chain dependents (visibleWhen → this field). */
+  const setFieldAudienceDirections = (
+    stepIndex: number,
+    fieldIndex: number,
+    nextIds: number[] | undefined,
+  ) => {
+    setConfig(prev => {
+      const steps = prev.steps.map((s, si) => {
+        if (si !== stepIndex) return s;
+        const parentKey = s.fields[fieldIndex]?.key;
+        const audienceDirectionIds = nextIds?.length ? nextIds : undefined;
+        const fields = s.fields.map((f, fi) => {
+          if (fi === fieldIndex) return { ...f, audienceDirectionIds };
+          if (parentKey && f.visibleWhen?.field === parentKey) {
+            return { ...f, audienceDirectionIds };
+          }
+          return f;
+        });
         return { ...s, fields };
       });
       return { ...prev, steps };
@@ -478,12 +539,33 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay }: Pro
         </button>
       </div>
       {previewOpen && (
-        <EveningQuestionnaireParticipantPreview
-          day={day}
-          config={config}
-          programEvents={programEvents}
-          roles={roles}
-        />
+        <>
+          {directions.length > 0 && (
+            <label className="adm-forum-check" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+              Превью как направление
+              <select
+                className="adm-input adm-input-narrow"
+                style={{ width: 'auto', minWidth: 160 }}
+                value={previewDirectionId ?? ''}
+                onChange={e => {
+                  const v = e.target.value;
+                  setPreviewDirectionId(v ? Number(v) : null);
+                }}
+              >
+                <option value="">Для всех (полный конфиг)</option>
+                {directions.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <EveningQuestionnaireParticipantPreview
+            day={day}
+            config={filterConfigForDirectionPreview(config, previewDirectionId)}
+            programEvents={programEvents}
+            roles={roles}
+          />
+        </>
       )}
       {config.steps.map((step, stepIndex) => (
         <div key={`${step.id}-${stepIndex}`} className="adm-forum-step-card">
@@ -628,6 +710,49 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay }: Pro
                 <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => moveField(stepIndex, fieldIndex, -1)}>↑</button>
                 <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => moveField(stepIndex, fieldIndex, 1)}>↓</button>
                 <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={() => removeField(stepIndex, fieldIndex)}>×</button>
+              </div>
+              <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
+                <div className="adm-label">Направления</div>
+                <p className="adm-muted" style={{ fontSize: 12, margin: '2px 0 6px' }}>
+                  По умолчанию — для всех. Можно отметить одно или несколько направлений.
+                  У цепочки настройки с родителя копируются на зависимые вопросы.
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px' }}>
+                  <label className="adm-forum-check" style={{ display: 'flex', gap: 6, fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={!field.audienceDirectionIds?.length}
+                      onChange={() => setFieldAudienceDirections(stepIndex, fieldIndex, undefined)}
+                    />
+                    Для всех
+                  </label>
+                  {directions.map(d => {
+                    const selected = field.audienceDirectionIds || [];
+                    const checked = selected.includes(d.id);
+                    return (
+                      <label key={d.id} className="adm-forum-check" style={{ display: 'flex', gap: 6, fontSize: 13 }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const next = checked
+                              ? selected.filter(id => id !== d.id)
+                              : [...selected, d.id];
+                            setFieldAudienceDirections(
+                              stepIndex,
+                              fieldIndex,
+                              next.length ? next : undefined,
+                            );
+                          }}
+                        />
+                        {d.name}
+                      </label>
+                    );
+                  })}
+                  {directions.length === 0 && (
+                    <span className="adm-muted" style={{ fontSize: 12 }}>Направления ещё не загружены</span>
+                  )}
+                </div>
               </div>
               {field.type === 'role_select' && (
                 <div style={{ gridColumn: '1 / -1', marginTop: 6 }}>

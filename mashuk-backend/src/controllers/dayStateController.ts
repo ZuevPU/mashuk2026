@@ -8,6 +8,7 @@ import {
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
   eveningProgramEventFields,
+  filterEveningConfigForDirection,
   getEveningOpensAtMsk,
   isEveningOpenForConfig,
   resolveEveningConfigForDay,
@@ -300,7 +301,13 @@ export async function loadDayContext(
   participantId: number,
   dayNumber: number,
   pedagogicalRole: string | null,
-  opts?: { now?: Date; settings?: Awaited<ReturnType<typeof getForumSettings>>; hasPointB?: boolean; pointBQuestionId?: number | null },
+  opts?: {
+    now?: Date;
+    settings?: Awaited<ReturnType<typeof getForumSettings>>;
+    hasPointB?: boolean;
+    pointBQuestionId?: number | null;
+    directionId?: number | null;
+  },
 ) {
   const now = opts?.now ?? new Date();
   const settings = opts?.settings ?? await getForumSettings();
@@ -346,7 +353,10 @@ export async function loadDayContext(
   const showRoleOfDay = dayNumber >= 1 && dayNumber <= 7 && !!roleMeta;
   const eveningDone = !!state?.eveningRatings;
   const askTomorrowRole = dayNumber >= 1 && dayNumber <= 6;
-  const config: EveningQuestionnaireConfig = resolveEveningConfigForDay(settings, dayNumber);
+  const config: EveningQuestionnaireConfig = filterEveningConfigForDirection(
+    resolveEveningConfigForDay(settings, dayNumber),
+    opts?.directionId ?? null,
+  );
   const opensAt = getEveningOpensAtMsk(config);
   const scheduleDayPublished = dayNumber >= 1 && dayNumber <= 7
     ? await getScheduleDayPublished(dayNumber)

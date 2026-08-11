@@ -764,6 +764,7 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           adminFetch={adminFetch}
           act={act}
           initialDay={currentDay}
+          directions={directions.map((d: { id: number; name: string }) => ({ id: d.id, name: d.name }))}
         />
       </div>
 

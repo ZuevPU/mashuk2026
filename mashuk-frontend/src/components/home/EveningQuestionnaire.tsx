@@ -11,6 +11,8 @@ export type EveningField = {
   allowOther?: boolean;
   otherLabel?: string;
   linkedEventIds?: number[];
+  /** Empty / missing = all directions. Non-empty = only these direction ids. */
+  audienceDirectionIds?: number[];
   visibleWhen?: { field: string; equals: boolean | string | number };
 };
 
