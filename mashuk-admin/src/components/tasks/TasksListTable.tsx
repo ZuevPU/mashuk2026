@@ -1,4 +1,3 @@
-import { RowActionsMenu } from '../participants/RowActionsMenu';
 import type { AdminTask } from './types';
 import {
   formatTaskDateTime,
@@ -24,6 +23,11 @@ type Props = {
   onModerate: (t: AdminTask) => void;
 };
 
+function MetaChip({ children }: { children: string }) {
+  if (!children || children === '—') return null;
+  return <span className="adm-tasks-chip">{children}</span>;
+}
+
 export function TasksListTable({
   tasks,
   categoriesById,
@@ -45,92 +49,118 @@ export function TasksListTable({
   const allSelected = tasks.length > 0 && tasks.every(t => selectedIds.has(t.id));
 
   return (
-    <div className="adm-table-scroll">
-      <table className="adm-table adm-table-compact">
-        <thead>
-          <tr>
-            <th>
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={() => onSelectAll(allSelected ? [] : tasks.map(t => t.id))}
-              />
-            </th>
-            <th>№</th>
-            <th>Название</th>
-            <th>Кратко</th>
-            <th>Категория</th>
-            <th>Номинация</th>
-            <th>Баллы</th>
-            <th>День</th>
-            <th>Тип</th>
-            <th>Лимит</th>
-            <th>Место</th>
-            <th>Время</th>
-            <th>Медаль</th>
-            <th>Подтверждение</th>
-            <th>Заявка до</th>
-            <th>Проверка</th>
-            <th>Статус</th>
-            <th>Вып.</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {tasks.map(t => {
-            const cat = t.categoryName || (t.categoryId ? categoriesById.get(t.categoryId) : null) || t.category || '—';
-            const days = t.dayNumbers?.length ? t.dayNumbers.join(', ') : String(t.dayNumber ?? '—');
-            const short = (t.shortDescription || t.description || '').slice(0, 60);
-            const isSelected = selectedIds.has(t.id);
-            const isHidden = t.isHidden;
-            return (
-              <tr key={t.id} className={`${isSelected ? 'adm-row-selected' : ''} ${isHidden ? 'adm-row-hidden' : ''}`} style={isHidden ? { opacity: 0.6, background: '#f5f5f5' } : undefined}>
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => onToggleSelect(t.id)}
-                  />
-                </td>
-                <td>{t.id}</td>
-                <td>
-                  <button type="button" className="adm-link-btn" onClick={() => onEdit(t)}>{t.title}</button>
-                </td>
-                <td title={t.shortDescription || t.description || ''}>{short ? `${short}${short.length >= 60 ? '…' : ''}` : '—'}</td>
-                <td>{cat}</td>
-                <td>{nominationLabel(t.nomination)}</td>
-                <td>{t.points ?? 0}</td>
-                <td>{days}</td>
-                <td>{taskKindLabel(t)}</td>
-                <td>{t.dailyRepeatLimit && t.executionType !== 'once' ? t.dailyRepeatLimit : '—'}</td>
-                <td>{t.programPlaceName || '—'}</td>
-                <td>{formatTaskDateTime(t.eventTime ?? t.availableFrom ?? t.publishTime)}</td>
-                <td>{medalLabel(t)}</td>
-                <td>{methodsLabel(t.confirmationMethods)}</td>
-                <td>{formatTaskDateTime(t.applicationDeadline)}</td>
-                <td title={t.pendingModerationCount ? `${t.pendingModerationCount} заявок ждут играпрактика` : undefined}>
-                  {t.pendingModerationCount ? `${t.pendingModerationCount}` : '—'}
-                </td>
-                <td>{statusLabel(t)}</td>
-                <td>{t.completionCount ?? 0}</td>
-                <td>
-                  <RowActionsMenu
-                    actions={[
-                      { label: 'Редактировать', onClick: () => onEdit(t) },
-                      { label: 'Дублировать', onClick: () => onDuplicate(t.id) },
-                      { label: 'Скачать QR', onClick: () => onQr(t.id) },
-                      { label: 'Проверка играпрактиком', onClick: () => onModerate(t) },
-                      { label: t.isHidden ? 'Показать' : 'Скрыть', onClick: () => onHide(t.id) },
-                      { label: 'В архив', onClick: () => onArchive(t.id) },
-                      { label: 'Удалить', onClick: () => onDelete(t.id), danger: true },
-                    ]}
-                  />
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="adm-tasks-list">
+      <div className="adm-tasks-list-head">
+        <label className="adm-tasks-check">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={() => onSelectAll(allSelected ? [] : tasks.map(t => t.id))}
+          />
+          <span>Все на странице</span>
+        </label>
+      </div>
+
+      {tasks.map(t => {
+        const cat = t.categoryName || (t.categoryId ? categoriesById.get(t.categoryId) : null) || t.category || '—';
+        const days = t.dayNumbers?.length ? t.dayNumbers.join(', ') : String(t.dayNumber ?? '—');
+        const short = (t.shortDescription || t.description || '').trim();
+        const isSelected = selectedIds.has(t.id);
+        const isHidden = t.isHidden;
+        const time = formatTaskDateTime(t.eventTime ?? t.availableFrom ?? t.publishTime);
+        const deadline = formatTaskDateTime(t.applicationDeadline);
+        const medal = medalLabel(t);
+        const methods = methodsLabel(t.confirmationMethods);
+        const nomination = nominationLabel(t.nomination);
+
+        return (
+          <article
+            key={t.id}
+            className={[
+              'adm-tasks-item',
+              isSelected ? 'is-selected' : '',
+              isHidden ? 'is-hidden' : '',
+            ].filter(Boolean).join(' ')}
+          >
+            <div className="adm-tasks-item-row1">
+              <label className="adm-tasks-check adm-tasks-check-solo">
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => onToggleSelect(t.id)}
+                  aria-label={`Выбрать задание ${t.id}`}
+                />
+              </label>
+
+              <div className="adm-tasks-item-main">
+                <div className="adm-tasks-item-title-line">
+                  <span className="adm-tasks-id">#{t.id}</span>
+                  <button type="button" className="adm-tasks-title" onClick={() => onEdit(t)}>
+                    {t.title}
+                  </button>
+                  <span className="adm-tasks-status">{statusLabel(t)}</span>
+                </div>
+                {short ? (
+                  <p className="adm-tasks-short" title={short}>
+                    {short.length > 120 ? `${short.slice(0, 120)}…` : short}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="adm-tasks-item-kpis" aria-label="Ключевые поля">
+                <span><em>Баллы</em>{t.points ?? 0}</span>
+                <span><em>День</em>{days}</span>
+                <span><em>Вып.</em>{t.completionCount ?? 0}</span>
+                {t.pendingModerationCount ? (
+                  <span className="is-warn" title="Заявок ждут играпрактика">
+                    <em>Проверка</em>{t.pendingModerationCount}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="adm-tasks-item-row2">
+              <div className="adm-tasks-item-meta">
+                <MetaChip>{cat}</MetaChip>
+                <MetaChip>{nomination}</MetaChip>
+                <MetaChip>{taskKindLabel(t)}</MetaChip>
+                {t.dailyRepeatLimit && t.executionType !== 'once' ? (
+                  <MetaChip>{`Лимит ${t.dailyRepeatLimit}`}</MetaChip>
+                ) : null}
+                {t.programPlaceName ? <MetaChip>{t.programPlaceName}</MetaChip> : null}
+                {time !== '—' ? <MetaChip>{time}</MetaChip> : null}
+                {medal !== '—' ? <MetaChip>{medal}</MetaChip> : null}
+                {methods !== '—' ? <MetaChip>{methods}</MetaChip> : null}
+                {deadline !== '—' ? <MetaChip>{`До ${deadline}`}</MetaChip> : null}
+              </div>
+
+              <div className="adm-tasks-item-actions">
+                <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => onEdit(t)}>
+                  Изменить
+                </button>
+                <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => onDuplicate(t.id)}>
+                  Дубль
+                </button>
+                <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => onQr(t.id)}>
+                  QR
+                </button>
+                <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => onModerate(t)}>
+                  Проверка
+                </button>
+                <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => onHide(t.id)}>
+                  {t.isHidden ? 'Показать' : 'Скрыть'}
+                </button>
+                <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => onArchive(t.id)}>
+                  Архив
+                </button>
+                <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={() => onDelete(t.id)}>
+                  Удалить
+                </button>
+              </div>
+            </div>
+          </article>
+        );
+      })}
     </div>
   );
 }

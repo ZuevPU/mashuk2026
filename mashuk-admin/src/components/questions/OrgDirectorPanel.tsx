@@ -34,7 +34,7 @@ type Props = {
 };
 
 function sortMark(sort: SortState, key: SortKey): string {
-  if (sort.key !== key) return ' ↕';
+  if (sort.key !== key) return '';
   return sort.dir === 'asc' ? ' ↑' : ' ↓';
 }
 
@@ -51,10 +51,10 @@ function statusLabel(status?: string | null): string {
   return 'Ожидает ответа';
 }
 
-function statusColor(status?: string | null): string {
-  if (status === 'answered') return '#2F855A';
-  if (status === 'closed') return '#718096';
-  return '#B8621A';
+function statusClass(status?: string | null): string {
+  if (status === 'answered') return 'adm-tasks-status is-ok';
+  if (status === 'closed') return 'adm-tasks-status';
+  return 'adm-tasks-status is-wait';
 }
 
 function firstParticipantQuestion(thread: OrgThread): string {
@@ -62,34 +62,40 @@ function firstParticipantQuestion(thread: OrgThread): string {
   return (msg?.text || '').trim();
 }
 
-function clip(text: string, max = 140): string {
+function clip(text: string, max = 180): string {
   const t = text.replace(/\s+/g, ' ').trim();
   if (t.length <= max) return t;
   return `${t.slice(0, max - 1)}…`;
 }
 
-function SortTh({
-  label: text,
-  sortKey,
+function SortBar({
   sort,
   onSort,
 }: {
-  label: string;
-  sortKey: SortKey;
   sort: SortState;
   onSort: (key: SortKey) => void;
 }) {
+  const keys: { key: SortKey; label: string }[] = [
+    { key: 'updatedAt', label: 'Обновл.' },
+    { key: 'createdAt', label: 'Созд.' },
+    { key: 'participant', label: 'Участник' },
+    { key: 'status', label: 'Статус' },
+    { key: 'messages', label: 'Сообщ.' },
+  ];
   return (
-    <th>
-      <button
-        type="button"
-        className="adm-link"
-        style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer', fontWeight: 700 }}
-        onClick={() => onSort(sortKey)}
-      >
-        {text}{sortMark(sort, sortKey)}
-      </button>
-    </th>
+    <div className="adm-mod-sort" aria-label="Сортировка" style={{ marginBottom: 10 }}>
+      <span className="adm-muted" style={{ fontSize: 12, marginRight: 4 }}>Сорт.</span>
+      {keys.map(k => (
+        <button
+          key={k.key}
+          type="button"
+          className={sort.key === k.key ? 'on' : ''}
+          onClick={() => onSort(k.key)}
+        >
+          {k.label}{sortMark(sort, k.key)}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -189,7 +195,7 @@ export function OrgDirectorPanel({ adminFetch, act, reloadKey, search = '', onOp
   };
 
   const replyBlock = (thread: OrgThread, compact = false) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: compact ? 220 : 280 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, width: '100%' }}>
       <textarea
         className="adm-input"
         rows={compact ? 2 : 3}
@@ -198,7 +204,7 @@ export function OrgDirectorPanel({ adminFetch, act, reloadKey, search = '', onOp
         placeholder="Ответ дирекции…"
         style={{ width: '100%', resize: 'vertical' }}
       />
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <div className="adm-mod-item-actions" style={{ marginTop: 0 }}>
         <button
           type="button"
           className="adm-btn adm-btn-primary adm-btn-sm"
@@ -208,7 +214,7 @@ export function OrgDirectorPanel({ adminFetch, act, reloadKey, search = '', onOp
         </button>
         <button
           type="button"
-          className="adm-btn btn-danger adm-btn-sm"
+          className="adm-btn adm-btn-danger adm-btn-sm"
           onClick={() => deleteThread(thread.id)}
         >
           Удалить
@@ -243,111 +249,96 @@ export function OrgDirectorPanel({ adminFetch, act, reloadKey, search = '', onOp
         ))}
       </div>
 
-      <p className="adm-kb-panel-sub" style={{ marginTop: 0, marginBottom: 12 }}>
-        Показаны все обращения: и ожидающие, и уже отвеченные. Нажмите на текст вопроса, чтобы открыть карточку.
-      </p>
+      <SortBar sort={sort} onSort={toggleSort} />
 
-      <div className="adm-kb-table-scroll">
-        <table className="adm-table">
-          <thead>
-            <tr>
-              <SortTh label="№" sortKey="id" sort={sort} onSort={toggleSort} />
-              <SortTh label="Участник" sortKey="participant" sort={sort} onSort={toggleSort} />
-              <SortTh label="Направление" sortKey="direction" sort={sort} onSort={toggleSort} />
-              <SortTh label="Обращение" sortKey="subject" sort={sort} onSort={toggleSort} />
-              <SortTh label="Вопрос" sortKey="question" sort={sort} onSort={toggleSort} />
-              <SortTh label="Статус" sortKey="status" sort={sort} onSort={toggleSort} />
-              <SortTh label="Созд." sortKey="createdAt" sort={sort} onSort={toggleSort} />
-              <SortTh label="Обновл." sortKey="updatedAt" sort={sort} onSort={toggleSort} />
-              <SortTh label="Сообщ." sortKey="messages" sort={sort} onSort={toggleSort} />
-              <th>Ответ / действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={10} className="adm-muted">Нет обращений по фильтру</td>
-              </tr>
-            )}
-            {filtered.map(thread => {
-              const question = firstParticipantQuestion(thread);
-              return (
-                <tr key={thread.id}>
-                  <td>#{thread.id}</td>
-                  <td>
+      <div className="adm-mod-list">
+        {filtered.length === 0 && <p className="adm-muted">Нет обращений по фильтру</p>}
+        {filtered.map(thread => {
+          const question = firstParticipantQuestion(thread);
+          return (
+            <article key={thread.id} className="adm-mod-item">
+              <div className="adm-mod-item-row1">
+                <div className="adm-mod-item-main">
+                  <div className="adm-mod-item-title-line">
                     {thread.participantId && onOpenCard ? (
                       <button
                         type="button"
-                        className="adm-link"
-                        style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer', textAlign: 'left' }}
+                        className="adm-tasks-title"
                         onClick={() => onOpenCard(thread.participantId!)}
                       >
                         {thread.participantName || `Участник #${thread.participantId}`}
                       </button>
                     ) : (
-                      thread.participantName || '—'
+                      <strong>{thread.participantName || 'Участник'}</strong>
                     )}
-                    {thread.groupName ? (
-                      <div className="adm-muted" style={{ fontSize: 11 }}>{thread.groupName}</div>
-                    ) : null}
-                  </td>
-                  <td>{thread.direction || '—'}</td>
-                  <td style={{ maxWidth: 160, fontSize: 12 }}>
-                    <div style={{ fontWeight: 600 }}>{thread.subject || 'Обращение'}</div>
-                    <div className="adm-muted" style={{ fontSize: 11 }}>Нить #{thread.id}</div>
-                  </td>
-                  <td style={{ maxWidth: 280, fontSize: 12 }}>
-                    {question ? (
-                      <button
-                        type="button"
-                        className="adm-link"
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: 0,
-                          font: 'inherit',
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          whiteSpace: 'pre-wrap',
-                          lineHeight: 1.35,
-                          color: 'inherit',
-                          textDecoration: 'underline',
-                          textDecorationStyle: 'dotted',
-                        }}
-                        title="Открыть карточку обращения"
-                        onClick={() => setModalId(thread.id)}
-                      >
-                        {clip(question)}
-                      </button>
-                    ) : (
-                      <span className="adm-muted">Нет текста</span>
-                    )}
-                  </td>
-                  <td style={{ color: statusColor(thread.status), fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    {statusLabel(thread.status)}
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{formatWhen(thread.createdAt)}</td>
-                  <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{formatWhen(thread.updatedAt)}</td>
-                  <td>{thread.messages?.length || 0}</td>
-                  <td>{replyBlock(thread, true)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    <span className={statusClass(thread.status)}>{statusLabel(thread.status)}</span>
+                    <span className="adm-tasks-id">#{thread.id}</span>
+                  </div>
+                  <p className="adm-kb-panel-sub" style={{ marginTop: 4 }}>
+                    {[
+                      thread.subject || 'Обращение',
+                      thread.direction,
+                      thread.groupName,
+                      `сообщ. ${thread.messages?.length || 0}`,
+                      formatWhen(thread.updatedAt) ? `обн. ${formatWhen(thread.updatedAt)}` : '',
+                    ].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+              </div>
+
+              {question ? (
+                <button
+                  type="button"
+                  className="adm-mod-item-text"
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    border: 0,
+                    background: 'transparent',
+                    padding: 0,
+                    cursor: 'pointer',
+                    color: 'inherit',
+                    font: 'inherit',
+                  }}
+                  title="Открыть карточку обращения"
+                  onClick={() => setModalId(thread.id)}
+                >
+                  {clip(question)}
+                </button>
+              ) : (
+                <p className="adm-muted" style={{ marginTop: 8 }}>Нет текста</p>
+              )}
+
+              <div className="adm-mod-item-actions">
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-secondary adm-btn-sm"
+                  onClick={() => setModalId(thread.id)}
+                >
+                  Открыть
+                </button>
+              </div>
+
+              <div style={{ marginTop: 10 }}>
+                {replyBlock(thread, true)}
+              </div>
+            </article>
+          );
+        })}
       </div>
 
       {modalThread && (
         <div className="adm-modal-backdrop" onClick={() => setModalId(null)}>
           <div
-            className="card"
+            className="card adm-kb-panel"
             style={{ maxWidth: 640, width: '100%', maxHeight: '90vh', overflow: 'auto' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
               <div>
                 <h3 style={{ marginTop: 0, marginBottom: 6 }}>
-                  {modalThread.subject || 'Обращение'} · нить #{modalThread.id}
+                  {modalThread.subject || 'Обращение'} · #{modalThread.id}
                 </h3>
                 <div className="adm-muted" style={{ fontSize: 13 }}>
                   {modalThread.participantId && onOpenCard ? (
@@ -365,9 +356,7 @@ export function OrgDirectorPanel({ adminFetch, act, reloadKey, search = '', onOp
                   {modalThread.groupName ? ` · ${modalThread.groupName}` : ''}
                   {modalThread.direction ? ` · ${modalThread.direction}` : ''}
                   {' · '}
-                  <span style={{ color: statusColor(modalThread.status), fontWeight: 700 }}>
-                    {statusLabel(modalThread.status)}
-                  </span>
+                  <span className={statusClass(modalThread.status)}>{statusLabel(modalThread.status)}</span>
                 </div>
                 <div className="adm-muted" style={{ fontSize: 12, marginTop: 4 }}>
                   Создано: {formatWhen(modalThread.createdAt) || '—'}
@@ -380,28 +369,23 @@ export function OrgDirectorPanel({ adminFetch, act, reloadKey, search = '', onOp
               </button>
             </div>
 
-            <div style={{ marginTop: 14 }}>
+            <div className="adm-mod-answers" style={{ borderTop: 'none', paddingTop: 0 }}>
               {(modalThread.messages || []).length === 0 && (
                 <p className="adm-muted">Сообщений нет</p>
               )}
               {(modalThread.messages || []).map(m => (
                 <div
                   key={m.id}
-                  style={{
-                    marginTop: 8,
-                    padding: 10,
-                    borderRadius: 8,
-                    fontSize: 13,
-                    background: m.senderType === 'admin' ? '#F0FFF4' : '#F7F7F7',
-                    whiteSpace: 'pre-wrap',
-                    lineHeight: 1.4,
-                  }}
+                  className={m.senderType === 'admin' ? 'adm-mod-answer' : 'adm-mod-reply'}
+                  style={m.senderType === 'admin' ? { background: 'rgba(0, 122, 255, 0.08)' } : undefined}
                 >
-                  <div style={{ color: '#888', fontSize: 11, marginBottom: 4 }}>
-                    {m.senderType === 'admin' ? 'Дирекция / организаторы' : 'Участник'}
-                    {m.createdAt ? ` · ${formatWhen(m.createdAt)}` : ''}
+                  <div className="adm-mod-answer-head">
+                    <strong>{m.senderType === 'admin' ? 'Дирекция / организаторы' : 'Участник'}</strong>
+                    <span className="adm-muted" style={{ fontSize: 11 }}>
+                      {m.createdAt ? formatWhen(m.createdAt) : ''}
+                    </span>
                   </div>
-                  {m.text}
+                  <div className="adm-mod-answer-text">{m.text}</div>
                 </div>
               ))}
             </div>

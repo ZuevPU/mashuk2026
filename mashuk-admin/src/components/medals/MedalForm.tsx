@@ -69,10 +69,13 @@ export function MedalForm({
   };
 
   return (
-    <div className="card adm-forum-block adm-medal-form">
-      <div className="adm-forum-toolbar" style={{ marginBottom: 12 }}>
-        <h3 style={{ margin: 0 }}>{editing ? 'Редактирование медали' : 'Новая медаль'}</h3>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+    <div className="card adm-forum-block adm-kb-panel adm-medal-form">
+      <div className="adm-kb-panel-head" style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div>
+          <h3>{editing ? 'Редактирование медали' : 'Новая медаль'}</h3>
+          <p className="adm-kb-panel-sub">Название, условие выдачи и видимость для участника.</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {toolbarActions}
           <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onBack}>
             ← К списку
@@ -131,7 +134,7 @@ export function MedalForm({
 
       <div className="adm-field">
         <span className="adm-label">Уровень</span>
-        <div className="adm-seg">
+        <div className="adm-forum-seg">
           {(['bronze', 'silver', 'gold'] as const).map(l => (
             <button key={l} type="button" className={draft.level === l ? 'on' : ''} onClick={() => onChange({ level: l })}>
               {l === 'bronze' ? 'Бронза' : l === 'silver' ? 'Серебро' : 'Золото'}
@@ -142,7 +145,7 @@ export function MedalForm({
 
       <div className="adm-field">
         <span className="adm-label">Тип выдачи</span>
-        <div className="adm-seg">
+        <div className="adm-forum-seg">
           <button type="button" className={draft.awardType === 'auto' ? 'on' : ''} onClick={() => onChange({ awardType: 'auto' })}>
             Автоматическая
           </button>
@@ -153,7 +156,7 @@ export function MedalForm({
       </div>
 
       {draft.awardType === 'auto' && (
-        <div className="adm-field card" style={{ padding: 12, background: '#fafafa' }}>
+        <div className="adm-field" style={{ padding: 12, borderRadius: 12, border: '1px solid var(--kb-hairline, rgba(60,60,67,0.12))', background: '#F5F5F7' }}>
           <span className="adm-label">Условие получения</span>
           <div className="adm-forum-grid-2" style={{ marginTop: 8 }}>
             <select
@@ -209,7 +212,7 @@ export function MedalForm({
 
       <div className="adm-field">
         <span className="adm-label">Статус</span>
-        <div className="adm-seg">
+        <div className="adm-forum-seg">
           <button type="button" className={draft.isActive ? 'on' : ''} onClick={() => onChange({ isActive: true })}>
             Активна
           </button>

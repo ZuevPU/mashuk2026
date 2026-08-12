@@ -17,32 +17,141 @@ type SortKey = 'submittedAt' | 'checkedAt' | 'participant' | 'task' | 'status' |
 type SortState = { key: SortKey; dir: 'asc' | 'desc' };
 
 function sortMark(sort: SortState, key: SortKey): string {
-  if (sort.key !== key) return ' ↕';
+  if (sort.key !== key) return '';
   return sort.dir === 'asc' ? ' ↑' : ' ↓';
 }
 
-function SortTh({
-  label: text,
-  sortKey,
+function statusClass(status?: string | null): string {
+  if (status === 'approved') return 'adm-tasks-status is-ok';
+  if (status === 'rejected') return 'adm-tasks-status is-bad';
+  return 'adm-tasks-status is-wait';
+}
+
+function SortBar({
   sort,
+  keys,
   onSort,
 }: {
-  label: string;
-  sortKey: SortKey;
   sort: SortState;
+  keys: { key: SortKey; label: string }[];
   onSort: (key: SortKey) => void;
 }) {
   return (
-    <th>
-      <button
-        type="button"
-        className="adm-link"
-        style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer', fontWeight: 700 }}
-        onClick={() => onSort(sortKey)}
-      >
-        {text}{sortMark(sort, sortKey)}
-      </button>
-    </th>
+    <div className="adm-mod-sort" aria-label="Сортировка">
+      <span className="adm-muted" style={{ fontSize: 12, marginRight: 4 }}>Сорт.</span>
+      {keys.map(k => (
+        <button
+          key={k.key}
+          type="button"
+          className={sort.key === k.key ? 'on' : ''}
+          onClick={() => onSort(k.key)}
+        >
+          {k.label}{sortMark(sort, k.key)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SubmissionCard({
+  row,
+  mode,
+  selected,
+  onToggle,
+  rejectValue,
+  onRejectChange,
+  onApprove,
+  onReject,
+}: {
+  row: TaskSubmissionRow;
+  mode: 'queue' | 'reviewed';
+  selected?: boolean;
+  onToggle?: () => void;
+  rejectValue: string;
+  onRejectChange: (value: string) => void;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const blocked = teamBlocked(row);
+  const when = mode === 'queue'
+    ? (row.submittedAt ? new Date(row.submittedAt).toLocaleString('ru-RU') : '—')
+    : ((row.checkedAt || row.verifiedAt)
+      ? new Date(row.checkedAt || row.verifiedAt || '').toLocaleString('ru-RU')
+      : '—');
+
+  return (
+    <article className={`adm-mod-item${selected ? ' is-selected' : ''}`}>
+      <div className="adm-mod-item-row1">
+        <div className="adm-mod-item-main">
+          {mode === 'queue' && onToggle && (
+            <label className="adm-tasks-check" style={{ marginBottom: 6 }}>
+              <input type="checkbox" checked={!!selected} onChange={onToggle} disabled={blocked} />
+              <span>Выбрать</span>
+            </label>
+          )}
+          <div className="adm-mod-item-title-line">
+            <strong>{row.participantName || `Участник #${row.participantId}`}</strong>
+            <span className={statusClass(row.status)}>{label(row.status || 'pending')}</span>
+          </div>
+          <p className="adm-kb-panel-sub" style={{ marginTop: 4 }}>
+            {[row.taskTitle || 'Задание', taskDayLabel(row), row.participantDirection, row.participantGroupName]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+        </div>
+        <div className="adm-mod-item-kpis" aria-label="Мета">
+          <span>
+            <em>{mode === 'queue' ? 'Отправлено' : 'Проверено'}</em>
+            {when}
+          </span>
+          {mode === 'reviewed' && (
+            <span>
+              <em>Баллы</em>
+              {row.pointsAwarded ?? 0}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="adm-mod-item-text">{taskSubmissionAnswerCell(row)}</div>
+
+      <div className="adm-mod-item-meta">
+        <div className="adm-mod-meta-block">{submissionMetaCell(row)}</div>
+        <div className="adm-mod-meta-block">{submissionLifecycleCell(row)}</div>
+      </div>
+
+      {row.moderatorComment && mode === 'reviewed' && (
+        <p className="adm-mod-reject-note" style={{ background: 'rgba(120,120,128,0.08)', color: 'var(--m-text)' }}>
+          Комментарий: {row.moderatorComment}
+        </p>
+      )}
+
+      <div className="adm-mod-item-actions">
+        <input
+          className="adm-input"
+          placeholder={mode === 'queue' ? 'Комментарий при отклонении' : 'Комментарий'}
+          value={rejectValue}
+          onChange={e => onRejectChange(e.target.value)}
+          style={{ flex: '1 1 180px', minWidth: 140, maxWidth: 320 }}
+        />
+        <button
+          type="button"
+          className="adm-btn adm-btn-primary adm-btn-sm"
+          disabled={blocked || (mode === 'reviewed' && row.status === 'approved')}
+          onClick={onApprove}
+        >
+          Одобрить
+        </button>
+        <button
+          type="button"
+          className="adm-btn adm-btn-danger adm-btn-sm"
+          disabled={blocked}
+          onClick={onReject}
+        >
+          {mode === 'reviewed' && row.status === 'rejected' ? 'Обновить ✕' : 'Отклонить'}
+        </button>
+      </div>
+    </article>
   );
 }
 
@@ -156,26 +265,28 @@ export function TaskModerationQueue({ adminFetch, act, reloadKey }: Props) {
     loadReviewed().catch(() => setReviewedLoading(false));
   }, [loadReviewed, reloadKey]);
 
+  const reloadBoth = async () => {
+    await Promise.all([loadQueue(), loadReviewed()]);
+  };
+
   const toggleSort = (key: SortKey, target: 'queue' | 'reviewed') => {
     const setter = target === 'queue' ? setSort : setReviewedSort;
-    const pageReset = target === 'queue' ? setPage : setReviewedPage;
     setter(prev => (
       prev.key === key
         ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
         : { key, dir: key === 'participant' || key === 'task' ? 'asc' : 'desc' }
     ));
-    pageReset(1);
+    if (target === 'queue') setPage(1);
+    else setReviewedPage(1);
   };
 
-  const toggle = (id: number) => setSelected(prev => {
-    const n = new Set(prev);
-    if (n.has(id)) n.delete(id);
-    else n.add(id);
-    return n;
-  });
-
-  const reloadBoth = async () => {
-    await Promise.all([loadQueue(), loadReviewed()]);
+  const toggle = (id: number) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const moderate = (id: number, status: 'approved' | 'rejected') =>
@@ -213,7 +324,7 @@ export function TaskModerationQueue({ adminFetch, act, reloadKey }: Props) {
 
   return (
     <>
-      <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+      <div className="adm-mod-filters">
         <select className="adm-input" value={dayFilter} onChange={e => { setDayFilter(e.target.value); setPage(1); }}>
           <option value="">Все дни (очередь)</option>
           {dayOptions.map(d => <option key={d} value={String(d)}>День {d}</option>)}
@@ -236,222 +347,153 @@ export function TaskModerationQueue({ adminFetch, act, reloadKey }: Props) {
           <option value="">Все группы</option>
           {groups.map(g => <option key={g.id} value={String(g.id)}>{g.name}</option>)}
         </select>
-        <span className="adm-muted">В очереди: {total}</span>
+        <span className="adm-muted" style={{ fontSize: 12 }}>В очереди: {total}</span>
       </div>
 
-      <div className="card adm-forum-block" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Очередь на проверку</h3>
-        <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-          <input
-            className="adm-input"
-            placeholder="Комментарий для массового отклонения"
-            value={bulkRejectComment}
-            onChange={e => setBulkRejectComment(e.target.value)}
-            style={{ minWidth: 220 }}
+      <section id="mod-tasks-queue" className="adm-forum-anchor">
+        <div className="card adm-forum-block adm-kb-panel">
+          <div className="adm-kb-panel-head">
+            <h3>Очередь на проверку</h3>
+            <p className="adm-kb-panel-sub">Одобрите или отклоните ответы участников. Можно массово.</p>
+          </div>
+
+          {selected.size > 0 && (
+            <div className="adm-kb-bulk" style={{ marginTop: 0, marginBottom: 12 }}>
+              <span className="adm-kb-bulk-count">Выбрано: {selected.size}</span>
+              <input
+                className="adm-input"
+                placeholder="Комментарий для массового отклонения"
+                value={bulkRejectComment}
+                onChange={e => setBulkRejectComment(e.target.value)}
+                style={{ minWidth: 200, flex: '1 1 200px' }}
+              />
+              <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={() => bulkModerate('approved')}>
+                Подтвердить
+              </button>
+              <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={() => bulkModerate('rejected')}>
+                Отклонить
+              </button>
+            </div>
+          )}
+
+          <SortBar
+            sort={sort}
+            onSort={k => toggleSort(k, 'queue')}
+            keys={[
+              { key: 'submittedAt', label: 'Время' },
+              { key: 'participant', label: 'Участник' },
+              { key: 'task', label: 'Задание' },
+              { key: 'day', label: 'День' },
+              { key: 'status', label: 'Статус' },
+            ]}
           />
-          <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" disabled={selected.size === 0} onClick={() => bulkModerate('approved')}>
-            Подтвердить выбранных ({selected.size})
-          </button>
-          <button type="button" className="adm-btn adm-btn-sm btn-danger" disabled={selected.size === 0} onClick={() => bulkModerate('rejected')}>
-            Отклонить выбранных ({selected.size})
-          </button>
-        </div>
-        <table className="adm-table">
-          <thead>
-            <tr>
-              <th />
-              <SortTh label="Участник" sortKey="participant" sort={sort} onSort={k => toggleSort(k, 'queue')} />
-              <SortTh label="Задание" sortKey="task" sort={sort} onSort={k => toggleSort(k, 'queue')} />
-              <SortTh label="День" sortKey="day" sort={sort} onSort={k => toggleSort(k, 'queue')} />
-              <th>Ответ</th>
-              <SortTh label="Статус" sortKey="status" sort={sort} onSort={k => toggleSort(k, 'queue')} />
-              <th>Цепочка</th>
-              <th>Тип</th>
-              <SortTh label="Отправлено" sortKey="submittedAt" sort={sort} onSort={k => toggleSort(k, 'queue')} />
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.id}>
-                <td><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} disabled={teamBlocked(r)} /></td>
-                <td>{r.participantName || r.participantId}</td>
-                <td>{r.taskTitle || '—'}</td>
-                <td>{taskDayLabel(r)}</td>
-                <td style={{ maxWidth: 220, fontSize: 12 }}>{taskSubmissionAnswerCell(r)}</td>
-                <td>{label(r.status || 'pending')}</td>
-                <td style={{ maxWidth: 200 }}>{submissionLifecycleCell(r)}</td>
-                <td>{submissionMetaCell(r)}</td>
-                <td style={{ whiteSpace: 'nowrap', fontSize: 11 }}>
-                  {r.submittedAt ? new Date(r.submittedAt).toLocaleString('ru-RU') : '—'}
-                </td>
-                <td>
-                  <input
-                    className="adm-input adm-input-narrow"
-                    placeholder="Коммент. отклон."
-                    value={rejectComment[r.id] || ''}
-                    onChange={e => setRejectComment(prev => ({ ...prev, [r.id]: e.target.value }))}
-                    style={{ maxWidth: 100, marginRight: 4 }}
-                  />
-                  <button type="button" className="adm-btn adm-btn-sm" disabled={teamBlocked(r)} onClick={() => moderate(r.id, 'approved')}>✓</button>
-                  <button type="button" className="adm-btn adm-btn-sm btn-danger" disabled={teamBlocked(r)} onClick={() => moderate(r.id, 'rejected')}>✕</button>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr><td colSpan={10} className="adm-muted">Нет заявок в очереди</td></tr>
-            )}
-          </tbody>
-        </table>
-        {total > limit && (
-          <div className="adm-forum-toolbar" style={{ marginTop: 8 }}>
-            <button type="button" className="adm-btn adm-btn-sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Назад</button>
-            <span className="adm-muted">Стр. {page}</span>
-            <button type="button" className="adm-btn adm-btn-sm" disabled={page * limit >= total} onClick={() => setPage(p => p + 1)}>Далее</button>
-          </div>
-        )}
-      </div>
 
-      <div
-        className="card adm-forum-block"
-        style={{
-          marginBottom: 16,
-          border: '1px solid #C4D4C0',
-          background: 'linear-gradient(180deg, #F3F8F2 0%, #fff 48px)',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div>
-            <h3 style={{ margin: 0 }}>Уже проверено мной</h3>
-            <p className="adm-muted" style={{ margin: '4px 0 0', fontSize: 12 }}>
-              Заявки, которые вы одобрили или отклонили в админке. Можно изменить решение.
-            </p>
+          <div className="adm-mod-list" style={{ marginTop: 10 }}>
+            {rows.map(r => (
+              <SubmissionCard
+                key={r.id}
+                row={r}
+                mode="queue"
+                selected={selected.has(r.id)}
+                onToggle={() => toggle(r.id)}
+                rejectValue={rejectComment[r.id] || ''}
+                onRejectChange={value => setRejectComment(prev => ({ ...prev, [r.id]: value }))}
+                onApprove={() => moderate(r.id, 'approved')}
+                onReject={() => moderate(r.id, 'rejected')}
+              />
+            ))}
+            {rows.length === 0 && <p className="adm-muted">Нет заявок в очереди</p>}
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                background: '#2D6A4F',
-                color: '#fff',
-                borderRadius: 999,
-                padding: '4px 10px',
-              }}
-            >
-              {reviewedTotal}
-            </span>
+
+          {total > limit && (
+            <div className="adm-forum-toolbar" style={{ marginTop: 12 }}>
+              <button type="button" className="adm-btn adm-btn-sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Назад</button>
+              <span className="adm-muted">Стр. {page}</span>
+              <button type="button" className="adm-btn adm-btn-sm" disabled={page * limit >= total} onClick={() => setPage(p => p + 1)}>Далее</button>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section id="mod-tasks-done" className="adm-forum-anchor">
+        <div className="card adm-forum-block adm-kb-panel">
+          <div className="adm-kb-panel-head" style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            <div>
+              <h3>Проверено мной · {reviewedTotal}</h3>
+              <p className="adm-kb-panel-sub">Можно изменить решение по заявкам, которые вы уже проверили.</p>
+            </div>
             <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setReviewedOpen(v => !v)}>
               {reviewedOpen ? 'Свернуть' : 'Развернуть'}
             </button>
           </div>
-        </div>
 
-        {reviewedOpen && (
-          <>
-            <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8, marginTop: 12, marginBottom: 12 }}>
-              <select
-                className="adm-input"
-                value={reviewedDayFilter}
-                onChange={e => { setReviewedDayFilter(e.target.value); setReviewedPage(1); }}
-              >
-                <option value="">Все дни</option>
-                {dayOptions.map(d => <option key={d} value={String(d)}>День {d}</option>)}
-              </select>
-              <select
-                className="adm-input"
-                value={reviewedStatusFilter}
-                onChange={e => { setReviewedStatusFilter(e.target.value); setReviewedPage(1); }}
-              >
-                <option value="approved,rejected">Одобрено и отклонено</option>
-                <option value="approved">Только одобрено</option>
-                <option value="rejected">Только отклонено</option>
-              </select>
-            </div>
+          {reviewedOpen && (
+            <>
+              <div className="adm-mod-filters" style={{ marginTop: 4 }}>
+                <select
+                  className="adm-input"
+                  value={reviewedDayFilter}
+                  onChange={e => { setReviewedDayFilter(e.target.value); setReviewedPage(1); }}
+                >
+                  <option value="">Все дни</option>
+                  {dayOptions.map(d => <option key={d} value={String(d)}>День {d}</option>)}
+                </select>
+                <select
+                  className="adm-input"
+                  value={reviewedStatusFilter}
+                  onChange={e => { setReviewedStatusFilter(e.target.value); setReviewedPage(1); }}
+                >
+                  <option value="approved,rejected">Одобрено и отклонено</option>
+                  <option value="approved">Только одобрено</option>
+                  <option value="rejected">Только отклонено</option>
+                </select>
+              </div>
 
-            {reviewedLoading && reviewedRows.length === 0 ? (
-              <p className="adm-muted">Загрузка проверенных…</p>
-            ) : (
-              <table className="adm-table">
-                <thead>
-                  <tr>
-                    <SortTh label="Участник" sortKey="participant" sort={reviewedSort} onSort={k => toggleSort(k, 'reviewed')} />
-                    <SortTh label="Задание" sortKey="task" sort={reviewedSort} onSort={k => toggleSort(k, 'reviewed')} />
-                    <SortTh label="День" sortKey="day" sort={reviewedSort} onSort={k => toggleSort(k, 'reviewed')} />
-                    <th>Ответ</th>
-                    <SortTh label="Решение" sortKey="status" sort={reviewedSort} onSort={k => toggleSort(k, 'reviewed')} />
-                    <SortTh label="Баллы" sortKey="points" sort={reviewedSort} onSort={k => toggleSort(k, 'reviewed')} />
-                    <th>Комментарий</th>
-                    <SortTh label="Проверено" sortKey="checkedAt" sort={reviewedSort} onSort={k => toggleSort(k, 'reviewed')} />
-                    <th>Изменить решение</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <SortBar
+                sort={reviewedSort}
+                onSort={k => toggleSort(k, 'reviewed')}
+                keys={[
+                  { key: 'checkedAt', label: 'Проверено' },
+                  { key: 'participant', label: 'Участник' },
+                  { key: 'task', label: 'Задание' },
+                  { key: 'day', label: 'День' },
+                  { key: 'status', label: 'Решение' },
+                  { key: 'points', label: 'Баллы' },
+                ]}
+              />
+
+              {reviewedLoading && reviewedRows.length === 0 ? (
+                <p className="adm-muted" style={{ marginTop: 10 }}>Загрузка проверенных…</p>
+              ) : (
+                <div className="adm-mod-list" style={{ marginTop: 10 }}>
                   {reviewedRows.map(r => (
-                    <tr key={r.id}>
-                      <td>{r.participantName || r.participantId}</td>
-                      <td>{r.taskTitle || '—'}</td>
-                      <td>{taskDayLabel(r)}</td>
-                      <td style={{ maxWidth: 220, fontSize: 12 }}>{taskSubmissionAnswerCell(r)}</td>
-                      <td>
-                        <span style={{ color: r.status === 'approved' ? '#2D6A4F' : '#C53030', fontWeight: 700 }}>
-                          {label(r.status || '')}
-                        </span>
-                      </td>
-                      <td>{r.pointsAwarded ?? 0}</td>
-                      <td style={{ maxWidth: 180, fontSize: 12 }}>{r.moderatorComment || '—'}</td>
-                      <td style={{ whiteSpace: 'nowrap', fontSize: 11 }}>
-                        {(r.checkedAt || r.verifiedAt)
-                          ? new Date(r.checkedAt || r.verifiedAt || '').toLocaleString('ru-RU')
-                          : '—'}
-                      </td>
-                      <td>
-                        <input
-                          className="adm-input adm-input-narrow"
-                          placeholder="Коммент."
-                          value={rejectComment[r.id] ?? r.moderatorComment ?? ''}
-                          onChange={e => setRejectComment(prev => ({ ...prev, [r.id]: e.target.value }))}
-                          style={{ maxWidth: 120, marginRight: 4, marginBottom: 4 }}
-                        />
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                          <button
-                            type="button"
-                            className="adm-btn adm-btn-sm"
-                            disabled={teamBlocked(r) || r.status === 'approved'}
-                            onClick={() => moderate(r.id, 'approved')}
-                            title="Одобрить заново"
-                          >
-                            Одобрить
-                          </button>
-                          <button
-                            type="button"
-                            className="adm-btn adm-btn-sm btn-danger"
-                            disabled={teamBlocked(r)}
-                            onClick={() => moderate(r.id, 'rejected')}
-                            title={r.status === 'rejected' ? 'Обновить отклонение' : 'Отклонить'}
-                          >
-                            {r.status === 'rejected' ? 'Обновить ✕' : 'Отклонить'}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                    <SubmissionCard
+                      key={r.id}
+                      row={r}
+                      mode="reviewed"
+                      rejectValue={rejectComment[r.id] ?? r.moderatorComment ?? ''}
+                      onRejectChange={value => setRejectComment(prev => ({ ...prev, [r.id]: value }))}
+                      onApprove={() => moderate(r.id, 'approved')}
+                      onReject={() => moderate(r.id, 'rejected')}
+                    />
                   ))}
                   {reviewedRows.length === 0 && (
-                    <tr><td colSpan={9} className="adm-muted">Вы ещё не проверяли заявки в этой выборке</td></tr>
+                    <p className="adm-muted">Вы ещё не проверяли заявки в этой выборке</p>
                   )}
-                </tbody>
-              </table>
-            )}
+                </div>
+              )}
 
-            {reviewedTotal > limit && (
-              <div className="adm-forum-toolbar" style={{ marginTop: 8 }}>
-                <button type="button" className="adm-btn adm-btn-sm" disabled={reviewedPage <= 1} onClick={() => setReviewedPage(p => p - 1)}>Назад</button>
-                <span className="adm-muted">Стр. {reviewedPage}</span>
-                <button type="button" className="adm-btn adm-btn-sm" disabled={reviewedPage * limit >= reviewedTotal} onClick={() => setReviewedPage(p => p + 1)}>Далее</button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+              {reviewedTotal > limit && (
+                <div className="adm-forum-toolbar" style={{ marginTop: 12 }}>
+                  <button type="button" className="adm-btn adm-btn-sm" disabled={reviewedPage <= 1} onClick={() => setReviewedPage(p => p - 1)}>Назад</button>
+                  <span className="adm-muted">Стр. {reviewedPage}</span>
+                  <button type="button" className="adm-btn adm-btn-sm" disabled={reviewedPage * limit >= reviewedTotal} onClick={() => setReviewedPage(p => p + 1)}>Далее</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </section>
     </>
   );
 }

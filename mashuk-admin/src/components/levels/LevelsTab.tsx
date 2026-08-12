@@ -2,9 +2,28 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { label } from '../../labels/ru';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
+import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
 import { BonusRulesEditor, type BonusRule } from './BonusRulesEditor';
 import { RatingFormulaPreview } from './RatingFormulaPreview';
 import { levelNameForPoints, validateThresholdRows, type ThresholdRow } from './levelPreviewUtils';
+
+const LEVELS_NAV_SETTINGS: HubNavItem[] = [
+  { id: 'levels-hero', label: 'Обзор' },
+  { id: 'levels-formula', label: 'Формула' },
+  { id: 'levels-path', label: 'Путь' },
+  { id: 'levels-exp', label: 'Опыт' },
+  { id: 'levels-actions', label: 'Ставки' },
+  { id: 'levels-scopes', label: 'Лидеры' },
+  { id: 'levels-bonus', label: 'Бонусы' },
+  { id: 'levels-recalc', label: 'Пересчёты' },
+];
+
+const LEVELS_NAV_MANUAL: HubNavItem[] = [
+  { id: 'levels-hero', label: 'Обзор' },
+  { id: 'levels-manual', label: 'Начисление' },
+  { id: 'levels-revoke', label: 'Аннулирование' },
+  { id: 'levels-manual-log', label: 'Журнал' },
+];
 
 type LevelConfig = {
   id: number;
@@ -118,33 +137,37 @@ function ThresholdEditor({
     onChange(rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   };
   return (
-    <div className="card">
-      <h3>{title}</h3>
-      <p className="adm-muted" style={{ fontSize: 12 }}>Ключ конфигурации: {actionType}</p>
-      <table className="adm-table">
-        <thead>
-          <tr>
-            <th>Уровень</th>
-            <th>От</th>
-            <th>До</th>
-            <th>Название</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i}>
-              <td>{r.level}</td>
-              <td><input type="number" className="adm-input" value={r.from} onChange={e => update(i, { from: Number(e.target.value) })} /></td>
-              <td><input type="number" className="adm-input" value={r.to} onChange={e => update(i, { to: Number(e.target.value) })} /></td>
-              <td><input className="adm-input" value={r.name} onChange={e => update(i, { name: e.target.value })} /></td>
-              <td>
-                <button type="button" className="adm-btn adm-btn-sm btn-danger" onClick={() => onChange(rows.filter((_, j) => j !== i))}>×</button>
-              </td>
+    <div className="card adm-forum-block adm-kb-panel">
+      <div className="adm-kb-panel-head">
+        <h3>{title}</h3>
+        <p className="adm-kb-panel-sub">Ключ конфигурации: {actionType}</p>
+      </div>
+      <div className="adm-kb-table-scroll">
+        <table className="adm-table adm-kb-inline-table">
+          <thead>
+            <tr>
+              <th>Уровень</th>
+              <th>От</th>
+              <th>До</th>
+              <th>Название</th>
+              <th />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td>{r.level}</td>
+                <td><input type="number" className="adm-input" value={r.from} onChange={e => update(i, { from: Number(e.target.value) })} /></td>
+                <td><input type="number" className="adm-input" value={r.to} onChange={e => update(i, { to: Number(e.target.value) })} /></td>
+                <td><input className="adm-input" value={r.name} onChange={e => update(i, { name: e.target.value })} /></td>
+                <td>
+                  <button type="button" className="adm-btn adm-btn-sm adm-btn-danger" onClick={() => onChange(rows.filter((_, j) => j !== i))}>×</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <button
         type="button"
         className="adm-btn adm-btn-secondary adm-btn-sm"
@@ -190,60 +213,62 @@ function ActionTable({
   onChange: (actionType: string, patch: Partial<ActionRow>) => void;
 }) {
   return (
-    <table className="adm-table">
-      <thead>
-        <tr>
-          <th>Название</th>
-          <th>Баллы</th>
-          <th>Линия</th>
-          <th>Макс.</th>
-          <th className="adm-muted" style={{ fontSize: 11 }}>actionType</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(row => (
-          <tr key={row.actionType}>
-            <td>
-              <input
-                className="adm-input"
-                value={row.displayName}
-                onChange={e => onChange(row.actionType, { displayName: e.target.value })}
-              />
-            </td>
-            <td>
-              <input
-                type="number"
-                className="adm-input"
-                style={{ width: 72 }}
-                value={row.points}
-                onChange={e => onChange(row.actionType, { points: Number(e.target.value) })}
-              />
-            </td>
-            <td>
-              <select
-                className="adm-input"
-                value={row.track}
-                onChange={e => onChange(row.actionType, { track: e.target.value })}
-              >
-                <option value="path">Путь</option>
-                <option value="experience">Опыт</option>
-                <option value="bonus">Бонус</option>
-              </select>
-            </td>
-            <td>
-              <input
-                type="number"
-                className="adm-input"
-                style={{ width: 72 }}
-                value={row.max}
-                onChange={e => onChange(row.actionType, { max: Number(e.target.value) })}
-              />
-            </td>
-            <td className="adm-muted" style={{ fontSize: 11 }}>{row.actionType}</td>
+    <div className="adm-kb-table-scroll">
+      <table className="adm-table adm-kb-inline-table">
+        <thead>
+          <tr>
+            <th>Название</th>
+            <th>Баллы</th>
+            <th>Линия</th>
+            <th>Макс.</th>
+            <th className="adm-muted" style={{ fontSize: 11 }}>actionType</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map(row => (
+            <tr key={row.actionType}>
+              <td>
+                <input
+                  className="adm-input"
+                  value={row.displayName}
+                  onChange={e => onChange(row.actionType, { displayName: e.target.value })}
+                />
+              </td>
+              <td>
+                <input
+                  type="number"
+                  className="adm-input"
+                  style={{ width: 72 }}
+                  value={row.points}
+                  onChange={e => onChange(row.actionType, { points: Number(e.target.value) })}
+                />
+              </td>
+              <td>
+                <select
+                  className="adm-input"
+                  value={row.track}
+                  onChange={e => onChange(row.actionType, { track: e.target.value })}
+                >
+                  <option value="path">Путь</option>
+                  <option value="experience">Опыт</option>
+                  <option value="bonus">Бонус</option>
+                </select>
+              </td>
+              <td>
+                <input
+                  type="number"
+                  className="adm-input"
+                  style={{ width: 72 }}
+                  value={row.max}
+                  onChange={e => onChange(row.actionType, { max: Number(e.target.value) })}
+                />
+              </td>
+              <td className="adm-muted" style={{ fontSize: 11 }}>{row.actionType}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -461,210 +486,264 @@ export function LevelsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
   if (loading) return <p className="adm-muted">Загрузка системы баллов…</p>;
 
-  return (
-    <div className="adm-forum adm-levels">
-      <AdminPageHero
-        title="Система рейтинга"
-        hint="Ставки по типам действий и области лидербордов. Итоговый рейтинг участника — единый счётчик (path + experience + bonus). Баллы конкретного задания задаются в «Задания»."
-      />
+  const navItems = segment === 'settings' ? LEVELS_NAV_SETTINGS : LEVELS_NAV_MANUAL;
 
-      <div className="adm-seg" style={{ marginBottom: 12 }}>
-        <button type="button" className={segment === 'settings' ? 'on' : ''} onClick={() => setSegment('settings')}>Настройка</button>
-        <button type="button" className={segment === 'manual' ? 'on' : ''} onClick={() => setSegment('manual')}>Ручные операции</button>
-      </div>
+  return (
+    <HubLensLayout className="adm-forum adm-levels adm-kb" items={navItems} navLabel="Разделы баллов">
+      <section id="levels-hero" className="adm-forum-anchor">
+        <AdminPageHero
+          title="Система баллов"
+          hint="Ставки по действиям и срезы лидербордов. Итог участника = Путь + Опыт + Бонус."
+        >
+          <div className="adm-forum-seg">
+            <button type="button" className={segment === 'settings' ? 'on' : ''} onClick={() => setSegment('settings')}>Настройка</button>
+            <button type="button" className={segment === 'manual' ? 'on' : ''} onClick={() => setSegment('manual')}>Ручные операции</button>
+          </div>
+          {segment === 'settings' && (
+            <div className="adm-forum-toolbar" style={{ marginTop: 12, marginBottom: 0, flexWrap: 'wrap', gap: 8 }}>
+              <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={saveAll}>Сохранить</button>
+              <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={recalcAll}>Пересчитать всех</button>
+            </div>
+          )}
+        </AdminPageHero>
+      </section>
 
       {segment === 'settings' && (
         <>
-          <div className="adm-forum-toolbar" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-            <button type="button" className="adm-btn adm-btn-primary" onClick={saveAll}>Сохранить</button>
-            <button type="button" className="adm-btn adm-btn-secondary" onClick={recalcAll}>Пересчитать всех</button>
-          </div>
+          <section id="levels-formula" className="adm-forum-anchor">
+            <RatingFormulaPreview pathRows={pathRows} expRows={expRows} />
+          </section>
 
-          <RatingFormulaPreview pathRows={pathRows} expRows={expRows} />
+          <section id="levels-path" className="adm-forum-anchor">
+            <ThresholdEditor title="Пороги уровней «Пути»" actionType="path_level" rows={pathRows} onChange={setPathRows} />
+          </section>
 
-          <ThresholdEditor title="Пороги уровней «Пути»" actionType="path_level" rows={pathRows} onChange={setPathRows} />
-          <ThresholdEditor title="Пороги уровней «Опыта»" actionType="exp_level" rows={expRows} onChange={setExpRows} />
+          <section id="levels-exp" className="adm-forum-anchor">
+            <ThresholdEditor title="Пороги уровней «Опыта»" actionType="exp_level" rows={expRows} onChange={setExpRows} />
+          </section>
 
-          {GROUP_ORDER.map(g => {
-            const rows = rowsByGroup.get(g) || [];
-            if (rows.length === 0) return null;
-            return (
-              <div className="card" key={g}>
-                <h3>{GROUP_LABELS[g] || g}</h3>
-                {g === 'experience' && (
-                  <p className="adm-muted" style={{ fontSize: 12, marginTop: 0 }}>
-                    Командные задания начисляют XP через task_complete (очки из карточки задания). Медаль — отдельная награда, без XP.
-                  </p>
-                )}
-                <ActionTable rows={rows} onChange={patchAction} />
-              </div>
-            );
-          })}
-
-          <div className="card">
-            <h3>Таблицы лидеров (доступные срезы)</h3>
-            <p className="adm-muted" style={{ fontSize: 12 }}>Какие разрезы рейтинга видит участник в приложении.</p>
-            <div className="adm-forum-grid-2" style={{ marginTop: 8 }}>
-              {([
-                ['total', 'Общий рейтинг'],
-                ['path', 'Линия «Путь»'],
-                ['experience', 'Линия «Опыт»'],
-                ['day', 'Лидеры дня'],
-                ['shift', 'Лидеры смены (дни 1–7)'],
-              ] as const).map(([key, lbl]) => (
-                <label key={key} className="adm-field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={leaderboardScopes[key]}
-                    onChange={e => setLeaderboardScopes(prev => ({ ...prev, [key]: e.target.checked }))}
-                  />
-                  <span>{lbl}</span>
-                </label>
-              ))}
+          <section id="levels-actions" className="adm-forum-anchor">
+            <div className="adm-stack">
+              {GROUP_ORDER.map(g => {
+                const rows = rowsByGroup.get(g) || [];
+                if (rows.length === 0) return null;
+                return (
+                  <div className="card adm-forum-block adm-kb-panel" key={g}>
+                    <div className="adm-kb-panel-head">
+                      <h3>{GROUP_LABELS[g] || g}</h3>
+                      {g === 'experience' && (
+                        <p className="adm-kb-panel-sub">
+                          Командные задания начисляют XP через task_complete. Медаль — отдельная награда, без XP.
+                        </p>
+                      )}
+                    </div>
+                    <ActionTable rows={rows} onChange={patchAction} />
+                  </div>
+                );
+              })}
             </div>
-          </div>
+          </section>
 
-          <BonusRulesEditor
-            adminFetch={adminFetch}
-            act={act}
-            reloadKey={reloadKey}
-            rules={bonusRules}
-            actionPoints={actionRows.map(r => ({ actionType: r.actionType, points: r.points, displayName: r.displayName }))}
-            onReload={load}
-          />
-
-          <div className="card">
-            <h3>История пересчётов</h3>
-            {recalcHistory.length === 0 && <p className="adm-muted">Пока не было пересчётов</p>}
-            <table className="adm-table">
-              <thead>
-                <tr><th>ID</th><th>Старт</th><th>Завершение</th><th>Участников</th><th>Статус</th></tr>
-              </thead>
-              <tbody>
-                {recalcHistory.map(r => (
-                  <tr key={r.id}>
-                    <td>{r.id}</td>
-                    <td>{r.startedAt ? new Date(r.startedAt).toLocaleString('ru-RU') : '—'}</td>
-                    <td>{r.finishedAt ? new Date(r.finishedAt).toLocaleString('ru-RU') : '—'}</td>
-                    <td>{r.participantsProcessed ?? '—'}</td>
-                    <td>{r.status}{r.error ? ` · ${r.error}` : ''}</td>
-                  </tr>
+          <section id="levels-scopes" className="adm-forum-anchor">
+            <div className="card adm-forum-block adm-kb-panel">
+              <div className="adm-kb-panel-head">
+                <h3>Таблицы лидеров</h3>
+                <p className="adm-kb-panel-sub">Какие разрезы рейтинга видит участник в приложении.</p>
+              </div>
+              <div className="adm-forum-grid-2" style={{ marginTop: 8 }}>
+                {([
+                  ['total', 'Общий рейтинг'],
+                  ['path', 'Линия «Путь»'],
+                  ['experience', 'Линия «Опыт»'],
+                  ['day', 'Лидеры дня'],
+                  ['shift', 'Лидеры смены (дни 1–7)'],
+                ] as const).map(([key, lbl]) => (
+                  <label key={key} className="adm-field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={leaderboardScopes[key]}
+                      onChange={e => setLeaderboardScopes(prev => ({ ...prev, [key]: e.target.checked }))}
+                    />
+                    <span>{lbl}</span>
+                  </label>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="levels-bonus" className="adm-forum-anchor">
+            <BonusRulesEditor
+              adminFetch={adminFetch}
+              act={act}
+              reloadKey={reloadKey}
+              rules={bonusRules}
+              actionPoints={actionRows.map(r => ({ actionType: r.actionType, points: r.points, displayName: r.displayName }))}
+              onReload={load}
+            />
+          </section>
+
+          <section id="levels-recalc" className="adm-forum-anchor">
+            <div className="card adm-forum-block adm-kb-panel">
+              <div className="adm-kb-panel-head">
+                <h3>История пересчётов</h3>
+                <p className="adm-kb-panel-sub">Запуски полного пересчёта рейтинга.</p>
+              </div>
+              {recalcHistory.length === 0 && <p className="adm-muted">Пока не было пересчётов</p>}
+              {recalcHistory.length > 0 && (
+                <div className="adm-kb-table-scroll">
+                  <table className="adm-table adm-kb-inline-table">
+                    <thead>
+                      <tr><th>ID</th><th>Старт</th><th>Завершение</th><th>Участников</th><th>Статус</th></tr>
+                    </thead>
+                    <tbody>
+                      {recalcHistory.map(r => (
+                        <tr key={r.id}>
+                          <td>{r.id}</td>
+                          <td>{r.startedAt ? new Date(r.startedAt).toLocaleString('ru-RU') : '—'}</td>
+                          <td>{r.finishedAt ? new Date(r.finishedAt).toLocaleString('ru-RU') : '—'}</td>
+                          <td>{r.participantsProcessed ?? '—'}</td>
+                          <td>{r.status}{r.error ? ` · ${r.error}` : ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </section>
         </>
       )}
 
       {segment === 'manual' && (
         <>
-          <div className="card">
-            <h3>Ручное начисление / снятие</h3>
-            <div className="adm-forum-grid-2">
-              <label className="adm-field">
-                <span className="adm-label">Участник</span>
-                <input
-                  className="adm-input"
-                  value={participantQuery}
-                  onChange={e => { setParticipantQuery(e.target.value); setSelectedParticipantId(null); }}
-                  placeholder="Поиск по ФИО"
-                />
-                {participantHits.length > 0 && !selectedParticipantId && (
-                  <div className="adm-dropdown-list">
-                    {participantHits.map(p => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        className="adm-btn adm-btn-sm adm-btn-secondary"
-                        style={{ display: 'block', width: '100%', marginTop: 4, textAlign: 'left' }}
-                        onClick={() => { setSelectedParticipantId(p.id); setParticipantQuery(p.name); setParticipantHits([]); }}
-                      >
-                        {p.name} (#{p.id})
-                      </button>
+          <section id="levels-manual" className="adm-forum-anchor">
+            <div className="card adm-forum-block adm-kb-panel">
+              <div className="adm-kb-panel-head">
+                <h3>Ручное начисление / снятие</h3>
+                <p className="adm-kb-panel-sub">Точечная корректировка баллов участника с обязательной причиной.</p>
+              </div>
+              <div className="adm-forum-grid-2">
+                <label className="adm-field">
+                  <span className="adm-label">Участник</span>
+                  <input
+                    className="adm-input"
+                    value={participantQuery}
+                    onChange={e => { setParticipantQuery(e.target.value); setSelectedParticipantId(null); }}
+                    placeholder="Поиск по ФИО"
+                  />
+                  {participantHits.length > 0 && !selectedParticipantId && (
+                    <div className="adm-dropdown-list">
+                      {participantHits.map(p => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className="adm-btn adm-btn-sm adm-btn-secondary"
+                          style={{ display: 'block', width: '100%', marginTop: 4, textAlign: 'left' }}
+                          onClick={() => { setSelectedParticipantId(p.id); setParticipantQuery(p.name); setParticipantHits([]); }}
+                        >
+                          {p.name} (#{p.id})
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </label>
+                <label className="adm-field">
+                  <span className="adm-label">Линия</span>
+                  <select className="adm-input" value={manualTrack} onChange={e => setManualTrack(e.target.value as 'path' | 'experience')}>
+                    <option value="path">Путь</option>
+                    <option value="experience">Опыт</option>
+                  </select>
+                </label>
+                <label className="adm-field">
+                  <span className="adm-label">Сумма</span>
+                  <input type="number" min={1} className="adm-input" value={manualPoints} onChange={e => setManualPoints(Math.max(1, Number(e.target.value) || 1))} />
+                </label>
+                <label className="adm-field">
+                  <span className="adm-label">Причина (обязательно)</span>
+                  <input className="adm-input" value={manualReason} onChange={e => setManualReason(e.target.value)} />
+                </label>
+                <label className="adm-field">
+                  <span className="adm-label">Дата (опционально)</span>
+                  <input
+                    type="datetime-local"
+                    className="adm-input"
+                    value={manualEffectiveAt}
+                    onChange={e => setManualEffectiveAt(e.target.value)}
+                  />
+                </label>
+              </div>
+              <div className="adm-mod-item-actions">
+                <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={() => submitManual(1)}>Добавить баллы</button>
+                <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={() => submitManual(-1)}>Снять баллы</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="levels-revoke" className="adm-forum-anchor">
+            <div className="card adm-forum-block adm-kb-panel">
+              <div className="adm-kb-panel-head">
+                <h3>Аннулировать подозрительные</h3>
+                <p className="adm-kb-panel-sub">Массовая отмена по дню смены и/или типу действия. Участнику уйдёт push.</p>
+              </div>
+              <div className="adm-forum-grid-2">
+                <label className="adm-field">
+                  <span className="adm-label">День смены (опционально)</span>
+                  <input type="number" min={1} max={8} className="adm-input" value={bulkForumDay} onChange={e => setBulkForumDay(e.target.value === '' ? '' : Number(e.target.value))} />
+                </label>
+                <label className="adm-field">
+                  <span className="adm-label">Тип действия (опционально)</span>
+                  <input className="adm-input" placeholder="task_complete" value={bulkActionType} onChange={e => setBulkActionType(e.target.value)} />
+                </label>
+                <label className="adm-field" style={{ gridColumn: '1 / -1' }}>
+                  <span className="adm-label">Причина</span>
+                  <input className="adm-input" value={bulkReason} onChange={e => setBulkReason(e.target.value)} />
+                </label>
+                <label className="adm-field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <input type="checkbox" checked={bulkNotify} onChange={e => setBulkNotify(e.target.checked)} />
+                  <span>Уведомить участника</span>
+                </label>
+              </div>
+              <div className="adm-mod-item-actions">
+                <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={bulkRevokeSuspicious}>Аннулировать</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="levels-manual-log" className="adm-forum-anchor">
+            <div className="card adm-forum-block adm-kb-panel">
+              <div className="adm-kb-panel-head">
+                <h3>История ручных начислений</h3>
+                <p className="adm-kb-panel-sub">Последние операции admin_manual из журнала баллов.</p>
+              </div>
+              <div className="adm-kb-table-scroll">
+                <table className="adm-table adm-kb-inline-table">
+                  <thead>
+                    <tr><th>Дата</th><th>Участник</th><th>Действие</th><th>Баллы</th><th /></tr>
+                  </thead>
+                  <tbody>
+                    {manualLog.map(l => (
+                      <tr key={l.id}>
+                        <td>{l.createdAt ? new Date(l.createdAt).toLocaleString('ru-RU') : ''}</td>
+                        <td>{l.participantName}</td>
+                        <td>{label(l.actionType)}</td>
+                        <td>{l.points}</td>
+                        <td>
+                          {!l.revokedAt && l.points > 0 && (
+                            <button type="button" className="adm-btn adm-btn-sm adm-btn-danger" onClick={() => revokeManual(l)}>Отменить</button>
+                          )}
+                        </td>
+                      </tr>
                     ))}
-                  </div>
-                )}
-              </label>
-              <label className="adm-field">
-                <span className="adm-label">Линия</span>
-                <select className="adm-input" value={manualTrack} onChange={e => setManualTrack(e.target.value as 'path' | 'experience')}>
-                  <option value="path">Путь</option>
-                  <option value="experience">Опыт</option>
-                </select>
-              </label>
-              <label className="adm-field">
-                <span className="adm-label">Сумма</span>
-                <input type="number" min={1} className="adm-input" value={manualPoints} onChange={e => setManualPoints(Math.max(1, Number(e.target.value) || 1))} />
-              </label>
-              <label className="adm-field">
-                <span className="adm-label">Причина (обязательно)</span>
-                <input className="adm-input" value={manualReason} onChange={e => setManualReason(e.target.value)} />
-              </label>
-              <label className="adm-field">
-                <span className="adm-label">Дата (опционально)</span>
-                <input
-                  type="datetime-local"
-                  className="adm-input"
-                  value={manualEffectiveAt}
-                  onChange={e => setManualEffectiveAt(e.target.value)}
-                />
-              </label>
+                    {manualLog.length === 0 && (
+                      <tr><td colSpan={5} className="adm-muted">Пока нет ручных операций</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-              <button type="button" className="adm-btn adm-btn-primary" onClick={() => submitManual(1)}>Добавить баллы</button>
-              <button type="button" className="adm-btn btn-danger" onClick={() => submitManual(-1)}>Снять баллы</button>
-            </div>
-          </div>
-
-          <div className="card">
-            <h3>Аннулировать подозрительные начисления</h3>
-            <p className="adm-muted" style={{ fontSize: 12 }}>Массовая отмена по дню смены и/или типу действия. Участнику отправится push.</p>
-            <div className="adm-forum-grid-2">
-              <label className="adm-field">
-                <span className="adm-label">День смены (опционально)</span>
-                <input type="number" min={1} max={8} className="adm-input" value={bulkForumDay} onChange={e => setBulkForumDay(e.target.value === '' ? '' : Number(e.target.value))} />
-              </label>
-              <label className="adm-field">
-                <span className="adm-label">Тип действия (опционально)</span>
-                <input className="adm-input" placeholder="task_complete" value={bulkActionType} onChange={e => setBulkActionType(e.target.value)} />
-              </label>
-              <label className="adm-field" style={{ gridColumn: '1 / -1' }}>
-                <span className="adm-label">Причина</span>
-                <input className="adm-input" value={bulkReason} onChange={e => setBulkReason(e.target.value)} />
-              </label>
-              <label className="adm-field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <input type="checkbox" checked={bulkNotify} onChange={e => setBulkNotify(e.target.checked)} />
-                <span>Уведомить участника</span>
-              </label>
-            </div>
-            <button type="button" className="adm-btn btn-danger" onClick={bulkRevokeSuspicious}>Аннулировать подозрительные</button>
-          </div>
-
-          <div className="card">
-            <h3>История ручных начислений</h3>
-            <table className="adm-table">
-              <thead>
-                <tr><th>Дата</th><th>Участник</th><th>Действие</th><th>Баллы</th><th /></tr>
-              </thead>
-              <tbody>
-                {manualLog.map(l => (
-                  <tr key={l.id}>
-                    <td>{l.createdAt ? new Date(l.createdAt).toLocaleString('ru-RU') : ''}</td>
-                    <td>{l.participantName}</td>
-                    <td>{label(l.actionType)}</td>
-                    <td>{l.points}</td>
-                    <td>
-                      {!l.revokedAt && l.points > 0 && (
-                        <button type="button" className="adm-btn adm-btn-sm btn-danger" onClick={() => revokeManual(l)}>Отменить</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          </section>
         </>
       )}
-    </div>
+    </HubLensLayout>
   );
 }

@@ -17,9 +17,12 @@ export function RatingFormulaPreview({ pathRows, expRows }: Props) {
   const totalSample = pathSample + expSample;
 
   return (
-    <div className="card">
-      <div className="adm-forum-toolbar" style={{ marginBottom: open ? 8 : 0 }}>
-        <h3 style={{ margin: 0 }}>Как считается рейтинг</h3>
+    <div className="card adm-forum-block adm-kb-panel">
+      <div className="adm-kb-panel-head" style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div>
+          <h3>Как считается рейтинг</h3>
+          <p className="adm-kb-panel-sub">Путь + Опыт + Бонус → итоговый счётчик участника.</p>
+        </div>
         <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setOpen(v => !v)}>
           {open ? 'Свернуть' : 'Развернуть'}
         </button>

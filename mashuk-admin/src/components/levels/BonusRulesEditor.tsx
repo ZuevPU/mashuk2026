@@ -82,13 +82,16 @@ export function BonusRulesEditor({ adminFetch, act, rules, actionPoints, onReloa
     }, 'Правило добавлено');
 
   return (
-    <div className="card">
-      <h3>Правила бонусов</h3>
-      <p className="adm-muted" style={{ fontSize: 12, marginTop: 0 }}>
-        Условия срабатывания и вкл/выкл. Размер награды задаётся action type в таблице ставок выше (группа «Бонусы» / «Путь»).
-      </p>
+    <div className="card adm-forum-block adm-kb-panel">
+      <div className="adm-kb-panel-head">
+        <h3>Правила бонусов</h3>
+        <p className="adm-kb-panel-sub">
+          Условия срабатывания и вкл/выкл. Размер награды — в таблице ставок (группа «Бонусы» / «Путь»).
+        </p>
+      </div>
       {rules.length === 0 && <p className="adm-muted">Нет правил — добавьте из шаблона.</p>}
-      <table className="adm-table">
+      <div className="adm-kb-table-scroll">
+      <table className="adm-table adm-kb-inline-table">
         <thead>
           <tr>
             <th>Правило</th>
@@ -165,6 +168,7 @@ export function BonusRulesEditor({ adminFetch, act, rules, actionPoints, onReloa
           })}
         </tbody>
       </table>
+      </div>
       {missingTemplates.length > 0 && (
         <div className="adm-forum-toolbar" style={{ marginTop: 8, flexWrap: 'wrap', gap: 8 }}>
           <span className="adm-muted" style={{ fontSize: 12 }}>Добавить шаблон:</span>

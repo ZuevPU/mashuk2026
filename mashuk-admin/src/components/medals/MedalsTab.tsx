@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
+import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
 import { MedalForm } from './MedalForm';
 import { MedalsListTable } from './MedalsListTable';
 import {
@@ -14,6 +15,16 @@ import {
   type MedalDraft,
   type RuleMetricOption,
 } from './types';
+
+const MEDALS_LIST_NAV: HubNavItem[] = [
+  { id: 'medals-hero', label: 'Обзор' },
+  { id: 'medals-list', label: 'Каталог' },
+];
+
+const MEDALS_FORM_NAV: HubNavItem[] = [
+  { id: 'medals-hero', label: 'Обзор' },
+  { id: 'medals-form', label: 'Форма' },
+];
 
 export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [loading, setLoading] = useState(true);
@@ -140,22 +151,29 @@ export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
   if (view === 'form') {
     return (
-      <div className="adm-forum">
-        <AdminPageHero title={editingId ? 'Редактирование медали' : 'Новая медаль'} />
-        <MedalForm
-          draft={draft}
-          metrics={metrics}
-          editing={!!editingId}
-          editingKey={editingId ?? 'new'}
-          saving={saving}
-          onChange={patch => setDraft(d => ({ ...d, ...patch }))}
-          onSave={save}
-          onBack={() => setView('list')}
-          onEvaluate={runEvaluate}
-          adminFetch={adminFetch}
-          act={act}
-        />
-      </div>
+      <HubLensLayout className="adm-forum adm-kb" items={MEDALS_FORM_NAV} navLabel="Разделы медалей">
+        <section id="medals-hero" className="adm-forum-anchor">
+          <AdminPageHero
+            title={editingId ? 'Редактирование медали' : 'Новая медаль'}
+            hint="Условие, видимость и иконка. Авто-оценка проверяет правила для участников."
+          />
+        </section>
+        <section id="medals-form" className="adm-forum-anchor">
+          <MedalForm
+            draft={draft}
+            metrics={metrics}
+            editing={!!editingId}
+            editingKey={editingId ?? 'new'}
+            saving={saving}
+            onChange={patch => setDraft(d => ({ ...d, ...patch }))}
+            onSave={save}
+            onBack={() => setView('list')}
+            onEvaluate={runEvaluate}
+            adminFetch={adminFetch}
+            act={act}
+          />
+        </section>
+      </HubLensLayout>
     );
   }
 
@@ -170,53 +188,61 @@ export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     : `Медали · ${totalAll} всего`;
 
   return (
-    <div className="adm-forum">
-      <AdminPageHero
-        title={heroTitle}
-        hint="Каталог наград смены. Автоматические медали проверяются по правилам; ручные выдаются из карточки участника."
-      >
-        <div className="adm-seg" style={{ marginBottom: 12 }}>
-          {tabs.map(t => (
-            <button key={t.key} type="button" className={tab === t.key ? 'on' : ''} onClick={() => setTab(t.key)}>
-              {t.label}
+    <HubLensLayout className="adm-forum adm-kb" items={MEDALS_LIST_NAV} navLabel="Разделы медалей">
+      <section id="medals-hero" className="adm-forum-anchor">
+        <AdminPageHero
+          title={heroTitle}
+          hint="Каталог наград смены. Автоматические — по правилам; ручные — из карточки участника."
+        >
+          <div className="adm-forum-seg" style={{ marginBottom: 12 }}>
+            {tabs.map(t => (
+              <button key={t.key} type="button" className={tab === t.key ? 'on' : ''} onClick={() => setTab(t.key)}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="adm-kb-toolbar" style={{ marginBottom: 0 }}>
+            <select className="adm-input" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
+              <option value="">Категория</option>
+              <option value="tasks">Задания</option>
+              <option value="piggybank">Копилка</option>
+              <option value="reflection">Рефлексия</option>
+              <option value="points">Баллы</option>
+              <option value="program">Программа</option>
+              <option value="exchange">Обмен</option>
+            </select>
+            <select className="adm-input" value={levelFilter} onChange={e => setLevelFilter(e.target.value)}>
+              <option value="">Уровень</option>
+              <option value="bronze">Бронза</option>
+              <option value="silver">Серебро</option>
+              <option value="gold">Золото</option>
+            </select>
+            <select className="adm-input" value={awardFilter} onChange={e => setAwardFilter(e.target.value)}>
+              <option value="">Тип выдачи</option>
+              <option value="auto">Автоматическая</option>
+              <option value="manual">Ручная</option>
+            </select>
+            <select className="adm-input" value={visibilityFilter} onChange={e => setVisibilityFilter(e.target.value)}>
+              <option value="">Видимость</option>
+              <option value="open">Открытая</option>
+              <option value="hidden">Скрытая</option>
+            </select>
+            <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={openCreate}>
+              + Создать медаль
             </button>
-          ))}
-        </div>
-        <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
-          <select className="adm-input" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
-            <option value="">Категория</option>
-            <option value="tasks">Задания</option>
-            <option value="piggybank">Копилка</option>
-            <option value="reflection">Рефлексия</option>
-            <option value="points">Баллы</option>
-            <option value="program">Программа</option>
-            <option value="exchange">Обмен</option>
-          </select>
-          <select className="adm-input" value={levelFilter} onChange={e => setLevelFilter(e.target.value)}>
-            <option value="">Уровень</option>
-            <option value="bronze">Бронза</option>
-            <option value="silver">Серебро</option>
-            <option value="gold">Золото</option>
-          </select>
-          <select className="adm-input" value={awardFilter} onChange={e => setAwardFilter(e.target.value)}>
-            <option value="">Тип выдачи</option>
-            <option value="auto">Автоматическая</option>
-            <option value="manual">Ручная</option>
-          </select>
-          <select className="adm-input" value={visibilityFilter} onChange={e => setVisibilityFilter(e.target.value)}>
-            <option value="">Видимость</option>
-            <option value="open">Открытая</option>
-            <option value="hidden">Скрытая</option>
-          </select>
-          <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={openCreate}>
-            + Создать медаль
-          </button>
-        </div>
-      </AdminPageHero>
+          </div>
+        </AdminPageHero>
+      </section>
 
-      <div className="card">
-        <MedalsListTable medals={medals} onEdit={openEdit} onHide={hideMedal} onDelete={deleteMedal} />
-      </div>
-    </div>
+      <section id="medals-list" className="adm-forum-anchor">
+        <div className="card adm-forum-block adm-kb-panel">
+          <div className="adm-kb-panel-head">
+            <h3>Каталог</h3>
+            <p className="adm-kb-panel-sub">Редактирование, скрытие и удаление медалей смены.</p>
+          </div>
+          <MedalsListTable medals={medals} onEdit={openEdit} onHide={hideMedal} onDelete={deleteMedal} />
+        </div>
+      </section>
+    </HubLensLayout>
   );
 }

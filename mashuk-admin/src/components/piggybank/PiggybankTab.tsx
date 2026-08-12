@@ -3,11 +3,18 @@ import { confirmDelete } from '../../admin/confirmDelete';
 import { adminDownloadBinary } from '../../admin/client';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
+import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
 import { RowActionsMenu } from '../participants/RowActionsMenu';
 
 const PIGGY_TAGS = ['идея', 'мысль', 'вопрос', 'контакт', 'на будущее', 'в работу'];
 const PIGGY_SOURCES = ['Направление', 'Урок о важном', 'Открытый урок', 'Клуб', 'Разговор с участником', 'Своя мысль'];
 const PAGE_SIZE = 100;
+
+const PIGGY_NAV: HubNavItem[] = [
+  { id: 'piggy-hero', label: 'Обзор' },
+  { id: 'piggy-list', label: 'Записи' },
+  { id: 'piggy-detail', label: 'Карточка' },
+];
 
 type ListMode = 'active' | 'deleted';
 
@@ -81,7 +88,6 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
   const filters = useMemo(() => ({
     q: search.trim(),
     participantId: participantId ? Number(participantId) : undefined,
-    // Пока не выбран конкретный id — фильтруем записи по ФИО напрямую
     participantQ: !participantId && debouncedParticipantQ.length >= 2
       ? debouncedParticipantQ
       : undefined,
@@ -243,286 +249,302 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
     ? `${entries.length} в списке · ${totalCount} всего`
     : `${totalCount} всего`;
   const heroHint = isDeletedList
-    ? 'Архив удалённых записей. Баллы за эти записи уже сняты. Можно восстановить текст в активный список (баллы не возвращаются автоматически).'
+    ? 'Архив удалённых записей. Баллы уже сняты; восстановление не возвращает баллы автоматически.'
     : 'Модерация записей участников. Удаление переносит в архив и снимает баллы.';
 
+  const navItems = openEntry
+    ? PIGGY_NAV
+    : PIGGY_NAV.filter(i => i.id !== 'piggy-detail');
+
   return (
-    <div className="adm-forum">
-      <AdminPageHero
-        title={isDeletedList ? `Удалённые копилки · ${listLabel}` : `Записи копилки · ${listLabel}`}
-        hint={heroHint}
-      >
-        <div className="adm-seg" style={{ marginBottom: 10 }}>
-          <button
-            type="button"
-            className={listMode === 'active' ? 'on' : ''}
-            onClick={() => { setListMode('active'); setPage(1); setOpenEntry(null); }}
-          >
-            Копилка
-          </button>
-          <button
-            type="button"
-            className={listMode === 'deleted' ? 'on' : ''}
-            onClick={() => { setListMode('deleted'); setPage(1); setOpenEntry(null); }}
-          >
-            Удалённые копилки{deletedTotal > 0 ? ` (${deletedTotal})` : ''}
-          </button>
-        </div>
-        <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
-          <input
-            className="adm-input"
-            placeholder="Поиск по тексту"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ minWidth: 160, flex: 1 }}
-          />
-          <input
-            className="adm-input"
-            placeholder="Участник (ФИО)"
-            value={participantSearch}
-            onChange={e => {
-              const next = e.target.value;
-              setParticipantSearch(next);
-              // Сброс точного выбора при правке текста — дальше фильтр по ФИО
-              if (participantId && next.trim() !== selectedParticipantLabel.trim()) {
-                setParticipantId('');
-                setSelectedParticipantLabel('');
-              }
-              if (!next.trim()) {
-                setParticipantId('');
-                setSelectedParticipantLabel('');
-              }
-            }}
-            style={{ minWidth: 160 }}
-            title="Введите ФИО — список отфильтруется. Можно уточнить выбор в списке справа."
-          />
-          <select
-            className="adm-input"
-            value={participantId}
-            onChange={e => {
-              const id = e.target.value;
-              setParticipantId(id);
-              if (!id) {
-                setSelectedParticipantLabel('');
-                return;
-              }
-              const hit = participantOptions.find(p => String(p.id) === id);
-              if (hit) {
-                setSelectedParticipantLabel(hit.label);
-                setParticipantSearch(hit.label);
-              }
-            }}
-            style={{ minWidth: 160 }}
-            title="Уточнить участника из найденных"
-          >
-            <option value="">
-              {debouncedParticipantQ.length >= 2 && !participantId
-                ? 'Уточнить участника…'
-                : 'Все участники'}
-            </option>
-            {participantOptions.map(p => (
-              <option key={p.id} value={p.id}>{p.label}</option>
-            ))}
-          </select>
-          <select className="adm-input" value={directionId} onChange={e => setDirectionId(e.target.value)}>
-            <option value="">Направление</option>
-            {directions.map(d => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
-          <select className="adm-input" value={groupId} onChange={e => setGroupId(e.target.value)}>
-            <option value="">Группа</option>
-            {groups.map(g => (
-              <option key={g.id} value={g.id}>{g.name}</option>
-            ))}
-          </select>
-          <select className="adm-input" value={forumDay} onChange={e => setForumDay(e.target.value)}>
-            <option value="">День</option>
-            {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
-              <option key={d} value={d}>День {d}</option>
-            ))}
-          </select>
-          <select className="adm-input" value={tag} onChange={e => setTag(e.target.value)}>
-            <option value="">Тег</option>
-            {PIGGY_TAGS.map(t => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-          <select className="adm-input" value={source} onChange={e => setSource(e.target.value)}>
-            <option value="">Источник</option>
-            {PIGGY_SOURCES.map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-          <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={exportXlsx}>
-            Экспорт в XLSX
-          </button>
+    <HubLensLayout className="adm-forum adm-kb" items={navItems} navLabel="Разделы копилки">
+      <section id="piggy-hero" className="adm-forum-anchor">
+        <AdminPageHero
+          title={isDeletedList ? `Удалённые · ${listLabel}` : `Копилка · ${listLabel}`}
+          hint={heroHint}
+        >
+          <div className="adm-forum-seg" style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              className={listMode === 'active' ? 'on' : ''}
+              onClick={() => { setListMode('active'); setPage(1); setOpenEntry(null); }}
+            >
+              Копилка
+            </button>
+            <button
+              type="button"
+              className={listMode === 'deleted' ? 'on' : ''}
+              onClick={() => { setListMode('deleted'); setPage(1); setOpenEntry(null); }}
+            >
+              Архив{deletedTotal > 0 ? ` · ${deletedTotal}` : ''}
+            </button>
+          </div>
+          <div className="adm-kb-toolbar" style={{ marginBottom: 0 }}>
+            <input
+              className="adm-input adm-kb-search"
+              placeholder="Поиск по тексту"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            <input
+              className="adm-input"
+              placeholder="Участник (ФИО)"
+              value={participantSearch}
+              onChange={e => {
+                const next = e.target.value;
+                setParticipantSearch(next);
+                if (participantId && next.trim() !== selectedParticipantLabel.trim()) {
+                  setParticipantId('');
+                  setSelectedParticipantLabel('');
+                }
+                if (!next.trim()) {
+                  setParticipantId('');
+                  setSelectedParticipantLabel('');
+                }
+              }}
+              title="Введите ФИО — список отфильтруется. Можно уточнить выбор в списке справа."
+            />
+            <select
+              className="adm-input"
+              value={participantId}
+              onChange={e => {
+                const id = e.target.value;
+                setParticipantId(id);
+                if (!id) {
+                  setSelectedParticipantLabel('');
+                  return;
+                }
+                const hit = participantOptions.find(p => String(p.id) === id);
+                if (hit) {
+                  setSelectedParticipantLabel(hit.label);
+                  setParticipantSearch(hit.label);
+                }
+              }}
+              title="Уточнить участника из найденных"
+            >
+              <option value="">
+                {debouncedParticipantQ.length >= 2 && !participantId
+                  ? 'Уточнить участника…'
+                  : 'Все участники'}
+              </option>
+              {participantOptions.map(p => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+            </select>
+            <select className="adm-input" value={directionId} onChange={e => setDirectionId(e.target.value)}>
+              <option value="">Направление</option>
+              {directions.map(d => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+            <select className="adm-input" value={groupId} onChange={e => setGroupId(e.target.value)}>
+              <option value="">Группа</option>
+              {groups.map(g => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+            <select className="adm-input adm-kb-control-sm" value={forumDay} onChange={e => setForumDay(e.target.value)}>
+              <option value="">День</option>
+              {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
+                <option key={d} value={d}>День {d}</option>
+              ))}
+            </select>
+            <select className="adm-input" value={tag} onChange={e => setTag(e.target.value)}>
+              <option value="">Тег</option>
+              {PIGGY_TAGS.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <select className="adm-input" value={source} onChange={e => setSource(e.target.value)}>
+              <option value="">Источник</option>
+              {PIGGY_SOURCES.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={exportXlsx}>
+              Экспорт XLSX
+            </button>
+          </div>
           {!isDeletedList && selectedIds.length > 0 && (
-            <>
-              <span className="adm-muted" style={{ fontSize: 12 }}>Выбрано: {selectedIds.length}</span>
-              <button
-                type="button"
-                className="adm-btn adm-btn-danger adm-btn-sm"
-                onClick={bulkDeleteSelected}
-              >
-                В архив выбранные
+            <div className="adm-kb-bulk" style={{ marginTop: 12 }}>
+              <span className="adm-kb-bulk-count">Выбрано: {selectedIds.length}</span>
+              <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={bulkDeleteSelected}>
+                В архив
               </button>
-              <button
-                type="button"
-                className="adm-btn adm-btn-secondary adm-btn-sm"
-                onClick={() => setSelectedIds([])}
-              >
+              <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setSelectedIds([])}>
                 Снять выбор
               </button>
-            </>
+            </div>
           )}
-        </div>
-      </AdminPageHero>
+        </AdminPageHero>
+      </section>
 
-      {loading ? (
-        <p className="adm-muted">Загрузка…</p>
-      ) : (
-        <div className="card">
-          {entries.length === 0 ? (
+      <section id="piggy-list" className="adm-forum-anchor">
+        <div className="card adm-forum-block adm-kb-panel">
+          <div className="adm-kb-panel-head">
+            <h3>{isDeletedList ? 'Архив записей' : 'Записи'}</h3>
+            <p className="adm-kb-panel-sub">
+              {isDeletedList
+                ? 'Удалённые записи можно восстановить в копилку без возврата баллов.'
+                : 'Откройте запись, пометьте нарушение или отправьте в архив.'}
+            </p>
+          </div>
+
+          {loading ? (
+            <p className="adm-muted">Загрузка…</p>
+          ) : entries.length === 0 ? (
             <p className="adm-muted">Записей не найдено</p>
           ) : (
             <>
-            <table className="adm-table">
-              <thead>
-                <tr>
-                  {!isDeletedList && (
-                    <th style={{ width: 36 }}>
-                      <input
-                        type="checkbox"
-                        checked={allPageSelected}
-                        onChange={toggleSelectAllPage}
-                        title="Выбрать все на странице"
-                        aria-label="Выбрать все на странице"
-                      />
-                    </th>
-                  )}
-                  <th>{isDeletedList ? 'Удалено' : 'Дата'}</th>
-                  <th>Участник</th>
-                  <th>Направление</th>
-                  <th>Текст</th>
-                  <th>Теги</th>
-                  <th>Источник</th>
-                  <th>Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map(e => (
-                  <tr
-                    key={e.id}
-                    style={isDeletedList ? { opacity: 0.85, background: '#f7f5f0' } : undefined}
-                  >
-                    {!isDeletedList && (
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(e.id)}
-                          onChange={() => toggleSelected(e.id)}
-                          aria-label={`Выбрать запись ${e.id}`}
+              {!isDeletedList && (
+                <div className="adm-tasks-list-head">
+                  <label className="adm-tasks-check">
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={toggleSelectAllPage}
+                      title="Выбрать все на странице"
+                    />
+                    <span>Выбрать страницу</span>
+                  </label>
+                </div>
+              )}
+              <div className="adm-mod-list">
+                {entries.map(e => {
+                  const when = isDeletedList
+                    ? (e.deletedAt ? new Date(e.deletedAt).toLocaleString('ru-RU') : '—')
+                    : (e.createdAt ? new Date(e.createdAt).toLocaleString('ru-RU') : '—');
+                  return (
+                    <article
+                      key={e.id}
+                      className={`adm-mod-item${selectedIds.includes(e.id) ? ' is-selected' : ''}${isDeletedList ? ' is-archived' : ''}`}
+                    >
+                      <div className="adm-mod-item-row1">
+                        <div className="adm-mod-item-main">
+                          {!isDeletedList && (
+                            <label className="adm-tasks-check" style={{ marginBottom: 6 }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.includes(e.id)}
+                                onChange={() => toggleSelected(e.id)}
+                              />
+                              <span>Выбрать</span>
+                            </label>
+                          )}
+                          <div className="adm-mod-item-title-line">
+                            <button
+                              type="button"
+                              className="adm-tasks-title"
+                              onClick={() => onOpenCard(e.participantId, 'piggybank')}
+                            >
+                              {e.participantName}
+                            </button>
+                            {e.isViolation ? <span className="adm-tasks-status is-bad">Нарушение</span> : null}
+                            {e.isHidden ? <span className="adm-tasks-status">Скрыта</span> : null}
+                            {e.forumDay != null ? <span className="adm-tasks-chip">День {e.forumDay}</span> : null}
+                          </div>
+                          <p className="adm-kb-panel-sub" style={{ marginTop: 4 }}>
+                            {[when, e.directionName, e.source].filter(Boolean).join(' · ')}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="adm-mod-item-text">{truncate(e.text, 220)}</p>
+                      {(e.tags || []).length > 0 && (
+                        <div className="adm-mod-item-meta">
+                          {(e.tags || []).map(t => (
+                            <span key={t} className="adm-tasks-chip">{t}</span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="adm-mod-item-actions">
+                        <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setOpenEntry(e)}>
+                          Открыть
+                        </button>
+                        <RowActionsMenu
+                          actions={isDeletedList
+                            ? [
+                              { label: 'Восстановить в копилку', onClick: () => restoreEntry(e.id) },
+                            ]
+                            : [
+                              {
+                                label: e.isViolation ? 'Снять нарушение' : 'Пометить как нарушение',
+                                onClick: () => patchEntry(e.id, { isViolation: !e.isViolation }),
+                              },
+                              {
+                                label: e.isHidden ? 'Показать' : 'Скрыть',
+                                onClick: () => patchEntry(e.id, { isHidden: !e.isHidden }),
+                              },
+                              { label: 'В архив (−баллы)', onClick: () => deleteEntry(e.id), danger: true },
+                            ]}
                         />
-                      </td>
-                    )}
-                    <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-                      {isDeletedList
-                        ? (e.deletedAt ? new Date(e.deletedAt).toLocaleString('ru-RU') : '—')
-                        : (e.createdAt ? new Date(e.createdAt).toLocaleString('ru-RU') : '—')}
-                    </td>
-                    <td>
-                      <button type="button" className="adm-link-btn" onClick={() => onOpenCard(e.participantId, 'piggybank')}>
-                        {e.participantName}
-                      </button>
-                    </td>
-                    <td>{e.directionName || '—'}</td>
-                    <td>{truncate(e.text, 150)}</td>
-                    <td style={{ fontSize: 11 }}>{(e.tags || []).join(', ') || '—'}</td>
-                    <td>{e.source || '—'}</td>
-                    <td>
-                      <RowActionsMenu
-                        actions={isDeletedList
-                          ? [
-                            { label: 'Открыть', onClick: () => setOpenEntry(e) },
-                            { label: 'Восстановить в копилку', onClick: () => restoreEntry(e.id) },
-                          ]
-                          : [
-                            { label: 'Открыть', onClick: () => setOpenEntry(e) },
-                            {
-                              label: e.isViolation ? 'Снять нарушение' : 'Пометить как нарушение',
-                              onClick: () => patchEntry(e.id, { isViolation: !e.isViolation }),
-                            },
-                            {
-                              label: e.isHidden ? 'Показать' : 'Скрыть',
-                              onClick: () => patchEntry(e.id, { isHidden: !e.isHidden }),
-                            },
-                            { label: 'В архив (−баллы, у участника красным)', onClick: () => deleteEntry(e.id), danger: true },
-                          ]}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {totalPages > 1 && (
-              <div className="adm-forum-toolbar" style={{ marginTop: 12 }}>
-                <button
-                  type="button"
-                  className="adm-btn adm-btn-secondary adm-btn-sm"
-                  disabled={page <= 1}
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                >
-                  ← Назад
-                </button>
-                <span className="adm-muted" style={{ fontSize: 12 }}>
-                  Страница {page} из {totalPages}
-                </span>
-                <button
-                  type="button"
-                  className="adm-btn adm-btn-secondary adm-btn-sm"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                >
-                  Вперёд →
-                </button>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
-            )}
+              {totalPages > 1 && (
+                <div className="adm-forum-toolbar" style={{ marginTop: 12 }}>
+                  <button
+                    type="button"
+                    className="adm-btn adm-btn-secondary adm-btn-sm"
+                    disabled={page <= 1}
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                  >
+                    Назад
+                  </button>
+                  <span className="adm-muted" style={{ fontSize: 12 }}>
+                    Стр. {page} из {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="adm-btn adm-btn-secondary adm-btn-sm"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  >
+                    Далее
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
-      )}
+      </section>
 
       {openEntry && (
-        <div className="card" style={{ marginTop: 12 }}>
-          <div className="adm-forum-toolbar">
-            <strong>Запись #{openEntry.id}</strong>
-            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setOpenEntry(null)}>Закрыть</button>
+        <section id="piggy-detail" className="adm-forum-anchor">
+          <div className="card adm-forum-block adm-kb-panel">
+            <div className="adm-kb-panel-head" style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                <h3>Запись #{openEntry.id}</h3>
+                <p className="adm-kb-panel-sub">
+                  {openEntry.participantName}
+                  {' · создано '}
+                  {openEntry.createdAt ? new Date(openEntry.createdAt).toLocaleString('ru-RU') : '—'}
+                  {openEntry.deletedAt
+                    ? ` · удалено ${new Date(openEntry.deletedAt).toLocaleString('ru-RU')}`
+                    : ''}
+                </p>
+              </div>
+              <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setOpenEntry(null)}>
+                Закрыть
+              </button>
+            </div>
+            <p className="adm-mod-item-text" style={{ marginTop: 0 }}>{openEntry.text}</p>
+            <div className="adm-mod-item-meta">
+              {(openEntry.tags || []).map(t => <span key={t} className="adm-tasks-chip">{t}</span>)}
+              {openEntry.source ? <span className="adm-tasks-chip">{openEntry.source}</span> : null}
+              {openEntry.pointsLogId ? <span className="adm-tasks-chip">points_log #{openEntry.pointsLogId}</span> : null}
+            </div>
+            {isDeletedList && (
+              <div className="adm-mod-item-actions">
+                <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={() => restoreEntry(openEntry.id)}>
+                  Восстановить в копилку
+                </button>
+              </div>
+            )}
           </div>
-          <p style={{ fontSize: 12, color: '#666' }}>
-            {openEntry.participantName} · создано{' '}
-            {openEntry.createdAt ? new Date(openEntry.createdAt).toLocaleString('ru-RU') : '—'}
-            {openEntry.deletedAt
-              ? ` · удалено ${new Date(openEntry.deletedAt).toLocaleString('ru-RU')}`
-              : ''}
-          </p>
-          <p style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>{openEntry.text}</p>
-          <p className="adm-muted" style={{ fontSize: 11, marginTop: 8 }}>
-            Теги: {(openEntry.tags || []).join(', ') || '—'} · Источник: {openEntry.source || '—'}
-            {openEntry.pointsLogId ? ` · points_log #${openEntry.pointsLogId}` : ''}
-          </p>
-          {isDeletedList && (
-            <button
-              type="button"
-              className="adm-btn adm-btn-sm"
-              style={{ marginTop: 10 }}
-              onClick={() => restoreEntry(openEntry.id)}
-            >
-              Восстановить в копилку
-            </button>
-          )}
-        </div>
+        </section>
       )}
-    </div>
+    </HubLensLayout>
   );
 }

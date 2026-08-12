@@ -11,7 +11,7 @@ export function OrgThreadsSection({ adminFetch, act, reloadKey, onOpenCard }: Pr
       <div className="adm-kb-panel-head">
         <h3>Обращения к организаторам / дирекции</h3>
         <p className="adm-kb-panel-sub">
-          Все обращения в таблице: ответ с уведомлением, удаление, сортировка и карточка по клику на вопрос.
+          Ответ с уведомлением, удаление и карточка участника.
         </p>
       </div>
       <OrgDirectorPanel

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { label } from '../../labels/ru';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
+import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
 import { OrgDirectorPanel } from '../questions/OrgDirectorPanel';
 import { TaskModerationQueue } from './TaskModerationQueue';
 
@@ -9,6 +10,24 @@ type Segment = 'exchange' | 'org' | 'archive' | 'tasks';
 type ArchiveFilter = 'approved' | 'rejected' | 'all';
 
 type ParticipantCardTab = 'profile' | 'answers' | 'tasks' | 'medals' | 'points' | 'piggybank';
+
+const MOD_NAV_EXCHANGE: HubNavItem[] = [
+  { id: 'mod-hero', label: 'Обзор' },
+  { id: 'mod-queue', label: 'Очередь' },
+];
+const MOD_NAV_TASKS: HubNavItem[] = [
+  { id: 'mod-hero', label: 'Обзор' },
+  { id: 'mod-tasks-queue', label: 'Очередь' },
+  { id: 'mod-tasks-done', label: 'Проверено' },
+];
+const MOD_NAV_ORG: HubNavItem[] = [
+  { id: 'mod-hero', label: 'Обзор' },
+  { id: 'mod-org', label: 'Обращения' },
+];
+const MOD_NAV_ARCHIVE: HubNavItem[] = [
+  { id: 'mod-hero', label: 'Обзор' },
+  { id: 'mod-archive', label: 'Архив' },
+];
 
 type ExchangeAnswer = {
   id: number;
@@ -81,12 +100,12 @@ function ExchangeAnswersBlock({
   }
 
   return (
-    <div style={{ marginTop: 10 }}>
+    <div className="adm-mod-answers">
       <div className="adm-label">Ответы участников · {top.length}</div>
       {top.map(a => (
-        <div key={a.id} style={{ marginTop: 8, padding: 10, background: '#F7F5F1', borderRadius: 8 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-            <strong style={{ fontSize: 13 }}>
+        <div key={a.id} className="adm-mod-answer">
+          <div className="adm-mod-answer-head">
+            <strong>
               {a.authorName || 'Участник'}
               {a.direction ? ` · ${a.direction}` : ''}
             </strong>
@@ -95,8 +114,8 @@ function ExchangeAnswersBlock({
               {a.reactions ? ` · 👍 ${a.reactions.likes ?? 0}` : ''}
             </span>
           </div>
-          <div style={{ fontSize: 13, marginTop: 4, whiteSpace: 'pre-wrap' }}>{a.text}</div>
-          <div className="form-row" style={{ marginTop: 6, gap: 6 }}>
+          <div className="adm-mod-answer-text">{a.text}</div>
+          <div className="adm-mod-answer-actions">
             {a.participantId != null && (
               <button
                 type="button"
@@ -109,7 +128,7 @@ function ExchangeAnswersBlock({
             {onDeleteAnswer && (
               <button
                 type="button"
-                className="adm-btn btn-danger adm-btn-sm"
+                className="adm-btn adm-btn-danger adm-btn-sm"
                 onClick={() => onDeleteAnswer(a.id)}
               >
                 Удалить ответ
@@ -117,29 +136,21 @@ function ExchangeAnswersBlock({
             )}
           </div>
           {replies(a.id).map(r => (
-            <div
-              key={r.id}
-              style={{
-                marginTop: 8,
-                marginLeft: 12,
-                padding: 8,
-                background: '#fff',
-                borderRadius: 6,
-                borderLeft: '3px solid #D8D0C4',
-              }}
-            >
-              <div style={{ fontSize: 12, fontWeight: 600 }}>
-                {r.authorName || 'Участник'}
-                <span className="adm-muted" style={{ fontWeight: 400 }}>
-                  {' · комментарий'}
-                  {formatWhen(r.createdAt) ? ` · ${formatWhen(r.createdAt)}` : ''}
-                </span>
+            <div key={r.id} className="adm-mod-reply">
+              <div className="adm-mod-answer-head">
+                <strong style={{ fontSize: 12 }}>
+                  {r.authorName || 'Участник'}
+                  <span className="adm-muted" style={{ fontWeight: 400 }}>
+                    {' · комментарий'}
+                    {formatWhen(r.createdAt) ? ` · ${formatWhen(r.createdAt)}` : ''}
+                  </span>
+                </strong>
               </div>
-              <div style={{ fontSize: 12, marginTop: 4, whiteSpace: 'pre-wrap' }}>{r.text}</div>
+              <div className="adm-mod-answer-text" style={{ fontSize: 12 }}>{r.text}</div>
               {onDeleteAnswer && (
                 <button
                   type="button"
-                  className="adm-btn btn-danger adm-btn-sm"
+                  className="adm-btn adm-btn-danger adm-btn-sm"
                   style={{ marginTop: 6 }}
                   onClick={() => onDeleteAnswer(r.id)}
                 >
@@ -192,26 +203,24 @@ function ExchangeQuestionCard({
     : (q.categoryId ?? q.category?.id ?? '');
 
   return (
-    <div className="card" style={{ marginBottom: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <div>
-          <strong>{q.authorName || 'Участник'}</strong>
-          <span className="adm-muted" style={{ fontSize: 12 }}>
-            {q.direction ? ` · ${q.direction}` : ''}
-            {q.groupName ? ` · ${q.groupName}` : ''}
-            {` · ${audienceLabel(q.audience)}`}
-            {q.createdAt ? ` · ${formatWhen(q.createdAt)}` : ''}
-          </span>
+    <article className="adm-mod-item">
+      <div className="adm-mod-item-row1">
+        <div className="adm-mod-item-main">
+          <div className="adm-mod-item-title-line">
+            <strong>{q.authorName || 'Участник'}</strong>
+            <span className="adm-tasks-status">{label(q.moderationStatus || 'pending')}</span>
+          </div>
+          <p className="adm-kb-panel-sub" style={{ marginTop: 4 }}>
+            {[q.direction, q.groupName, audienceLabel(q.audience), formatWhen(q.createdAt)].filter(Boolean).join(' · ')}
+            {typeof q.answerCount === 'number' ? ` · ответов: ${q.answerCount}` : ''}
+            {q.classifiedBy ? ` · ${q.classifiedBy}` : ''}
+          </p>
         </div>
-        <span className="adm-muted" style={{ fontSize: 12 }}>
-          {label(q.moderationStatus || 'pending')}
-          {typeof q.answerCount === 'number' ? ` · ответов: ${q.answerCount}` : ''}
-          {q.classifiedBy ? ` · ${q.classifiedBy}` : ''}
-        </span>
       </div>
-      <p style={{ marginTop: 8, marginBottom: 0, whiteSpace: 'pre-wrap' }}>{q.text}</p>
+
+      <p className="adm-mod-item-text">{q.text}</p>
       {q.moderationStatus === 'rejected' && q.moderatorComment && (
-        <p className="adm-insights-warn" style={{ marginTop: 8, marginBottom: 0 }}>
+        <p className="adm-mod-reject-note">
           Причина отклонения: {q.moderatorComment}
         </p>
       )}
@@ -237,18 +246,18 @@ function ExchangeQuestionCard({
             onChange={e => onRejectDraftChange?.(e.target.value)}
             placeholder="Почему вопрос не публикуем…"
           />
-          <div className="form-row" style={{ marginTop: 8 }}>
-            <button type="button" className="adm-btn adm-btn-primary" onClick={onApprove}>
+          <div className="adm-mod-item-actions">
+            <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={onApprove}>
               Одобрить
             </button>
-            <button type="button" className="adm-btn btn-danger" onClick={onReject}>
+            <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={onReject}>
               Отклонить
             </button>
-            <button type="button" className="adm-btn adm-btn-ghost" onClick={onDelete}>
+            <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onDelete}>
               Удалить
             </button>
             {q.participantId != null && (
-              <button type="button" className="adm-btn adm-btn-secondary" onClick={() => onOpenCard(q.participantId!)}>
+              <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => onOpenCard(q.participantId!)}>
                 Карточка автора
               </button>
             )}
@@ -257,25 +266,25 @@ function ExchangeQuestionCard({
       )}
 
       {mode === 'archive' && (
-        <div className="form-row" style={{ marginTop: 8 }}>
-          <button type="button" className="adm-btn adm-btn-secondary" onClick={onToggleAnswers}>
+        <div className="adm-mod-item-actions">
+          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={onToggleAnswers}>
             {answersOpen ? 'Скрыть ответы' : `Показать ответы (${q.answerCount ?? answers.length})`}
           </button>
           {q.moderationStatus === 'rejected' && (
-            <button type="button" className="adm-btn" onClick={onApprove}>
+            <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={onApprove}>
               Одобрить повторно
             </button>
           )}
           {q.moderationStatus === 'approved' && (
-            <button type="button" className="adm-btn btn-danger" onClick={onReject}>
+            <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={onReject}>
               Снять с публикации
             </button>
           )}
-          <button type="button" className="adm-btn adm-btn-ghost" onClick={onDelete}>
+          <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onDelete}>
             Удалить
           </button>
           {q.participantId != null && (
-            <button type="button" className="adm-btn adm-btn-secondary" onClick={() => onOpenCard(q.participantId!)}>
+            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => onOpenCard(q.participantId!)}>
               Карточка автора
             </button>
           )}
@@ -289,7 +298,7 @@ function ExchangeQuestionCard({
           onDeleteAnswer={onDeleteAnswer}
         />
       )}
-    </div>
+    </article>
   );
 }
 
@@ -368,142 +377,179 @@ export function ModerationTab({ adminFetch, act, reloadKey, onOpenCard }: Modera
   };
 
   const segments: { key: Segment; label: string }[] = [
-    { key: 'exchange', label: `Обмен (ожидает${pendingExchange.length ? ` · ${pendingExchange.length}` : ''})` },
-    { key: 'tasks', label: 'Задания на проверке' },
+    { key: 'exchange', label: `Обмен${pendingExchange.length ? ` · ${pendingExchange.length}` : ''}` },
+    { key: 'tasks', label: 'Задания' },
     { key: 'org', label: 'Организаторы' },
-    { key: 'archive', label: 'Архив обмена' },
+    { key: 'archive', label: 'Архив' },
   ];
+
+  const navItems =
+    segment === 'tasks' ? MOD_NAV_TASKS
+      : segment === 'org' ? MOD_NAV_ORG
+        : segment === 'archive' ? MOD_NAV_ARCHIVE
+          : MOD_NAV_EXCHANGE;
 
   if (loading) return <p className="adm-muted">Загрузка модерации…</p>;
 
   return (
-    <div className="adm-forum">
-      <AdminPageHero
-        title="Модерация"
-        hint="Вопросы обмена опытом сначала попадают сюда. После одобрения их видят другие участники и могут отвечать."
-      />
-
-      <div className="adm-seg" style={{ marginBottom: 12 }}>
-        {segments.map(s => (
-          <button key={s.key} type="button" className={segment === s.key ? 'on' : ''} onClick={() => setSegment(s.key)}>
-            {s.label}
-          </button>
-        ))}
-      </div>
+    <HubLensLayout className="adm-forum adm-kb" items={navItems} navLabel="Разделы модерации">
+      <section id="mod-hero" className="adm-forum-anchor">
+        <AdminPageHero
+          title="Модерация"
+          hint="Обмен опытом, задания на проверке и обращения к организаторам — в одном месте."
+        >
+          <div className="adm-forum-seg">
+            {segments.map(s => (
+              <button key={s.key} type="button" className={segment === s.key ? 'on' : ''} onClick={() => setSegment(s.key)}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </AdminPageHero>
+      </section>
 
       {segment === 'tasks' && (
         <TaskModerationQueue adminFetch={adminFetch} act={act} reloadKey={reloadKey} />
       )}
 
       {segment === 'exchange' && (
-        <>
-          <p className="adm-forum-hint">
-            Пользователь отправил вопрос → статус «на модерации». Выберите рубрику и одобрите — вопрос появится у остальных.
-            В очереди сверху: «Другое» и авторазметка.
-          </p>
-          {selectedIds.length > 0 && (
-            <div className="card" style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span>Выбрано: {selectedIds.length}</span>
-              <select className="adm-input" style={{ maxWidth: 240 }} value={bulkCategoryId === '' ? '' : String(bulkCategoryId)} onChange={e => setBulkCategoryId(e.target.value ? Number(e.target.value) : '')}>
-                <option value="">Сменить рубрику…</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.emoji ? `${c.emoji} ` : ''}{c.title}</option>)}
-              </select>
-              <button
-                type="button"
-                className="adm-btn adm-btn-secondary"
-                disabled={!bulkCategoryId}
-                onClick={() => act(async () => {
-                  await adminFetch('/exchange/bulk-category', {
-                    method: 'POST',
-                    body: JSON.stringify({ ids: selectedIds, categoryId: bulkCategoryId }),
-                  });
-                  setSelectedIds([]);
-                  await reload();
-                }, 'Рубрика обновлена')}
-              >
-                Применить
-              </button>
+        <section id="mod-queue" className="adm-forum-anchor">
+          <div className="card adm-forum-block adm-kb-panel">
+            <div className="adm-kb-panel-head">
+              <h3>Очередь обмена</h3>
+              <p className="adm-kb-panel-sub">
+                Выберите рубрику и одобрите — вопрос появится у участников. Сверху: «Другое» и авторазметка.
+              </p>
             </div>
-          )}
-          {pendingExchange.length === 0 && <p className="adm-muted">Нет вопросов на модерации</p>}
-          {pendingExchange.map(q => (
-            <div key={q.id}>
-              <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4, fontSize: 12 }}>
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(q.id)}
-                  onChange={e => setSelectedIds(prev => (
-                    e.target.checked ? [...prev, q.id] : prev.filter(id => id !== q.id)
+            {selectedIds.length > 0 && (
+              <div className="adm-kb-bulk" style={{ marginTop: 0, marginBottom: 12 }}>
+                <span className="adm-kb-bulk-count">Выбрано: {selectedIds.length}</span>
+                <select
+                  className="adm-input"
+                  style={{ maxWidth: 240 }}
+                  value={bulkCategoryId === '' ? '' : String(bulkCategoryId)}
+                  onChange={e => setBulkCategoryId(e.target.value ? Number(e.target.value) : '')}
+                >
+                  <option value="">Сменить рубрику…</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.emoji ? `${c.emoji} ` : ''}{c.title}</option>
                   ))}
-                />
-                Выбрать для массовой смены рубрики
-              </label>
-              <ExchangeQuestionCard
-                q={q}
-                mode="pending"
-                categories={categories}
-                categoryDraft={categoryDraft[q.id] ?? q.categoryId ?? q.category?.id ?? ''}
-                onCategoryDraftChange={value => setCategoryDraft(prev => ({ ...prev, [q.id]: value }))}
-                rejectDraft={rejectDraft[q.id] || ''}
-                onRejectDraftChange={value => setRejectDraft(prev => ({ ...prev, [q.id]: value }))}
-                onApprove={() => moderate(q.id, 'approved')}
-                onReject={() => moderate(q.id, 'rejected', rejectDraft[q.id])}
-                onDelete={() => removeQuestion(q.id)}
-                onOpenCard={id => onOpenCard(id)}
-                onDeleteAnswer={removeAnswer}
-              />
+                </select>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-secondary adm-btn-sm"
+                  disabled={!bulkCategoryId}
+                  onClick={() => act(async () => {
+                    await adminFetch('/exchange/bulk-category', {
+                      method: 'POST',
+                      body: JSON.stringify({ ids: selectedIds, categoryId: bulkCategoryId }),
+                    });
+                    setSelectedIds([]);
+                    await reload();
+                  }, 'Рубрика обновлена')}
+                >
+                  Применить
+                </button>
+              </div>
+            )}
+            {pendingExchange.length === 0 && <p className="adm-muted">Нет вопросов на модерации</p>}
+            <div className="adm-mod-list">
+              {pendingExchange.map(q => (
+                <div key={q.id} className="adm-mod-list-item">
+                  <label className="adm-tasks-check">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(q.id)}
+                      onChange={e => setSelectedIds(prev => (
+                        e.target.checked ? [...prev, q.id] : prev.filter(id => id !== q.id)
+                      ))}
+                    />
+                    <span>Выбрать</span>
+                  </label>
+                  <ExchangeQuestionCard
+                    q={q}
+                    mode="pending"
+                    categories={categories}
+                    categoryDraft={categoryDraft[q.id] ?? q.categoryId ?? q.category?.id ?? ''}
+                    onCategoryDraftChange={value => setCategoryDraft(prev => ({ ...prev, [q.id]: value }))}
+                    rejectDraft={rejectDraft[q.id] || ''}
+                    onRejectDraftChange={value => setRejectDraft(prev => ({ ...prev, [q.id]: value }))}
+                    onApprove={() => moderate(q.id, 'approved')}
+                    onReject={() => moderate(q.id, 'rejected', rejectDraft[q.id])}
+                    onDelete={() => removeQuestion(q.id)}
+                    onOpenCard={id => onOpenCard(id)}
+                    onDeleteAnswer={removeAnswer}
+                  />
+                </div>
+              ))}
             </div>
-          ))}
-        </>
+          </div>
+        </section>
       )}
 
       {segment === 'archive' && (
-        <>
-          <div className="adm-seg" style={{ marginBottom: 12 }}>
-            {([
-              { key: 'approved' as const, label: 'Опубликованные' },
-              { key: 'rejected' as const, label: 'Отклонённые' },
-              { key: 'all' as const, label: 'Все' },
-            ]).map(f => (
-              <button
-                key={f.key}
-                type="button"
-                className={archiveFilter === f.key ? 'on' : ''}
-                onClick={() => setArchiveFilter(f.key)}
-              >
-                {f.label}
-              </button>
-            ))}
+        <section id="mod-archive" className="adm-forum-anchor">
+          <div className="card adm-forum-block adm-kb-panel">
+            <div className="adm-kb-panel-head">
+              <h3>Архив обмена</h3>
+              <p className="adm-kb-panel-sub">Опубликованные и отклонённые вопросы, ответы участников.</p>
+            </div>
+            <div className="adm-forum-seg" style={{ marginBottom: 12 }}>
+              {([
+                { key: 'approved' as const, label: 'Опубликованные' },
+                { key: 'rejected' as const, label: 'Отклонённые' },
+                { key: 'all' as const, label: 'Все' },
+              ]).map(f => (
+                <button
+                  key={f.key}
+                  type="button"
+                  className={archiveFilter === f.key ? 'on' : ''}
+                  onClick={() => setArchiveFilter(f.key)}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            {exchangeArchive.length === 0 && <p className="adm-muted">Нет вопросов в архиве</p>}
+            <div className="adm-mod-list">
+              {exchangeArchive.map(q => (
+                <ExchangeQuestionCard
+                  key={q.id}
+                  q={q}
+                  mode="archive"
+                  categories={categories}
+                  categoryDraft={categoryDraft[q.id] ?? q.categoryId ?? q.category?.id ?? ''}
+                  onCategoryDraftChange={value => setCategoryDraft(prev => ({ ...prev, [q.id]: value }))}
+                  answersOpen={!!openAnswers[q.id]}
+                  onToggleAnswers={() => setOpenAnswers(prev => ({ ...prev, [q.id]: !prev[q.id] }))}
+                  onApprove={() => moderate(q.id, 'approved')}
+                  onReject={() => moderate(q.id, 'rejected', 'Снято с публикации модератором')}
+                  onDelete={() => removeQuestion(q.id)}
+                  onOpenCard={id => onOpenCard(id)}
+                  onDeleteAnswer={removeAnswer}
+                />
+              ))}
+            </div>
           </div>
-          {exchangeArchive.length === 0 && <p className="adm-muted">Нет вопросов в архиве</p>}
-          {exchangeArchive.map(q => (
-            <ExchangeQuestionCard
-              key={q.id}
-              q={q}
-              mode="archive"
-              categories={categories}
-              categoryDraft={categoryDraft[q.id] ?? q.categoryId ?? q.category?.id ?? ''}
-              onCategoryDraftChange={value => setCategoryDraft(prev => ({ ...prev, [q.id]: value }))}
-              answersOpen={!!openAnswers[q.id]}
-              onToggleAnswers={() => setOpenAnswers(prev => ({ ...prev, [q.id]: !prev[q.id] }))}
-              onApprove={() => moderate(q.id, 'approved')}
-              onReject={() => moderate(q.id, 'rejected', 'Снято с публикации модератором')}
-              onDelete={() => removeQuestion(q.id)}
-              onOpenCard={id => onOpenCard(id)}
-              onDeleteAnswer={removeAnswer}
-            />
-          ))}
-        </>
+        </section>
       )}
 
       {segment === 'org' && (
-        <OrgDirectorPanel
-          adminFetch={adminFetch}
-          act={act}
-          reloadKey={reloadKey}
-          onOpenCard={onOpenCard}
-        />
+        <section id="mod-org" className="adm-forum-anchor">
+          <div className="card adm-forum-block adm-kb-panel">
+            <div className="adm-kb-panel-head">
+              <h3>Обращения к организаторам</h3>
+              <p className="adm-kb-panel-sub">Ответ с уведомлением, удаление и карточка участника.</p>
+            </div>
+            <OrgDirectorPanel
+              adminFetch={adminFetch}
+              act={act}
+              reloadKey={reloadKey}
+              onOpenCard={onOpenCard}
+            />
+          </div>
+        </section>
       )}
-    </div>
+    </HubLensLayout>
   );
 }
