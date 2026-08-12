@@ -700,15 +700,37 @@ export function QuestionForm({
 
           <fieldset className="adm-field">
             <legend className="adm-label">Аудитория</legend>
-            <select className="adm-input" value={draft.audienceType} onChange={e => onChange({ audienceType: e.target.value })}>
-              <option value="all">Все</option>
-              <option value="direction">Направление</option>
-              <option value="group">Группа</option>
-              <option value="role">Роль</option>
+            <p className="adm-forum-hint" style={{ marginTop: 0, marginBottom: 8 }}>
+              Чтобы вопрос видели только участники одного направления — выберите «Направление»
+              и укажите его ниже. Остальные направления этот вопрос не увидят.
+            </p>
+            <select
+              className="adm-input"
+              value={draft.audienceType}
+              onChange={e => {
+                const audienceType = e.target.value;
+                onChange({
+                  audienceType,
+                  ...(audienceType !== 'direction' ? { audienceDirectionId: '' } : {}),
+                  ...(audienceType !== 'group' ? { audienceGroupId: '' } : {}),
+                  ...(audienceType !== 'role' ? { audienceRole: '' } : {}),
+                });
+              }}
+            >
+              <option value="all">Все участники</option>
+              <option value="direction">Только одно направление</option>
+              <option value="group">Только одна группа</option>
+              <option value="role">Только роль</option>
             </select>
             {draft.audienceType === 'direction' && (
-              <select className="adm-input" style={{ marginTop: 6 }} value={draft.audienceDirectionId} onChange={e => onChange({ audienceDirectionId: e.target.value })}>
-                <option value="">— направление —</option>
+              <select
+                className="adm-input"
+                style={{ marginTop: 6 }}
+                value={draft.audienceDirectionId}
+                onChange={e => onChange({ audienceDirectionId: e.target.value })}
+                required
+              >
+                <option value="">— выберите направление —</option>
                 {directions.map(d => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
               </select>
             )}

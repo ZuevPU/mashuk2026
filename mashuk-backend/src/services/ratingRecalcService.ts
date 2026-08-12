@@ -18,6 +18,12 @@ export function normalizeLevelThresholds(raw: unknown): number[] {
 export async function recalculateAllParticipantTotals(adminId?: number): Promise<{
   runId: number;
   participantsProcessed: number;
+  bonuses?: {
+    dayCompleteAwarded: number;
+    regularityAwarded: number;
+    dayCompleteAmountFixed: number;
+    regularityAmountFixed: number;
+  };
 }> {
   const [run] = await db.insert(ratingRecalcRuns).values({
     adminId: adminId ?? null,
@@ -25,6 +31,10 @@ export async function recalculateAllParticipantTotals(adminId?: number): Promise
   }).returning();
 
   try {
+    // Сначала доначислить бонусы «полный день» / «регулярность», выровнять тарифы
+    const { backfillRatingBonusesForAll } = await import('./ratingBonusesService.js');
+    const bonusResult = await backfillRatingBonusesForAll();
+
     const allParticipants = await db.select({ id: participants.id }).from(participants);
     let processed = 0;
     for (const { id } of allParticipants) {
@@ -67,7 +77,16 @@ export async function recalculateAllParticipantTotals(adminId?: number): Promise
       })
       .where(eq(ratingRecalcRuns.id, run.id));
 
-    return { runId: run.id, participantsProcessed: processed };
+    return {
+      runId: run.id,
+      participantsProcessed: processed,
+      bonuses: {
+        dayCompleteAwarded: bonusResult.dayCompleteAwarded,
+        regularityAwarded: bonusResult.regularityAwarded,
+        dayCompleteAmountFixed: bonusResult.dayCompleteAmountFixed,
+        regularityAmountFixed: bonusResult.regularityAmountFixed,
+      },
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await db.update(ratingRecalcRuns)

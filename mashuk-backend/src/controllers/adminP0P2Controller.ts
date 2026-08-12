@@ -885,19 +885,23 @@ export const recalculateParticipantPointsCard = async (req: AdminRequest, res: R
     res.status(404).json({ error: 'Not found' });
     return;
   }
-  const { recalculateParticipantTotals } = await import('../services/pointsService.js');
+  const { backfillRatingBonusesForParticipant } = await import('../services/ratingBonusesService.js');
   const { auditParticipantPoints } = await import('../services/participantPointsAudit.js');
-  await recalculateParticipantTotals(participantId);
+  const bonuses = await backfillRatingBonusesForParticipant(participantId);
   const audit = await auditParticipantPoints(participantId);
   await logAdminAction({
     req,
     actionType: 'points_recalculate',
     section: 'participants',
     objectId: String(participantId),
-    newValue: { participantId, audit: { ok: audit.ok, stored: audit.stored, fromLog: audit.fromLog } },
+    newValue: {
+      participantId,
+      bonuses,
+      audit: { ok: audit.ok, stored: audit.stored, fromLog: audit.fromLog },
+    },
     isCritical: false,
   });
-  res.json({ ok: true, audit });
+  res.json({ ok: true, audit, bonuses });
 };
 
 export const revokeSuspiciousParticipantPoints = async (req: AdminRequest, res: Response): Promise<void> => {

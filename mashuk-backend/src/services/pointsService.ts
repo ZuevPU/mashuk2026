@@ -371,7 +371,30 @@ export async function awardPoints(
   const points = overridePoints !== undefined
     ? overridePoints
     : (config?.pointsPerUnit ?? catalog?.pointsPerUnit ?? 0);
-  if (points <= 0) return null;
+
+  const [beforeRow] = await db.select({
+    pathPoints: participants.pathPoints,
+    experiencePoints: participants.experiencePoints,
+  }).from(participants).where(eq(participants.id, participantId)).limit(1);
+  const pointsBefore = {
+    path: beforeRow?.pathPoints ?? 0,
+    experience: beforeRow?.experiencePoints ?? 0,
+  };
+  const trackEarly = pointsTrackForAction(actionType);
+
+  /** Даже при 0 XP / капе — проверить бонус «полный день» и серии. */
+  const runBonusHooks = async () => {
+    const { afterPointsAwarded } = await import('./ratingBonusesService.js');
+    await afterPointsAwarded(participantId, trackEarly, 0, pointsBefore, {
+      forumDay,
+      actionType,
+    });
+  };
+
+  if (points <= 0) {
+    await runBonusHooks();
+    return null;
+  }
 
   const maxAccruals = config?.maxAccruals ?? catalog?.maxAccruals ?? null;
   if (maxAccruals && !opts?.ignoreMaxAccruals) {
@@ -389,18 +412,10 @@ export async function awardPoints(
       console.warn(
         `awardPoints capped: participant=${participantId} action=${actionType} count=${count} max=${maxAccruals}`,
       );
+      await runBonusHooks();
       return null;
     }
   }
-
-  const [beforeRow] = await db.select({
-    pathPoints: participants.pathPoints,
-    experiencePoints: participants.experiencePoints,
-  }).from(participants).where(eq(participants.id, participantId)).limit(1);
-  const pointsBefore = {
-    path: beforeRow?.pathPoints ?? 0,
-    experience: beforeRow?.experiencePoints ?? 0,
-  };
 
   const [inserted] = await db.insert(pointsLog).values({
     participantId,

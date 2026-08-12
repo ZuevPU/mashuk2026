@@ -2667,7 +2667,11 @@ export const triggerRatingRecalcAll = async (req: AdminRequest, res: Response): 
     req,
     actionType: 'rating_recalc_all',
     section: 'levels',
-    newValue: { runId: result.runId, participantsProcessed: result.participantsProcessed },
+    newValue: {
+      runId: result.runId,
+      participantsProcessed: result.participantsProcessed,
+      bonuses: result.bonuses ?? null,
+    },
     isCritical: true,
   });
   res.json({ ok: true, ...result });

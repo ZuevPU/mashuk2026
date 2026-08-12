@@ -1206,7 +1206,7 @@ export const createExchangeQuestion = async (req: ParticipantRequest, res: Respo
     const limits = await getExchangeLimitsForParticipant(req.participant!.id);
     if (limits.questionsLeft <= 0) {
       res.status(400).json({
-        error: `Лимит вопросов исчерпан: можно задать не больше ${limits.questionsMax}`,
+        error: `Лимит на сегодня исчерпан: можно задать не больше ${limits.questionsMax} вопросов в день`,
         limits,
       });
       return;

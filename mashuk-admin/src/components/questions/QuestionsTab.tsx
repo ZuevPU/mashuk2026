@@ -287,6 +287,10 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
         return;
       }
     }
+    if (draft.audienceType === 'direction' && !draft.audienceDirectionId) {
+      alert('Выберите направление: вопрос будет виден только участникам этого направления.');
+      return;
+    }
     act(async () => {
       const body = bodyFromDraft(draft, publish);
       let qid = editingId;
@@ -867,6 +871,8 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
                 selectedIds={selectedIds}
                 readOnly={readOnly}
                 groupByDay={!dayFilter && !readOnly}
+                directionList={directions}
+                groupList={groups}
                 onToggleSelect={toggleSelect}
                 onToggleAll={toggleAll}
                 onEdit={openEdit}

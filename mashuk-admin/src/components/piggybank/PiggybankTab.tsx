@@ -66,6 +66,7 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
   const [openEntry, setOpenEntry] = useState<Entry | null>(null);
   const [participantOptions, setParticipantOptions] = useState<{ id: number; label: string }[]>([]);
   const [selectedParticipantLabel, setSelectedParticipantLabel] = useState('');
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const isDeletedList = listMode === 'deleted';
 
   useEffect(() => {
@@ -132,7 +133,12 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
 
   useEffect(() => {
     setPage(1);
+    setSelectedIds([]);
   }, [search, participantId, debouncedParticipantQ, directionId, groupId, forumDay, tag, source, listMode]);
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [page, reloadKey]);
 
   useEffect(() => {
     if (participantSearch.trim().length < 2) {
@@ -176,10 +182,45 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
     act(async () => {
       const res = await adminFetch(`/piggybank-entries/${id}`, { method: 'DELETE' });
       setOpenEntry(null);
+      setSelectedIds(prev => prev.filter(x => x !== id));
       await load();
       return res?.pointsRevoked
         ? 'В архиве, баллы сняты — у участника запись с красной пометкой'
         : 'В архиве (баллы не найдены или уже сняты)';
+    });
+  };
+
+  const toggleSelected = (id: number) => {
+    setSelectedIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+  };
+
+  const allPageSelected = entries.length > 0 && entries.every(e => selectedIds.includes(e.id));
+  const toggleSelectAllPage = () => {
+    if (allPageSelected) {
+      const pageIds = new Set(entries.map(e => e.id));
+      setSelectedIds(prev => prev.filter(id => !pageIds.has(id)));
+      return;
+    }
+    setSelectedIds(prev => [...new Set([...prev, ...entries.map(e => e.id)])]);
+  };
+
+  const bulkDeleteSelected = () => {
+    if (!selectedIds.length) return;
+    if (!confirmDelete(
+      `Отправить в архив ${selectedIds.length} записей и снять баллы? У участников записи останутся с красной пометкой.`,
+    )) return;
+    act(async () => {
+      const res = await adminFetch('/piggybank-entries/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      setOpenEntry(null);
+      setSelectedIds([]);
+      await load();
+      const failed = res?.failed?.length ?? 0;
+      return failed
+        ? `В архиве: ${res.deleted}, со снятием баллов: ${res.pointsRevoked}, ошибок: ${failed}`
+        : `В архиве: ${res.deleted}${res.pointsRevoked ? `, баллов снято у ${res.pointsRevoked}` : ''}`;
     });
   };
 
@@ -316,6 +357,25 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
           <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={exportXlsx}>
             Экспорт в XLSX
           </button>
+          {!isDeletedList && selectedIds.length > 0 && (
+            <>
+              <span className="adm-muted" style={{ fontSize: 12 }}>Выбрано: {selectedIds.length}</span>
+              <button
+                type="button"
+                className="adm-btn adm-btn-danger adm-btn-sm"
+                onClick={bulkDeleteSelected}
+              >
+                В архив выбранные
+              </button>
+              <button
+                type="button"
+                className="adm-btn adm-btn-secondary adm-btn-sm"
+                onClick={() => setSelectedIds([])}
+              >
+                Снять выбор
+              </button>
+            </>
+          )}
         </div>
       </AdminPageHero>
 
@@ -330,6 +390,17 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
             <table className="adm-table">
               <thead>
                 <tr>
+                  {!isDeletedList && (
+                    <th style={{ width: 36 }}>
+                      <input
+                        type="checkbox"
+                        checked={allPageSelected}
+                        onChange={toggleSelectAllPage}
+                        title="Выбрать все на странице"
+                        aria-label="Выбрать все на странице"
+                      />
+                    </th>
+                  )}
                   <th>{isDeletedList ? 'Удалено' : 'Дата'}</th>
                   <th>Участник</th>
                   <th>Направление</th>
@@ -341,7 +412,20 @@ export function PiggybankTab({ adminFetch, act, reloadKey, onOpenCard }: Piggyba
               </thead>
               <tbody>
                 {entries.map(e => (
-                  <tr key={e.id} style={isDeletedList ? { opacity: 0.85, background: '#f7f5f0' } : undefined}>
+                  <tr
+                    key={e.id}
+                    style={isDeletedList ? { opacity: 0.85, background: '#f7f5f0' } : undefined}
+                  >
+                    {!isDeletedList && (
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(e.id)}
+                          onChange={() => toggleSelected(e.id)}
+                          aria-label={`Выбрать запись ${e.id}`}
+                        />
+                      </td>
+                    )}
                     <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
                       {isDeletedList
                         ? (e.deletedAt ? new Date(e.deletedAt).toLocaleString('ru-RU') : '—')

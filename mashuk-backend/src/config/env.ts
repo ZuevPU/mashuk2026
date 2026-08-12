@@ -25,9 +25,9 @@ export const env = {
   VK_MINI_APP_URL: process.env.VK_MINI_APP_URL || 'https://vk.ru/app54662212',
   EXPORT_STORAGE_DIR: process.env.EXPORT_STORAGE_DIR || 'data/admin-exports',
   UNIFIED_RATING: process.env.UNIFIED_RATING !== 'false',
-  /** Обмен опытом: лимит вопросов на участника за всю смену */
+  /** Обмен опытом: лимит вопросов на участника за календарный день (МСК) */
   EXCHANGE_MAX_QUESTIONS_TOTAL: process.env.EXCHANGE_MAX_QUESTIONS_TOTAL || '3',
-  /** Обмен опытом: лимит ответов на участника за календарный день (МСК) */
+  /** Обмен опытом: сколько ответов дают баллы (за смену); имя env — legacy */
   EXCHANGE_MAX_ANSWERS_PER_DAY: process.env.EXCHANGE_MAX_ANSWERS_PER_DAY || '5',
   /** Мин. длина текста вопроса в «Обмене опытом» */
   EXCHANGE_MIN_QUESTION_LEN: Number(process.env.EXCHANGE_MIN_QUESTION_LEN) || 60,

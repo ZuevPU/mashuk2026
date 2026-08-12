@@ -5,7 +5,7 @@ import {
 import { db } from '../db/index.js';
 import {
   questions, questionOptions, answers, exchangeQuestions, exchangeAnswers, orgThreads, participants, forumSettings,
-  adminActionsLog,
+  adminActionsLog, directions,
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import {
@@ -27,6 +27,36 @@ function participantDisplayName(p: typeof participants.$inferSelect | null): str
   if (!p) return undefined;
   const name = [p.firstName, p.lastName].filter(Boolean).join(' ').trim();
   return name || String(p.vkId);
+}
+
+/** Подтягивает legacy `direction` (имя) при выборе audienceDirectionId. */
+async function applyAudienceDirectionName(
+  values: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  // Partial PATCH: если audienceType не передали — не трогаем аудиторию.
+  if (values.audienceType === undefined && values.audienceDirectionId === undefined) {
+    return values;
+  }
+  const aud = String(values.audienceType ?? 'all');
+  if (aud !== 'direction') {
+    if (aud === 'all') {
+      return { ...values, audienceDirectionId: null, direction: null };
+    }
+    return values;
+  }
+  const dirId = values.audienceDirectionId != null ? Number(values.audienceDirectionId) : NaN;
+  if (!Number.isFinite(dirId) || dirId <= 0) {
+    return { ...values, audienceDirectionId: null, direction: null };
+  }
+  const [d] = await db.select({ id: directions.id, name: directions.name })
+    .from(directions)
+    .where(eq(directions.id, dirId))
+    .limit(1);
+  return {
+    ...values,
+    audienceDirectionId: dirId,
+    direction: d?.name ?? null,
+  };
 }
 
 function slotWindowsForTitle(title: string, toDay: number, startDate: Date) {
@@ -224,12 +254,18 @@ export const crudQuestions = {
   create: async (req: AdminRequest, res: Response) => {
     const parsed = parseBody(questionCreateSchema, req.body);
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
+    if (parsed.data.audienceType === 'direction' && !parsed.data.audienceDirectionId) {
+      res.status(400).json({ error: 'Выберите направление для аудитории вопроса' });
+      return;
+    }
     const { resolveAdminShiftId } = await import('../services/shiftService.js');
     const shiftId = await resolveAdminShiftId(req);
-    const values = buildQuestionValues(parsed.data as Record<string, unknown>, parsed.data.title.trim());
+    const values = await applyAudienceDirectionName(
+      buildQuestionValues(parsed.data as Record<string, unknown>, parsed.data.title.trim()) as Record<string, unknown>,
+    );
     if (!values.type) values.type = 'open';
     if (!values.status) values.status = 'draft';
-    const [q] = await db.insert(questions).values({ ...values, shiftId }).returning();
+    const [q] = await db.insert(questions).values({ ...values, shiftId } as typeof questions.$inferInsert).returning();
     // Точки осмысления / state_check — авто-рассылка, когда уже «в эфире»
     // (опубликован сейчас; по времени — подхватит push-планировщик).
     if (q.status === 'published') {
@@ -252,7 +288,19 @@ export const crudQuestions = {
     const [before] = await db.select().from(questions).where(eq(questions.id, id)).limit(1);
     if (!before) { res.status(404).json({ error: 'Not found' }); return; }
 
-    const enriched = enrichQuestionWritePayload(parsed.data as Record<string, unknown>, before);
+    const nextAudienceType = (parsed.data as { audienceType?: string }).audienceType ?? before.audienceType;
+    const nextAudienceDirId = (parsed.data as { audienceDirectionId?: number | null }).audienceDirectionId
+      !== undefined
+      ? (parsed.data as { audienceDirectionId?: number | null }).audienceDirectionId
+      : before.audienceDirectionId;
+    if (nextAudienceType === 'direction' && (nextAudienceDirId == null || !Number(nextAudienceDirId))) {
+      res.status(400).json({ error: 'Выберите направление для аудитории вопроса' });
+      return;
+    }
+
+    const enriched = await applyAudienceDirectionName(
+      enrichQuestionWritePayload(parsed.data as Record<string, unknown>, before),
+    );
     const [{ count: answerCount }] = await db.select({ count: count() }).from(answers).where(eq(answers.questionId, id));
     const newTitle = enriched.title != null ? String(enriched.title) : before.title;
     const newText = enriched.text != null ? String(enriched.text) : before.text;
@@ -283,7 +331,9 @@ export const crudQuestions = {
         timePoint: enriched.timePoint !== undefined ? (enriched.timePoint as string | null) : before.timePoint,
         dayNumber: enriched.dayNumber !== undefined ? Number(enriched.dayNumber) : before.dayNumber,
         dayNumbers: (enriched.dayNumbers as number[] | undefined) ?? before.dayNumbers,
-        direction: before.direction,
+        direction: (enriched.direction as string | null | undefined) !== undefined
+          ? (enriched.direction as string | null)
+          : before.direction,
         audienceType: enriched.audienceType !== undefined ? (enriched.audienceType as string) : before.audienceType,
         audienceDirectionId: enriched.audienceDirectionId !== undefined ? (enriched.audienceDirectionId as number | null) : before.audienceDirectionId,
         audienceGroupId: enriched.audienceGroupId !== undefined ? (enriched.audienceGroupId as number | null) : before.audienceGroupId,

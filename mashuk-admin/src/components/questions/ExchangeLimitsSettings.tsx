@@ -16,7 +16,7 @@ export function ExchangeLimitsSettings({ form, onChange, onSave }: Props) {
     <div className="card adm-forum-block" style={{ marginBottom: 12 }}>
       <h3 style={{ marginTop: 0 }}>Обмен опытом · лимиты и баллы</h3>
       <p className="adm-muted" style={{ fontSize: 13, marginBottom: 12, lineHeight: 1.45 }}>
-        Правила для всех участников. Вопросы: жёсткий лимит на создание и баллы за каждый одобренный.
+        Правила для всех участников. Вопросы: лимит на календарный день (МСК) и баллы за каждый одобренный.
         Ответы: можно отвечать без ограничений, но баллы начисляются только за первые N ответов на вопросы других.
       </p>
 
@@ -25,7 +25,7 @@ export function ExchangeLimitsSettings({ form, onChange, onSave }: Props) {
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Вопросы участника</div>
           <div className="form-row" style={{ flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
-              Сколько вопросов можно задать (за смену)
+              Сколько вопросов можно задать (в день)
               <input
                 type="number"
                 className="adm-input"

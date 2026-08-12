@@ -9,6 +9,8 @@ type Props = {
   readOnly: boolean;
   /** When true, render collapsible sections by forum day */
   groupByDay?: boolean;
+  directionList?: Array<{ id: number; name: string }>;
+  groupList?: Array<{ id: number; name: string }>;
   onToggleSelect: (id: number) => void;
   onToggleAll: () => void;
   onEdit: (q: AdminQuestion) => void;
@@ -32,6 +34,8 @@ function QuestionRows({
   questions,
   selectedIds,
   readOnly,
+  directionList,
+  groupList,
   onToggleSelect,
   onEdit,
   onDuplicate,
@@ -74,7 +78,7 @@ function QuestionRows({
             <td>{answerTypeLabel(q.answerType || q.type)}</td>
             <td>{days}</td>
             <td>{q.timeWindowLabel || '—'}</td>
-            <td>{audienceLabel(q)}</td>
+            <td>{audienceLabel(q, directionList, groupList)}</td>
             <td>{statusLabel(q)}</td>
             <td>{q.answerCount ?? 0}</td>
             <td>
@@ -178,6 +182,8 @@ export function QuestionsListTable({
   selectedIds,
   readOnly,
   groupByDay = false,
+  directionList,
+  groupList,
   onToggleSelect,
   onToggleAll,
   onEdit,
@@ -190,7 +196,7 @@ export function QuestionsListTable({
   onDelete,
   onOpenModeration,
 }: Props) {
-  const groups = useMemo(() => {
+  const dayGroups = useMemo(() => {
     if (!groupByDay) return null;
     const map = new Map<number, AdminQuestion[]>();
     for (const q of questions) {
@@ -226,6 +232,8 @@ export function QuestionsListTable({
     questions,
     selectedIds,
     readOnly,
+    directionList,
+    groupList,
     onToggleSelect,
     onEdit,
     onDuplicate,
@@ -238,7 +246,7 @@ export function QuestionsListTable({
     onOpenModeration,
   };
 
-  if (!groupByDay || !groups) {
+  if (!groupByDay || !dayGroups) {
     return (
       <TableShell
         questions={questions}
@@ -254,7 +262,7 @@ export function QuestionsListTable({
 
   return (
     <div className="adm-questions-by-day">
-      {groups.map(([day, rows]) => {
+      {dayGroups.map(([day, rows]) => {
         const isCollapsed = collapsed[day] === true;
         const label = day === 0 ? 'Без дня' : `День ${day}`;
         return (

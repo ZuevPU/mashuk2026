@@ -111,6 +111,8 @@ export type AdminQuestion = {
   sortOrder?: number;
   audienceType?: string;
   audienceDirectionId?: number | null;
+  /** Legacy: имя направления (синхронизируется с audienceDirectionId на бэке). */
+  direction?: string | null;
   audienceGroupId?: number | null;
   audienceRole?: string | null;
   isRequired?: boolean;
@@ -171,11 +173,29 @@ export function answerTypeLabel(t?: string | null): string {
   return ANSWER_TYPES.find(a => a.value === t)?.label ?? t ?? '—';
 }
 
-export function audienceLabel(q: AdminQuestion): string {
+export function audienceLabel(
+  q: AdminQuestion,
+  dirs?: Array<{ id: number; name: string }>,
+  groups?: Array<{ id: number; name: string }>,
+): string {
   const t = q.audienceType || 'all';
   if (t === 'all') return 'Все';
-  if (t === 'direction') return q.audienceDirectionId ? `Направление #${q.audienceDirectionId}` : 'Направление';
-  if (t === 'group') return q.audienceGroupId ? `Группа #${q.audienceGroupId}` : 'Группа';
+  if (t === 'direction') {
+    if (q.audienceDirectionId != null) {
+      const name = dirs?.find(d => d.id === q.audienceDirectionId)?.name
+        || q.direction
+        || `#${q.audienceDirectionId}`;
+      return `Только «${name}»`;
+    }
+    return q.direction ? `Только «${q.direction}»` : 'Направление';
+  }
+  if (t === 'group') {
+    if (q.audienceGroupId != null) {
+      const name = groups?.find(g => g.id === q.audienceGroupId)?.name || `#${q.audienceGroupId}`;
+      return `Группа «${name}»`;
+    }
+    return 'Группа';
+  }
   if (t === 'role') return q.audienceRole ? `Роль: ${q.audienceRole}` : 'Роль';
   return t;
 }

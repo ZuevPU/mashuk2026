@@ -365,10 +365,25 @@ export function LevelsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   };
 
   const recalcAll = () => {
-    if (!confirm('Пересчитать баллы всех участников из журнала?')) return;
+    if (!confirm(
+      'Пересчитать всех: доначислить бонусы «полный день» (25) и «регулярность 6 дней» (60) тем, кто закрыл все точки, затем пересобрать суммы из журнала?',
+    )) return;
     act(async () => {
-      await adminFetch('/rating/recalculate-all', { method: 'POST', body: '{}' });
+      const res = await adminFetch('/rating/recalculate-all', { method: 'POST', body: '{}' }) as {
+        bonuses?: {
+          dayCompleteAwarded?: number;
+          regularityAwarded?: number;
+          dayCompleteAmountFixed?: number;
+          regularityAmountFixed?: number;
+        };
+      };
       await load();
+      const b = res?.bonuses;
+      if (b) {
+        alert(
+          `Готово.\nПолный день начислено: ${b.dayCompleteAwarded ?? 0}\nРегулярность начислено: ${b.regularityAwarded ?? 0}\nСуммы в журнале выровнены: день ${b.dayCompleteAmountFixed ?? 0}, регулярность ${b.regularityAmountFixed ?? 0}`,
+        );
+      }
     }, 'Пересчёт завершён');
   };
 

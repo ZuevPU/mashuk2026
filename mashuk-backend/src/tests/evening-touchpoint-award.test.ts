@@ -18,9 +18,11 @@ describe('evening questionnaire as touchpoint 7', () => {
   it('ratio without marker: eveningDone adds exactly one slot', () => {
     const off = touchpointCompletionRatio([], new Set(), 1, { eveningDone: false });
     const on = touchpointCompletionRatio([], new Set(), 1, { eveningDone: true });
+    // Без опубликованных вопросов ожидается только слот итогов дня
+    assert.equal(off.expected, 1);
     assert.equal(off.completed, 0);
     assert.equal(on.completed, 1);
-    assert.equal(on.expected, 7);
+    assert.equal(on.expected, 1);
   });
 
   it('cumulative counts eveningDoneDays across days', () => {
@@ -31,7 +33,7 @@ describe('evening questionnaire as touchpoint 7', () => {
       { eveningDoneDays: new Set([1, 3]) },
     );
     assert.equal(completed, 2);
-    assert.equal(expected, 21);
+    assert.equal(expected, 3);
   });
 
   it('items: eveningRatings alone marks slot 7 done', () => {

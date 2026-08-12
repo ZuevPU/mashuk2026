@@ -185,6 +185,60 @@ export async function deletePiggybankEntry(req: AdminRequest, res: Response): Pr
   }
 }
 
+export async function bulkDeletePiggybankEntries(req: AdminRequest, res: Response): Promise<void> {
+  const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const parsedIds = (rawIds as unknown[])
+    .map(x => Number(x))
+    .filter((n): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0);
+  const ids = [...new Set<number>(parsedIds)].slice(0, 200);
+  if (!ids.length) {
+    res.status(400).json({ error: 'Укажите ids записей для удаления' });
+    return;
+  }
+
+  let deleted = 0;
+  let pointsRevoked = 0;
+  const failed: Array<{ id: number; error: string }> = [];
+
+  for (const id of ids) {
+    try {
+      const result = await softDeletePiggybankEntry(id);
+      deleted += 1;
+      if (result.pointsRevoked) pointsRevoked += 1;
+      await logAdminAction({
+        req,
+        actionType: 'piggybank_delete',
+        section: 'piggybank',
+        objectId: id,
+        oldValue: {
+          text: result.entry.text,
+          participantId: result.entry.participantId,
+          pointsLogId: result.pointsLogId,
+          bulk: true,
+        },
+        newValue: {
+          deletedAt: result.entry.deletedAt,
+          pointsRevoked: result.pointsRevoked,
+          revokeError: result.revokeError ?? null,
+        },
+        isCritical: true,
+      });
+    } catch (e) {
+      failed.push({ id, error: e instanceof Error ? e.message : 'Error' });
+    }
+  }
+
+  await logAdminAction({
+    req,
+    actionType: 'piggybank_bulk_delete',
+    section: 'piggybank',
+    newValue: { ids, deleted, pointsRevoked, failedCount: failed.length },
+    isCritical: true,
+  });
+
+  res.json({ deleted, pointsRevoked, failed, requested: ids.length });
+}
+
 export async function restorePiggybankEntryAdmin(req: AdminRequest, res: Response): Promise<void> {
   const id = Number(req.params.id);
   try {

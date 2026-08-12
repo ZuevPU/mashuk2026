@@ -11,6 +11,7 @@ import { buildKindDashboard } from './questionKindDashboard.js';
 import { buildPiggybankDashboard } from './piggybankDashboard.js';
 import { buildExchangeAnalytics } from './exchangeAnalytics.js';
 import { buildRoleDirectionMatrix } from './roleDirectionMatrix.js';
+import { buildRoleDynamicsHub } from './roleDynamicsHub.js';
 import { forumSeriesDays } from './dayComparison.js';
 import {
   buildTouchpointSlotCoverage,
@@ -296,6 +297,7 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
     touchpointThreshold: null,
     touchpointSlotCoverage: null,
     roleDirectionMatrix: null,
+    roleDynamics: null,
     directionEmotionEnergy: scPulse.directionEmotionEnergy ?? [],
   };
 }
@@ -308,10 +310,11 @@ export async function buildHubForumExtras(filters: AnalyticsFilters, req?: Admin
   const currentDay = settings.currentDay ?? 1;
   const seriesDays = forumSeriesDays(currentDay);
 
-  const [touchpointThreshold, touchpointSlotCoverage, roleDirectionMatrix, exchange] = await Promise.all([
+  const [touchpointThreshold, touchpointSlotCoverage, roleDirectionMatrix, roleDynamics, exchange] = await Promise.all([
     buildTouchpointThresholdCoverage(cohort, seriesDays, forumFilters.shiftId),
     buildTouchpointSlotCoverage(cohort, seriesDays, forumFilters.shiftId),
     buildRoleDirectionMatrix(cohort, seriesDays),
+    buildRoleDynamicsHub(cohort, seriesDays),
     buildExchangeAnalytics(forumFilters, req),
   ]);
 
@@ -319,6 +322,7 @@ export async function buildHubForumExtras(filters: AnalyticsFilters, req?: Admin
     touchpointThreshold,
     touchpointSlotCoverage,
     roleDirectionMatrix,
+    roleDynamics,
     exchange,
   };
 }

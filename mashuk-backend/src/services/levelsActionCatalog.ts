@@ -27,7 +27,7 @@ export const ACTION_CATALOG: ActionCatalogDef[] = [
   { actionType: 'exchange_question', displayName: 'Вопрос в «Общении»', track: 'path', group: 'path', pointsPerUnit: 3, maxAccruals: 30 },
   { actionType: 'exchange_answer', displayName: 'Ответ участнику в «Общении»', track: 'path', group: 'path', pointsPerUnit: 5, maxAccruals: 50 },
   { actionType: 'attendance', displayName: 'Посещение события программы', track: 'path', group: 'path', pointsPerUnit: 5, maxAccruals: 40 },
-  { actionType: 'day_complete_bonus', displayName: 'Бонус за полный день (все точки)', track: 'path', group: 'path', pointsPerUnit: 20, maxAccruals: 8 },
+  { actionType: 'day_complete_bonus', displayName: 'Бонус за полный день (все точки)', track: 'path', group: 'path', pointsPerUnit: 25, maxAccruals: 8 },
   { actionType: 'reflection_streak_7', displayName: 'Бонус за регулярность 7 дней', track: 'path', group: 'path', pointsPerUnit: 50, maxAccruals: 1 },
 
   { actionType: 'task_complete', displayName: 'Выполнение задания (дефолт)', track: 'experience', group: 'experience', pointsPerUnit: 20, maxAccruals: 100 },
@@ -37,7 +37,7 @@ export const ACTION_CATALOG: ActionCatalogDef[] = [
   { actionType: 'piggybank_question', displayName: 'Копилка: вопрос', track: 'path', group: 'piggybank', pointsPerUnit: 3, maxAccruals: 50 },
   { actionType: 'piggybank_entry', displayName: 'Копилка: запись (прочее)', track: 'experience', group: 'piggybank', pointsPerUnit: 3, maxAccruals: 100 },
 
-  { actionType: 'bonus_regularity', displayName: 'Бонус регулярности (6+ дней)', track: 'bonus', group: 'bonus', pointsPerUnit: 25, maxAccruals: 1 },
+  { actionType: 'bonus_regularity', displayName: 'Бонус регулярности (6+ полных дней)', track: 'bonus', group: 'bonus', pointsPerUnit: 60, maxAccruals: 1 },
   { actionType: 'bonus_diversity', displayName: 'Бонус разнообразия заданий', track: 'bonus', group: 'bonus', pointsPerUnit: 25, maxAccruals: 1 },
 
   { actionType: 'path_level', displayName: 'Пороги уровней «Пути»', track: 'path', group: 'levels', pointsPerUnit: 0, maxAccruals: null },

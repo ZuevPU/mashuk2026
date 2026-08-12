@@ -1,8 +1,9 @@
-import { eq, count } from 'drizzle-orm';
+import { and, eq, count, gte } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { exchangeAnswers, exchangeQuestions, levelsConfig } from '../db/schema.js';
 import { getForumSettings } from './helpers.js';
 import { env } from '../config/env.js';
+import { startOfMoscowDay } from './questionAutoNotify.js';
 
 function positiveInt(raw: unknown, fallback: number): number {
   const n = Number(raw);
@@ -11,7 +12,10 @@ function positiveInt(raw: unknown, fallback: number): number {
 }
 
 export type ExchangeLimitsConfig = {
-  /** Сколько вопросов участник может задать за всю смену (жёсткий лимит) */
+  /**
+   * Сколько вопросов участник может задать за календарный день (МСК).
+   * Поле в JSON по-прежнему `maxQuestionsTotal` (legacy-имя).
+   */
   maxQuestionsTotal: number;
   /** Баллы за один одобренный вопрос */
   pointsPerQuestion: number;
@@ -87,11 +91,15 @@ export function normalizeExchangeLimitsInput(raw: unknown): ExchangeLimitsConfig
 
 /** Sync levels_config so awardPoints / Levels tab match exchange settings. */
 export async function syncExchangePointsToLevelsConfig(cfg: ExchangeLimitsConfig): Promise<void> {
+  const settings = await getForumSettings();
+  const totalDays = Math.max(1, Number(settings?.totalDays) || 8);
+  // Вопросы лимитируются по дню → потолок баллов за смену ≈ лимит × дни форума
+  const questionAccruals = Math.max(cfg.maxQuestionsTotal * totalDays, 1);
   const pairs: { actionType: string; pointsPerUnit: number; maxAccruals: number }[] = [
     {
       actionType: 'exchange_question',
       pointsPerUnit: cfg.pointsPerQuestion,
-      maxAccruals: Math.max(cfg.maxQuestionsTotal, 1),
+      maxAccruals: questionAccruals,
     },
     {
       actionType: 'exchange_answer',
@@ -152,10 +160,14 @@ export async function getExchangeLimitsForParticipant(
   const cfg = await getExchangeLimitsConfig();
   const questionsMax = cfg.maxQuestionsTotal;
   const answersForPointsMax = cfg.maxAnswersForPoints;
+  const dayStart = startOfMoscowDay();
 
   const [qRow] = await db.select({ cnt: count() })
     .from(exchangeQuestions)
-    .where(eq(exchangeQuestions.participantId, participantId));
+    .where(and(
+      eq(exchangeQuestions.participantId, participantId),
+      gte(exchangeQuestions.createdAt, dayStart),
+    ));
   const questionsUsed = Number(qRow?.cnt ?? 0);
 
   const [aRow] = await db.select({ cnt: count() })

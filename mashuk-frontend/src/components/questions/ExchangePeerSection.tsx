@@ -255,8 +255,8 @@ export function ExchangePeerSection({
         <div className="ask-btn m-card" style={{ marginBottom: 10 }}>
           {limits && (
             <div style={{ fontSize: 12, color: '#666', marginBottom: 8, lineHeight: 1.45 }}>
-              Можно задать ещё {limits.questionsLeft} {questionsWord(limits.questionsLeft)}
-              {' '}(из {limits.questionsMax}
+              Можно задать ещё {limits.questionsLeft} {questionsWord(limits.questionsLeft)} сегодня
+              {' '}(из {limits.questionsMax} в день
               {limits.pointsPerQuestion != null ? `, +${limits.pointsPerQuestion} за вопрос` : ''}).
             </div>
           )}
@@ -268,7 +268,7 @@ export function ExchangePeerSection({
             disabled={!!limits && limits.questionsLeft <= 0}
             onClick={() => { void openCompose(); }}
           >
-            {limits && limits.questionsLeft <= 0 ? 'Лимит вопросов исчерпан' : '+ Задать вопрос · выбрать тему'}
+            {limits && limits.questionsLeft <= 0 ? 'Лимит на сегодня исчерпан' : '+ Задать вопрос · выбрать тему'}
           </Button>
         </div>
       )}

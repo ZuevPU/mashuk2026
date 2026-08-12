@@ -13,7 +13,7 @@ type ActionPoints = { actionType: string; points: number; displayName?: string }
 const RULE_META: Record<string, { title: string; paramKey?: string; paramLabel?: string; hint?: string }> = {
   day_complete_bonus: {
     title: 'Бонус за полный день',
-    hint: 'Начисляется, когда участник закрыл все точки осмысления за день. Баллы — в таблице «Путь» (day_complete_bonus).',
+    hint: 'Когда закрыты все точки дня (проверки + осмысления + итоги). По умолчанию 25 баллов «Путь». Пересчёт — кнопка «Пересчитать всех».',
   },
   reflection_streak_7: {
     title: 'Серия дней с рефлексией',
@@ -22,10 +22,10 @@ const RULE_META: Record<string, { title: string; paramKey?: string; paramLabel?:
     hint: 'Считаются дни с активностью по линии «Путь» (точки, проверки, обмен).',
   },
   bonus_regularity: {
-    title: 'Регулярность (любая активность)',
+    title: 'Регулярность (полные дни)',
     paramKey: 'minStreak',
     paramLabel: 'Дней подряд',
-    hint: 'Любые начисления за день смены подряд.',
+    hint: 'N дней подряд с закрытыми всеми точками. По умолчанию 6 дней → 60 баллов (линия бонусов).',
   },
   bonus_diversity: {
     title: 'Разнообразие заданий',

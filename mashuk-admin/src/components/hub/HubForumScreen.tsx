@@ -38,6 +38,7 @@ import { DirectionEmotionEnergyBlock } from './DirectionEmotionEnergyBlock';
 import { DirectionRadarCompare } from './DirectionRadarCompare';
 import { StateReasonsByDirectionTable } from './StateReasonsByDirectionTable';
 import { RoleDirectionHeatmap } from './RoleDirectionHeatmap';
+import { HubRoleDynamics } from './HubRoleDynamics';
 import { TouchpointDirectionSlotChart, TouchpointSlotChart } from './TouchpointSlotChart';
 import { PiggybankDirectionMatrix } from './PiggybankDirectionMatrix';
 import { HubEmotionsDayChart } from './HubEmotionsDayChart';
@@ -185,6 +186,7 @@ export function HubForumScreen({
           touchpointThreshold: extras.touchpointThreshold ?? null,
           touchpointSlotCoverage: extras.touchpointSlotCoverage ?? null,
           roleDirectionMatrix: extras.roleDirectionMatrix ?? null,
+          roleDynamics: extras.roleDynamics ?? null,
           exchange: extras.exchange ?? res.exchange ?? null,
         };
         dataRef.current = merged;
@@ -534,6 +536,11 @@ export function HubForumScreen({
       <StateReasonsByDirectionTable
         rows={data.pulse?.stateReasons?.byDirection}
         directions={(data.byDirection ?? []).map((r: { direction: string }) => r.direction)}
+        onOpenDirection={openDirection}
+      />
+      <HubRoleDynamics
+        data={data.roleDynamics}
+        toolbarDirection={direction || undefined}
         onOpenDirection={openDirection}
       />
       <RoleDirectionHeatmap

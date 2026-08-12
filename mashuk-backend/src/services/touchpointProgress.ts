@@ -205,14 +205,19 @@ export function touchpointCompletionRatio(
   const dayQs = dayQuestions.filter(q => questionMatchesDay(q, dayNumber));
   const eveningDone = opts?.eveningDone === true;
   let completed = 0;
+  let expected = 0;
   for (const slot of TOUCHPOINT_SLOTS) {
     // Any matching twin counts (user may have answered an older id than the newest publish)
     const matched = dayQs.filter(q => questionMatchesTouchpointSlot(q, slot));
+    // Слот без опубликованного вопроса не блокирует «полный день»
+    // (итоговый слот всё равно ожидаем — закрывается eveningRatings).
+    if (matched.length === 0 && !isEveningTouchpointSlot(slot)) continue;
+    expected += 1;
     const byAnswer = matched.some(q => answeredIds.has(q.id));
     const byEvening = eveningDone && isEveningTouchpointSlot(slot);
     if (byAnswer || byEvening) completed += 1;
   }
-  return { completed, expected: TOUCHPOINT_SLOTS.length };
+  return { completed, expected };
 }
 
 /** Cumulative completion across days 1..throughDay (inclusive). */
