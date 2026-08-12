@@ -73,13 +73,15 @@ export function GoalsStepEditor({ questions, onChange, onSave, dirty }: Props) {
   };
 
   return (
-    <div className="adm-forum-block card">
-      <h3>Шаг «Цели» (Точка А)</h3>
-      <p className="adm-forum-hint">
-        Вопросы целеполагания при регистрации. Для выбора одного ответа можно включить «Свой вариант»
-        и добавить цепочку: следующий вопрос появляется только если участник выбрал нужный вариант.
-        Те же вопросы используются в Точке Б.
-      </p>
+    <div className="card adm-forum-block adm-kb-panel">
+      <div className="adm-kb-panel-head">
+        <h3>Шаг «Цели» (Точка А)</h3>
+        <p className="adm-kb-panel-sub">
+          Вопросы целеполагания при регистрации. Для выбора одного ответа можно включить «Свой вариант»
+          и добавить цепочку: следующий вопрос появляется только если участник выбрал нужный вариант.
+          Те же вопросы используются в Точке Б.
+        </p>
+      </div>
       {questions.map((q, i) => {
         const needsOptions = q.type === 'choice' || q.type === 'multi';
         const err = errors[i];

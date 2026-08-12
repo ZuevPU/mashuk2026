@@ -1,5 +1,4 @@
 import { Fragment, useMemo, useState } from 'react';
-import { AdminPageHero } from '../admin/AdminPageHero';
 import { RowActionsMenu } from '../participants/RowActionsMenu';
 import { RoleEditModal } from './RoleEditModal';
 import {
@@ -36,12 +35,13 @@ export function RolesListSection({
 
   return (
     <>
-      <AdminPageHero
-        title="Роли · 6 ролей матрицы"
-        hint="Шесть педагогических ролей форума. Тексты и иконки участник видит после диагностики и в «Роли дня»."
-      />
-
-      <div className="card adm-forum-block adm-role-matrix-wrap">
+      <div className="card adm-forum-block adm-kb-panel adm-role-matrix-wrap">
+        <div className="adm-kb-panel-head">
+          <h3>Роли · матрица</h3>
+          <p className="adm-kb-panel-sub">
+            Шесть педагогических ролей. Тексты и иконки участник видит после диагностики.
+          </p>
+        </div>
         <div className="adm-role-matrix-grid">
           <div className="adm-role-matrix-corner" />
           {matrixCols.map(col => (
@@ -73,8 +73,13 @@ export function RolesListSection({
         </div>
       </div>
 
-      <div className="card adm-forum-block">
-        <table className="adm-table">
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Список ролей</h3>
+          <p className="adm-kb-panel-sub">Редактирование текстов и переход к советам роли.</p>
+        </div>
+        <div className="adm-kb-table-scroll">
+        <table className="adm-table adm-kb-inline-table">
           <thead>
             <tr>
               <th>Название</th>
@@ -105,6 +110,7 @@ export function RolesListSection({
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <RoleEditModal

@@ -106,9 +106,9 @@ export function LeaderboardDashboard({
   const uiMaxRows = filters.showAll ? undefined : (maxRows ?? 50);
 
   return (
-    <div className="lb-dashboard card">
+    <div className="lb-dashboard">
       {showModeTabs !== false && (
-        <div className="lb-mode-tabs">
+        <div className="adm-forum-seg" style={{ marginBottom: 12 }}>
           {([
             { key: 'points' as const, label: 'Баллы' },
             { key: 'nomination' as const, label: 'Номинации' },
@@ -116,7 +116,7 @@ export function LeaderboardDashboard({
             <button
               key={tab.key}
               type="button"
-              className={`lb-mode-tab ${filters.mode === tab.key ? 'on' : ''}`}
+              className={filters.mode === tab.key ? 'on' : ''}
               onClick={() => patchFilters({ mode: tab.key })}
             >
               {tab.label}
@@ -135,20 +135,20 @@ export function LeaderboardDashboard({
         compact={showModeTabs === false}
       />
 
-      <div className="lb-toolbar">
+      <div className="adm-kb-toolbar" style={{ marginTop: 12, marginBottom: 12 }}>
         {onOpenFullscreen && (
           <button
             type="button"
-            className="adm-btn adm-btn-primary"
+            className="adm-btn adm-btn-primary adm-btn-sm"
             onClick={() => onOpenFullscreen(buildLeaderboardQuery(filters))}
           >
             На весь экран
           </button>
         )}
-        <button type="button" className="adm-btn adm-btn-secondary" onClick={() => void downloadExport()}>
-          Скачать CSV (полная таблица)
+        <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => void downloadExport()}>
+          Скачать CSV
         </button>
-        <button type="button" className="adm-btn adm-btn-secondary" onClick={load}>
+        <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={load}>
           Обновить
         </button>
       </div>

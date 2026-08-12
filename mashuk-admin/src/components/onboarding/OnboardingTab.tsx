@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
+import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
 import {
   cloneDiagQuestions,
   DEFAULT_DIAG_MATRIX,
@@ -21,6 +23,11 @@ import {
   type OnboardingStep,
   type RoleDiagnosticsConfig,
 } from './types';
+
+const ONBOARDING_NAV: HubNavItem[] = [
+  { id: 'onboarding-hero', label: 'Обзор' },
+  { id: 'onboarding-content', label: 'Шаг' },
+];
 
 function snapshotConfig(cfg: RoleDiagnosticsConfig): string {
   return JSON.stringify(cfg);
@@ -214,97 +221,100 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
   }
 
   return (
-    <div className="adm-forum adm-onboarding">
-      <div className="adm-forum-hero card">
-        <h2 className="adm-forum-hero-title">Конструктор регистрации</h2>
-        <p className="adm-forum-hint">
-          Порядок для участника: регистрация → цели (Точка А) → интересы → диагностика роли → дальше приложение.
-        </p>
-        <div className="adm-seg adm-forum-day-seg adm-onboarding-seg">
-          {ONBOARDING_STEPS.map(s => (
-            <button
-              key={s.id}
-              type="button"
-              className={step === s.id ? 'on' : ''}
-              onClick={() => setStep(s.id)}
-            >
-              {s.label}{stepDirty(s.id) ? ' •' : ''}
-            </button>
-          ))}
-        </div>
-        {configDirty && (
-          <div className="adm-forum-actions" style={{ marginTop: 12 }}>
-            <button
-              type="button"
-              className="adm-btn"
-              disabled={!goalsValid}
-              onClick={saveAllConfig}
-              title={goalsValid ? undefined : 'Сначала исправьте вопросы в шаге «Цели»'}
-            >
-              Сохранить всё (config) •
-            </button>
+    <HubLensLayout className="adm-forum adm-onboarding adm-kb" items={ONBOARDING_NAV} navLabel="Разделы регистрации">
+      <section id="onboarding-hero" className="adm-forum-anchor">
+        <AdminPageHero
+          title="Регистрация"
+          hint="Порядок для участника: регистрация → цели → интересы → диагностика роли → приложение."
+        >
+          <div className="adm-forum-seg">
+            {ONBOARDING_STEPS.map(s => (
+              <button
+                key={s.id}
+                type="button"
+                className={step === s.id ? 'on' : ''}
+                onClick={() => setStep(s.id)}
+              >
+                {s.label}{stepDirty(s.id) ? ' ·' : ''}
+              </button>
+            ))}
           </div>
-        )}
-      </div>
+          {configDirty && (
+            <div className="adm-forum-toolbar" style={{ marginTop: 12, marginBottom: 0 }}>
+              <button
+                type="button"
+                className="adm-btn adm-btn-primary adm-btn-sm"
+                disabled={!goalsValid}
+                onClick={saveAllConfig}
+                title={goalsValid ? undefined : 'Сначала исправьте вопросы в шаге «Цели»'}
+              >
+                Сохранить всё
+              </button>
+            </div>
+          )}
+        </AdminPageHero>
+      </section>
 
-      {step === 'goals' && (
-        <GoalsStepEditor
-          questions={goalQuestions}
-          onChange={setGoalQuestions}
-          onSave={() => saveConfig('Цели сохранены')}
-          dirty={goalsDirty}
-        />
-      )}
-      {step === 'interests' && (
-        <InterestsStepEditor
-          groups={interestGroups}
-          interestMin={interestMin}
-          interestMax={interestMax}
-          onChange={setInterestGroups}
-          onLimitsChange={(min, max) => {
-            setInterestMin(min);
-            setInterestMax(max);
-          }}
-          onSave={() => saveConfig('Интересы сохранены')}
-          dirty={interestsDirty}
-          onOpenProgram={onOpenProgram}
-        />
-      )}
-      {step === 'diag' && (
-        <RoleDiagnosticEditor
-          questions={diagQuestions}
-          matrix={diagMatrix}
-          onQuestionsChange={setDiagQuestions}
-          onMatrixChange={setDiagMatrix}
-          onSave={() => saveConfig('Диагностика сохранена')}
-          dirty={diagDirty}
-        />
-      )}
-      {step === 'roles' && (
-        <RolesListSection
-          roles={roles}
-          adminFetch={adminFetch}
-          act={(fn, msg) => act(fn, msg)}
-          onRolesUpdated={setRoles}
-          onViewAdviceForRole={openAdviceForRole}
-        />
-      )}
-      {step === 'advice' && (
-        <AdviceCatalogSection
-          adminFetch={adminFetch}
-          act={(fn, msg) => act(fn, msg)}
-          initialRoleFilter={adviceRoleFilter}
-          filterVersion={adviceFilterVersion}
-        />
-      )}
-      {step === 'preview' && (
-        <OnboardingPreview
-          goalQuestions={goalQuestions}
-          interestGroups={interestGroups}
-          diagQuestions={diagQuestions}
-          roles={roles}
-        />
-      )}
-    </div>
+      <section id="onboarding-content" className="adm-forum-anchor">
+        {step === 'goals' && (
+          <GoalsStepEditor
+            questions={goalQuestions}
+            onChange={setGoalQuestions}
+            onSave={() => saveConfig('Цели сохранены')}
+            dirty={goalsDirty}
+          />
+        )}
+        {step === 'interests' && (
+          <InterestsStepEditor
+            groups={interestGroups}
+            interestMin={interestMin}
+            interestMax={interestMax}
+            onChange={setInterestGroups}
+            onLimitsChange={(min, max) => {
+              setInterestMin(min);
+              setInterestMax(max);
+            }}
+            onSave={() => saveConfig('Интересы сохранены')}
+            dirty={interestsDirty}
+            onOpenProgram={onOpenProgram}
+          />
+        )}
+        {step === 'diag' && (
+          <RoleDiagnosticEditor
+            questions={diagQuestions}
+            matrix={diagMatrix}
+            onQuestionsChange={setDiagQuestions}
+            onMatrixChange={setDiagMatrix}
+            onSave={() => saveConfig('Диагностика сохранена')}
+            dirty={diagDirty}
+          />
+        )}
+        {step === 'roles' && (
+          <RolesListSection
+            roles={roles}
+            adminFetch={adminFetch}
+            act={(fn, msg) => act(fn, msg)}
+            onRolesUpdated={setRoles}
+            onViewAdviceForRole={openAdviceForRole}
+          />
+        )}
+        {step === 'advice' && (
+          <AdviceCatalogSection
+            adminFetch={adminFetch}
+            act={(fn, msg) => act(fn, msg)}
+            initialRoleFilter={adviceRoleFilter}
+            filterVersion={adviceFilterVersion}
+          />
+        )}
+        {step === 'preview' && (
+          <OnboardingPreview
+            goalQuestions={goalQuestions}
+            interestGroups={interestGroups}
+            diagQuestions={diagQuestions}
+            roles={roles}
+          />
+        )}
+      </section>
+    </HubLensLayout>
   );
 }

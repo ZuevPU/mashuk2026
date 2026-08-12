@@ -42,13 +42,13 @@ export function RoleDiagnosticEditor({
   };
 
   return (
-    <div className="adm-forum-block card">
-      <h3>Диагностика роли</h3>
-      <p className="adm-forum-hint">
-        Вопросы навигационной диагностики: у каждого варианта выберите, какую роль он засчитывает.
-        Можно добавить вопросы и варианты ответа (сейчас {questions.length} вопр.).
-        Итоговая роль — та, что чаще набралась по ответам участника.
-      </p>
+    <div className="card adm-forum-block adm-kb-panel">
+      <div className="adm-kb-panel-head">
+        <h3>Диагностика роли</h3>
+        <p className="adm-kb-panel-sub">
+          У каждого варианта ответа — роль, которую он засчитывает. Итоговая роль — та, что чаще набралась.
+        </p>
+      </div>
       {questions.map((q, qi) => (
         <details key={qi} className="card adm-forum-nested-card adm-forum-details" open={qi === 0}>
           <summary className="adm-forum-summary">

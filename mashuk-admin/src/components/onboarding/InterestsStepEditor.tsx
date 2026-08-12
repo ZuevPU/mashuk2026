@@ -52,20 +52,22 @@ export function InterestsStepEditor({
   };
 
   return (
-    <div className="adm-forum-block card">
-      <h3>Шаг «Интересы»</h3>
-      <p className="adm-forum-hint">
-        Участник выбирает теги интересов — по ним строятся рекомендации в программе.
-        {onOpenProgram && (
-          <>
-            {' '}
-            Теги должны совпадать с{' '}
-            <button type="button" className="adm-link-btn" onClick={onOpenProgram}>
-              тематическими тегами программы →
-            </button>
-          </>
-        )}
-      </p>
+    <div className="card adm-forum-block adm-kb-panel">
+      <div className="adm-kb-panel-head">
+        <h3>Шаг «Интересы»</h3>
+        <p className="adm-kb-panel-sub">
+          Участник выбирает теги интересов — по ним строятся рекомендации в программе.
+          {onOpenProgram && (
+            <>
+              {' '}
+              Теги должны совпадать с{' '}
+              <button type="button" className="adm-link-btn" onClick={onOpenProgram}>
+                тематическими тегами программы →
+              </button>
+            </>
+          )}
+        </p>
+      </div>
 
       <div className="adm-forum-grid-2" style={{ marginBottom: 12 }}>
         <label className="adm-field">

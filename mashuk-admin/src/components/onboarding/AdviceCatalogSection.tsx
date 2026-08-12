@@ -191,14 +191,17 @@ export function AdviceCatalogSection({
 
   return (
     <>
-      <div className="card adm-forum-hero">
-        <div className="adm-forum-toolbar adm-advice-toolbar">
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Советы по ролям</h3>
+          <p className="adm-kb-panel-sub">Каталог советов на день: фильтры, импорт CSV и публикация.</p>
+        </div>
+        <div className="adm-kb-toolbar">
           <input
-            className="adm-input"
+            className="adm-input adm-kb-search"
             placeholder="Поиск"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ minWidth: 160 }}
           />
           <select className="adm-input" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
             <option value="">Роль: все</option>
@@ -217,14 +220,14 @@ export function AdviceCatalogSection({
             <option value="draft">Черновик</option>
             <option value="published">Опубликован</option>
           </select>
-          <button type="button" className="adm-btn adm-btn-primary" onClick={openNew}>+ Добавить совет</button>
+          <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={openNew}>+ Добавить</button>
           {selectedIds.size > 0 && (
-            <button type="button" className="adm-btn adm-btn-danger" onClick={deleteSelected}>
-              Удалить выбранные ({selectedIds.size})
+            <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={deleteSelected}>
+              Удалить ({selectedIds.size})
             </button>
           )}
-          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => importRef.current?.click()}>
-            Импорт из CSV
+          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => importRef.current?.click()}>
+            Импорт CSV
           </button>
           <input
             ref={importRef}
@@ -237,13 +240,17 @@ export function AdviceCatalogSection({
               e.target.value = '';
             }}
           />
-          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadTemplate().catch(err => alert(String(err)))}>
-            Скачать шаблон CSV
+          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => downloadTemplate().catch(err => alert(String(err)))}>
+            Шаблон CSV
           </button>
         </div>
       </div>
 
-      <div className="card adm-forum-block">
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Каталог</h3>
+          <p className="adm-kb-panel-sub">Список советов по выбранным фильтрам.</p>
+        </div>
         {loading ? (
           <p className="adm-muted">Загрузка…</p>
         ) : experiments.length === 0 ? (
@@ -251,8 +258,8 @@ export function AdviceCatalogSection({
         ) : (
           <>
           {selectedIds.size > 0 && (
-            <div className="adm-forum-toolbar" style={{ marginBottom: 10, gap: 8 }}>
-              <span style={{ fontWeight: 700 }}>Выбрано: {selectedIds.size}</span>
+            <div className="adm-kb-bulk" style={{ marginTop: 0, marginBottom: 10 }}>
+              <span className="adm-kb-bulk-count">Выбрано: {selectedIds.size}</span>
               <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={deleteSelected}>
                 Удалить
               </button>
@@ -265,7 +272,8 @@ export function AdviceCatalogSection({
               </button>
             </div>
           )}
-          <table className="adm-table">
+          <div className="adm-kb-table-scroll">
+          <table className="adm-table adm-kb-inline-table">
             <thead>
               <tr>
                 <th style={{ width: 36 }}>
@@ -334,6 +342,7 @@ export function AdviceCatalogSection({
               ))}
             </tbody>
           </table>
+          </div>
           </>
         )}
       </div>

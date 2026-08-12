@@ -66,11 +66,10 @@ const emptyMaterial = () => ({
   kbUnlockMinTouchpoints: '' as number | '',
   kbSection: 'thematic' as string,
   kbSubsection: '' as string,
-  topicTitle: '',
   sortOrder: '' as number | '',
 });
 
-/** После сохранения оставляем раздел/тему/спикеров — удобно добавлять следующий тип артефакта. */
+/** После сохранения оставляем раздел/спикеров — удобно добавлять следующий тип артефакта. */
 const keepContextAfterCreate = (prev: ReturnType<typeof emptyMaterial>) => ({
   ...emptyMaterial(),
   dayNumber: prev.dayNumber,
@@ -84,7 +83,6 @@ const keepContextAfterCreate = (prev: ReturnType<typeof emptyMaterial>) => ({
   kbUnlockMinTouchpoints: prev.kbUnlockMinTouchpoints,
   kbSection: prev.kbSection,
   kbSubsection: prev.kbSubsection,
-  topicTitle: prev.topicTitle,
 });
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -290,7 +288,6 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
         : null,
       kbSection: newMaterial.kbSection || null,
       kbSubsection: newMaterial.kbSection === 'open_lessons' ? (newMaterial.kbSubsection || null) : null,
-      topicTitle: newMaterial.topicTitle.trim() || null,
       sortOrder: newMaterial.sortOrder === '' ? 0 : newMaterial.sortOrder,
       status,
       ...extra,
@@ -326,8 +323,8 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
         await refreshMaterials();
       }
     }, status === 'published'
-      ? 'Опубликован. Можно сразу добавить следующий тип к той же теме'
-      : 'Черновик сохранён. Можно сразу добавить следующий тип к той же теме', { reload: false });
+      ? 'Опубликован. Можно сразу добавить следующий тип'
+      : 'Черновик сохранён. Можно сразу добавить следующий тип', { reload: false });
   };
 
   const uploadFile = async (file: File) => {
@@ -363,7 +360,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
       } else {
         await refreshMaterials();
       }
-    }, 'Файл загружен. Можно сразу добавить следующий тип к той же теме', { reload: false });
+    }, 'Файл загружен. Можно сразу добавить следующий тип', { reload: false });
   };
 
   const openCard = (id: number) => {
@@ -375,7 +372,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   const materialsTableHead = (
     <thead>
       <tr>
-        <SortTh label="Раздел / тема" sortKey="section" sort={listSort} onSort={toggleListSort} />
+        <SortTh label="Раздел" sortKey="section" sort={listSort} onSort={toggleListSort} />
         <SortTh label="День" sortKey="day" sort={listSort} onSort={toggleListSort} />
         <SortTh label="Спикер" sortKey="speaker" sort={listSort} onSort={toggleListSort} />
         <SortTh label="Название / ссылка" sortKey="title" sort={listSort} onSort={toggleListSort} />
@@ -420,7 +417,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             ? `База знаний · ${materials.length} материалов`
             : `База знаний · ${filtered.length} из ${materials.length} материалов`
         }
-        hint="Материалы сгруппированы по дням смены. Одна «Тема» + несколько типов (презентация, видео…) идут подряд у участника. Типы и ручная разблокировка — внизу страницы."
+        hint="Материалы сгруппированы по дням смены. После сохранения форма оставляет раздел и спикеров. Типы и ручная разблокировка — внизу страницы."
       >
         {setTab && (
           <button type="button" className="adm-kb-btn adm-kb-btn-secondary" onClick={() => setTab('events')}>
@@ -506,7 +503,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
           <div className="adm-kb-panel-head">
             <h4>Новый материал</h4>
             <p className="adm-kb-panel-sub">
-              Одна «Тема» для презентации, видео и конспекта — материалы одного спикера идут рядом
+              Раздел, день, тип артефакта и спикеры — после сохранения контекст остаётся для следующего материала
             </p>
           </div>
           <div className="adm-kb-section-legend">
@@ -540,7 +537,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
                 ))}
               </select>
             </label>
-            {newMaterial.kbSection === 'open_lessons' ? (
+            {newMaterial.kbSection === 'open_lessons' && (
               <label className="adm-field">
                 <span className="adm-label">Подраздел *</span>
                 <select
@@ -553,27 +550,6 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
                     <option key={s.key} value={s.key}>{s.label}</option>
                   ))}
                 </select>
-              </label>
-            ) : (
-              <label className="adm-field">
-                <span className="adm-label">Тема (группировка)</span>
-                <input
-                  className="adm-input"
-                  value={newMaterial.topicTitle}
-                  onChange={e => setNewMaterial({ ...newMaterial, topicTitle: e.target.value })}
-                  placeholder="Напр. «Урок о дружбе» — одна тема для нескольких типов"
-                />
-              </label>
-            )}
-            {newMaterial.kbSection === 'open_lessons' && (
-              <label className="adm-field">
-                <span className="adm-label">Тема (группировка)</span>
-                <input
-                  className="adm-input"
-                  value={newMaterial.topicTitle}
-                  onChange={e => setNewMaterial({ ...newMaterial, topicTitle: e.target.value })}
-                  placeholder="Одинаковая тема = артефакты подряд"
-                />
               </label>
             )}
             <label className="adm-field">

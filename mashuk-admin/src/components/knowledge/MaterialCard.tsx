@@ -45,7 +45,6 @@ type Draft = {
   kbUnlockMinTouchpoints: number | '';
   kbSection: string;
   kbSubsection: string;
-  topicTitle: string;
   sortOrder: number | '';
 };
 
@@ -79,7 +78,6 @@ function mkDraft(m: MaterialRow): Draft {
     kbUnlockMinTouchpoints: m.kbUnlockMinTouchpoints != null ? m.kbUnlockMinTouchpoints : '',
     kbSection: m.kbSection || '',
     kbSubsection: m.kbSubsection || '',
-    topicTitle: m.topicTitle || '',
     sortOrder: m.sortOrder != null ? m.sortOrder : '',
   };
 }
@@ -104,7 +102,6 @@ function draftToBody(draft: Draft, statusOverride?: string): Record<string, unkn
       : null,
     kbSection: draft.kbSection || null,
     kbSubsection: draft.kbSection === 'open_lessons' ? (draft.kbSubsection || null) : null,
-    topicTitle: draft.topicTitle.trim() || null,
     sortOrder: draft.sortOrder === '' ? 0 : draft.sortOrder,
   };
 }
@@ -196,13 +193,6 @@ export function MaterialCard({
               ))}
             </select>
           )}
-          <input
-            className="adm-input"
-            style={{ marginTop: 4 }}
-            value={draft.topicTitle}
-            onChange={e => setDraft(d => ({ ...d, topicTitle: e.target.value }))}
-            placeholder="Тема"
-          />
           {sec && (
             <div
               className="adm-kb-section-chip"
@@ -425,7 +415,7 @@ export function MaterialCard({
                     ))}
                   </select>
                 </label>
-                {draft.kbSection === 'open_lessons' ? (
+                {draft.kbSection === 'open_lessons' && (
                   <label className="adm-field">
                     <span className="adm-label">Подраздел</span>
                     <select
@@ -438,25 +428,6 @@ export function MaterialCard({
                         <option key={s.key} value={s.key}>{s.label}</option>
                       ))}
                     </select>
-                  </label>
-                ) : (
-                  <label className="adm-field">
-                    <span className="adm-label">Тема (группировка)</span>
-                    <input
-                      className="adm-input"
-                      value={draft.topicTitle}
-                      onChange={e => setDraft(d => ({ ...d, topicTitle: e.target.value }))}
-                    />
-                  </label>
-                )}
-                {draft.kbSection === 'open_lessons' && (
-                  <label className="adm-field">
-                    <span className="adm-label">Тема (группировка)</span>
-                    <input
-                      className="adm-input"
-                      value={draft.topicTitle}
-                      onChange={e => setDraft(d => ({ ...d, topicTitle: e.target.value }))}
-                    />
                   </label>
                 )}
                 <label className="adm-field">

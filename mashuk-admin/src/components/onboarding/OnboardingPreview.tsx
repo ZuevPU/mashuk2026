@@ -16,11 +16,13 @@ const TYPE_LABEL: Record<GoalQuestion['type'], string> = {
 export function OnboardingPreview({ goalQuestions, interestGroups, diagQuestions, roles }: Props) {
   const sampleQ = diagQuestions[0];
   return (
-    <div className="adm-forum-block card adm-onboarding-preview">
-      <h3>Превью для дирекции</h3>
-      <p className="adm-forum-hint">
-        Упрощённый вид этапов — как их увидит участник (без VK и без отправки ответов).
-      </p>
+    <div className="card adm-forum-block adm-kb-panel adm-onboarding-preview">
+      <div className="adm-kb-panel-head">
+        <h3>Превью для дирекции</h3>
+        <p className="adm-kb-panel-sub">
+          Упрощённый вид этапов — как их увидит участник (без VK и без отправки ответов).
+        </p>
+      </div>
 
       <section className="card adm-forum-nested-card">
         <h4>Регистрация → Цели</h4>

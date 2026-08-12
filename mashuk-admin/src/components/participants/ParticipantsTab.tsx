@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { adminDownloadBinary } from '../../admin/client';
 import { CONFIRM_BLOCK_PARTICIPANT, CONFIRM_DELETE_PARTICIPANT, CONFIRM_REMOVE_FROM_PROGRAM } from '../../admin/confirmDelete';
-import { label } from '../../labels/ru';
 import { ROLE_OPTIONS } from '../onboarding/roleOptions';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import { Pagination } from '../admin/Pagination';
 import type { AdminTabProps } from '../admin/types';
+import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
 import { VkProfileLink } from '../VkProfileLink';
 import { RowActionsMenu, formatParticipantActivity } from './RowActionsMenu';
 import { ParticipantAvatar } from './ParticipantAvatar';
 
 type ParticipantCardTab = 'profile' | 'answers' | 'tasks' | 'medals' | 'points' | 'piggybank' | 'activity' | 'logs';
+
+const PARTICIPANTS_NAV: HubNavItem[] = [
+  { id: 'participants-hero', label: 'Обзор' },
+  { id: 'participants-filters', label: 'Фильтры' },
+  { id: 'participants-list', label: 'Список' },
+];
 
 export type ParticipantsTabProps = AdminTabProps & {
   onOpenCard: (id: number, tab?: ParticipantCardTab) => void;
@@ -282,47 +288,49 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
   }
 
   return (
-    <div className="adm-forum">
-      <AdminPageHero
-        title={isHiddenList
-          ? `Удалили профиль · ${participantsTotal}`
-          : `Участники · ${participantsTotal} в программе`}
-        hint={isHiddenList
-          ? 'Участники, которые нажали «Удалить профиль» или были исключены организатором. Данные сохранены — можно восстановить в основной список.'
-          : 'Поиск и фильтры по активным участникам. Клик по строке — карточка. Действия — меню ⋮.'}
-      />
-
-      <div className="adm-seg" style={{ marginBottom: 12 }}>
-        <button
-          type="button"
-          className={listMode === 'active' ? 'on' : ''}
-          onClick={() => { setListMode('active'); setParticipantsPage(1); setSelected(new Set()); }}
+    <HubLensLayout className="adm-forum adm-kb" items={PARTICIPANTS_NAV} navLabel="Разделы участников">
+      <section id="participants-hero" className="adm-forum-anchor">
+        <AdminPageHero
+          title={isHiddenList
+            ? `Удалили профиль · ${participantsTotal}`
+            : `Участники · ${participantsTotal} в программе`}
+          hint={isHiddenList
+            ? 'Мягкое удаление: данные сохранены, можно восстановить.'
+            : 'Поиск и фильтры. Клик по строке — карточка. Действия — меню ⋮.'}
         >
-          В программе
-        </button>
-        <button
-          type="button"
-          className={listMode === 'hidden' ? 'on' : ''}
-          onClick={() => {
-            setListMode('hidden');
-            setParticipantsPage(1);
-            setSelected(new Set());
-            setActivityFilter('');
-            setHiddenAllShifts(true);
-          }}
-        >
-          Удалили профиль{hiddenTotal > 0 ? ` (${hiddenTotal})` : ''}
-        </button>
-      </div>
+          <div className="adm-forum-seg">
+            <button
+              type="button"
+              className={listMode === 'active' ? 'on' : ''}
+              onClick={() => { setListMode('active'); setParticipantsPage(1); setSelected(new Set()); }}
+            >
+              В программе
+            </button>
+            <button
+              type="button"
+              className={listMode === 'hidden' ? 'on' : ''}
+              onClick={() => {
+                setListMode('hidden');
+                setParticipantsPage(1);
+                setSelected(new Set());
+                setActivityFilter('');
+                setHiddenAllShifts(true);
+              }}
+            >
+              Удалили профиль{hiddenTotal > 0 ? ` · ${hiddenTotal}` : ''}
+            </button>
+          </div>
+        </AdminPageHero>
+      </section>
 
       {isHiddenList && (
-        <div className="adm-forum-hint" style={{ marginBottom: 12 }}>
-          Здесь только <b>мягкое</b> удаление: участник нажал «Удалить мой профиль» или админ выбрал «Исключить из программы».
-          Данные сохраняются, человека можно восстановить.
-          <br />
-          Действие «Удалить безвозвратно» стирает запись из базы — в этом списке такого человека <b>не будет</b>.
-          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+        <div className="card adm-forum-block adm-kb-panel" style={{ marginBottom: 12 }}>
+          <p className="adm-kb-panel-sub" style={{ margin: 0 }}>
+            Здесь только <b>мягкое</b> удаление: участник нажал «Удалить мой профиль» или админ выбрал «Исключить из программы».
+            Данные сохраняются, человека можно восстановить. «Удалить безвозвратно» стирает запись — в этом списке его не будет.
+          </p>
+          <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <label className="adm-tasks-check">
               <input
                 type="checkbox"
                 checked={hiddenAllShifts}
@@ -331,7 +339,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
                   setParticipantsPage(1);
                 }}
               />
-              Все смены
+              <span>Все смены</span>
             </label>
             {!hiddenAllShifts && currentShiftId != null && (
               <span className="adm-muted" style={{ fontSize: 12 }}>
@@ -346,12 +354,12 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
             </span>
           </div>
           {participantsTotal === 0 && hiddenUnfilteredTotal > 0 && (
-            <p style={{ margin: '8px 0 0', color: '#9B2C2C' }}>
+            <p style={{ margin: '8px 0 0', color: '#D70015' }}>
               С текущими фильтрами никого нет, но без фильтров найдено: {hiddenUnfilteredTotal}. Сбросьте поиск / направление / группу / роль.
             </p>
           )}
           {participantsTotal === 0 && hiddenUnfilteredTotal === 0 && (
-            <p style={{ margin: '8px 0 0', color: hardDeleteCount > 0 ? '#9B2C2C' : undefined }}>
+            <p style={{ margin: '8px 0 0', color: hardDeleteCount > 0 ? '#D70015' : undefined }}>
               Сейчас нет ни одного мягко удалённого профиля
               {hiddenAllShifts ? '' : ' на этой смене'}.
               {hardDeleteCount > 0
@@ -362,72 +370,80 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
         </div>
       )}
 
-      <div className="card adm-forum-block">
-        <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
-          <input
-            className="adm-input"
-            style={{ minWidth: 200 }}
-            value={participantSearch}
-            onChange={e => setParticipantSearch(e.target.value)}
-            placeholder="Поиск: ФИО или VK ID"
-          />
-          <select className="adm-input" value={groupFilter} onChange={e => setGroupFilter(e.target.value)}>
-            <option value="">Все группы</option>
-            {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
-          <select className="adm-input" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
-            <option value="">Все роли (ручная)</option>
-            {ROLE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
-          </select>
-          <select className="adm-input" value={strongRoleFilter} onChange={e => setStrongRoleFilter(e.target.value)} title="Ведущая роль по диагностике">
-            <option value="">Все роли (диагностика)</option>
-            {ROLE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
-          </select>
-          <select className="adm-input" value={activityFilter} onChange={e => setActivityFilter(e.target.value)} disabled={isHiddenList}>
-            <option value="">Любая активность</option>
-            <option value="active_today">Активен сегодня</option>
-            <option value="inactive_1d">Неактивен ≥ 1 дня</option>
-            <option value="inactive_3d">Неактивен ≥ 3 дней</option>
-          </select>
-          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setShowIdColumn(v => !v)}>
-            {showIdColumn ? 'Скрыть ID' : 'Показать ID'}
-          </button>
-          <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => exportList()}>
-            Выгрузить список (XLSX)
-          </button>
-          {!isHiddenList && (
-            <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={() => setShowAdd(v => !v)}>
-              + Добавить участника
+      <section id="participants-filters" className="adm-forum-anchor">
+        <div className="card adm-forum-block adm-kb-panel">
+          <div className="adm-kb-panel-head">
+            <h3>Фильтры</h3>
+            <p className="adm-kb-panel-sub">Поиск, группа, роль, активность и направления.</p>
+          </div>
+          <div className="adm-kb-toolbar">
+            <input
+              className="adm-input adm-kb-search"
+              value={participantSearch}
+              onChange={e => setParticipantSearch(e.target.value)}
+              placeholder="Поиск: ФИО или VK ID"
+            />
+            <select className="adm-input" value={groupFilter} onChange={e => setGroupFilter(e.target.value)}>
+              <option value="">Все группы</option>
+              {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+            <select className="adm-input" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
+              <option value="">Все роли (ручная)</option>
+              {ROLE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
+            </select>
+            <select className="adm-input" value={strongRoleFilter} onChange={e => setStrongRoleFilter(e.target.value)} title="Ведущая роль по диагностике">
+              <option value="">Все роли (диагностика)</option>
+              {ROLE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
+            </select>
+            <select className="adm-input" value={activityFilter} onChange={e => setActivityFilter(e.target.value)} disabled={isHiddenList}>
+              <option value="">Любая активность</option>
+              <option value="active_today">Активен сегодня</option>
+              <option value="inactive_1d">Неактивен ≥ 1 дня</option>
+              <option value="inactive_3d">Неактивен ≥ 3 дней</option>
+            </select>
+            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setShowIdColumn(v => !v)}>
+              {showIdColumn ? 'Скрыть ID' : 'Показать ID'}
             </button>
+            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => exportList()}>
+              Выгрузить XLSX
+            </button>
+            {!isHiddenList && (
+              <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={() => setShowAdd(v => !v)}>
+                + Добавить
+              </button>
+            )}
+          </div>
+          <div className="adm-program-tag-pick" style={{ marginTop: 10 }}>
+            <span className="adm-muted" style={{ fontSize: 12, marginRight: 8 }}>Направления:</span>
+            {directions.map(d => (
+              <button
+                key={d.id}
+                type="button"
+                className={`adm-chip-btn ${directionFilter.includes(d.id) ? 'on' : ''}`}
+                onClick={() => toggleDir(d.id)}
+              >
+                {d.name}
+              </button>
+            ))}
+          </div>
+          {selected.size > 0 && !isHiddenList && (
+            <div className="adm-kb-bulk" style={{ marginTop: 12 }}>
+              <span className="adm-kb-bulk-count">Выбрано: {selected.size}</span>
+              <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => exportList([...selected])}>Выгрузить</button>
+              <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setPushModal({ ids: [...selected] })}>Пуш</button>
+              <button type="button" className="adm-btn adm-btn-sm adm-btn-primary" onClick={openTransfer}>В смену…</button>
+              <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => setSelected(new Set())}>Снять выбор</button>
+            </div>
           )}
         </div>
-        <div className="adm-program-tag-pick" style={{ marginTop: 10 }}>
-          <span className="adm-muted" style={{ fontSize: 12, marginRight: 8 }}>Направления:</span>
-          {directions.map(d => (
-            <button
-              key={d.id}
-              type="button"
-              className={`adm-chip-btn ${directionFilter.includes(d.id) ? 'on' : ''}`}
-              onClick={() => toggleDir(d.id)}
-            >
-              {d.name}
-            </button>
-          ))}
-        </div>
-        {selected.size > 0 && !isHiddenList && (
-          <div className="adm-forum-toolbar" style={{ marginTop: 10 }}>
-            <span className="adm-muted">Выбрано: {selected.size}</span>
-            <button type="button" className="adm-btn adm-btn-sm" onClick={() => exportList([...selected])}>Выгрузить выбранных</button>
-            <button type="button" className="adm-btn adm-btn-sm" onClick={() => setPushModal({ ids: [...selected] })}>Отправить пуш выбранным</button>
-            <button type="button" className="adm-btn adm-btn-sm adm-btn-primary" onClick={openTransfer}>Перенести в смену…</button>
-            <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => setSelected(new Set())}>Снять выбор</button>
-          </div>
-        )}
-      </div>
+      </section>
 
       {showAdd && (
-        <div className="card adm-forum-block">
-          <h3 style={{ marginTop: 0 }}>Новый участник</h3>
+        <div className="card adm-forum-block adm-kb-panel">
+          <div className="adm-kb-panel-head">
+            <h3>Новый участник</h3>
+            <p className="adm-kb-panel-sub">VK ID и ФИО — обязательные поля для создания.</p>
+          </div>
           <div className="adm-forum-grid-2">
             <input className="adm-input" value={newParticipant.vkId} onChange={e => setNewParticipant({ ...newParticipant, vkId: e.target.value })} placeholder="VK ID" />
             <select className="adm-input" value={newParticipant.directionId} onChange={e => setNewParticipant({ ...newParticipant, directionId: e.target.value })}>
@@ -437,175 +453,188 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
             <input className="adm-input" value={newParticipant.firstName} onChange={e => setNewParticipant({ ...newParticipant, firstName: e.target.value })} placeholder="Имя" />
             <input className="adm-input" value={newParticipant.lastName} onChange={e => setNewParticipant({ ...newParticipant, lastName: e.target.value })} placeholder="Фамилия" />
           </div>
-          <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" style={{ marginTop: 8 }} onClick={createParticipant}>Сохранить</button>
+          <div className="adm-mod-item-actions">
+            <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={createParticipant}>Сохранить</button>
+          </div>
         </div>
       )}
 
-      <table className="adm-table">
-        <thead>
-          <tr>
-            <th>
-              <input type="checkbox" checked={allSelected} onChange={() => {
-                if (allSelected) setSelected(new Set());
-                else setSelected(new Set(participants.map(p => p.id)));
-              }} aria-label="Выбрать все" />
-            </th>
-            {showIdColumn && <th>ID</th>}
-            <th aria-label="Аватар" />
-            <th>VK ID</th>
-            <th>ФИО</th>
-            <th>Направление</th>
-            <th>Группа</th>
-            <th>Регион</th>
-            <th>Роль</th>
-            <th>Путь</th>
-            <th>Опыт</th>
-            <th>Рейтинг</th>
-            <th>{isHiddenList ? 'Скрыт с' : 'Активность'}</th>
-            <th>Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          {participants.length === 0 && (
-            <tr>
-              <td colSpan={showIdColumn ? 14 : 13} className="adm-muted" style={{ padding: 24, textAlign: 'center' }}>
-                {isHiddenList ? 'Никто не удалял профиль' : 'Участники не найдены'}
-              </td>
-            </tr>
-          )}
-          {participants.map(p => (
-            <tr
-              key={p.id}
-              className="adm-table-row-click"
-              style={!isHiddenList && p.isBlocked ? { opacity: 0.85, background: '#FFF5F5' } : isHiddenList ? { opacity: 0.92 } : undefined}
-              onClick={e => {
-                const t = e.target as HTMLElement;
-                if (t.closest('button, select, input, a, .adm-row-menu')) return;
-                onOpenCard(p.id);
-              }}
-            >
-              <td onClick={e => e.stopPropagation()}>
-                <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
-              </td>
-              {showIdColumn && <td className="adm-muted">{p.id}</td>}
-              <td>
-                <ParticipantAvatar
-                  firstName={p.firstName}
-                  lastName={p.lastName}
-                  avatarUrl={p.avatarUrl}
-                  size="sm"
-                />
-              </td>
-              <td><VkProfileLink vkId={p.vkId} /></td>
-              <td>{p.firstName} {p.lastName}{!isHiddenList && p.isBlocked ? ' · заблок.' : ''}</td>
-              <td onClick={e => e.stopPropagation()}>
-                <select
-                  className="adm-input adm-input-narrow"
-                  value={p.directionId ?? directions.find(d => d.name === p.direction)?.id ?? ''}
-                  onChange={e => adminFetch(`/participants/${p.id}/direction`, {
-                    method: 'PATCH', body: JSON.stringify({ directionId: Number(e.target.value) }),
-                  }).then(reloadPage)}
-                >
-                  {directions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-              </td>
-              <td onClick={e => e.stopPropagation()}>
-                <select
-                  className="adm-input adm-input-narrow"
-                  value={p.groupId ?? ''}
-                  onChange={e => {
-                    const v = e.target.value;
-                    act(() => adminFetch(`/participants/${p.id}/group`, {
-                      method: 'PATCH',
-                      body: JSON.stringify({ groupId: v ? Number(v) : null }),
-                    }).then(reloadPage), 'Группа обновлена');
-                  }}
-                >
-                  <option value="">—</option>
-                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                </select>
-              </td>
-              <td>{p.region || '—'}</td>
-              <td onClick={e => e.stopPropagation()}>
-                <select
-                  className="adm-input adm-input-narrow"
-                  value={p.pedagogicalRole || ''}
-                  onChange={e => act(() => adminFetch(`/participants/${p.id}/role`, {
-                    method: 'PATCH',
-                    body: JSON.stringify({ pedagogicalRole: e.target.value || null }),
-                  }), 'Роль обновлена')}
-                >
-                  <option value="">—</option>
-                  {ROLE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
-                </select>
-              </td>
-              <td>{p.pathPoints ?? 0}</td>
-              <td>{p.experiencePoints ?? 0}</td>
-              <td>{p.totalRating ?? ((p.pathPoints ?? 0) + (p.experiencePoints ?? 0))}</td>
-              <td>{isHiddenList ? formatHiddenAt(p.selfDeletedAt) : formatParticipantActivity(p.lastActiveAt)}</td>
-              <td onClick={e => e.stopPropagation()}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                  {isHiddenList && (
-                    <button
-                      type="button"
-                      className="adm-btn adm-btn-sm adm-btn-primary"
-                      onClick={() => act(() => adminFetch(`/participants/${p.id}/restore`, { method: 'POST' }).then(reloadPage), 'Восстановлен в программу')}
-                    >
-                      Восстановить
-                    </button>
-                  )}
-                  <RowActionsMenu actions={isHiddenList ? [
-                    { label: 'Открыть карточку', onClick: () => onOpenCard(p.id) },
-                    { label: 'Выгрузить данные (PDF)', onClick: () => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF') },
-                    {
-                      label: 'Удалить безвозвратно',
-                      confirmMessage: CONFIRM_DELETE_PARTICIPANT,
-                      onClick: () => act(() => adminFetch(`/participants/${p.id}/registration`, { method: 'DELETE' }).then(reloadPage), 'Удалён'),
-                      danger: true,
-                    },
-                  ] : [
-                  { label: 'Открыть карточку', onClick: () => onOpenCard(p.id) },
-                  { label: 'Скорректировать роль', onClick: () => onOpenCard(p.id, 'profile') },
-                  { label: 'Выгрузить данные (PDF)', onClick: () => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF') },
-                  { label: 'Отправить пуш', onClick: () => setPushModal({ ids: [p.id] }) },
-                  ...(p.isBlocked
-                    ? [{ label: 'Разблокировать', onClick: () => act(() => adminFetch(`/participants/${p.id}/unblock`, { method: 'POST' }).then(reloadPage), 'Разблокирован') }]
-                    : [{
-                      label: 'Заблокировать',
-                      confirmMessage: CONFIRM_BLOCK_PARTICIPANT,
-                      onClick: () => act(() => adminFetch(`/participants/${p.id}/block`, { method: 'POST', body: '{}' }).then(reloadPage), 'Заблокирован'),
-                      danger: true,
-                    }]),
-                  {
-                    label: 'Исключить из программы',
-                    confirmMessage: CONFIRM_REMOVE_FROM_PROGRAM,
-                    onClick: () => act(() => adminFetch(`/participants/${p.id}/remove-from-program`, { method: 'POST', body: '{}' }).then(reloadPage), 'Исключён из программы'),
-                    danger: true,
-                  },
-                  {
-                    label: 'Удалить безвозвратно',
-                    confirmMessage: CONFIRM_DELETE_PARTICIPANT,
-                    onClick: () => act(() => adminFetch(`/participants/${p.id}/registration`, { method: 'DELETE' }).then(reloadPage), 'Удалён'),
-                    danger: true,
-                  },
-                ]} />
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <Pagination page={participantsPage} total={participantsTotal} setPage={setParticipantsPage} />
+      <section id="participants-list" className="adm-forum-anchor">
+        <div className="card adm-forum-block adm-kb-panel">
+          <div className="adm-kb-panel-head">
+            <h3>Список</h3>
+            <p className="adm-kb-panel-sub">Клик по строке открывает карточку участника.</p>
+          </div>
+          <div className="adm-kb-table-scroll">
+            <table className="adm-table adm-kb-inline-table">
+              <thead>
+                <tr>
+                  <th>
+                    <input type="checkbox" checked={allSelected} onChange={() => {
+                      if (allSelected) setSelected(new Set());
+                      else setSelected(new Set(participants.map(p => p.id)));
+                    }} aria-label="Выбрать все" />
+                  </th>
+                  {showIdColumn && <th>ID</th>}
+                  <th aria-label="Аватар" />
+                  <th>VK ID</th>
+                  <th>ФИО</th>
+                  <th>Направление</th>
+                  <th>Группа</th>
+                  <th>Регион</th>
+                  <th>Роль</th>
+                  <th>Путь</th>
+                  <th>Опыт</th>
+                  <th>Рейтинг</th>
+                  <th>{isHiddenList ? 'Скрыт с' : 'Активность'}</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody>
+                {participants.length === 0 && (
+                  <tr>
+                    <td colSpan={showIdColumn ? 14 : 13} className="adm-muted" style={{ padding: 24, textAlign: 'center' }}>
+                      {isHiddenList ? 'Никто не удалял профиль' : 'Участники не найдены'}
+                    </td>
+                  </tr>
+                )}
+                {participants.map(p => (
+                  <tr
+                    key={p.id}
+                    className="adm-table-row-click"
+                    style={!isHiddenList && p.isBlocked ? { opacity: 0.85, background: 'rgba(255, 59, 48, 0.06)' } : isHiddenList ? { opacity: 0.92 } : undefined}
+                    onClick={e => {
+                      const t = e.target as HTMLElement;
+                      if (t.closest('button, select, input, a, .adm-row-menu')) return;
+                      onOpenCard(p.id);
+                    }}
+                  >
+                    <td onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
+                    </td>
+                    {showIdColumn && <td className="adm-muted">{p.id}</td>}
+                    <td>
+                      <ParticipantAvatar
+                        firstName={p.firstName}
+                        lastName={p.lastName}
+                        avatarUrl={p.avatarUrl}
+                        size="sm"
+                      />
+                    </td>
+                    <td><VkProfileLink vkId={p.vkId} /></td>
+                    <td>{p.firstName} {p.lastName}{!isHiddenList && p.isBlocked ? ' · заблок.' : ''}</td>
+                    <td onClick={e => e.stopPropagation()}>
+                      <select
+                        className="adm-input adm-input-narrow"
+                        value={p.directionId ?? directions.find(d => d.name === p.direction)?.id ?? ''}
+                        onChange={e => adminFetch(`/participants/${p.id}/direction`, {
+                          method: 'PATCH', body: JSON.stringify({ directionId: Number(e.target.value) }),
+                        }).then(reloadPage)}
+                      >
+                        {directions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      </select>
+                    </td>
+                    <td onClick={e => e.stopPropagation()}>
+                      <select
+                        className="adm-input adm-input-narrow"
+                        value={p.groupId ?? ''}
+                        onChange={e => {
+                          const v = e.target.value;
+                          act(() => adminFetch(`/participants/${p.id}/group`, {
+                            method: 'PATCH',
+                            body: JSON.stringify({ groupId: v ? Number(v) : null }),
+                          }).then(reloadPage), 'Группа обновлена');
+                        }}
+                      >
+                        <option value="">—</option>
+                        {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                      </select>
+                    </td>
+                    <td>{p.region || '—'}</td>
+                    <td onClick={e => e.stopPropagation()}>
+                      <select
+                        className="adm-input adm-input-narrow"
+                        value={p.pedagogicalRole || ''}
+                        onChange={e => act(() => adminFetch(`/participants/${p.id}/role`, {
+                          method: 'PATCH',
+                          body: JSON.stringify({ pedagogicalRole: e.target.value || null }),
+                        }), 'Роль обновлена')}
+                      >
+                        <option value="">—</option>
+                        {ROLE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.name}</option>)}
+                      </select>
+                    </td>
+                    <td>{p.pathPoints ?? 0}</td>
+                    <td>{p.experiencePoints ?? 0}</td>
+                    <td>{p.totalRating ?? ((p.pathPoints ?? 0) + (p.experiencePoints ?? 0))}</td>
+                    <td>{isHiddenList ? formatHiddenAt(p.selfDeletedAt) : formatParticipantActivity(p.lastActiveAt)}</td>
+                    <td onClick={e => e.stopPropagation()}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                        {isHiddenList && (
+                          <button
+                            type="button"
+                            className="adm-btn adm-btn-sm adm-btn-primary"
+                            onClick={() => act(() => adminFetch(`/participants/${p.id}/restore`, { method: 'POST' }).then(reloadPage), 'Восстановлен в программу')}
+                          >
+                            Восстановить
+                          </button>
+                        )}
+                        <RowActionsMenu actions={isHiddenList ? [
+                          { label: 'Открыть карточку', onClick: () => onOpenCard(p.id) },
+                          { label: 'Выгрузить данные (PDF)', onClick: () => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF') },
+                          {
+                            label: 'Удалить безвозвратно',
+                            confirmMessage: CONFIRM_DELETE_PARTICIPANT,
+                            onClick: () => act(() => adminFetch(`/participants/${p.id}/registration`, { method: 'DELETE' }).then(reloadPage), 'Удалён'),
+                            danger: true,
+                          },
+                        ] : [
+                        { label: 'Открыть карточку', onClick: () => onOpenCard(p.id) },
+                        { label: 'Скорректировать роль', onClick: () => onOpenCard(p.id, 'profile') },
+                        { label: 'Выгрузить данные (PDF)', onClick: () => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF') },
+                        { label: 'Отправить пуш', onClick: () => setPushModal({ ids: [p.id] }) },
+                        ...(p.isBlocked
+                          ? [{ label: 'Разблокировать', onClick: () => act(() => adminFetch(`/participants/${p.id}/unblock`, { method: 'POST' }).then(reloadPage), 'Разблокирован') }]
+                          : [{
+                            label: 'Заблокировать',
+                            confirmMessage: CONFIRM_BLOCK_PARTICIPANT,
+                            onClick: () => act(() => adminFetch(`/participants/${p.id}/block`, { method: 'POST', body: '{}' }).then(reloadPage), 'Заблокирован'),
+                            danger: true,
+                          }]),
+                        {
+                          label: 'Исключить из программы',
+                          confirmMessage: CONFIRM_REMOVE_FROM_PROGRAM,
+                          onClick: () => act(() => adminFetch(`/participants/${p.id}/remove-from-program`, { method: 'POST', body: '{}' }).then(reloadPage), 'Исключён из программы'),
+                          danger: true,
+                        },
+                        {
+                          label: 'Удалить безвозвратно',
+                          confirmMessage: CONFIRM_DELETE_PARTICIPANT,
+                          onClick: () => act(() => adminFetch(`/participants/${p.id}/registration`, { method: 'DELETE' }).then(reloadPage), 'Удалён'),
+                          danger: true,
+                        },
+                      ]} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={participantsPage} total={participantsTotal} setPage={setParticipantsPage} />
+        </div>
+      </section>
 
       {pushModal && (
         <div className="adm-modal-backdrop" onClick={() => setPushModal(null)}>
-          <div className="card" style={{ maxWidth: 420, width: '100%' }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0 }}>Отправить пуш ({pushModal.ids.length})</h3>
+          <div className="card adm-kb-panel" style={{ maxWidth: 420, width: '100%' }} onClick={e => e.stopPropagation()}>
+            <div className="adm-kb-panel-head">
+              <h3>Отправить пуш ({pushModal.ids.length})</h3>
+            </div>
             <textarea className="adm-input" rows={3} value={pushText} onChange={e => setPushText(e.target.value)} placeholder="Текст уведомления" />
-            <div className="form-row" style={{ marginTop: 12 }}>
-              <button type="button" className="adm-btn adm-btn-primary" onClick={sendPush}>Отправить</button>
-              <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setPushModal(null)}>Отмена</button>
+            <div className="adm-mod-item-actions">
+              <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={sendPush}>Отправить</button>
+              <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setPushModal(null)}>Отмена</button>
             </div>
           </div>
         </div>
@@ -613,13 +642,14 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
 
       {transferTargetId != null && (
         <div className="adm-modal-backdrop" onClick={() => setTransferTargetId(null)}>
-          <div className="card" style={{ maxWidth: 460, width: '100%' }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0 }}>Перенести участников в смену</h3>
-            <p className="adm-muted">
-              Будет создана предварительная запись с теми же персональными данными. При первом входе
-              участник завершит регистрацию в новой смене. История исходной смены сохранится.
-            </p>
-            <p className="adm-forum-hint">
+          <div className="card adm-kb-panel" style={{ maxWidth: 460, width: '100%' }} onClick={e => e.stopPropagation()}>
+            <div className="adm-kb-panel-head">
+              <h3>Перенести участников в смену</h3>
+              <p className="adm-kb-panel-sub">
+                Создаётся предварительная запись с теми же персональными данными. История исходной смены сохранится.
+              </p>
+            </div>
+            <p className="adm-muted" style={{ fontSize: 12 }}>
               Ответы, баллы, задания, награды, направление, группа и роль не переносятся.
             </p>
             <label className="adm-field">
@@ -638,20 +668,20 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
                   ))}
               </select>
             </label>
-            <p className="adm-forum-hint">
+            <p className="adm-muted" style={{ fontSize: 12 }}>
               Если участник уже есть в выбранной смене, он будет пропущен.
             </p>
-            <div className="form-row" style={{ marginTop: 12 }}>
-              <button type="button" className="adm-btn adm-btn-primary" onClick={copyParticipantsToShift}>
+            <div className="adm-mod-item-actions">
+              <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={copyParticipantsToShift}>
                 Перенести {selected.size}
               </button>
-              <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setTransferTargetId(null)}>
+              <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setTransferTargetId(null)}>
                 Отмена
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </HubLensLayout>
   );
 }

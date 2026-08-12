@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AdminTabProps } from '../admin/types';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { Tab } from '../../tabs';
+import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
 import { LeaderboardDashboard } from './LeaderboardDashboard';
 import { LeaderboardFilters } from './LeaderboardFilters';
 import { LeaderboardTable } from './LeaderboardTable';
@@ -12,6 +13,12 @@ import {
   type LeaderboardFiltersState,
   type LeaderboardRow,
 } from './leaderboardTypes';
+
+const RATING_NAV: HubNavItem[] = [
+  { id: 'rating-hero', label: 'Обзор' },
+  { id: 'rating-board', label: 'Лидеры' },
+  { id: 'rating-links', label: 'Переходы' },
+];
 
 function parseHashFilters(): Partial<LeaderboardFiltersState> {
   const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
@@ -94,7 +101,7 @@ export function LeaderboardScreen({
     : scopeLabel(filters.scope);
 
   return (
-    <div className="leaderboard-screen">
+    <div className="leaderboard-screen adm-kb">
       <header className="leaderboard-screen-header">
         <h1>Таблица лидеров</h1>
         <p className="adm-muted">
@@ -103,7 +110,11 @@ export function LeaderboardScreen({
         </p>
       </header>
 
-      <div className="lb-card lb-screen-filters">
+      <div className="card adm-forum-block adm-kb-panel lb-screen-filters">
+        <div className="adm-kb-panel-head">
+          <h3>Фильтры</h3>
+          <p className="adm-kb-panel-sub">Срез, день, направление и поиск по таблице.</p>
+        </div>
         <LeaderboardFilters
           filters={filters}
           onChange={patch => setFilters(prev => ({ ...prev, ...patch }))}
@@ -113,7 +124,11 @@ export function LeaderboardScreen({
         />
       </div>
 
-      <div className="lb-card">
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Рейтинг</h3>
+          <p className="adm-kb-panel-sub">Актуальное положение участников по выбранному срезу.</p>
+        </div>
         <LeaderboardTable
           rows={rows}
           filters={filters}
@@ -153,35 +168,53 @@ export function RatingTab({
   const jump = (t: Tab) => { if (setTab) setTab(t); };
 
   return (
-    <div>
-      <AdminPageHero
-        title="Система рейтинга"
-        hint="Таблицы лидеров, номинации, медали и быстрые переходы к заданиям, модерации и выгрузкам."
-      />
+    <HubLensLayout className="adm-forum adm-kb" items={RATING_NAV} navLabel="Разделы рейтинга">
+      <section id="rating-hero" className="adm-forum-anchor">
+        <AdminPageHero
+          title="Рейтинг"
+          hint="Таблицы лидеров, номинации и быстрые переходы к заданиям, модерации и выгрузкам."
+        />
+      </section>
 
-      <LeaderboardDashboard
-        adminFetch={adminFetch}
-        forumDay={forumDay}
-        autoRefreshMs={60_000}
-        onOpenFullscreen={openScreen}
-        onOpenCard={onOpenCard}
-      />
+      <section id="rating-board" className="adm-forum-anchor">
+        <div className="card adm-forum-block adm-kb-panel">
+          <div className="adm-kb-panel-head">
+            <h3>Таблица лидеров</h3>
+            <p className="adm-kb-panel-sub">Баллы и номинации с фильтрами и выгрузкой CSV.</p>
+          </div>
+          <LeaderboardDashboard
+            adminFetch={adminFetch}
+            forumDay={forumDay}
+            autoRefreshMs={60_000}
+            onOpenFullscreen={openScreen}
+            onOpenCard={onOpenCard}
+          />
+        </div>
+      </section>
 
-      <div className="adm-card-grid lb-quick-grid">
-        {[
-          { id: 'tasks' as Tab, label: 'Каталог заданий' },
-          { id: 'moderation' as Tab, label: 'Модерация заявок' },
-          { id: 'medals' as Tab, label: 'Медали' },
-          { id: 'levels' as Tab, label: 'Ставки и лидеры' },
-          { id: 'participants' as Tab, label: 'Участники' },
-          { id: 'exports' as Tab, label: 'Выгрузки рейтинга' },
-          { id: 'analytics' as Tab, label: 'Активность' },
-        ].map(item => (
-          <button key={item.id} type="button" className="card adm-btn adm-btn-secondary" onClick={() => jump(item.id)}>
-            {item.label}
-          </button>
-        ))}
-      </div>
-    </div>
+      <section id="rating-links" className="adm-forum-anchor">
+        <div className="card adm-forum-block adm-kb-panel">
+          <div className="adm-kb-panel-head">
+            <h3>Смежные разделы</h3>
+            <p className="adm-kb-panel-sub">Быстрый переход к связанным вкладкам админки.</p>
+          </div>
+          <div className="adm-mod-item-actions" style={{ marginTop: 0 }}>
+            {[
+              { id: 'tasks' as Tab, label: 'Задания' },
+              { id: 'moderation' as Tab, label: 'Модерация' },
+              { id: 'medals' as Tab, label: 'Медали' },
+              { id: 'levels' as Tab, label: 'Система баллов' },
+              { id: 'participants' as Tab, label: 'Участники' },
+              { id: 'exports' as Tab, label: 'Выгрузки' },
+              { id: 'analytics' as Tab, label: 'Аналитика' },
+            ].map(item => (
+              <button key={item.id} type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => jump(item.id)}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+    </HubLensLayout>
   );
 }

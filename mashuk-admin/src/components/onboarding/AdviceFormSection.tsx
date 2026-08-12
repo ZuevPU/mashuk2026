@@ -79,7 +79,7 @@ export function AdviceFormSection({
   );
 
   return (
-    <div className="card adm-forum-block adm-advice-form">
+    <div className="card adm-forum-block adm-kb-panel adm-advice-form">
       <div className="adm-forum-toolbar" style={{ marginBottom: 12 }}>
         <h3 style={{ margin: 0 }}>{editingId != null ? 'Редактирование советов' : 'Новые советы'}</h3>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
