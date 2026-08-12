@@ -490,6 +490,7 @@ export function HubForumScreen({
         byDirectionPhase={pulse.byDirectionPhase}
         byDirectionPhaseForum={pulse.byDirectionPhaseForum}
         directions={(data.byDirection ?? []).map((r: { direction: string }) => r.direction)}
+        directionEmotionEnergy={data.directionEmotionEnergy ?? pulse.directionEmotionEnergy}
       />
       {zoneDayRows.length > 0 && (
         <DashCard title="Динамика зон по дням">

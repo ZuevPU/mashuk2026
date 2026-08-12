@@ -10,6 +10,7 @@ import {
   EMOTION_ORDER,
 } from '../analytics/chartRu';
 import { hubDirections } from './hubQuery';
+import { HubEmotionsDirectionInsights } from './HubEmotionsDirectionInsights';
 
 type EmotionAvg = {
   id?: string;
@@ -126,6 +127,7 @@ export function HubEmotionsDayChart({
   byDirectionPhase,
   byDirectionPhaseForum,
   directions,
+  directionEmotionEnergy,
 }: {
   emotions?: EmotionAvg[] | null;
   emotionSeries?: EmotionSeriesRow[] | null;
@@ -133,6 +135,16 @@ export function HubEmotionsDayChart({
   byDirectionPhase?: DirectionPhaseRow[] | null;
   byDirectionPhaseForum?: DirectionPhaseRow[] | null;
   directions?: string[] | null;
+  directionEmotionEnergy?: {
+    direction: string;
+    day: number;
+    energyAvg: number | null;
+    responses: number;
+    zones?: Record<string, number>;
+    riskFatiguePct?: number;
+    engagementLiftPct?: number;
+    dominantZone?: string;
+  }[] | null;
 }) {
   const [mode, setMode] = useState<ViewMode>('timeline');
   const [directionFilter, setDirectionFilter] = useState('');
@@ -393,6 +405,12 @@ export function HubEmotionsDayChart({
           <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>Нет данных за форум.</p>
         )}
       </DashCard>
+
+      <HubEmotionsDirectionInsights
+        byDirectionPhase={byDirectionPhase}
+        byDirectionPhaseForum={byDirectionPhaseForum}
+        directionEmotionEnergy={directionEmotionEnergy}
+      />
     </>
   );
 }
