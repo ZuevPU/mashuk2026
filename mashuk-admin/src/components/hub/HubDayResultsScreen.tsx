@@ -29,6 +29,8 @@ import {
   heatCellStyle,
   lowTone,
 } from './dayResultsUi';
+import { ConclusionCard } from './directionNarrative';
+import { dayFixationNarr, dayOpenNarr } from './hubNarrative';
 
 type Block = {
   key: string;
@@ -74,6 +76,8 @@ type DayResultsData = {
   experiment: Array<{ name: string; n: number }>;
   fixation: Array<{ name: string; n: number }>;
   fixationN: number;
+  fixationQuotes?: Array<{ text: string; meta: string }>;
+  openQuotes?: Array<{ text: string; meta: string }>;
   practices: Array<{ name: string; n: number; mean: number }>;
   open: Array<{ key: string; label: string; n: number; fill: number; junk: number; medLen: number }>;
   draftByDir: Array<{ dir: string; n: number; pct: number }>;
@@ -94,6 +98,8 @@ export function HubDayResultsScreen() {
   const [data, setData] = useState<DayResultsData | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [fixQuoteLimit, setFixQuoteLimit] = useState(24);
+  const [openQuoteLimit, setOpenQuoteLimit] = useState(24);
 
   useEffect(() => {
     setLoading(true);
@@ -133,6 +139,26 @@ export function HubDayResultsScreen() {
   }, [data?.daySeries, selectedDay]);
 
   const hasForumIndexSeries = forumIndexChart.some(r => r.index != null);
+
+  const fixationConclusion = useMemo(() => {
+    if (!data || !m) return null;
+    return dayFixationNarr({
+      fixationN: data.fixationN,
+      submitted: m.submitted,
+      fixation: data.fixation,
+      fixationQuotesN: data.fixationQuotes?.length ?? 0,
+    });
+  }, [data, m]);
+
+  const openConclusion = useMemo(() => {
+    if (!data || !m) return null;
+    return dayOpenNarr({
+      submitted: m.submitted,
+      formalPct: m.formalPct,
+      open: data.open,
+      openQuotesN: data.openQuotes?.length ?? 0,
+    });
+  }, [data, m]);
 
   return (
     <div className="adm-day-results">
@@ -465,45 +491,83 @@ export function HubDayResultsScreen() {
                 </>
               )}
             </DashCard>
-            <div className="adm-dash-grid adm-dash-grid-2" style={{ marginTop: 14 }}>
-              <DashCard title={`Что зафиксировали о себе (${data.fixationN})`}>
-                {data.fixation.length === 0 ? (
-                  <p className="adm-muted">Нет данных.</p>
-                ) : (
-                  (() => {
-                    const mx = Math.max(...data.fixation.map(f => f.n), 1);
-                    return data.fixation.map(f => (
-                      <div key={f.name} className="adm-day-results-row">
-                        <div>
-                          <div className="adm-day-results-lb">{f.name}</div>
-                          <HBar widthPct={(f.n / mx) * 100} />
-                        </div>
-                        <div className="adm-day-results-nb">{f.n}</div>
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Что зафиксировали о себе"
+            note="Самоописание дня: повторяющиеся формулировки и развёрнутые комментарии участников."
+          >
+            <DashCard title={`Формулировки · ${data.fixationN}`}>
+              {data.fixation.length === 0 ? (
+                <p className="adm-muted">Нет данных.</p>
+              ) : (
+                (() => {
+                  const mx = Math.max(...data.fixation.map(f => f.n), 1);
+                  return data.fixation.map(f => (
+                    <div key={f.name} className="adm-day-results-row">
+                      <div>
+                        <div className="adm-day-results-lb">{f.name}</div>
+                        <HBar widthPct={(f.n / mx) * 100} />
                       </div>
-                    ));
-                  })()
-                )}
-              </DashCard>
-              <DashCard title="Роль, выбранная на завтра">
-                {data.roles.length === 0 ? (
-                  <p className="adm-muted">Нет данных.</p>
-                ) : (
-                  (() => {
-                    const mx = Math.max(...data.roles.map(r => r.n), 1);
-                    const base = m.total || m.submitted || 1;
-                    return data.roles.map(r => (
-                      <div key={r.name} className="adm-day-results-row">
-                        <div>
-                          <div className="adm-day-results-lb">{r.name}</div>
-                          <HBar widthPct={(r.n / mx) * 100} color="#6f7d95" />
-                        </div>
-                        <div className="adm-day-results-nb">{Math.round((r.n / base) * 100)}%</div>
+                      <div className="adm-day-results-nb">{f.n}</div>
+                    </div>
+                  ));
+                })()
+              )}
+            </DashCard>
+            <DashCard
+              title={`Комментарии · ${(data.fixationQuotes ?? []).length}`}
+              className="adm-hub-quotes-card"
+            >
+              {(data.fixationQuotes ?? []).length === 0 ? (
+                <p className="adm-muted">Нет развёрнутых текстов фиксации.</p>
+              ) : (
+                <>
+                  {(data.fixationQuotes ?? []).slice(0, fixQuoteLimit).map((q, i) => (
+                    <div key={i} className="adm-state-quote">
+                      {q.text}
+                      <span className="adm-state-quote-m">{q.meta}</span>
+                    </div>
+                  ))}
+                  {(data.fixationQuotes ?? []).length > fixQuoteLimit && (
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-ghost"
+                      style={{ marginTop: 10 }}
+                      onClick={() => setFixQuoteLimit(n => Math.min(n + 24, (data.fixationQuotes ?? []).length))}
+                    >
+                      Показать ещё ({(data.fixationQuotes ?? []).length - fixQuoteLimit})
+                    </button>
+                  )}
+                </>
+              )}
+            </DashCard>
+            {fixationConclusion && <ConclusionCard c={fixationConclusion} />}
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Роль, выбранная на завтра"
+            note="Распределение ролей среди сдавших анкету."
+          >
+            <DashCard>
+              {data.roles.length === 0 ? (
+                <p className="adm-muted">Нет данных.</p>
+              ) : (
+                (() => {
+                  const mx = Math.max(...data.roles.map(r => r.n), 1);
+                  const base = m.total || m.submitted || 1;
+                  return data.roles.map(r => (
+                    <div key={r.name} className="adm-day-results-row">
+                      <div>
+                        <div className="adm-day-results-lb">{r.name}</div>
+                        <HBar widthPct={(r.n / mx) * 100} color="#6f7d95" />
                       </div>
-                    ));
-                  })()
-                )}
-              </DashCard>
-            </div>
+                      <div className="adm-day-results-nb">{Math.round((r.n / base) * 100)}%</div>
+                    </div>
+                  ));
+                })()
+              )}
+            </DashCard>
           </DayResultsSection>
 
           <DayResultsSection
@@ -577,6 +641,34 @@ export function HubDayResultsScreen() {
                 </table>
               )}
             </DashCard>
+            <DashCard
+              title={`Комментарии анкеты · ${(data.openQuotes ?? []).length}`}
+              className="adm-hub-quotes-card"
+            >
+              {(data.openQuotes ?? []).length === 0 ? (
+                <p className="adm-muted">Нет развёрнутых открытых ответов.</p>
+              ) : (
+                <>
+                  {(data.openQuotes ?? []).slice(0, openQuoteLimit).map((q, i) => (
+                    <div key={i} className="adm-state-quote">
+                      {q.text}
+                      <span className="adm-state-quote-m">{q.meta}</span>
+                    </div>
+                  ))}
+                  {(data.openQuotes ?? []).length > openQuoteLimit && (
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-ghost"
+                      style={{ marginTop: 10 }}
+                      onClick={() => setOpenQuoteLimit(n => Math.min(n + 24, (data.openQuotes ?? []).length))}
+                    >
+                      Показать ещё ({(data.openQuotes ?? []).length - openQuoteLimit})
+                    </button>
+                  )}
+                </>
+              )}
+            </DashCard>
+            {openConclusion && <ConclusionCard c={openConclusion} />}
             <div className="adm-dash-grid adm-dash-grid-2" style={{ marginTop: 14 }}>
               <DashCard title="Черновики по направлениям">
                 {data.draftByDir.length === 0 ? (

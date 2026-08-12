@@ -309,17 +309,18 @@ function buildChoiceBuckets(
 function buildFixation(
   fields: EveningField[],
   submitted: EveningExportRow[],
-): { items: { name: string; n: number }[]; n: number } {
+): { items: { name: string; n: number }[]; n: number; quotes: Array<{ text: string; meta: string }> } {
   const candidates = fields.filter(f =>
     /^new_field/i.test(f.key)
     || /фиксир/i.test(f.label || '')
     || /зону роста|способ действия|непривычно/i.test(f.label || ''),
   );
-  if (!candidates.length) return { items: [], n: 0 };
+  if (!candidates.length) return { items: [], n: 0, quotes: [] };
   const merged = mergeFieldKeys(candidates.map(f => ({ key: f.key, label: f.label || f.key })));
   const values: string[] = [];
+  const quoteRows: Array<{ text: string; meta: string; len: number }> = [];
   const seenPid = new Set<string>();
-  for (const keys of merged.values()) {
+  for (const [label, keys] of merged.entries()) {
     for (const r of submitted) {
       for (const key of keys) {
         const f = candidates.find(c => c.key === key);
@@ -330,11 +331,59 @@ function buildFixation(
         if (seenPid.has(id)) continue;
         seenPid.add(id);
         values.push(t);
+        if (t.length > 20) {
+          quoteRows.push({
+            text: t.slice(0, 400),
+            meta: `${label === '__new_field_merged__' ? 'Фиксация о себе' : label} · ${dirOf(r)}`,
+            len: t.length,
+          });
+        }
         break;
       }
     }
   }
-  return { items: countNamed(values), n: values.length };
+  const quotes = quoteRows
+    .sort((a, b) => b.len - a.len)
+    .slice(0, 60)
+    .map(({ text, meta }) => ({ text, meta }));
+  return { items: countNamed(values), n: values.length, quotes };
+}
+
+const OPEN_QUOTE_KEYS = new Set([
+  'mainThesis', 'understandingChange', 'likedMost', 'improveTomorrow', 'freeNote',
+]);
+
+function buildOpenQuotes(
+  fields: EveningField[],
+  submitted: EveningExportRow[],
+): Array<{ text: string; meta: string }> {
+  const openFields = fields.filter(f =>
+    isOpenTextField(f)
+    && !/^new_field/i.test(f.key)
+    && f.key !== 'experimentResult'
+    && !/фиксир/i.test(f.label || '')
+    && (OPEN_QUOTE_KEYS.has(f.key) || f.type === 'text'),
+  );
+  const pool: Array<{ text: string; meta: string; len: number }> = [];
+  const seen = new Set<string>();
+  for (const f of openFields) {
+    for (const r of submitted) {
+      const t = textOf(f, r);
+      if (!t || t.length < 40) continue;
+      const id = `${r.participantId}:${f.key}:${t.slice(0, 80)}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      pool.push({
+        text: t.slice(0, 400),
+        meta: `${f.label || f.key} · ${dirOf(r)}`,
+        len: t.length,
+      });
+    }
+  }
+  return pool
+    .sort((a, b) => b.len - a.len)
+    .slice(0, 60)
+    .map(({ text, meta }) => ({ text, meta }));
 }
 
 function buildDraftsByDir(
@@ -464,6 +513,7 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
   const transferIndex = transferIndexPct(experimentTop);
 
   const fixation = buildFixation(fields, submittedRows);
+  const openQuotes = buildOpenQuotes(fields, submittedRows);
 
   const roles = buildChoiceBuckets(
     fields,
@@ -588,6 +638,8 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
     experiment: experimentTop,
     fixation: fixation.items,
     fixationN: fixation.n,
+    fixationQuotes: fixation.quotes,
+    openQuotes,
     practices,
     open,
     draftByDir,

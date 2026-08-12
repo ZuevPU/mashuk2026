@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useInsights } from '../insights/InsightsContext';
 import { DashCard, DashScreenTitle } from '../analytics/dashboardUi';
 import { HubKpiRow } from './HubKpiRow';
@@ -10,6 +10,17 @@ import {
   StackBar,
 } from './dayResultsUi';
 import { HubDirectionDynamics, type SeriesMetric } from './HubDirectionDynamics';
+import {
+  ConclusionCard,
+  dirNarr,
+  dirSummary,
+  forumAlerts,
+  forumConclusions,
+  type ActCmpRow,
+  type ForumTotals,
+  type OverviewRow,
+  type StateCmpRow,
+} from './directionNarrative';
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
@@ -29,11 +40,15 @@ const LEVEL_COLORS: Record<string, string> = {
   'Реакция': '#e6ae4a',
 };
 
-const SEG_COLORS: Record<string, string> = {
-  'Ядро': '#57bd9c',
-  'Слушатели': '#79b8c9',
-  'Общительные': '#c98fb0',
-  'Тихие': '#e2685e',
+const FB_COLORS = ['#57bd9c', '#6f7d95', '#79b8c9', '#e2685e'];
+const NEG_EMO = new Set(['Усталость', 'Раздражение', 'Тревога', 'Грусть']);
+
+type ForumLayer = {
+  overview: OverviewRow[];
+  stateCmp: StateCmpRow[];
+  actCmp: ActCmpRow[];
+  forum: ForumTotals;
+  fbCats: string[];
 };
 
 type DirData = {
@@ -66,10 +81,12 @@ type DirData = {
   kpis: Array<{ label: string; value: string; sub: string }>;
   state: {
     n: number; people: number; cov: number; neg: number; reasons: number;
+    noText?: number;
     byPhase: Array<{
-      phase: string; n: number; dist: number[]; energy: number | null; neg: number | null;
+      phase: string; phaseKey?: string; n: number; dist: number[]; energy: number | null; neg: number | null;
     }>;
     themes: Array<{ name: string; n: number }>;
+    emoPhase?: Array<{ emo: string; v: number[] }>;
   };
   emotions: Array<{ name: string; n: number; pct: number; forumPct: number; deltaPp: number }>;
   evening: {
@@ -92,7 +109,7 @@ type DirData = {
     sources: Array<{ name: string; n: number }>;
   };
   act: {
-    n: number; points: number; exp0: number; today: number; old: number;
+    n: number; points: number; path?: number; exp?: number; exp0: number; today: number; old: number;
     segs: Array<{ name: string; n: number }>;
   };
   groups: Array<{ g: string; n: number; idx: number | null; neg: number | null; pts: number | null }>;
@@ -103,34 +120,10 @@ type DirData = {
       cells: Array<{ key: string; v: number | null; rank: number; tone: number }>;
     }>;
   };
-  daySeries: Array<{
-    day: number; idx: number | null; neg: number | null; own: number | null;
-    points: number | null; exQ: number | null;
-  }>;
-  timelines: Array<{
-    dir: string; registered: number;
-    cards: Array<{ day: number; main: { v: number | string; label: string } | null; tools: string[] }>;
-  }>;
   instruments: string[];
   series: SeriesMetric[];
-  touchpoints: Array<{
-    index: number; name: string; short: string; kind: string; day: number;
-    all: number; byDir: Record<string, number>;
-  }>;
-  anketaBlocks: {
-    blocks: Array<{ key: string; label: string; forumMean: number | null; forumLow: number }>;
-    forumIdx: number | null;
-    rows: Array<{
-      dir: string; idx: number | null;
-      means: Array<{ key: string; mean: number | null; low: number }>;
-    }>;
-  };
-  anketaCards: Array<{
-    dir: string;
-    byDay: Record<string, { fill: number; idx: number | null; crit: number | null }>;
-  }>;
-  anketaForumByDay: Record<string, { fill: number; idx: number | null; crit: number | null }>;
   dirColors: Record<string, string>;
+  forumLayer?: ForumLayer;
 };
 
 function fmt(v: number | null | undefined, unit = ''): string {
@@ -138,17 +131,26 @@ function fmt(v: number | null | undefined, unit = ''): string {
   return `${v}${unit}`;
 }
 
-function cellBg(tone: number, up: boolean): string {
-  // tone 1 = best (green), 0 = worst (coral)
-  const t = up ? tone : tone;
-  if (t >= 0.62) return `rgba(87, 189, 156, ${(t - 0.5) * 0.85})`;
-  if (t <= 0.38) return `rgba(226, 104, 94, ${(0.5 - t) * 0.85})`;
+function cellBg(tone: number): string {
+  if (tone >= 0.62) return `rgba(87, 189, 156, ${(tone - 0.5) * 0.85})`;
+  if (tone <= 0.38) return `rgba(226, 104, 94, ${(0.5 - tone) * 0.85})`;
   return 'rgba(111, 125, 149, 0.13)';
 }
 
+function heatRank(vals: number[], v: number, up: boolean): string {
+  if (!vals.length) return 'transparent';
+  const sorted = [...vals].sort((a, b) => (up ? b - a : a - b));
+  const idx = sorted.indexOf(v);
+  const a = vals.length <= 1 ? 0.5 : 1 - idx / (vals.length - 1);
+  if (a > 0.66) return `rgba(87,189,156,${(a - 0.5) * 0.75})`;
+  if (a < 0.34) return `rgba(226,104,94,${(0.5 - a) * 0.75})`;
+  return 'transparent';
+}
+
 /**
- * Линза «Направление» — сводный портрет по всем инструментам.
- * GET /analytics/hub/direction. Старый детальный разбор — внизу.
+ * Штаб · Направления — два слоя:
+ * 1) форум · сравнение
+ * 2) направление · точечный разбор + narrative engine
  */
 export function HubDirectionScreen() {
   const {
@@ -157,7 +159,7 @@ export function HubDirectionScreen() {
   const [data, setData] = useState<DirData | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [anketaMetric, setAnketaMetric] = useState<'fill' | 'idx' | 'crit'>('fill');
+  const [layer, setLayer] = useState<'forum' | 'dir'>('forum');
 
   useEffect(() => {
     setLoading(true);
@@ -182,23 +184,80 @@ export function HubDirectionScreen() {
   const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);
   const cur = data?.meta.selectedDir || direction || '—';
   const m = data?.meta;
+  const fl = data?.forumLayer;
   const themeMax = Math.max(...(data?.state.themes.map(t => t.n) ?? [1]), 1);
-  const roleMax = Math.max(...(data?.evening.roles.map(r => r.n) ?? [1]), 1);
   const tagMax = Math.max(...(data?.kop.tags.map(t => t.n) ?? [1]), 1);
   const srcMax = Math.max(...(data?.kop.sources.map(s => s.n) ?? [1]), 1);
   const catMax = Math.max(...(data?.exch.cats.map(c => c.n) ?? [1]), 1);
-  const eventOwnMax = Math.max(...(data?.refl.byEvent.map(e => e.own) ?? [1]), 1);
+
+  const conclusions = useMemo(
+    () => (fl ? forumConclusions(fl.overview, fl.stateCmp, fl.actCmp) : []),
+    [fl],
+  );
+  const alerts = useMemo(
+    () => (fl ? forumAlerts(fl.overview, fl.forum.points) : []),
+    [fl],
+  );
+
+  const narr = useMemo(() => {
+    if (!data || !fl || cur === '—') return null;
+    const ov = fl.overview.find(r => r.dir === cur);
+    const sc = fl.stateCmp.find(r => r.dir === cur);
+    if (!ov || !sc) return null;
+    return dirNarr({
+      dir: cur,
+      reg: data.meta.registered || ov.reg,
+      state: {
+        n: data.state.n,
+        byPhase: data.state.byPhase,
+        emoPhase: data.state.emoPhase ?? [],
+        themes: data.state.themes,
+      },
+      refl: data.refl,
+      fbDist: ov.fbDist,
+      kop: data.kop,
+      exch: data.exch,
+      overview: ov,
+      stateCmp: sc,
+      forum: fl.forum,
+    });
+  }, [data, fl, cur]);
+
+  const summary = narr ? dirSummary(narr) : null;
 
   return (
     <div className="adm-day-results">
       <DashScreenTitle
-        title={cur !== '—' ? cur : 'Направление'}
+        title={layer === 'forum' ? 'Штаб · Сравнение направлений' : cur !== '—' ? `Направление «${cur}»` : 'Направление'}
         hint={
           m
-            ? `${m.registered} зарегистрировано · день ${m.day} · сводка по всем инструментам`
-            : 'Портрет направления: отклонения от форума и рабочие списки групп'
+            ? layer === 'forum'
+              ? `День ${m.day} · ${m.dirs} направлений · ${m.forumRegistered} участников`
+              : `${m.registered} зарегистрировано · день ${m.day} · точечный разбор`
+            : 'Сравнение направлений и точечный разбор с выводами'
         }
       />
+
+      <div className="adm-dir-layers" role="tablist" aria-label="Слой аналитики">
+        <button
+          type="button"
+          role="tab"
+          className={`adm-dir-layer ${layer === 'forum' ? 'is-on' : ''}`}
+          aria-selected={layer === 'forum'}
+          onClick={() => setLayer('forum')}
+        >
+          Форум · сравнение направлений
+        </button>
+        <button
+          type="button"
+          role="tab"
+          className={`adm-dir-layer ${layer === 'dir' ? 'is-on' : ''}`}
+          aria-selected={layer === 'dir'}
+          onClick={() => setLayer('dir')}
+        >
+          Направление · точечный разбор
+        </button>
+      </div>
 
       <div className="adm-day-results-days" aria-label="Дни форума">
         {[1, 2, 3, 4, 5, 6, 7, 8].map(d => {
@@ -221,7 +280,10 @@ export function HubDirectionScreen() {
             key={d.dir}
             type="button"
             className={`adm-dir-chip ${d.dir === cur ? 'is-on' : ''}`}
-            onClick={() => setDirection(d.dir)}
+            onClick={() => {
+              setDirection(d.dir);
+              setLayer('dir');
+            }}
           >
             {d.dir}
             {d.registered > 0 && <span className="adm-dir-chip-c">{d.registered}</span>}
@@ -233,11 +295,393 @@ export function HubDirectionScreen() {
       {loading && !!data && <p className="adm-muted" style={{ fontSize: 12 }}>Обновление…</p>}
       {err && <p className="adm-error">{err}</p>}
 
-      {data && (
+      {data && layer === 'forum' && !fl && (
+        <p className="adm-muted">Нет данных слоя сравнения — обновите backend (Redeploy).</p>
+      )}
+
+      {data && layer === 'forum' && fl && (
         <>
           <DayResultsSection
-            title="Портрет направления"
-            note="Отклонение от среднего по форуму в процентах. Зелёный — направление сильнее форума; для усталости, черновиков и «без обмена» сильнее значит меньше."
+            title="Что собрано за день"
+            note="Строка «на человека» важнее абсолютных чисел: она показывает, живёт ли инструмент в направлении."
+          >
+            <HubKpiRow
+              cols={4}
+              items={[
+                {
+                  value: String(fl.forum.state),
+                  label: 'Замеров состояния',
+                  sub: `${(fl.forum.state / Math.max(fl.forum.reg, 1)).toFixed(1)} на участника`,
+                },
+                {
+                  value: String(fl.forum.fb),
+                  label: 'Комментариев после блоков',
+                  sub: `${(fl.forum.fb / Math.max(fl.forum.reg, 1)).toFixed(1)} на участника`,
+                },
+                {
+                  value: String(fl.forum.kop),
+                  label: 'Записей в копилку',
+                  sub: `${(fl.forum.kop / Math.max(fl.forum.reg, 1)).toFixed(2)} на участника`,
+                },
+                {
+                  value: String(fl.forum.q),
+                  label: 'Вопросов в обмене',
+                  sub: `${(fl.forum.q / Math.max(fl.forum.reg, 1)).toFixed(2)} на участника`,
+                },
+                {
+                  value: `${fl.forum.negDay}%`,
+                  label: 'В риске и усталости днём',
+                  sub: 'по всему форуму',
+                },
+              ]}
+            />
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Сводная матрица направлений"
+            note="Цвет — место в ряду, не абсолютное значение. Объёмы нормированы на зарегистрированных."
+          >
+            <DashCard>
+              <div className="adm-day-results-scroll">
+                <table className="adm-day-results-table">
+                  <thead>
+                    <tr>
+                      <th>Направление</th>
+                      {[
+                        ['state', 'Замеров / чел.', true],
+                        ['fb', 'Коммент. / чел.', true],
+                        ['kop', 'Копилка / чел.', true],
+                        ['q', 'Вопросов / чел.', true],
+                        ['eMorn', 'Энергия утро', true],
+                        ['eDay', 'Энергия день', true],
+                        ['negDay', 'Риск днём %', false],
+                        ['points', 'Точки', true],
+                        ['exp', 'Балл «Опыт»', true],
+                      ].map(([k, label]) => (
+                        <th key={String(k)} style={{ textAlign: 'center', maxWidth: 76, whiteSpace: 'normal' }}>
+                          {label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fl.overview.map(r => {
+                      const cols: Array<{ key: string; v: number | null; up: boolean }> = [
+                        { key: 'state', v: +(r.state / Math.max(r.reg, 1)).toFixed(2), up: true },
+                        { key: 'fb', v: +(r.fb / Math.max(r.reg, 1)).toFixed(2), up: true },
+                        { key: 'kop', v: +(r.kop / Math.max(r.reg, 1)).toFixed(2), up: true },
+                        { key: 'q', v: +(r.q / Math.max(r.reg, 1)).toFixed(2), up: true },
+                        { key: 'eMorn', v: r.eMorn, up: true },
+                        { key: 'eDay', v: r.eDay, up: true },
+                        { key: 'negDay', v: r.negDay, up: false },
+                        { key: 'points', v: r.points, up: true },
+                        { key: 'exp', v: r.exp, up: true },
+                      ];
+                      return (
+                        <tr key={r.dir} className={r.dir === cur ? 'adm-dir-row-me' : undefined}>
+                          <td>
+                            {r.dir}
+                            <div className="adm-muted" style={{ fontSize: 11 }}>{r.reg} чел.</div>
+                          </td>
+                          {cols.map(c => {
+                            const vals = fl.overview
+                              .map(o => {
+                                if (c.key === 'state') return +(o.state / Math.max(o.reg, 1)).toFixed(2);
+                                if (c.key === 'fb') return +(o.fb / Math.max(o.reg, 1)).toFixed(2);
+                                if (c.key === 'kop') return +(o.kop / Math.max(o.reg, 1)).toFixed(2);
+                                if (c.key === 'q') return +(o.q / Math.max(o.reg, 1)).toFixed(2);
+                                if (c.key === 'eMorn') return o.eMorn;
+                                if (c.key === 'eDay') return o.eDay;
+                                if (c.key === 'negDay') return o.negDay;
+                                if (c.key === 'points') return o.points;
+                                return o.exp;
+                              })
+                              .filter((v): v is number => v != null);
+                            return (
+                              <td key={c.key} style={{ textAlign: 'center', padding: 4 }}>
+                                {c.v == null ? (
+                                  <span className="adm-muted">—</span>
+                                ) : (
+                                  <span
+                                    className="adm-day-results-cell"
+                                    style={{ background: heatRank(vals, c.v, c.up) }}
+                                  >
+                                    {c.v}
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </DashCard>
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Характер обратной связи"
+            note="Важно соотношение «содержательное к пустому»: работает ли вопрос после блока или собирает отписки."
+          >
+            <DashCard>
+              {fl.overview.map(r => {
+                const tot = r.fbDist.reduce((a, b) => a + b, 0) || 1;
+                const sub = Math.round(((r.fbDist[2] ?? 0) / tot) * 100);
+                return (
+                  <div key={r.dir} style={{ marginTop: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, gap: 8 }}>
+                      <span style={{ fontSize: 13.5 }}>{r.dir}</span>
+                      <span className="adm-muted" style={{ fontSize: 12.5 }}>
+                        {tot} · содержательных {sub}%
+                      </span>
+                    </div>
+                    <StackBar
+                      items={fl.fbCats.map((name, i) => ({ name, n: r.fbDist[i] ?? 0 }))}
+                      colors={FB_COLORS}
+                    />
+                  </div>
+                );
+              })}
+              <div className="adm-day-results-legend" style={{ marginTop: 12 }}>
+                {fl.fbCats.map((c, i) => (
+                  <span key={c}><i style={{ background: FB_COLORS[i] }} />{c}</span>
+                ))}
+              </div>
+            </DashCard>
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Состояние и энергия"
+            note="Опираться на долю риска и топ-эмоцию. Энергию читать только как направление сдвига."
+          >
+            <div className="adm-dir-grid2">
+              <DashCard title="Доля в риске и усталости днём">
+                {[...fl.overview].sort((a, b) => b.negDay - a.negDay).map(r => {
+                  const nm = Math.max(...fl.overview.map(x => x.negDay || 0), 1);
+                  return (
+                    <div key={r.dir} className="adm-day-results-row">
+                      <div>
+                        <div className="adm-day-results-lb">{r.dir}</div>
+                        <HBar
+                          widthPct={(r.negDay / nm) * 100}
+                          color={r.negDay >= 30 ? '#e2685e' : r.negDay >= 20 ? '#e6ae4a' : '#6f7d95'}
+                        />
+                      </div>
+                      <div className="adm-day-results-nb">{r.negDay}%</div>
+                    </div>
+                  );
+                })}
+              </DashCard>
+              <DashCard title="Топ-эмоция дня и динамика энергии">
+                <div className="adm-day-results-scroll">
+                  <table className="adm-day-results-table">
+                    <tbody>
+                      {fl.overview.map(r => {
+                        const dz = r.eDay != null && r.eMorn != null ? +(r.eDay - r.eMorn).toFixed(1) : null;
+                        const warn = r.topEmoDay ? NEG_EMO.has(r.topEmoDay) : false;
+                        return (
+                          <tr key={r.dir}>
+                            <td>{r.dir}</td>
+                            <td className="adm-muted" style={{ textAlign: 'center' }}>
+                              {r.eMorn ?? '—'} → {r.eDay ?? '—'}
+                            </td>
+                            <td style={{ textAlign: 'center', color: dz == null ? undefined : dz > 0 ? '#0f766e' : dz < 0 ? '#b91c1c' : undefined }}>
+                              {dz == null ? '—' : `${dz > 0 ? '+' : ''}${dz}`}
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              {r.topEmoDay && <Flag tone={warn ? 'warn' : 'ok'}>{r.topEmoDay}</Flag>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </DashCard>
+            </div>
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Программа и обмен: два механизма"
+            note="«Путь» — прохождение программы. «Опыт» — добровольное участие в обмене. Сводить в один балл нельзя."
+          >
+            <DashCard>
+              <div style={{ width: '100%', height: 280 }}>
+                <ResponsiveContainer>
+                  <BarChart
+                    data={[...fl.actCmp].sort((a, b) => b.exp - a.exp)}
+                    margin={{ top: 8, right: 8, left: 0, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(111,125,149,0.25)" />
+                    <XAxis dataKey="dir" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="path" name="Путь" fill="#6f7d95" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="exp" name="Опыт" fill="#e6ae4a" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Копилка и обмен опытом"
+            note="Здесь измеряется не объём, а намерение: какой тег преобладает и какая доля вопросов без рубрики."
+          >
+            <div className="adm-dir-grid2">
+              <DashCard title="Копилка">
+                <div className="adm-day-results-scroll">
+                  <table className="adm-day-results-table">
+                    <thead>
+                      <tr>
+                        <th>Направление</th>
+                        <th style={{ textAlign: 'center' }}>Записей</th>
+                        <th style={{ textAlign: 'center' }}>На чел.</th>
+                        <th style={{ textAlign: 'right' }}>Преобладает</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fl.overview.map(r => (
+                        <tr key={r.dir}>
+                          <td>{r.dir}</td>
+                          <td style={{ textAlign: 'center' }}>{r.kop}</td>
+                          <td style={{ textAlign: 'center' }} className="adm-muted">
+                            {(r.kop / Math.max(r.reg, 1)).toFixed(2)}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {r.kopTop ? (
+                              <Flag tone={['в работу', 'идея'].includes(r.kopTop) ? 'ok' : 'warn'}>
+                                {r.kopTop} · {r.kopTopN}
+                              </Flag>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </DashCard>
+              <DashCard title="Обмен опытом">
+                <div className="adm-day-results-scroll">
+                  <table className="adm-day-results-table">
+                    <thead>
+                      <tr>
+                        <th>Направление</th>
+                        <th style={{ textAlign: 'center' }}>Вопросов</th>
+                        <th style={{ textAlign: 'center' }}>На 100</th>
+                        <th style={{ textAlign: 'center' }}>Без рубрики</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fl.overview.map(r => (
+                        <tr key={r.dir}>
+                          <td>{r.dir}</td>
+                          <td style={{ textAlign: 'center' }}>{r.q}</td>
+                          <td style={{ textAlign: 'center' }} className="adm-muted">
+                            {Math.round((r.q / Math.max(r.reg, 1)) * 100)}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <Flag tone={r.qOther >= 60 ? 'bad' : r.qOther >= 30 ? 'warn' : 'ok'}>
+                              {r.qOther}%
+                            </Flag>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </DashCard>
+            </div>
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Что это значит · читаемый вывод"
+            note="Текст собирается из тех же чисел, что и графики: пороги и сравнения заданы правилами."
+          >
+            <DashCard>
+              {conclusions.map((c, i) => (
+                <ConclusionCard key={c.h} c={c} index={i} />
+              ))}
+              <p className="adm-day-results-callout">
+                Выводы пересобираются при каждом обновлении данных. Если формулировка перестала соответствовать
+                реальности — значит, изменились числа: смотрите на блок, из которого вывод собран.
+              </p>
+            </DashCard>
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Куда идти сегодня"
+            note="Направление попадает в список, если набрало минимум два сигнала: нагрузка, отдача или вовлечённость."
+          >
+            <DashCard>
+              {alerts.length === 0 ? (
+                <p className="adm-muted">Сегодня ни одно направление не набрало двух сигналов сразу.</p>
+              ) : alerts.map(a => (
+                <div key={a.dir} className="adm-narr-alert">
+                  <div className="adm-narr-alert-d">{a.dir}</div>
+                  <div className="adm-muted">{a.sig.join(' · ')}</div>
+                </div>
+              ))}
+            </DashCard>
+          </DayResultsSection>
+
+          {data.series.length > 0 && (
+            <DayResultsSection title="Динамика по дням" note="Сравнение направлений по выбранному инструменту.">
+              <HubDirectionDynamics
+                series={data.series}
+                instruments={data.instruments}
+                dirs={data.dirs.map(d => d.dir)}
+                dirColors={data.dirColors}
+                selectedDir={cur !== '—' ? cur : null}
+              />
+            </DayResultsSection>
+          )}
+        </>
+      )}
+
+      {data && layer === 'dir' && (
+        <>
+          <DayResultsSection
+            title="Ключевые показатели"
+            note="Число само по себе ничего не значит: важно, больше или меньше оно ожидаемого для размера направления."
+          >
+            <HubKpiRow
+              cols={4}
+              items={(() => {
+                const ov = fl?.overview.find(r => r.dir === cur);
+                const reg = Math.max(m?.registered || ov?.reg || 1, 1);
+                const freg = Math.max(fl?.forum.reg || data.meta.forumRegistered || 1, 1);
+                const rows: Array<[string, number, number]> = [
+                  ['Отметок состояния', data.state.n, fl?.forum.state ?? 0],
+                  ['Комментариев после блоков', data.refl.n, fl?.forum.fb ?? 0],
+                  ['Записей в копилке', data.kop.n, fl?.forum.kop ?? 0],
+                  ['Вопросов в обмене', data.exch.q, fl?.forum.q ?? 0],
+                ];
+                return [
+                  ...rows.map(([label, v, f]) => {
+                    const p = +(v / reg).toFixed(2);
+                    const fp = +(f / freg).toFixed(2);
+                    return {
+                      value: String(v),
+                      label,
+                      sub: `${p} на чел. · ${p >= fp ? 'выше' : 'ниже'} форума (${fp})`,
+                    };
+                  }),
+                  {
+                    value: `${ov?.negDay ?? data.state.neg}%`,
+                    label: 'Риск и усталость днём',
+                    sub: `по форуму ${fl?.forum.negDay ?? data.forum.neg}%`,
+                  },
+                ];
+              })()}
+            />
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Портрет относительно форума"
+            note="Отклонение от среднего по форуму. Зелёный — направление сильнее форума (для усталости — меньше)."
           >
             <DashCard>
               {data.profile.map(p => {
@@ -270,21 +714,12 @@ export function HubDirectionScreen() {
                   </div>
                 );
               })}
-              <p className="adm-day-results-callout adm-day-results-callout-amber">
-                Профиль читается как форма: провал слева по состоянию и подъём справа по охватам —
-                «выгорающие активные», работать с ними иначе, чем с ровно тихим направлением.
-              </p>
             </DashCard>
           </DayResultsSection>
 
-          <HubKpiRow
-            cols={4}
-            items={data.kpis.map(k => ({ value: k.value, label: k.label, sub: k.sub }))}
-          />
-
           <DayResultsSection
-            title="Состояние по фазам дня"
-            note="Доли считаются внутри фазы. Энергия — медиана."
+            title="Состояние по фазам"
+            note="Зоны внутри каждой проверки. Медиана энергии — справочно; картину задают зоны."
           >
             <DashCard>
               <div className="adm-dir-grid3">
@@ -301,10 +736,7 @@ export function HubDirectionScreen() {
                         {data.zones.map((z, i) => {
                           const pc = ((p.dist[i] ?? 0) / tot) * 100;
                           return (
-                            <div
-                              key={z}
-                              style={{ height: `${pc}%`, background: ZONE_COLORS[z] }}
-                            >
+                            <div key={z} style={{ height: `${pc}%`, background: ZONE_COLORS[z] }}>
                               {pc >= 9 ? `${Math.round(pc)}%` : ''}
                             </div>
                           );
@@ -316,166 +748,135 @@ export function HubDirectionScreen() {
               </div>
               <div className="adm-day-results-legend">
                 {data.zones.map(z => (
-                  <span key={z}>
-                    <i style={{ background: ZONE_COLORS[z] }} />
-                    {z}
-                  </span>
+                  <span key={z}><i style={{ background: ZONE_COLORS[z] }} />{z}</span>
                 ))}
               </div>
             </DashCard>
+            {narr?.state && <ConclusionCard c={narr.state} />}
           </DayResultsSection>
 
           <DayResultsSection
-            title="Настроение и его причины"
-            note="Важно не то, каких эмоций больше, а какие встречаются чаще, чем у всех."
-          >
-            <div className="adm-dir-grid2">
-              <DashCard title={`Эмоции · ${data.state.n} отметок`}>
-                {data.emotions.map(e => (
-                  <div key={e.name} className="adm-day-results-row">
-                    <div>
-                      <div className="adm-day-results-lb">
-                        {e.name}
-                        {Math.abs(e.deltaPp) >= 2 && (
-                          <Flag tone={e.deltaPp > 0 ? 'warn' : 'ok'}>
-                            {e.deltaPp > 0 ? '+' : ''}{e.deltaPp} п.п.
-                          </Flag>
-                        )}
-                      </div>
-                      <HBar widthPct={e.pct} color="#e6ae4a" />
-                    </div>
-                    <div className="adm-day-results-nb">{e.pct}%</div>
-                  </div>
-                ))}
-              </DashCard>
-              <DashCard title={`Темы причин · ${data.state.reasons} пояснений`}>
-                {data.state.themes.map(t => (
-                  <div key={t.name} className="adm-day-results-row">
-                    <div>
-                      <div className="adm-day-results-lb">{t.name}</div>
-                      <HBar widthPct={(t.n / themeMax) * 100} />
-                    </div>
-                    <div className="adm-day-results-nb">{t.n}</div>
-                  </div>
-                ))}
-                <p className="adm-day-results-callout">
-                  Тема с наибольшим весом — то, что штаб может изменить завтра.
-                </p>
-              </DashCard>
-            </div>
-          </DayResultsSection>
-
-          <DayResultsSection
-            title="Оценки дня по блокам программы"
-            note="Точка — направление, штрих — форум. Справа доля оценок ниже четырёх."
+            title="Эмоции по фазам"
+            note="Одна и та же эмоция в разное время означает разное: усталость утром — про сон, днём — про нагрузку блока."
           >
             <DashCard>
-              {data.evening.blocks.map(b => {
-                const f = data.forum.blocks.find(x => x.key === b.key);
-                const v = b.mean ?? 0;
-                const fv = f?.mean ?? v;
-                const pos = ((v - 3.5) / 1.5) * 100;
-                const fpos = ((fv - 3.5) / 1.5) * 100;
-                return (
-                  <div key={b.key} className="adm-dir-prof">
-                    <div className="adm-dir-prof-nm">{b.label}</div>
-                    <div className="adm-dir-pbar">
-                      <div
-                        className="adm-dir-block-forum"
-                        style={{ left: `${Math.max(0, Math.min(100, fpos))}%` }}
-                      />
-                      <div
-                        className="adm-dir-block-dot"
-                        style={{
-                          left: `${Math.max(0, Math.min(100, pos))}%`,
-                          background: v >= fv ? '#57bd9c' : '#e2685e',
-                        }}
-                      />
+              {(data.state.emoPhase ?? []).length === 0 ? (
+                <p className="adm-muted">Нет отметок эмоций в срезе</p>
+              ) : (
+                <div className="adm-day-results-scroll">
+                  <table className="adm-day-results-table">
+                    <thead>
+                      <tr>
+                        <th>Эмоция</th>
+                        <th style={{ textAlign: 'center' }}>Утро</th>
+                        <th style={{ textAlign: 'center' }}>День</th>
+                        <th style={{ textAlign: 'center' }}>Вечер</th>
+                        <th style={{ textAlign: 'center' }}>Всего</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...(data.state.emoPhase ?? [])]
+                        .sort((a, b) => (b.v[0]! + b.v[1]! + b.v[2]!) - (a.v[0]! + a.v[1]! + a.v[2]!))
+                        .map(e => {
+                          const tot = e.v.reduce((a, b) => a + b, 0);
+                          const neg = NEG_EMO.has(e.emo);
+                          const mx = Math.max(...(data.state.emoPhase ?? []).flatMap(x => x.v), 1);
+                          return (
+                            <tr key={e.emo}>
+                              <td style={{ color: neg ? '#b45309' : undefined }}>{e.emo}</td>
+                              {e.v.map((v, i) => (
+                                <td key={i} style={{ textAlign: 'center', padding: 4 }}>
+                                  <span
+                                    className="adm-day-results-cell"
+                                    style={{
+                                      background: v
+                                        ? `rgba(${neg ? '226,104,94' : '87,189,156'},${Math.min(v / mx, 1) * 0.5})`
+                                        : 'transparent',
+                                    }}
+                                  >
+                                    {v || '·'}
+                                  </span>
+                                </td>
+                              ))}
+                              <td style={{ textAlign: 'center' }} className="adm-muted"><b>{tot}</b></td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div className="adm-muted" style={{ marginTop: 14, fontSize: 12 }}>
+                Сравнение с форумом · {data.state.n} отметок
+              </div>
+              {data.emotions.slice(0, 6).map(e => (
+                <div key={e.name} className="adm-day-results-row">
+                  <div>
+                    <div className="adm-day-results-lb">
+                      {e.name}
+                      {Math.abs(e.deltaPp) >= 2 && (
+                        <Flag tone={e.deltaPp > 0 ? 'warn' : 'ok'}>
+                          {e.deltaPp > 0 ? '+' : ''}{e.deltaPp} п.п.
+                        </Flag>
+                      )}
                     </div>
-                    <div className="adm-dir-prof-vl">
-                      <b>{fmt(b.mean)}</b>
-                      <span style={{ color: b.low >= 12 ? '#b91c1c' : undefined }}>
-                        {b.low}% ниже 4
-                      </span>
-                    </div>
+                    <HBar widthPct={e.pct} color="#e6ae4a" />
                   </div>
-                );
-              })}
-              <p className="adm-day-results-callout">
-                Индекс дня — <b>{fmt(data.evening.idx)}</b> при {fmt(data.forum.idx)} по форуму.
-                Черновиков {data.evening.drafts}%.
+                  <div className="adm-day-results-nb">{e.pct}%</div>
+                </div>
+              ))}
+            </DashCard>
+            {narr?.emo && <ConclusionCard c={narr.emo} />}
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Причины состояния"
+            note="Категории по тексту пояснения. Это то, что штаб может изменить завтра."
+          >
+            <DashCard>
+              {data.state.themes.map(t => (
+                <div key={t.name} className="adm-day-results-row">
+                  <div>
+                    <div className="adm-day-results-lb">{t.name}</div>
+                    <HBar
+                      widthPct={(t.n / themeMax) * 100}
+                      color={t.name === 'Без пояснения' ? '#6f7d95' : '#e6ae4a'}
+                    />
+                  </div>
+                  <div className="adm-day-results-nb">{t.n}</div>
+                </div>
+              ))}
+            </DashCard>
+            {narr?.reason && <ConclusionCard c={narr.reason} />}
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Обратная связь после блоков"
+            note="Содержательность важнее объёма. Дефект чаще в вопросе, а не в участниках."
+          >
+            <DashCard>
+              <StackBar
+                items={data.levels.map((l, i) => ({
+                  name: l,
+                  n: data.refl.dist[i] ?? 0,
+                }))}
+                colors={data.levels.map(l => LEVEL_COLORS[l])}
+              />
+              <div className="adm-day-results-legend" style={{ marginTop: 10 }}>
+                {data.levels.map(l => (
+                  <span key={l}><i style={{ background: LEVEL_COLORS[l] }} />{l}</span>
+                ))}
+              </div>
+              <p className="adm-muted" style={{ marginTop: 12, fontSize: 12 }}>
+                {data.refl.n} текстов · присвоение {data.refl.own}% · охват {data.refl.cov}%
               </p>
             </DashCard>
+            {narr?.fb && <ConclusionCard c={narr.fb} />}
           </DayResultsSection>
 
           <DayResultsSection
-            title="Как отвечали: глубина и обмен"
-            note="Спрашивать и отвечать — разные роли."
-          >
-            <div className="adm-dir-grid2">
-              <DashCard title={`Уровни осмысления · ${data.refl.n} текстов`}>
-                <StackBar
-                  items={data.levels.map((l, i) => ({
-                    name: l,
-                    n: data.refl.dist[i] ?? 0,
-                  }))}
-                  colors={data.levels.map(l => LEVEL_COLORS[l])}
-                />
-                <div className="adm-day-results-legend" style={{ marginTop: 10 }}>
-                  {data.levels.map(l => (
-                    <span key={l}><i style={{ background: LEVEL_COLORS[l] }} />{l}</span>
-                  ))}
-                </div>
-                <div className="adm-muted" style={{ marginTop: 14, fontSize: 12 }}>
-                  Присвоение по событиям · {data.refl.own}% общее
-                </div>
-                {data.refl.byEvent.map(e => (
-                  <div key={e.ev} className="adm-day-results-row">
-                    <div>
-                      <div className="adm-day-results-lb">{e.ev}</div>
-                      <HBar
-                        widthPct={(e.own / Math.max(eventOwnMax, 1)) * 100}
-                        color={e.own >= 12 ? '#57bd9c' : '#6f7d95'}
-                      />
-                    </div>
-                    <div className="adm-day-results-nb">
-                      {e.own}%
-                      <div style={{ fontSize: 10.5 }} className="adm-muted">n={e.n}</div>
-                    </div>
-                  </div>
-                ))}
-              </DashCard>
-              <DashCard title="Обмен опытом">
-                <div className="adm-dir-mini-kpis">
-                  <div><div className="v">{data.exch.q}</div><div className="l">вопросов</div></div>
-                  <div><div className="v">{data.exch.a}</div><div className="l">ответов</div></div>
-                  <div><div className="v">{data.exch.cov}%</div><div className="l">охват</div></div>
-                </div>
-                <div className="adm-muted" style={{ marginTop: 14, fontSize: 12 }}>О чём спрашивают</div>
-                {data.exch.cats.length === 0 ? (
-                  <p className="adm-muted">Вопросов от направления нет</p>
-                ) : data.exch.cats.map(c => (
-                  <div key={c.name} className="adm-day-results-row">
-                    <div>
-                      <div className="adm-day-results-lb">{c.name}</div>
-                      <HBar
-                        widthPct={(c.n / catMax) * 100}
-                        color={c.name === 'Не размечено' ? '#6f7d95' : '#e6ae4a'}
-                      />
-                    </div>
-                    <div className="adm-day-results-nb">{c.n}</div>
-                  </div>
-                ))}
-                <p className="adm-day-results-callout">
-                  Медиана ответа {data.exch.medA} знаков, коротких реплик {data.exch.short}%.
-                </p>
-              </DashCard>
-            </div>
-          </DayResultsSection>
-
-          <DayResultsSection
-            title="Как складывали в копилку"
-            note="Автосохранённые материалы отделены от собственных заметок. Тег «контакт» — только счётчик."
+            title="Копилка"
+            note="Тег показывает, доходит ли запись до намерения."
           >
             <div className="adm-dir-grid2">
               <DashCard>
@@ -489,16 +890,13 @@ export function HubDirectionScreen() {
                     <div className="l">заметок с действием</div>
                   </div>
                 </div>
-                <div className="adm-muted" style={{ marginTop: 14, fontSize: 12 }}>
-                  Теги · {data.kop.n} заметок + {data.kop.auto} авто
-                </div>
                 {data.kop.tags.filter(t => t.n > 0).map(t => (
                   <div key={t.tag} className="adm-day-results-row">
                     <div>
                       <div className="adm-day-results-lb">{t.tag}</div>
                       <HBar
                         widthPct={(t.n / tagMax) * 100}
-                        color={['в работу', 'на будущее'].includes(t.tag) ? '#57bd9c' : t.tag === 'контакт' ? '#c98fb0' : '#6f7d95'}
+                        color={['в работу', 'на будущее', 'идея'].includes(t.tag) ? '#57bd9c' : '#6f7d95'}
                       />
                     </div>
                     <div className="adm-day-results-nb">{t.n}</div>
@@ -506,7 +904,9 @@ export function HubDirectionScreen() {
                 ))}
               </DashCard>
               <DashCard title="Откуда приходит материал">
-                {data.kop.sources.map(s => (
+                {data.kop.sources.length === 0 ? (
+                  <p className="adm-muted">Нет записей</p>
+                ) : data.kop.sources.map(s => (
                   <div key={s.name} className="adm-day-results-row">
                     <div>
                       <div className="adm-day-results-lb">{s.name}</div>
@@ -517,461 +917,122 @@ export function HubDirectionScreen() {
                 ))}
               </DashCard>
             </div>
+            {narr?.kop && <ConclusionCard c={narr.kop} />}
           </DayResultsSection>
 
           <DayResultsSection
-            title="Роли и ролевой эксперимент"
-            note="Единственный индикатор движения, а не удовлетворённости."
+            title="Обмен опытом"
+            note="Спрашивать и отвечать — разные роли."
           >
-            <div className="adm-dir-grid2">
-              <DashCard title={`Ролевой эксперимент · ${data.evening.experiment.reduce((a, x) => a + x.n, 0)} ответов`}>
-                {data.evening.experiment.length === 0 ? (
-                  <p className="adm-muted">Нет ответов по эксперименту в срезе</p>
-                ) : data.evening.experiment.map(e => (
-                  <div key={e.name} className="adm-day-results-row">
-                    <div>
-                      <div className="adm-day-results-lb">{e.name}</div>
-                      <HBar
-                        widthPct={(e.n / Math.max(...data.evening.experiment.map(x => x.n), 1)) * 100}
-                        color="#e6ae4a"
-                      />
-                    </div>
-                    <div className="adm-day-results-nb">{e.n}</div>
+            <DashCard>
+              <div className="adm-dir-mini-kpis">
+                <div><div className="v">{data.exch.q}</div><div className="l">вопросов</div></div>
+                <div><div className="v">{data.exch.a}</div><div className="l">ответов</div></div>
+                <div><div className="v">{data.exch.cov}%</div><div className="l">охват</div></div>
+              </div>
+              {data.exch.cats.length === 0 ? (
+                <p className="adm-muted" style={{ marginTop: 12 }}>Вопросов от направления нет</p>
+              ) : data.exch.cats.map(c => (
+                <div key={c.name} className="adm-day-results-row">
+                  <div>
+                    <div className="adm-day-results-lb">{c.name}</div>
+                    <HBar
+                      widthPct={(c.n / catMax) * 100}
+                      color={c.name === 'Не размечено' ? '#6f7d95' : '#e6ae4a'}
+                    />
                   </div>
-                ))}
-              </DashCard>
-              <DashCard title="Роль на завтра">
-                {data.evening.roles.map(r => {
-                  const tot = data.evening.roles.reduce((a, x) => a + x.n, 0) || 1;
-                  return (
-                    <div key={r.name} className="adm-day-results-row">
-                      <div>
-                        <div className="adm-day-results-lb">{r.name}</div>
-                        <HBar widthPct={(r.n / roleMax) * 100} color="#6f7d95" />
-                      </div>
-                      <div className="adm-day-results-nb">{Math.round((r.n / tot) * 100)}%</div>
-                    </div>
-                  );
-                })}
-              </DashCard>
-            </div>
+                  <div className="adm-day-results-nb">{c.n}</div>
+                </div>
+              ))}
+            </DashCard>
+            {narr?.q && <ConclusionCard c={narr.q} />}
           </DayResultsSection>
 
-          <DayResultsSection
-            title="Состав участия и группы"
-            note="Группы от 8 человек. Строка, красная во всех трёх колонках — повод идти сегодня."
-          >
-            <div className="adm-dir-grid2">
-              <DashCard title="Типы участия">
-                <StackBar
-                  items={data.act.segs.map(s => ({ name: s.name, n: s.n }))}
-                  colors={data.act.segs.map(s => SEG_COLORS[s.name] || '#6f7d95')}
-                />
-                <div className="adm-day-results-legend" style={{ marginTop: 10 }}>
-                  {data.act.segs.map(s => (
-                    <span key={s.name}>
-                      <i style={{ background: SEG_COLORS[s.name] }} />
-                      {s.name} — {s.n}
-                    </span>
+          {summary && (
+            <DayResultsSection
+              title="Итог для утреннего штаба"
+              note="Заголовки шести выводов и три первых действия — то, что куратор говорит за тридцать секунд."
+            >
+              <DashCard>
+                <p style={{ fontSize: 14.5, lineHeight: 1.55, margin: 0 }}>{summary.titles}</p>
+                <ol className="adm-narr-actions">
+                  {summary.actions.map(a => (
+                    <li key={a}>{a}</li>
                   ))}
-                </div>
-                <p className="adm-day-results-callout">
-                  Точек в среднем {data.act.points} против {data.forum.points} по форуму.
-                  Без обмена {data.act.exp0}%. Выпавших 2+ дня — {data.act.old}.
-                </p>
+                </ol>
               </DashCard>
+            </DayResultsSection>
+          )}
+
+          {data.groups.length > 0 && (
+            <DayResultsSection
+              title="Группы направления"
+              note="Рабочий список: где проседает индекс или точки осмысления."
+            >
               <DashCard>
                 <div className="adm-day-results-scroll">
                   <table className="adm-day-results-table">
                     <thead>
                       <tr>
                         <th>Группа</th>
-                        <th style={{ textAlign: 'center' }}>Чел.</th>
+                        <th style={{ textAlign: 'center' }}>N</th>
                         <th style={{ textAlign: 'center' }}>Индекс</th>
-                        <th style={{ textAlign: 'center' }}>Минус</th>
+                        <th style={{ textAlign: 'center' }}>Риск %</th>
                         <th style={{ textAlign: 'center' }}>Точки</th>
                       </tr>
                     </thead>
                     <tbody>
                       {data.groups.map(g => (
                         <tr key={g.g}>
-                          <td style={{ fontWeight: 600 }}>{g.g}</td>
-                          <td style={{ textAlign: 'center' }} className="adm-muted">{g.n}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            {g.idx != null ? (
-                              <Flag tone={g.idx < 4.45 ? 'bad' : g.idx < 4.65 ? 'warn' : 'ok'}>{g.idx}</Flag>
-                            ) : '—'}
-                          </td>
-                          <td style={{ textAlign: 'center', color: (g.neg ?? 0) >= 30 ? '#b91c1c' : undefined }}>
-                            {g.neg != null ? `${g.neg}%` : '—'}
-                          </td>
-                          <td style={{ textAlign: 'center', color: (g.pts ?? 99) < 7.5 ? '#b91c1c' : undefined }}>
-                            {g.pts != null ? g.pts : '—'}
-                          </td>
+                          <td>{g.g}</td>
+                          <td style={{ textAlign: 'center' }}>{g.n}</td>
+                          <td style={{ textAlign: 'center' }}>{fmt(g.idx)}</td>
+                          <td style={{ textAlign: 'center' }}>{fmt(g.neg)}</td>
+                          <td style={{ textAlign: 'center' }}>{fmt(g.pts)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               </DashCard>
-            </div>
-          </DayResultsSection>
-
-          {data.series?.length > 0 && (
-            <HubDirectionDynamics
-              instruments={data.instruments}
-              series={data.series}
-              dirs={data.dirs.map(d => d.dir)}
-              dirColors={data.dirColors}
-              selectedDir={data.meta.selectedDir}
-            />
+            </DayResultsSection>
           )}
 
-          <DayResultsSection
-            title="Каждое направление по дням"
-            note="Одна лента на направление — чем закрыт каждый день и ключевое число."
-          >
-            {data.timelines.map(t => (
-              <DashCard key={t.dir} title={`${t.dir} · ${t.registered}`}>
-                <div className="adm-dir-tl">
-                  {t.cards.map(c => (
-                    <div key={c.day} className={`adm-dir-tlc ${c.main ? 'has' : ''}`}>
-                      <div className="d">День {c.day}</div>
-                      {c.main ? (
-                        <>
-                          <div className="k">{c.main.v}</div>
-                          <div className="s">{c.main.label}</div>
-                        </>
-                      ) : (
-                        <div className="s" style={{ marginTop: 16 }}>нет данных</div>
-                      )}
-                      {c.tools.length > 0 && (
-                        <div className="s" style={{ marginTop: 6 }}>{c.tools.join(' · ')}</div>
-                      )}
-                    </div>
-                  ))}
+          {data.matrix.rows.length > 0 && (
+            <DayResultsSection title="Место в ряду направлений" note="Цвет — ранг среди направлений по метрике.">
+              <DashCard>
+                <div className="adm-day-results-scroll">
+                  <table className="adm-day-results-table">
+                    <thead>
+                      <tr>
+                        <th>Направление</th>
+                        {data.matrix.keys.map(k => (
+                          <th key={k.key} style={{ textAlign: 'center' }}>{k.name}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.matrix.rows.map(row => (
+                        <tr key={row.dir} className={row.dir === cur ? 'adm-dir-row-me' : undefined}>
+                          <td>{row.dir}</td>
+                          {row.cells.map(c => (
+                            <td key={c.key} style={{ textAlign: 'center', padding: 4 }}>
+                              <span
+                                className="adm-day-results-cell"
+                                style={{ background: cellBg(c.tone) }}
+                              >
+                                {fmt(c.v)}
+                              </span>
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </DashCard>
-            ))}
-          </DayResultsSection>
-
-          <DayResultsSection
-            title="Заполняемость точек осмысления"
-            note="Доля зарегистрированных в направлении, закрывших каждую точку. Не «сколько ответов», а какая часть трека дошла."
-          >
-            <DashCard>
-              <div className="adm-day-results-scroll">
-                <table className="adm-day-results-table">
-                  <thead>
-                    <tr>
-                      <th style={{ minWidth: 210 }}>Точка</th>
-                      <th style={{ textAlign: 'center' }}>Весь форум</th>
-                      {data.dirs.map(d => (
-                        <th key={d.dir} style={{ textAlign: 'center', maxWidth: 74, whiteSpace: 'normal' }}>
-                          {d.dir}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(data.touchpoints ?? []).map(tp => (
-                      <tr key={tp.index}>
-                        <td>
-                          {tp.name}
-                          <div className="adm-muted" style={{ fontSize: 11 }}>{tp.kind} · день {tp.day}</div>
-                        </td>
-                        <td style={{ textAlign: 'center', fontWeight: 600 }} className="adm-muted">
-                          {tp.all}%
-                        </td>
-                        {data.dirs.map(d => {
-                          const v = tp.byDir[d.dir] ?? 0;
-                          const a = Math.max(0, Math.min(1, (v - 25) / 60));
-                          const bg = a > 0.62
-                            ? `rgba(87,189,156,${(a - 0.5) * 0.8})`
-                            : a < 0.38
-                              ? `rgba(226,104,94,${(0.5 - a) * 0.8})`
-                              : 'rgba(111,125,149,.13)';
-                          return (
-                            <td key={d.dir} style={{ padding: 4 }}>
-                              <span
-                                className="adm-dir-cell"
-                                style={{
-                                  background: bg,
-                                  fontWeight: d.dir === cur ? 600 : 400,
-                                  color: a < 0.28 ? '#b91c1c' : undefined,
-                                }}
-                              >
-                                {v}%
-                              </span>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="adm-day-results-callout">
-                Вечерняя проверка обычно собирает заметно меньше утренней у всех направлений сразу —
-                это чаще расписание, а не мотивация трека.
-              </p>
-            </DashCard>
-
-            <DashCard title="Точки всех направлений на одном графике">
-              <div style={{ width: '100%', height: 320 }}>
-                <ResponsiveContainer>
-                  <BarChart
-                    data={(data.touchpoints ?? []).map(tp => {
-                      const row: Record<string, string | number> = { short: tp.short };
-                      for (const d of data.dirs) row[d.dir] = tp.byDir[d.dir] ?? 0;
-                      return row;
-                    })}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
-                    <XAxis dataKey="short" tick={{ fontSize: 11 }} />
-                    <YAxis unit="%" tick={{ fontSize: 11 }} width={36} />
-                    <Tooltip />
-                    {data.dirs.map(d => (
-                      <Bar
-                        key={d.dir}
-                        dataKey={d.dir}
-                        fill={data.dirColors[d.dir]}
-                        fillOpacity={d.dir === cur ? 1 : 0.82}
-                        radius={[2, 2, 0, 0]}
-                      />
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </DashCard>
-          </DayResultsSection>
-
-          <DayResultsSection
-            title="Анкета дня: оценки по направлениям"
-            note="Блоки программы против направлений. Цвет — место в ряду, не абсолют."
-          >
-            <DashCard>
-              <div className="adm-day-results-scroll">
-                <table className="adm-day-results-table">
-                  <thead>
-                    <tr>
-                      <th style={{ minWidth: 150 }}>Блок программы</th>
-                      <th style={{ textAlign: 'center' }}>Форум</th>
-                      {data.dirs.map(d => (
-                        <th key={d.dir} style={{ textAlign: 'center', maxWidth: 74, whiteSpace: 'normal' }}>
-                          {d.dir}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(data.anketaBlocks?.blocks ?? []).map(b => {
-                      const vals = data.anketaBlocks.rows
-                        .map(r => r.means.find(m => m.key === b.key)?.mean)
-                        .filter((v): v is number => v != null)
-                        .sort((a, c) => c - a);
-                      return (
-                        <tr key={b.key}>
-                          <td>
-                            {b.label}
-                            <div className="adm-muted" style={{ fontSize: 11 }}>
-                              критика {b.forumLow}%
-                            </div>
-                          </td>
-                          <td style={{ textAlign: 'center', fontWeight: 600 }} className="adm-muted">
-                            {b.forumMean ?? '—'}
-                          </td>
-                          {data.anketaBlocks.rows.map(row => {
-                            const cell = row.means.find(m => m.key === b.key);
-                            const v = cell?.mean;
-                            const r = v != null && vals.length > 1 ? vals.indexOf(v) : -1;
-                            const a = r >= 0 ? 1 - r / (vals.length - 1) : 0.5;
-                            const bg = a > 0.66
-                              ? `rgba(87,189,156,${(a - 0.5) * 0.75})`
-                              : a < 0.34
-                                ? `rgba(226,104,94,${(0.5 - a) * 0.75})`
-                                : 'transparent';
-                            return (
-                              <td key={row.dir} style={{ padding: 4 }}>
-                                <span
-                                  className="adm-dir-cell"
-                                  style={{ background: bg, fontWeight: row.dir === cur ? 600 : 400 }}
-                                >
-                                  {v ?? '—'}
-                                </span>
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
-                    <tr>
-                      <td style={{ fontWeight: 600 }}>Индекс дня</td>
-                      <td style={{ textAlign: 'center', fontWeight: 600 }}>
-                        {data.anketaBlocks?.forumIdx ?? '—'}
-                      </td>
-                      {(data.anketaBlocks?.rows ?? []).map(row => (
-                        <td
-                          key={row.dir}
-                          style={{
-                            textAlign: 'center',
-                            fontWeight: 600,
-                            color: (row.idx ?? 0) >= (data.anketaBlocks.forumIdx ?? 0)
-                              ? '#0f766e'
-                              : '#b91c1c',
-                          }}
-                        >
-                          {row.idx ?? '—'}
-                        </td>
-                      ))}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </DashCard>
-
-            <DashCard title="Карточки направлений по дням анкеты">
-              <div className="adm-dir-picker" style={{ marginTop: 0 }}>
-                {([
-                  ['fill', 'Заполняемость анкеты'],
-                  ['idx', 'Оценка дня'],
-                  ['crit', 'Оценок ниже 4'],
-                ] as const).map(([k, n]) => (
-                  <button
-                    key={k}
-                    type="button"
-                    className={`adm-dir-chip ${anketaMetric === k ? 'is-on' : ''}`}
-                    onClick={() => setAnketaMetric(k)}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <div className="adm-dir-anketa-cards">
-                {(data.anketaCards ?? []).map(card => {
-                  const unit = anketaMetric === 'idx' ? '' : '%';
-                  const fa = data.anketaForumByDay?.[String(selectedDay)]?.[anketaMetric]
-                    ?? data.anketaForumByDay?.[Object.keys(data.anketaForumByDay || {}).slice(-1)[0] || '']?.[anketaMetric];
-                  const days = Object.keys(card.byDay).map(Number).sort((a, b) => a - b);
-                  const last = days.length ? days[days.length - 1] : null;
-                  const first = days.length ? days[0] : null;
-                  const curV = last != null ? card.byDay[String(last)]?.[anketaMetric] : null;
-                  const firstV = first != null ? card.byDay[String(first)]?.[anketaMetric] : null;
-                  const better = curV != null && fa != null
-                    ? (anketaMetric === 'crit' ? curV <= fa : curV >= fa)
-                    : null;
-                  return (
-                    <div
-                      key={card.dir}
-                      className={`adm-dir-anketa-card ${card.dir === cur ? 'is-on' : ''}`}
-                    >
-                      <div className="adm-dir-anketa-card-t">{card.dir}</div>
-                      <div className="adm-dir-anketa-bars">
-                        {[1, 2, 3, 4, 5, 6, 7, 8].map(i => {
-                          const v = card.byDay[String(i)]?.[anketaMetric];
-                          if (v == null) {
-                            return <div key={i} className="adm-dir-anketa-bar is-empty" title={`День ${i}: нет`} />;
-                          }
-                          const rng = anketaMetric === 'idx' ? [4, 5] : anketaMetric === 'crit' ? [0, 25] : [0, 100];
-                          const norm = Math.max(0.12, Math.min(1, (v - rng[0]) / (rng[1] - rng[0])));
-                          const ok = fa == null
-                            ? true
-                            : (anketaMetric === 'crit' ? v <= fa : v >= fa);
-                          return (
-                            <div
-                              key={i}
-                              className={`adm-dir-anketa-bar ${ok ? 'is-ok' : 'is-bad'}`}
-                              style={{ height: Math.round(norm * 56) }}
-                              title={`День ${i}: ${v}${unit}`}
-                            />
-                          );
-                        })}
-                      </div>
-                      <div className="adm-dir-anketa-val">
-                        {curV == null ? '—' : `${curV}${unit}`}
-                        {firstV != null && curV != null && first != null && last != null && first !== last && (
-                          <span style={{
-                            marginLeft: 8,
-                            fontSize: 12.5,
-                            color: curV - firstV >= 0 ? '#0f766e' : '#b91c1c',
-                          }}>
-                            {curV - firstV >= 0 ? '▲' : '▼'} {Math.abs(curV - firstV).toFixed(1)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="adm-muted" style={{ fontSize: 11.5, marginTop: 5 }}>
-                        {days.length
-                          ? `день ${first}: ${firstV}${unit}${days.length > 1 ? ` → день ${last}` : ''}`
-                          : 'нет данных'}
-                        {fa != null && (
-                          <>
-                            <br />
-                            по форуму {fa}{unit}
-                            {better == null ? '' : (better ? ' · выше' : ' · ниже')}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="adm-day-results-callout">
-                Восемь столбиков — дни смены; пустой означает, что выгрузки нет.
-                Зелёный — выше форума, красный — ниже.
-              </p>
-            </DashCard>
-          </DayResultsSection>
-
-          <DayResultsSection
-            title="Сравнение направлений"
-            note="Цвет кодирует место в ряду, а не абсолют. Текущее направление подсвечено."
-          >
-            <DashCard>
-              {m?.smallNote && (
-                <p className="adm-muted" style={{ marginTop: 0, marginBottom: 12, fontSize: 12 }}>
-                  {m.smallNote}
-                </p>
-              )}
-              <div className="adm-day-results-scroll">
-                <table className="adm-day-results-table">
-                  <thead>
-                    <tr>
-                      <th>Направление</th>
-                      {data.matrix.keys.map(k => (
-                        <th key={k.key} style={{ textAlign: 'center', maxWidth: 72, whiteSpace: 'normal' }}>
-                          {k.name}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.matrix.rows.map(row => (
-                      <tr key={row.dir} className={row.dir === cur ? 'adm-dir-me' : undefined}>
-                        <td style={{ fontWeight: 600 }}>
-                          {row.dir}
-                          <div className="adm-muted" style={{ fontSize: 11 }}>{row.registered}</div>
-                        </td>
-                        {row.cells.map((c, i) => {
-                          const keyMeta = data.matrix.keys[i];
-                          return (
-                            <td key={c.key} style={{ padding: 4 }}>
-                              <span
-                                className="adm-dir-cell"
-                                style={{ background: cellBg(c.tone, keyMeta.up) }}
-                              >
-                                {c.v == null ? '—' : `${c.v}${keyMeta.unit}`}
-                              </span>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </DashCard>
-          </DayResultsSection>
-
+            </DayResultsSection>
+          )}
         </>
       )}
     </div>

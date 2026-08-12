@@ -3213,12 +3213,95 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 }
 
 /* Направление — сводный портрет */
+.adm-dir-layers {
+  display: flex;
+  gap: 4px;
+  margin: 12px 0 4px;
+  border-bottom: 1px solid var(--m-border);
+}
+.adm-dir-layer {
+  padding: 9px 16px;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--m-text-secondary);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+.adm-dir-layer:hover { color: var(--m-text); }
+.adm-dir-layer.is-on {
+  color: var(--m-text);
+  border-bottom-color: #e6ae4a;
+  font-weight: 600;
+}
 .adm-dir-picker {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
   margin: 8px 0 16px;
 }
+.adm-dir-row-me td { background: rgba(230, 174, 74, 0.09); }
+.adm-narr-card {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border-left: 2px solid #e6ae4a;
+  background: var(--m-surface);
+  border-radius: 0 10px 10px 0;
+}
+.adm-narr-card-head {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+.adm-narr-card-idx {
+  font-size: 11px;
+  color: var(--m-text-secondary);
+  min-width: 18px;
+  opacity: 0.7;
+}
+.adm-narr-card-h {
+  font-size: 14.5px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.adm-narr-card-p {
+  font-size: 13.5px;
+  color: var(--m-text-secondary);
+  line-height: 1.6;
+}
+.adm-narr-card-a {
+  margin-top: 10px;
+  font-size: 13px;
+  padding-left: 14px;
+  border-left: 2px solid #57bd9c;
+  color: var(--m-text-secondary);
+}
+.adm-narr-card-a-l {
+  color: #0f766e;
+  font-weight: 600;
+}
+.adm-narr-alert {
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(111, 125, 149, 0.25);
+}
+.adm-narr-alert:last-child { border-bottom: 0; }
+.adm-narr-alert-d {
+  font-size: 14px;
+  font-weight: 600;
+  color: #b45309;
+  margin-bottom: 4px;
+}
+.adm-narr-actions {
+  margin: 14px 0 0;
+  padding-left: 20px;
+  color: var(--m-text-secondary);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.adm-narr-actions li { margin: 6px 0; }
+.adm-hub-quotes-card { margin-top: 14px; }
 .adm-dir-chip {
   padding: 7px 14px;
   border: 1px solid var(--m-border);

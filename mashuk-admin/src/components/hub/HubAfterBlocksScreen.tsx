@@ -10,6 +10,8 @@ import {
   HBar,
   StackBar,
 } from './dayResultsUi';
+import { ConclusionCard } from './directionNarrative';
+import { afterBlocksNarr } from './hubNarrative';
 
 const LEVELS = ['Перенос в практику', 'Связь с собой', 'Тезис', 'Реакция'] as const;
 const LEVEL_COLORS: Record<string, string> = {
@@ -30,6 +32,9 @@ type AfterBlocksData = {
     medLen: number;
     subtopics: number;
     coveragePct: number;
+    transferPct?: number;
+    reactionPct?: number;
+    shortPct?: number;
   };
   levelDist: Array<{ name: string; n: number; med: number }>;
   events: Array<{
@@ -46,6 +51,7 @@ type AfterBlocksData = {
   quotes: Array<{
     lvl: string; text: string; event: string; subtopic: string; direction: string;
   }>;
+  quotesTotal?: number;
   daySeries: Array<{
     day: number; own: number | null; coveragePct: number | null; answers: number;
   }>;
@@ -72,6 +78,7 @@ export function HubAfterBlocksScreen() {
   const [qEvent, setQEvent] = useState('');
   const [qSub, setQSub] = useState('');
   const [qDir, setQDir] = useState('');
+  const [quoteLimit, setQuoteLimit] = useState(24);
 
   useEffect(() => {
     setLoading(true);
@@ -103,8 +110,28 @@ export function HubAfterBlocksScreen() {
       if (qSub && q.subtopic !== qSub) return false;
       if (qDir && q.direction !== qDir) return false;
       return true;
-    }).slice(0, 12);
+    });
   }, [data, qEvent, qSub, qDir]);
+
+  const visibleQuotes = filteredQuotes.slice(0, quoteLimit);
+
+  const takeawayConclusion = useMemo(() => {
+    if (!data) return null;
+    const transfer = data.levelDist.find(l => l.name === 'Перенос в практику')?.n ?? 0;
+    const reaction = data.levelDist.find(l => l.name === 'Реакция')?.n ?? 0;
+    const tot = data.meta.answers || 1;
+    return afterBlocksNarr({
+      answers: data.meta.answers,
+      people: data.meta.people,
+      coveragePct: data.meta.coveragePct,
+      own: data.meta.own,
+      medLen: data.meta.medLen,
+      transferPct: data.meta.transferPct ?? Math.round((transfer / tot) * 100),
+      reactionPct: data.meta.reactionPct ?? Math.round((reaction / tot) * 100),
+      shortPct: data.meta.shortPct ?? 0,
+      quotesN: data.quotesTotal ?? data.quotes.length,
+    });
+  }, [data]);
 
   return (
     <div className="adm-day-results">
@@ -421,23 +448,38 @@ export function HubAfterBlocksScreen() {
               </div>
               {filteredQuotes.length === 0 ? (
                 <p className="adm-muted">Нет цитат по выбранным фильтрам.</p>
-              ) : filteredQuotes.map((q, i) => (
-                <div
-                  key={`${i}-${q.text.slice(0, 24)}`}
-                  className="adm-state-quote"
-                  style={{ borderLeftColor: LEVEL_COLORS[q.lvl] || '#57bd9c' }}
-                >
-                  {q.text}
-                  <span className="adm-state-quote-m">
-                    {q.lvl} · {q.subtopic} · {q.direction}
-                  </span>
-                </div>
-              ))}
+              ) : (
+                <>
+                  {visibleQuotes.map((q, i) => (
+                    <div
+                      key={`${i}-${q.text.slice(0, 24)}`}
+                      className="adm-state-quote"
+                      style={{ borderLeftColor: LEVEL_COLORS[q.lvl] || '#57bd9c' }}
+                    >
+                      {q.text}
+                      <span className="adm-state-quote-m">
+                        {q.lvl} · {q.subtopic} · {q.direction}
+                      </span>
+                    </div>
+                  ))}
+                  {filteredQuotes.length > quoteLimit && (
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-ghost"
+                      style={{ marginTop: 10 }}
+                      onClick={() => setQuoteLimit(n => Math.min(n + 24, filteredQuotes.length))}
+                    >
+                      Показать ещё ({filteredQuotes.length - quoteLimit})
+                    </button>
+                  )}
+                </>
+              )}
               <div className="adm-day-results-callout" style={{ borderLeftColor: '#6f7d95' }}>
                 Ответы короче 60 знаков в ленту не попадают, но остаются в статистике.
                 Разметка словарная — на 5–7 % выборки стоит проверить вручную.
               </div>
             </DashCard>
+            {takeawayConclusion && <ConclusionCard c={takeawayConclusion} />}
           </DayResultsSection>
 
           <DayResultsSection

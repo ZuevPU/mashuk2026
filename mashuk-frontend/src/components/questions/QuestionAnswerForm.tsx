@@ -252,6 +252,7 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
 };
 
 const MIN_LESSON_REFLECTION_CHARS = 20;
+const MIN_STATE_REASON_CHARS = 15;
 
 function formatLessonTime(ev: { startTime?: string | null }) {
   if (!ev.startTime) return null;
@@ -781,13 +782,14 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
       switch (question.type) {
         case 'checkin': {
           const reason = stateReason.trim().slice(0, 500);
+          if (reason.length < MIN_STATE_REASON_CHARS) return;
           answerData = {
             emotion,
             energy,
             // Не подставляем «утро» по умолчанию — иначе дневные/вечерние
             // проверки в аналитике штаба уезжают в утренний столбец.
             ...(question.timePoint ? { timePoint: question.timePoint } : {}),
-            ...(reason ? { reason } : {}),
+            reason,
           };
           break;
         }
@@ -848,9 +850,14 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
             <Textarea
               value={stateReason}
               onChange={e => setStateReason(e.target.value.slice(0, 500))}
-              placeholder="Короткий комментарий (необязательно): урок, общение, усталость…"
+              placeholder="Короткий комментарий: урок, общение, усталость, быт…"
               rows={3}
             />
+            {stateReason.trim().length < MIN_STATE_REASON_CHARS && (
+              <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
+                Ещё минимум {MIN_STATE_REASON_CHARS - stateReason.trim().length} символов
+              </div>
+            )}
           </FormItem>
         </>
       )}
@@ -903,7 +910,16 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
         </>
       )}
 
-      <Button size="l" stretched disabled={saving || (question.type === 'checkin' && !emotion)} onClick={handleSubmit} style={{ marginTop: 16 }}>
+      <Button
+        size="l"
+        stretched
+        disabled={
+          saving
+          || (question.type === 'checkin' && (!emotion || stateReason.trim().length < MIN_STATE_REASON_CHARS))
+        }
+        onClick={handleSubmit}
+        style={{ marginTop: 16 }}
+      >
         Отправить ответ
       </Button>
     </Div>

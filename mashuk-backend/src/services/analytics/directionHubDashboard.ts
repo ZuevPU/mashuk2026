@@ -12,6 +12,7 @@ import {
   participantDayState,
 } from '../../db/schema.js';
 import {
+  CHECKIN_EMOTION_IDS,
   CHECKIN_EMOTION_LABELS,
   emotionIdToZone,
   type EmotionZoneKey,
@@ -240,18 +241,35 @@ function buildStateSlice(rows: KindAnswerRow[], registered: number) {
   });
 
   const emoMap = new Map<string, number>();
+  const emoPhaseMap = new Map<string, [number, number, number]>();
+  for (const id of CHECKIN_EMOTION_IDS) {
+    const label = CHECKIN_EMOTION_LABELS[id];
+    emoPhaseMap.set(label, [0, 0, 0]);
+  }
   for (const r of rows) {
     const id = (r.emotion || '').trim().toLowerCase();
     if (!id) continue;
     const label = CHECKIN_EMOTION_LABELS[id as keyof typeof CHECKIN_EMOTION_LABELS] || r.emotion!;
     emoMap.set(label, (emoMap.get(label) || 0) + 1);
+    const phase = resolvePhase(r);
+    const phaseIdx = PHASE_ORDER.indexOf(phase);
+    if (phaseIdx < 0) continue;
+    const cur = emoPhaseMap.get(label) ?? [0, 0, 0];
+    cur[phaseIdx] += 1;
+    emoPhaseMap.set(label, cur);
   }
   const emotions = [...emoMap.entries()]
     .map(([name, n]) => ({ name, n }))
     .sort((a, b) => b.n - a.n);
+  const emoPhase = [...emoPhaseMap.entries()]
+    .map(([emo, v]) => ({ emo, v }))
+    .filter(e => e.v.some(n => n > 0))
+    .sort((a, b) => (b.v[0]! + b.v[1]! + b.v[2]!) - (a.v[0]! + a.v[1]! + a.v[2]!));
 
   const reasons = rows.map(r => (r.answer || '').trim()).filter(Boolean);
+  const noText = Math.max(0, rows.length - reasons.length);
   const themes = countThemes(reasons).map(t => ({ name: t.name, n: t.n }));
+  if (noText > 0) themes.push({ name: 'Без пояснения', n: noText });
 
   return {
     n: rows.length,
@@ -260,7 +278,9 @@ function buildStateSlice(rows: KindAnswerRow[], registered: number) {
     neg,
     byPhase,
     emotions,
+    emoPhase,
     reasons: reasons.length,
+    noText,
     themes,
   };
 }
@@ -380,10 +400,16 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
     cohortIds.length
       ? db.select({
         id: participants.id,
+        pathPoints: participants.pathPoints,
         experiencePoints: participants.experiencePoints,
         lastActiveAt: participants.lastActiveAt,
       }).from(participants).where(inArray(participants.id, cohortIds))
-      : Promise.resolve([] as Array<{ id: number; experiencePoints: number | null; lastActiveAt: Date | null }>),
+      : Promise.resolve([] as Array<{
+        id: number;
+        pathPoints: number | null;
+        experiencePoints: number | null;
+        lastActiveAt: Date | null;
+      }>),
     cohortIds.length
       ? db.select({
         id: piggybank.id,
@@ -561,6 +587,8 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
       };
     });
     const pointsAvg = mean(actPeople.map(p => p.points)) ?? 0;
+    const pathAvg = round1(mean(dirPeople.map(p => scoreById.get(p.id)?.pathPoints ?? 0)) ?? 0);
+    const expAvg = round1(mean(actPeople.map(p => p.exp)) ?? 0);
     const exp0 = pct(actPeople.filter(p => p.exp <= 0).length, actPeople.length || 1);
     let today = 0;
     let old = 0;
@@ -634,6 +662,8 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
       act: {
         n: actPeople.length,
         points: round1(pointsAvg),
+        path: pathAvg,
+        exp: expAvg,
         exp0,
         today: pct(today, actPeople.length || 1),
         old,
@@ -905,6 +935,113 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
   const palette = ['#e6ae4a', '#79b8c9', '#57bd9c', '#e2685e', '#c98fb0', '#8fb98a', '#b0a0d0', '#6f7d95'];
   dirs.forEach((d, i) => { dirColors[d] = palette[i % palette.length]; });
 
+  /** Слой сравнения направлений для штаба (narrative + матрицы). */
+  const overview = dirs.map(d => {
+    const s = byDir[d];
+    const reg = regByDir.get(d) || 0;
+    const morn = s.state.byPhase.find(p => p.phaseKey === 'morning');
+    const dayP = s.state.byPhase.find(p => p.phaseKey === 'day');
+    const topEmo = (() => {
+      const dayIdx = 1;
+      let best: { emo: string; n: number } | null = null;
+      for (const e of s.state.emoPhase) {
+        const n = e.v[dayIdx] ?? 0;
+        if (!best || n > best.n) best = { emo: e.emo, n };
+      }
+      return best?.n ? best.emo : (s.state.emotions[0]?.name ?? null);
+    })();
+    // fbDist ≈ HTML: [эмоц+, пустые, содержательные, сложность]
+    const dist = s.refl.dist;
+    const fbDist = [
+      dist[1] ?? 0, // Связь с собой
+      (dist[2] ?? 0) + (dist[3] ?? 0), // Тезис + Реакция
+      dist[0] ?? 0, // Перенос в практику
+      0,
+    ];
+    const kopSorted = [...s.kop.tags].filter(t => t.n > 0).sort((a, b) => b.n - a.n);
+    const kopTop = kopSorted[0]?.tag ?? null;
+    const unmarked = s.exch.cats.find(c => c.name === 'Не размечено')?.n ?? 0;
+    const qOther = s.exch.q ? pct(unmarked, s.exch.q) : 0;
+    return {
+      dir: d,
+      reg,
+      state: s.state.n,
+      fb: s.refl.n,
+      kop: s.kop.n,
+      q: s.exch.q,
+      ans: s.exch.a,
+      eMorn: morn?.energy ?? null,
+      eDay: dayP?.energy ?? null,
+      negDay: dayP?.neg ?? s.state.neg,
+      topEmoDay: topEmo,
+      points: s.act.points,
+      path: s.act.path,
+      exp: s.act.exp,
+      fbDist,
+      kopTop,
+      kopTopN: kopSorted[0]?.n ?? 0,
+      qOther,
+    };
+  });
+
+  const stateCmp = dirs.map(d => {
+    const s = byDir[d];
+    const morn = s.state.byPhase.find(p => p.phaseKey === 'morning');
+    const dayP = s.state.byPhase.find(p => p.phaseKey === 'day');
+    const topDay = overview.find(o => o.dir === d)?.topEmoDay ?? null;
+    return {
+      dir: d,
+      m: morn?.energy ?? null,
+      d: dayP?.energy ?? null,
+      neg: dayP?.neg ?? s.state.neg,
+      emo: topDay,
+    };
+  });
+
+  const actCmp = dirs.map(d => {
+    const s = byDir[d];
+    return {
+      dir: d,
+      n: regByDir.get(d) || 0,
+      path: s.act.path,
+      exp: s.act.exp,
+      pts: s.act.points,
+    };
+  });
+
+  const forumFbDist = overview.reduce(
+    (acc, r) => acc.map((v, i) => v + (r.fbDist[i] ?? 0)),
+    [0, 0, 0, 0],
+  );
+  const forumNegDay = (() => {
+    const dayP = forum.state.byPhase.find(p => p.phaseKey === 'day');
+    return dayP?.neg ?? forum.state.neg;
+  })();
+
+  const forumLayer = {
+    overview,
+    stateCmp,
+    actCmp,
+    forum: {
+      reg: people.length,
+      state: forum.state.n,
+      fb: forum.refl.n,
+      kop: forum.kop.n,
+      q: forum.exch.q,
+      fbDist: forumFbDist,
+      negDay: forumNegDay,
+      points: forum.act.points,
+      path: forum.act.path,
+      exp: forum.act.exp,
+    },
+    fbCats: [
+      'Эмоционально-положительный',
+      'Нейтральный / несодержательный',
+      'Содержательный по работе',
+      'Сложность / требует внимания',
+    ] as const,
+  };
+
   return {
     filters: { ...filters, day },
     currentForumDay: currentDay,
@@ -982,6 +1119,7 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
     anketaCards,
     anketaForumByDay,
     dirColors,
+    forumLayer,
     exportPath: selectedDir
       ? `/exports/direction?format=xlsx&direction=${encodeURIComponent(selectedDir)}&day=${day}`
       : undefined,

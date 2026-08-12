@@ -265,12 +265,15 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
   const themesPos = countThemes(posReasons);
   const quotes = negReasons
     .filter(r => !r.psycho)
-    .slice(0, 8)
+    .sort((a, b) => b.text.length - a.text.length)
+    .slice(0, 60)
     .map(r => ({
-      text: r.text,
+      text: r.text.slice(0, 400),
       meta: `${r.phase} · ${r.zone} · ${r.dir}`,
     }));
   const psychoCount = negReasons.filter(r => r.psycho).length;
+  const reasonCoveragePct = pct(reasonsAll.length, answers || 1);
+  const noReasonPct = pct(Math.max(0, answers - reasonsAll.length), answers || 1);
 
   // Energy
   const energies = rows
@@ -352,6 +355,8 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
       prevNeg,
       psychoCount,
       coveragePct: pct(participantIds.size, registered.length),
+      reasonCoveragePct,
+      noReasonPct,
     },
     zones,
     phaseCov,
@@ -366,6 +371,7 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
     negCount: negReasons.filter(r => !r.psycho).length,
     posCount: posReasons.length,
     quotes,
+    quotesTotal: negReasons.filter(r => !r.psycho).length,
     transition,
     coverage,
     daySeries,

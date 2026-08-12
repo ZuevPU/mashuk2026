@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useInsights } from '../insights/InsightsContext';
 import { DashCard, DashScreenTitle } from '../analytics/dashboardUi';
 import { EmotionDynamicsPanel } from '../analytics/EmotionDynamicsPanel';
@@ -13,6 +13,8 @@ import {
   HBar,
   lowTone,
 } from './dayResultsUi';
+import { ConclusionCard } from './directionNarrative';
+import { stateNarr } from './hubNarrative';
 
 const ZONE_COLORS: Record<string, string> = {
   'Подъём': '#57bd9c',
@@ -35,6 +37,8 @@ type StateData = {
     prevNeg: number | null;
     psychoCount: number;
     coveragePct: number;
+    reasonCoveragePct?: number;
+    noReasonPct?: number;
   };
   zones: string[];
   zoneByPhase: Array<{
@@ -57,6 +61,7 @@ type StateData = {
   themesPos: Array<{ name: string; n: number }>;
   negCount: number;
   quotes: Array<{ text: string; meta: string }>;
+  quotesTotal?: number;
   energyHist: Array<{ v: number; n: number }>;
   energyMedian: number | null;
   transition: { n: number; m: number[][] };
@@ -103,6 +108,7 @@ export function HubStateScreen() {
   const [data, setData] = useState<StateData | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [quoteLimit, setQuoteLimit] = useState(24);
 
   useEffect(() => {
     setLoading(true);
@@ -126,6 +132,22 @@ export function HubStateScreen() {
   const allForum = isAllForumDay(forumDay);
   const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);
   const m = data?.meta;
+
+  const reasonConclusion = useMemo(() => {
+    if (!data || !m) return null;
+    return stateNarr({
+      answers: m.answers,
+      reasons: m.reasons,
+      reasonCoveragePct: m.reasonCoveragePct
+        ?? (m.answers ? Math.round((m.reasons / m.answers) * 100) : 0),
+      noReasonPct: m.noReasonPct
+        ?? (m.answers ? Math.round(((m.answers - m.reasons) / m.answers) * 100) : 0),
+      currentNeg: m.currentNeg,
+      negCount: data.negCount,
+      themesNeg: data.themesNeg,
+      psychoCount: m.psychoCount,
+    });
+  }, [data, m]);
 
   return (
     <div className="adm-day-results">
@@ -325,48 +347,62 @@ export function HubStateScreen() {
 
           <DayResultsSection
             title="Причины"
-            note="Темы негатива и дословные цитаты только из зон «Риск» и «Усталость». Имена скрыты."
+            note="Темы негатива и дословные цитаты из зон «Риск» и «Усталость». Имена скрыты."
           >
-            <div className="adm-dash-grid adm-dash-grid-2">
-              <DashCard title={`Темы негативных причин · ${data.negCount}`}>
-                {data.themesNeg.length === 0 ? (
-                  <p className="adm-muted">Нет размеченных тем.</p>
-                ) : (
-                  (() => {
-                    const mx = Math.max(...data.themesNeg.map(x => x.n), 1);
-                    return data.themesNeg.map(x => (
-                      <div key={x.name} className="adm-day-results-row">
-                        <div>
-                          <div className="adm-day-results-lb">{x.name}</div>
-                          <HBar
-                            widthPct={(x.n / mx) * 100}
-                            color={x.n / mx > 0.5 ? '#e2685e' : '#e6ae4a'}
-                          />
-                        </div>
-                        <div className="adm-day-results-nb">{x.n}</div>
+            <DashCard title={`Темы негативных причин · ${data.negCount}`}>
+              {data.themesNeg.length === 0 ? (
+                <p className="adm-muted">Нет размеченных тем.</p>
+              ) : (
+                (() => {
+                  const mx = Math.max(...data.themesNeg.map(x => x.n), 1);
+                  return data.themesNeg.map(x => (
+                    <div key={x.name} className="adm-day-results-row">
+                      <div>
+                        <div className="adm-day-results-lb">{x.name}</div>
+                        <HBar
+                          widthPct={(x.n / mx) * 100}
+                          color={x.n / mx > 0.5 ? '#e2685e' : '#e6ae4a'}
+                        />
                       </div>
-                    ));
-                  })()
-                )}
-                {m.psychoCount > 0 && (
-                  <p className="adm-day-results-callout">
-                    {m.psychoCount} ответов помечены как внешние/личные — не в общей ленте.
-                  </p>
-                )}
-              </DashCard>
-              <DashCard title="Что штаб видит дословно">
-                {data.quotes.length === 0 ? (
-                  <p className="adm-muted">Нет цитат из минуса.</p>
-                ) : (
-                  data.quotes.map((q, i) => (
+                      <div className="adm-day-results-nb">{x.n}</div>
+                    </div>
+                  ));
+                })()
+              )}
+              {m.psychoCount > 0 && (
+                <p className="adm-day-results-callout">
+                  {m.psychoCount} ответов помечены как внешние/личные — не в общей ленте.
+                </p>
+              )}
+            </DashCard>
+            <DashCard
+              title={`Комментарии участников · ${data.quotesTotal ?? data.quotes.length}`}
+              className="adm-hub-quotes-card"
+            >
+              {data.quotes.length === 0 ? (
+                <p className="adm-muted">Нет цитат из минуса.</p>
+              ) : (
+                <>
+                  {data.quotes.slice(0, quoteLimit).map((q, i) => (
                     <div key={i} className="adm-state-quote">
                       {q.text}
                       <span className="adm-state-quote-m">{q.meta}</span>
                     </div>
-                  ))
-                )}
-              </DashCard>
-            </div>
+                  ))}
+                  {data.quotes.length > quoteLimit && (
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-ghost"
+                      style={{ marginTop: 10 }}
+                      onClick={() => setQuoteLimit(n => Math.min(n + 24, data.quotes.length))}
+                    >
+                      Показать ещё ({data.quotes.length - quoteLimit})
+                    </button>
+                  )}
+                </>
+              )}
+            </DashCard>
+            {reasonConclusion && <ConclusionCard c={reasonConclusion} />}
           </DayResultsSection>
 
           <DayResultsSection

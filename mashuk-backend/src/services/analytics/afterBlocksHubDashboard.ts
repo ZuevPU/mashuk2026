@@ -168,18 +168,21 @@ function buildSlice(
     };
   }).filter(t => t.n > 0);
 
-  // Quotes: appropriation, len > 60
-  const quotes = items
+  // Quotes: appropriation, len > 60 — штаб читает до ~60 сильных формулировок
+  const quotePool = items
     .filter(i => isAppropriation(i.level) && i.len > 60)
-    .sort((a, b) => b.len - a.len)
-    .slice(0, 40)
-    .map(i => ({
-      lvl: i.level,
-      text: i.row.answer.trim().slice(0, 320),
-      event: i.event,
-      subtopic: i.subtopic,
-      direction: i.row.direction,
-    }));
+    .sort((a, b) => b.len - a.len);
+  const quotes = quotePool.slice(0, 60).map(i => ({
+    lvl: i.level,
+    text: i.row.answer.trim().slice(0, 320),
+    event: i.event,
+    subtopic: i.subtopic,
+    direction: i.row.direction,
+  }));
+
+  const transferN = levelDist.find(l => l.name === 'Перенос в практику')?.n ?? 0;
+  const reactionN = levelDist.find(l => l.name === 'Реакция')?.n ?? 0;
+  const shortN = items.filter(i => i.len > 0 && i.len < 40).length;
 
   return {
     meta: {
@@ -190,6 +193,9 @@ function buildSlice(
       medLen,
       subtopics: subtopics.length,
       coveragePct: round1((peopleIds.size / Math.max(1, registered)) * 100),
+      transferPct: items.length ? round1((transferN / items.length) * 100) : 0,
+      reactionPct: items.length ? round1((reactionN / items.length) * 100) : 0,
+      shortPct: items.length ? round1((shortN / items.length) * 100) : 0,
     },
     levelDist,
     events,
@@ -197,6 +203,7 @@ function buildSlice(
     dirs,
     byTime,
     quotes,
+    quotesTotal: quotePool.length,
   };
 }
 
@@ -248,6 +255,7 @@ export async function buildAfterBlocksHubDashboard(filters: AnalyticsFilters, re
     dirs: slice.dirs,
     byTime: slice.byTime,
     quotes: slice.quotes,
+    quotesTotal: slice.quotesTotal,
     daySeries,
     exportPath: `/exports/after-blocks?mode=day&day=${day}`,
   };

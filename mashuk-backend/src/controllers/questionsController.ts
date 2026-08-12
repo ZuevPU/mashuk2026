@@ -561,8 +561,17 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
     if (question.type === 'checkin' && answerData && typeof answerData === 'object') {
       const emo = String((answerData as { emotion?: string }).emotion || '');
       const zone = emotionIdToZone(emo);
+      const reasonRaw = (answerData as { reason?: unknown }).reason;
+      const reason = typeof reasonRaw === 'string' ? reasonRaw.trim() : '';
+      if (reason.length < 15) {
+        res.status(400).json({
+          error: 'Напишите короткий комментарий, с чем связано состояние (хотя бы пару слов)',
+        });
+        return;
+      }
       normalizedAnswer = {
         ...answerData,
+        reason: reason.slice(0, 500),
         emotionZone: zone,
         emotionZoneLabel: zone ? EMOTION_ZONE_LABELS[zone] : null,
       };
