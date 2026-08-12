@@ -15,6 +15,8 @@ import { buildEveningDaySeries, forumSeriesDays } from './dayComparison.js';
 import { buildPracticeRecommendNps } from './practiceRecommendNps.js';
 import { pickPreferredScaleFields } from './dayResultsMetrics.js';
 import { EVENING_SCALE_KEYS } from '../touchpointTemplates.js';
+import { buildGoalProgressByDirection } from './goalProgressByDirection.js';
+import { buildGoalRestateDay5 } from './goalRestateDay5.js';
 
 /** Эти поля сворачиваем в таблицу NPS по практикам — не дублируем графиком. */
 const PRACTICE_NPS_FIELD_KEYS = new Set(['recommendYes', 'recommendScore', 'practiceEvent', 'practiceName']);
@@ -257,6 +259,11 @@ export async function buildEveningDashboard(
     submittedRows.map(r => r.ratings as Record<string, unknown>),
   );
 
+  const goalProgressByDirection = buildGoalProgressByDirection(fields, submittedRows);
+  const goalRestateDay5 = (dayFilter == null || dayFilter === 5)
+    ? buildGoalRestateDay5(fields, seriesSubmittedRows.filter(r => r.dayNumber === 5))
+    : null;
+
   const scaleFieldsRaw = fields.filter(
     f => (f.type === 'scale_1_5' || f.type === 'scale_1_10') && !isPracticeNpsField(f),
   );
@@ -417,6 +424,8 @@ export async function buildEveningDashboard(
     byDirection,
     questions,
     practiceRecommendNps,
+    goalProgressByDirection,
+    goalRestateDay5,
     scaleAverages,
     scaleOverallAvg,
     scaleByDay,

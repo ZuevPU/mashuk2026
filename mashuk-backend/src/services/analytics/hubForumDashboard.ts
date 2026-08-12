@@ -216,6 +216,8 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
     scaleByDay: eveningRaw.scaleByDay,
     scaleByDirectionDay: eveningRaw.scaleByDirectionDay,
     practiceRecommendNps: eveningRaw.practiceRecommendNps,
+    goalProgressByDirection: eveningRaw.goalProgressByDirection ?? null,
+    goalRestateDay5: eveningRaw.goalRestateDay5 ?? null,
   };
 
   const afterBlocks = {

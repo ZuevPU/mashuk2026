@@ -26,6 +26,8 @@ import { DayComparisonPanel, PULSE_DAY_METRICS } from '../analytics/DayCompariso
 import { EnergyAverages } from '../analytics/EnergyAverages';
 import { EveningScaleAverages } from '../analytics/EveningScaleAverages';
 import { PracticeRecommendNpsTable } from '../analytics/PracticeRecommendNpsTable';
+import { GoalProgressByDirectionChart } from './GoalProgressByDirectionChart';
+import { GoalRestateDay5Panel } from './GoalRestateDay5Panel';
 import { ExchangeAnalyticsPanel } from '../analytics/ExchangeAnalyticsPanel';
 import { TouchpointCoveragePanel } from '../analytics/TouchpointCoveragePanel';
 import { HubKpiRow } from './HubKpiRow';
@@ -351,6 +353,21 @@ export function HubForumScreen({
     onLensChange('direction');
   };
 
+  const goalRestate = data?.evening?.goalRestateDay5 as {
+    answered?: number;
+    themes?: unknown[];
+  } | null | undefined;
+  const showGoalRestate = Boolean(goalRestate)
+    && (allForum || selectedDay === 5)
+    && ((goalRestate?.answered ?? 0) > 0 || (goalRestate?.themes?.length ?? 0) > 0);
+  const forumNav = useMemo(() => {
+    if (!showGoalRestate) return FORUM_NAV;
+    const items = [...FORUM_NAV];
+    const i = items.findIndex(x => x.id === 'forum-evening');
+    items.splice(i >= 0 ? i + 1 : items.length, 0, { id: 'forum-goal-restate', label: 'Цель D5' });
+    return items;
+  }, [showGoalRestate]);
+
   const statusBar = (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 4 }}>
       <span className="adm-muted" style={{ fontSize: 12 }}>
@@ -396,7 +413,7 @@ export function HubForumScreen({
   const pulse = data.pulse?.emotionalPulse ?? {};
 
   return (
-    <HubLensLayout items={FORUM_NAV} navLabel="Разделы форума" className="adm-dash-stack">
+    <HubLensLayout items={forumNav} navLabel="Разделы форума" className="adm-dash-stack">
         <DashScreenTitle
           title="Штаб · Форум"
           hint={dayHintFull}
@@ -733,12 +750,28 @@ export function HubForumScreen({
             byDay={data.evening?.scaleByDay}
             byDirectionDay={data.evening?.scaleByDirectionDay}
           />
+          <GoalProgressByDirectionChart
+            data={data.evening?.goalProgressByDirection}
+            onOpenDirection={openDirection}
+          />
           <PracticeRecommendNpsTable
             data={data.evening?.practiceRecommendNps}
             title="Готов ли рекомендовать эту практику коллегам?"
           />
           </DeferMount>
         </section>
+
+        {showGoalRestate && (
+          <section id="forum-goal-restate" className="adm-forum-anchor">
+            <SectionLabel>Уточнённая цель · день 5</SectionLabel>
+            <DeferMount minHeight={420}>
+              <GoalRestateDay5Panel
+                data={data.evening?.goalRestateDay5}
+                onOpenDirection={openDirection}
+              />
+            </DeferMount>
+          </section>
+        )}
 
         <section id="forum-after" className="adm-forum-anchor">
           <SectionLabel>После блоков · сводка</SectionLabel>
