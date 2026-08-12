@@ -1,13 +1,32 @@
 import { useCallback, useEffect, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
 import { label } from '../../labels/ru';
+import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
 import { RichHtmlEditor } from '../admin/RichHtmlEditor';
 import { htmlToPlain } from '../admin/RichFormatToolbar';
+import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
 import { EveningQuestionnaireBuilder } from './EveningQuestionnaireBuilder';
 import { ProfilePdfSettings } from './ProfilePdfSettings';
 import { OrgThreadsSection } from './OrgThreadsSection';
 import { SECTIONS } from './types';
+
+const FORUM_SETTINGS_NAV: HubNavItem[] = [
+  { id: 'forum-cfg-day', label: 'День' },
+  { id: 'forum-cfg-calendar', label: 'Календарь' },
+  { id: 'forum-cfg-kb', label: 'База знаний' },
+  { id: 'forum-cfg-groups', label: 'Группы' },
+  { id: 'forum-cfg-focus', label: 'Фокус дня' },
+  { id: 'forum-cfg-evening', label: 'Анкета' },
+  { id: 'forum-cfg-menu', label: 'Меню' },
+  { id: 'forum-cfg-pdf', label: 'Профиль' },
+  { id: 'forum-cfg-consents', label: 'Согласия' },
+];
+
+const FORUM_ORG_NAV: HubNavItem[] = [
+  { id: 'forum-cfg-org', label: 'Обращения' },
+];
+
 
 function plainFocusToHtml(text: string): string {
   if (!text.trim()) return '';
@@ -225,49 +244,69 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   );
 
   return (
-    <div className="adm-forum">
-      <div className="adm-seg" style={{ marginBottom: 12 }}>
-        <button type="button" className={forumSegment === 'settings' ? 'on' : ''} onClick={() => setForumSegment('settings')}>
+    <HubLensLayout
+      className="adm-forum adm-kb"
+      items={forumSegment === 'settings' ? FORUM_SETTINGS_NAV : FORUM_ORG_NAV}
+      navLabel={forumSegment === 'settings' ? 'Разделы форума' : 'Обращения'}
+    >
+      <div className="adm-forum-seg" role="tablist" aria-label="Разделы вкладки Форум">
+        <button
+          type="button"
+          role="tab"
+          className={forumSegment === 'settings' ? 'on' : ''}
+          aria-selected={forumSegment === 'settings'}
+          onClick={() => setForumSegment('settings')}
+        >
           Настройки форума
         </button>
-        <button type="button" className={forumSegment === 'org' ? 'on' : ''} onClick={() => setForumSegment('org')}>
+        <button
+          type="button"
+          role="tab"
+          className={forumSegment === 'org' ? 'on' : ''}
+          aria-selected={forumSegment === 'org'}
+          onClick={() => setForumSegment('org')}
+        >
           Обращения к организаторам
         </button>
       </div>
 
       {forumSegment === 'org' && (
-        <OrgThreadsSection adminFetch={adminFetch} act={act} reloadKey={reloadKey} />
+        <section id="forum-cfg-org" className="adm-forum-anchor">
+          <OrgThreadsSection adminFetch={adminFetch} act={act} reloadKey={reloadKey} />
+        </section>
       )}
 
       {forumSegment === 'settings' && (
       <>
-      <div className="adm-forum-hero card">
-        <h2 className="adm-forum-hero-title">
-          Сейчас для участников: <span className="adm-forum-accent">день {currentDay}</span> из {totalDays}
-        </h2>
-        <p className="adm-forum-hint">
-          От этого зависят главная, программа, touchpoints и публикация расписания. Переключите день — участники увидят контент этого дня (если он опубликован).
-        </p>
-        <div className="adm-seg adm-forum-day-seg">
-          {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
-            <button
-              key={d}
-              type="button"
-              className={currentDay === d ? 'on' : ''}
-              onClick={() => saveForumSettings({ currentDay: d })}
-            >
-              День {d}
-            </button>
-          ))}
-        </div>
-      </div>
+      <section id="forum-cfg-day" className="adm-forum-anchor">
+        <AdminPageHero
+          title={`Сейчас для участников: день ${currentDay} из ${totalDays}`}
+          hint="От этого зависят главная, программа, touchpoints и публикация расписания. Переключите день — участники увидят контент этого дня (если он опубликован)."
+        >
+          <div className="adm-seg adm-forum-day-seg">
+            {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
+              <button
+                key={d}
+                type="button"
+                className={currentDay === d ? 'on' : ''}
+                onClick={() => saveForumSettings({ currentDay: d })}
+              >
+                День {d}
+              </button>
+            ))}
+          </div>
+        </AdminPageHero>
+      </section>
 
-      <div className="card adm-forum-block">
-        <h3>Календарь и публикация программы</h3>
-        <p className="adm-forum-hint">
-          Расписание вбиваете во вкладке «Программа» заранее. Участники видят день <strong>только после публикации</strong> здесь
-          (или кнопкой «Опубликовать день» в Программе). Неопубликованные дни в приложении пустые.
-        </p>
+      <section id="forum-cfg-calendar" className="adm-forum-anchor">
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Календарь и публикация программы</h3>
+          <p className="adm-kb-panel-sub">
+            Расписание вбиваете во вкладке «Программа» заранее. Участники видят день только после публикации здесь
+            (или кнопкой «Опубликовать день» в Программе). Неопубликованные дни в приложении пустые.
+          </p>
+        </div>
         <div className="adm-forum-grid-2">
           <label className="adm-field">
             <span className="adm-label">Всего дней форума</span>
@@ -401,10 +440,16 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           </table>
         )}
       </div>
+      </section>
 
-      <div className="card adm-forum-block">
-        <h3>База знаний</h3>
-        <p className="adm-forum-hint">Сколько точек осмысления нужно, чтобы открыть материалы дня. Разблокировка одному участнику — вкладка «База знаний».</p>
+      <section id="forum-cfg-kb" className="adm-forum-anchor">
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>База знаний</h3>
+          <p className="adm-kb-panel-sub">
+            Сколько точек осмысления нужно, чтобы открыть материалы дня. Разблокировка одному участнику — вкладка «База знаний».
+          </p>
+        </div>
         <div className="adm-forum-grid-2">
           <label className="adm-field">
             <span className="adm-label">Порог touchpoints (обычно 4)</span>
@@ -446,14 +491,18 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           Сохранить порог базы знаний
         </button>
       </div>
+      </section>
 
-      <div className="card adm-forum-block">
-        <h3>Группы при регистрации</h3>
-        <p className="adm-forum-hint">
-          Рабочие группы на смене: участник выбирает или система назначает автоматически.
-          Столбец «Направление» принудительно задаёт направление всем участникам группы
-          (даже если при регистрации выбрали другое).
-        </p>
+      <section id="forum-cfg-groups" className="adm-forum-anchor">
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Группы при регистрации</h3>
+          <p className="adm-kb-panel-sub">
+            Рабочие группы на смене: участник выбирает или система назначает автоматически.
+            Столбец «Направление» принудительно задаёт направление всем участникам группы
+            (даже если при регистрации выбрали другое).
+          </p>
+        </div>
         <label className="adm-field">
           <span className="adm-label">Режим</span>
           <select
@@ -704,10 +753,14 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           </tbody>
         </table>
       </div>
+      </section>
 
-      <div className="card adm-forum-block">
-        <h3>Фокус дня на главной</h3>
-        <p className="adm-forum-hint">Текст на главном экране участника: заголовок, ключевой вопрос, пояснение.</p>
+      <section id="forum-cfg-focus" className="adm-forum-anchor">
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Фокус дня на главной</h3>
+          <p className="adm-kb-panel-sub">Текст на главном экране участника: заголовок, ключевой вопрос, пояснение.</p>
+        </div>
         <div className="adm-forum-day-chips">
           {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
             <button
@@ -758,8 +811,10 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         )}
         <button type="button" className="adm-btn adm-btn-primary" onClick={saveDayFocus}>Сохранить фокус</button>
       </div>
+      </section>
 
-      <div className="card adm-forum-block">
+      <section id="forum-cfg-evening" className="adm-forum-anchor">
+      <div className="card adm-forum-block adm-kb-panel">
         <EveningQuestionnaireBuilder
           adminFetch={adminFetch}
           act={act}
@@ -767,10 +822,14 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           directions={directions.map((d: { id: number; name: string }) => ({ id: d.id, name: d.name }))}
         />
       </div>
+      </section>
 
-      <div className="card adm-forum-block">
-        <h3>Меню участника</h3>
-        <p className="adm-forum-hint">Какие разделы видны в нижней навигации мини-приложения.</p>
+      <section id="forum-cfg-menu" className="adm-forum-anchor">
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Меню участника</h3>
+          <p className="adm-kb-panel-sub">Какие разделы видны в нижней навигации мини-приложения.</p>
+        </div>
         {SECTIONS.map(s => (
           <label key={s} className="adm-forum-check" style={{ display: 'block', marginBottom: 6 }}>
             <input
@@ -785,8 +844,10 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           Сохранить меню
         </button>
       </div>
+      </section>
 
-      <div className="card adm-forum-block">
+      <section id="forum-cfg-pdf" className="adm-forum-anchor">
+      <div className="card adm-forum-block adm-kb-panel">
         <ProfilePdfSettings
           adminFetch={adminFetch}
           act={act}
@@ -794,10 +855,14 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           onShiftLabelSave={lbl => setForumSettings((s: any) => ({ ...s, shiftLabel: lbl }))}
         />
       </div>
+      </section>
 
-      <div className="card adm-forum-block">
-        <h3>Согласия (ПД и аналитика)</h3>
-        <p className="adm-forum-hint">Тексты при первом входе. Активная версия показывается новым участникам.</p>
+      <section id="forum-cfg-consents" className="adm-forum-anchor">
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Согласия (ПД и аналитика)</h3>
+          <p className="adm-kb-panel-sub">Тексты при первом входе. Активная версия показывается новым участникам.</p>
+        </div>
         <div className="form-row">
           <select value={newConsent.kind} onChange={e => setNewConsent({ ...newConsent, kind: e.target.value })}>
             <option value="pd">Персональные данные</option>
@@ -849,8 +914,9 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           </div>
         ))}
       </div>
+      </section>
       </>
       )}
-    </div>
+    </HubLensLayout>
   );
 }

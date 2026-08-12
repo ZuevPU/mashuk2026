@@ -7,9 +7,13 @@ type Props = Pick<AdminTabProps, 'adminFetch' | 'act' | 'reloadKey'> & {
 
 export function OrgThreadsSection({ adminFetch, act, reloadKey, onOpenCard }: Props) {
   return (
-    <div className="card adm-forum-block">
-      <h3>Обращения к организаторам / дирекции</h3>
-      <p className="adm-forum-hint">Все обращения в таблице: ответ с уведомлением, удаление, сортировка и карточка по клику на вопрос.</p>
+    <div className="card adm-forum-block adm-kb-panel">
+      <div className="adm-kb-panel-head">
+        <h3>Обращения к организаторам / дирекции</h3>
+        <p className="adm-kb-panel-sub">
+          Все обращения в таблице: ответ с уведомлением, удаление, сортировка и карточка по клику на вопрос.
+        </p>
+      </div>
       <OrgDirectorPanel
         adminFetch={adminFetch}
         act={act}

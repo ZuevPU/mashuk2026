@@ -101,10 +101,12 @@ export function ProfilePdfSettings({ adminFetch, act, forumShiftLabel, onShiftLa
 
   return (
     <div className="adm-forum-block">
-      <h3>Профиль и итоговый PDF</h3>
-      <p className="adm-forum-hint">
-        Прогресс «Точка A → B» на главной и тексты подсказок в профиле. PDF использует название смены и эти веса.
-      </p>
+      <div className="adm-kb-panel-head">
+        <h3>Профиль и итоговый PDF</h3>
+        <p className="adm-kb-panel-sub">
+          Прогресс «Точка A → B» на главной и тексты подсказок в профиле. PDF использует название смены и эти веса.
+        </p>
+      </div>
       <label className="adm-field">
         <span className="adm-label">Название смены в PDF</span>
         <input
