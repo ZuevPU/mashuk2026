@@ -4,6 +4,7 @@ import { questions } from '../db/schema.js';
 import { TOUCHPOINT_SLOTS, type TouchpointSlot } from './touchpointTemplates.js';
 import { questionMatchesDay } from './questionAdminHelpers.js';
 import { getQuestionAccess } from './questionEligibility.js';
+import { lessonSlotIndexForQuestion } from './lessonSlotEvents.js';
 
 export const TOUCHPOINT_BLOCKS = new Set(['Проверка состояния', 'Точки осмысления', 'Итоги дня']);
 
@@ -44,18 +45,15 @@ export function questionMatchesTouchpointSlot(
 
   if (slot.block === 'Точки осмысления') {
     if (!isSenseMakingQuestion(q)) return false;
-    const title = (q.title || '').toLowerCase();
+    const lessonSlot = lessonSlotIndexForQuestion(q);
     if (slot.title === 'Осмысление по направлению') {
-      if (title.includes('осмысление урока') || title.includes('слот')) return false;
+      // Не путать с «Уроки о важном» / «Открытые уроки» (в т.ч. «Осмысление Уроков…»).
+      if (lessonSlot != null) return false;
       return (q.timePoint || '').trim() === slot.timePoint;
     }
     if (slot.title.startsWith('Осмысление урока')) {
-      if (slot.title.includes('слот 1')) {
-        return title.includes('слот 1')
-          || (title.includes('осмысление урока') && !title.includes('слот 2'));
-      }
-      return title.includes('слот 2')
-        || ((q.timePoint || '').trim() === 'вечер' && title.includes('осмысление') && !title.includes('слот 1'));
+      if (slot.title.includes('слот 1')) return lessonSlot === 4;
+      return lessonSlot === 5;
     }
   }
 

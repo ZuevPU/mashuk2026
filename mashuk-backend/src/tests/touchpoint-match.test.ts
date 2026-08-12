@@ -86,6 +86,48 @@ describe('touchpoint slot matching', () => {
     assert.equal(questionMatchesTouchpointSlot(q, directionSlot), true);
   });
 
+  it('maps admin titles «Уроки о важном» / «Открытые уроки» to lesson slots', () => {
+    const importantSlot = TOUCHPOINT_SLOTS.find(s => s.title.includes('слот 1'))!;
+    const openSlot = TOUCHPOINT_SLOTS.find(s => s.title.includes('слот 2'))!;
+    const important = {
+      title: 'Осмысление Уроков о важном',
+      type: 'open',
+      block: 'Точки осмысления',
+      timePoint: 'день',
+      questionKind: 'after_blocks',
+    };
+    const open = {
+      title: 'Осмысление Открытых уроков / практик / клубов',
+      type: 'open',
+      block: 'Точки осмысления',
+      timePoint: 'вечер',
+      questionKind: 'after_blocks',
+    };
+    assert.equal(questionMatchesTouchpointSlot(important, importantSlot), true);
+    assert.equal(questionMatchesTouchpointSlot(important, openSlot), false);
+    assert.equal(questionMatchesTouchpointSlot(important, directionSlot), false);
+    assert.equal(questionMatchesTouchpointSlot(open, openSlot), true);
+    assert.equal(questionMatchesTouchpointSlot(open, importantSlot), false);
+    assert.equal(questionMatchesTouchpointSlot(open, directionSlot), false);
+  });
+
+  it('still matches template «Осмысление урока (слот 1/2)» titles', () => {
+    const importantSlot = TOUCHPOINT_SLOTS.find(s => s.title.includes('слот 1'))!;
+    const openSlot = TOUCHPOINT_SLOTS.find(s => s.title.includes('слот 2'))!;
+    assert.equal(questionMatchesTouchpointSlot({
+      title: 'Осмысление урока (слот 1)',
+      block: 'Точки осмысления',
+      timePoint: 'день',
+      questionKind: 'after_blocks',
+    }, importantSlot), true);
+    assert.equal(questionMatchesTouchpointSlot({
+      title: 'Осмысление урока (слот 2)',
+      block: 'Точки осмысления',
+      timePoint: 'вечер',
+      questionKind: 'after_blocks',
+    }, openSlot), true);
+  });
+
   it('counts completion when answer is on alias checkin question', () => {
     const q = {
       id: 42,

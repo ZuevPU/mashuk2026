@@ -59,9 +59,9 @@ export function touchpointTypeForQuestion(q: typeof questions.$inferSelect): str
   if (block.includes('направлен') || (block.includes('осмыслен') && !title.includes('урок'))) {
     return 'direction';
   }
-  if (title.includes('урок') || block.includes('урок')) {
-    return 'lesson_important';
-  }
+  // Fallback: «урок» без явного слота — важный, если не открытый.
+  if (title.includes('открыт') || title.includes('наоборот')) return 'lesson_open';
+  if (title.includes('урок') || block.includes('урок')) return 'lesson_important';
   return kind || 'other';
 }
 

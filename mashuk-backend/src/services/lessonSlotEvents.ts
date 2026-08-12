@@ -25,10 +25,34 @@ export type LessonPickItem = {
 
 type LessonKind = 'important' | 'open' | 'any';
 
+/**
+ * Слот осмысления урока по заголовку вопроса.
+ * Админка часто пишет «Осмысление Уроков о важном» / «Открытых уроков…»
+ * вместо шаблонного «Осмысление урока (слот 1/2)».
+ */
 function lessonSlotIndex(q: { title?: string | null }): 4 | 5 | null {
   const t = (q.title || '').toLowerCase();
-  if (t.includes('слот 2') || t.includes('(слот 2)')) return 5;
-  if (t.includes('осмысление урока') || t.includes('слот 1')) return 4;
+  if (!t.trim()) return null;
+
+  // Слот 2 / открытые — сначала, чтобы «открытый урок о важном» не ушёл в слот 1.
+  if (
+    t.includes('слот 2')
+    || t.includes('(слот 2)')
+    || t.includes('открыт')
+    || t.includes('наоборот')
+  ) {
+    return 5;
+  }
+
+  if (
+    t.includes('слот 1')
+    || t.includes('(слот 1)')
+    || t.includes('важн')
+    || /осмысление\s+урок/.test(t)
+  ) {
+    return 4;
+  }
+
   return null;
 }
 
