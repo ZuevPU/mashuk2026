@@ -784,7 +784,9 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
           answerData = {
             emotion,
             energy,
-            timePoint: question.timePoint || 'утро',
+            // Не подставляем «утро» по умолчанию — иначе дневные/вечерние
+            // проверки в аналитике штаба уезжают в утренний столбец.
+            ...(question.timePoint ? { timePoint: question.timePoint } : {}),
             ...(reason ? { reason } : {}),
           };
           break;

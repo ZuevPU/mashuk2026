@@ -1,7 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { answers, participantDayState, questions } from '../../db/schema.js';
-import { isPublishedStatus } from '../publishStatus.js';
 import {
   EXPORT_TOUCHPOINT_FILTERS,
   touchpointTypeForQuestion,
@@ -12,6 +11,7 @@ import {
   emptyZoneDistribution,
   zonesToPercent,
 } from './zoneDistribution.js';
+import { isQuestionLiveForAnalytics } from './analyticsQuestionLive.js';
 
 export type KindDashboardMode = 'after_blocks' | 'state_check';
 
@@ -125,8 +125,9 @@ async function loadPublishedQuestions(dayNumbers: number[], shiftId?: number | n
   const rows = conditions.length
     ? await db.select().from(questions).where(and(...conditions))
     : await db.select().from(questions);
+  const now = new Date();
   return rows.filter(q =>
-    isPublishedStatus(q.status)
+    isQuestionLiveForAnalytics(q, now)
     && questionDaysOf(q).some(d => dayNumbers.includes(d)),
   );
 }

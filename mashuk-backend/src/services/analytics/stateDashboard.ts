@@ -14,7 +14,7 @@ import {
   collectKindAnswerRows,
   type KindAnswerRow,
 } from './questionKindDashboard.js';
-import { stateCheckPhaseForAnswer } from './touchpointMetrics.js';
+import { stateCheckPhaseFromQuestion } from './analyticsQuestionLive.js';
 import {
   PHASE_ORDER,
   PHASE_RU,
@@ -35,11 +35,10 @@ import {
 } from './stateDashboardMetrics.js';
 
 function resolvePhase(r: KindAnswerRow): PhaseKey {
-  const tp = (r.timePoint || '').toLowerCase();
-  if (tp.includes('вечер')) return 'evening';
-  if (tp.includes('день')) return 'day';
-  if (tp.includes('утро')) return 'morning';
-  return stateCheckPhaseForAnswer(r.createdAt);
+  return stateCheckPhaseFromQuestion(
+    { timePoint: r.timePoint, title: r.questionTitle },
+    r.createdAt,
+  );
 }
 
 function zoneOf(r: KindAnswerRow): ZoneKey | null {

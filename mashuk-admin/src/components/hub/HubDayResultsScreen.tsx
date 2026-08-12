@@ -1,9 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { useInsights } from '../insights/InsightsContext';
 import {
   DashCard,
   DashScreenTitle,
 } from '../analytics/dashboardUi';
+import { ChartTooltipRu, formatForumDay } from '../analytics/chartRu';
 import { HubKpiRow } from './HubKpiRow';
 import { downloadHubExport } from './hubExports';
 import { hubFilterParams } from './hubQuery';
@@ -106,6 +116,22 @@ export function HubDayResultsScreen() {
   const selectedDay = Number(forumDay) || meta?.currentForumDay || 1;
   const m = data?.meta;
 
+  const forumIndexChart = useMemo(() => {
+    const series = data?.daySeries ?? [];
+    return [1, 2, 3, 4, 5, 6, 7, 8].map(day => {
+      const pt = series.find(s => s.day === day);
+      return {
+        day,
+        dayLabel: formatForumDay(day),
+        index: pt?.index ?? null,
+        submitted: pt?.submitted ?? 0,
+        selected: day === selectedDay,
+      };
+    });
+  }, [data?.daySeries, selectedDay]);
+
+  const hasForumIndexSeries = forumIndexChart.some(r => r.index != null);
+
   return (
     <div className="adm-day-results">
       <DashScreenTitle
@@ -154,6 +180,58 @@ export function HubDayResultsScreen() {
             title="Пульс дня"
             note="Четыре числа, по которым утренний штаб решает, менять ли что-то в программе."
           >
+            <DashCard title="Индекс форума по дням">
+              <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
+                Среднее по шкалам итоговой анкеты за каждый день смены (1–5). Карточки ниже — срез выбранного дня.
+              </p>
+              {hasForumIndexSeries ? (
+                <ResponsiveContainer width="100%" height={240}>
+                  <LineChart data={forumIndexChart} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e5ea" />
+                    <XAxis dataKey="dayLabel" tick={{ fontSize: 11, fill: '#86868b' }} />
+                    <YAxis
+                      domain={[1, 5]}
+                      ticks={[1, 2, 3, 4, 5]}
+                      tick={{ fontSize: 11, fill: '#86868b' }}
+                      width={28}
+                    />
+                    <Tooltip content={<ChartTooltipRu />} />
+                    <Line
+                      type="monotone"
+                      dataKey="index"
+                      name="Индекс форума"
+                      stroke="var(--m-accent)"
+                      strokeWidth={2.5}
+                      connectNulls
+                      dot={(props) => {
+                        const { cx, cy, payload } = props as {
+                          cx?: number;
+                          cy?: number;
+                          payload?: { selected?: boolean; index?: number | null };
+                        };
+                        if (cx == null || cy == null || payload?.index == null) return null;
+                        const on = Boolean(payload.selected);
+                        return (
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r={on ? 5 : 3}
+                            fill={on ? 'var(--m-accent)' : '#1F3A5F'}
+                            stroke="#fff"
+                            strokeWidth={on ? 2 : 1}
+                          />
+                        );
+                      }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>
+                  Пока нет сданных анкет ни за один день — индекс появится после первых сдач.
+                </p>
+              )}
+            </DashCard>
+
             <HubKpiRow
               cols={4}
               items={[

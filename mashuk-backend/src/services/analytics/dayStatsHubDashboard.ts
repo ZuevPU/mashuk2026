@@ -12,12 +12,12 @@ import {
 import { emotionIdToZone } from '../emotionZones.js';
 import { getForumSettings } from '../helpers.js';
 import { isOrganizerDirection } from '../leaderboardQuery.js';
-import { isPublishedStatus } from '../publishStatus.js';
 import { getCalendarForumDay, getMoscowParts } from '../timePhase.js';
 import { TOUCHPOINT_SLOTS, windowsForDay } from '../touchpointTemplates.js';
 import { touchpointTypeForQuestion } from '../exports/touchpointFilter.js';
 import { collectEveningExportRows } from '../exports/eveningExportData.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
+import { isQuestionLiveForAnalytics } from './analyticsQuestionLive.js';
 import { loadCohortParticipants } from './cohort.js';
 import { collectKindAnswerRows } from './questionKindDashboard.js';
 import {
@@ -99,7 +99,9 @@ async function computeDaySlice(
   now: Date,
   opts: { treatFutureAsWait: boolean },
 ) {
-  const published = allQuestions.filter(q => isPublishedStatus(q.status) && questionMatchesDay(q, day));
+  const published = allQuestions.filter(q =>
+    isQuestionLiveForAnalytics(q, now) && questionMatchesDay(q, day),
+  );
   const qIds = published.map(q => q.id);
 
   const ans = qIds.length && cohortIds.length

@@ -18,7 +18,6 @@ import {
 } from '../emotionZones.js';
 import { getForumSettings } from '../helpers.js';
 import { isOrganizerDirection } from '../leaderboardQuery.js';
-import { isPublishedStatus } from '../publishStatus.js';
 import { entryTags } from '../piggybankDict.js';
 import { getCalendarForumDay, getMoscowParts } from '../timePhase.js';
 import {
@@ -60,7 +59,10 @@ import {
   type PhaseKey,
   type ZoneKey,
 } from './stateDashboardMetrics.js';
-import { stateCheckPhaseForAnswer } from './touchpointMetrics.js';
+import {
+  isQuestionLiveForAnalytics,
+  stateCheckPhaseFromQuestion,
+} from './analyticsQuestionLive.js';
 import {
   DIR_MIN_REG,
   GROUP_MIN_N,
@@ -88,11 +90,10 @@ function dirName(raw: string | null | undefined): string {
 }
 
 function resolvePhase(r: KindAnswerRow): PhaseKey {
-  const tp = (r.timePoint || '').toLowerCase();
-  if (tp.includes('вечер')) return 'evening';
-  if (tp.includes('день')) return 'day';
-  if (tp.includes('утро')) return 'morning';
-  return stateCheckPhaseForAnswer(r.createdAt);
+  return stateCheckPhaseFromQuestion(
+    { timePoint: r.timePoint, title: r.questionTitle },
+    r.createdAt,
+  );
 }
 
 function zoneOf(r: KindAnswerRow): ZoneKey | null {
@@ -155,7 +156,7 @@ async function loadTouchpointBundle(ids: number[], throughDay: number) {
   };
   if (!ids.length) return empty;
   const qRows = await db.select().from(questions);
-  const published = qRows.filter(q => isPublishedStatus(q.status));
+  const published = qRows.filter(q => isQuestionLiveForAnalytics(q));
   const eveningStates = await db.select({
     participantId: participantDayState.participantId,
     dayNumber: participantDayState.dayNumber,

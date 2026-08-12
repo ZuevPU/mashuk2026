@@ -183,20 +183,33 @@ export async function buildEveningDashboard(
   const cohort = await loadCohortParticipants(filters, req);
   const cohortSize = cohort.filter(p => p.onboardingCompletedAt).length;
 
-  const { rows, fields, diagnostics } = await collectEveningExportRows({
+  const eveningCohortFilters = {
     shiftId: filters.shiftId,
-    day: dayFilter,
     direction: filters.direction ?? undefined,
     group: filters.group ?? undefined,
     ageCategory: filters.ageCategory ?? undefined,
     activityQ: filters.activity ?? undefined,
-    includeDrafts: true,
-  });
+    includeDrafts: true as const,
+  };
 
+  // Срез дня — для KPI/шкал выбранного дня.
+  // Ряды «по дням» грузим без day-фильтра, иначе при day=5 дни 1–4 обнуляются.
+  const seriesDays = forumSeriesDays(currentDay);
+  const [slicePack, seriesPack] = await Promise.all([
+    collectEveningExportRows({ ...eveningCohortFilters, day: dayFilter }),
+    dayFilter != null
+      ? collectEveningExportRows({ ...eveningCohortFilters, day: null })
+      : Promise.resolve(null),
+  ]);
+
+  const { rows, fields, diagnostics } = slicePack;
   const submittedRows = rows.filter(r => r.status === 'сдано');
   const draftRows = rows.filter(r => r.status === 'черновик');
   const submitted = submittedRows.length;
   const drafts = draftRows.length;
+  const seriesSubmittedRows = seriesPack
+    ? seriesPack.rows.filter(r => r.status === 'сдано')
+    : submittedRows;
   const fillRatePct = cohortSize
     ? Math.round((submitted / cohortSize) * 1000) / 10
     : 0;
@@ -321,9 +334,8 @@ export async function buildEveningDashboard(
   const scaleAverages = scaleSlice.byQuestion;
   const scaleOverallAvg = scaleSlice.overallAvg;
 
-  const seriesDays = forumSeriesDays(currentDay);
   const scaleByDay = seriesDays.map(day => {
-    const dayRows = submittedRows.filter(r => r.dayNumber === day);
+    const dayRows = seriesSubmittedRows.filter(r => r.dayNumber === day);
     const stats = scaleStatsForRows(dayRows);
     return {
       day,
@@ -335,12 +347,12 @@ export async function buildEveningDashboard(
 
   const directions = [...new Set([
     ...cohort.map(p => (p.direction || '—').trim() || '—'),
-    ...submittedRows.map(r => (r.directionName || r.p.direction || '—').trim() || '—'),
+    ...seriesSubmittedRows.map(r => (r.directionName || r.p.direction || '—').trim() || '—'),
   ])].sort((a, b) => a.localeCompare(b, 'ru'));
 
   const scaleByDirectionDay = seriesDays.flatMap(day =>
     directions.map(direction => {
-      const slice = submittedRows.filter(r => {
+      const slice = seriesSubmittedRows.filter(r => {
         if (r.dayNumber !== day) return false;
         const d = (r.directionName || r.p.direction || '—').trim() || '—';
         return d === direction;

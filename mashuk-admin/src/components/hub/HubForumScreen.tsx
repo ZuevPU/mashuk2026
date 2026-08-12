@@ -40,6 +40,7 @@ import { StateReasonsByDirectionTable } from './StateReasonsByDirectionTable';
 import { RoleDirectionHeatmap } from './RoleDirectionHeatmap';
 import { TouchpointSlotChart } from './TouchpointSlotChart';
 import { PiggybankDirectionMatrix } from './PiggybankDirectionMatrix';
+import { HubEmotionsDayChart } from './HubEmotionsDayChart';
 import { downloadHubExport, forumExportItems, forumPackExportItem } from './hubExports';
 import { hubFilterParams } from './hubQuery';
 import type { HubLens } from './HubTab';
@@ -448,14 +449,21 @@ export function HubForumScreen({
         rows={pulse.byDirectionPhase}
         onOpenDirection={openDirection}
       />
-      {(pulse.emotions ?? []).length > 0 && (
-        <DashCard title="11 эмоций">
-          <SrcBars items={(pulse.emotions as { label: string; count: number; pct: number }[]).map(d => ({
-            label: `${d.label} (${d.pct}%) · ${d.count}`,
-            count: d.count,
-          }))} />
-        </DashCard>
-      )}
+      <HubEmotionsDayChart
+        emotions={pulse.emotions as {
+          id?: string; label: string; count: number; pct: number;
+        }[] | undefined}
+        emotionSeries={pulse.emotionSeries as {
+          emotion: string;
+          label: string;
+          morningPct: number;
+          dayPct: number;
+          eveningPct: number;
+          morningCount?: number;
+          dayCount?: number;
+          eveningCount?: number;
+        }[] | undefined}
+      />
       {zoneDayRows.length > 0 && (
         <DashCard title="Динамика зон по дням">
           <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>

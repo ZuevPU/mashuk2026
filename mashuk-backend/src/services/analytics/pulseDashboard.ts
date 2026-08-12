@@ -1,12 +1,16 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { answers, participantDayState, questions } from '../../db/schema.js';
-import { isPublishedStatus } from '../publishStatus.js';
 import { reflectionKindFromQuestion } from '../reflectionTypeLabel.js';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { getForumSettings } from '../helpers.js';
+import { questionMatchesDay } from '../questionAdminHelpers.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import { resolveDayRange } from './analyticsQuery.js';
+import {
+  isQuestionLiveForAnalytics,
+  stateCheckPhaseFromQuestion,
+} from './analyticsQuestionLive.js';
 import { loadCohortParticipants } from './cohort.js';
 import {
   accumulateZoneFromAnswer,
@@ -19,6 +23,7 @@ import {
 import {
   buildEmotionDistribution,
   CHECKIN_EMOTION_IDS,
+  CHECKIN_EMOTION_LABELS,
   type EmotionZoneKey,
 } from '../emotionZones.js';
 import {
@@ -27,7 +32,6 @@ import {
   buildTouchpointThresholdCoverage,
   countEveningCompleted,
   countStateChecksByPhase,
-  stateCheckPhaseForAnswer,
   touchpointCompletionByType,
 } from './touchpointMetrics.js';
 import { buildForumDayKpiSeries, forumSeriesDays } from './dayComparison.js';
@@ -188,20 +192,22 @@ export async function buildPulseDashboard(
   ]);
   const { daySeries, byDirectionDaySeries } = dayKpi;
 
+  const now = new Date();
   const qRows = filters.shiftId != null
     ? await db.select().from(questions).where(eq(questions.shiftId, filters.shiftId))
     : await db.select().from(questions);
-  const publishedQ = qRows.filter(q => isPublishedStatus(q.status));
-  /** Вопросы среза для сигнала: всё опубликованное по дням, кроме точки А/Б и evening (вечер — отдельно через day_state). */
+  // Только «в эфире»: status=published и publishTime уже наступил (сеяные окна в будущем не считаем).
+  const publishedQ = qRows.filter(q => isQuestionLiveForAnalytics(q, now));
+  /** Вопросы среза для сигнала: live по дням, кроме точки А/Б и evening (вечер — отдельно через day_state). */
   const activityQs = publishedQ.filter(q => {
-    if (q.dayNumber == null || !days.includes(q.dayNumber)) return false;
+    if (!days.some(d => questionMatchesDay(q, d))) return false;
     const kind = reflectionKindFromQuestion(q);
     return kind !== 'point_a' && kind !== 'point_b' && kind !== 'evening_summary';
   });
   const activityQIdSet = new Set(activityQs.map(q => q.id));
-  const checkQIds = activityQs
-    .filter(q => reflectionKindFromQuestion(q) === 'state_check')
-    .map(q => q.id);
+  const checkQs = activityQs.filter(q => reflectionKindFromQuestion(q) === 'state_check');
+  const checkQIds = checkQs.map(q => q.id);
+  const checkQById = new Map(checkQs.map(q => [q.id, q]));
   const loadQIds = [...activityQIdSet];
   const activityAns = ids.length && loadQIds.length
     ? await db.select().from(answers).where(and(
@@ -249,22 +255,33 @@ export async function buildPulseDashboard(
     evening: emptyZoneDistribution(),
   };
   const emotionCounts = new Map<string, number>();
+  const emotionCountsByPhase: Record<'morning' | 'day' | 'evening', Map<string, number>> = {
+    morning: new Map(),
+    day: new Map(),
+    evening: new Map(),
+  };
+  const phaseAnswerN = { morning: 0, day: 0, evening: 0 };
   const reasons: string[] = [];
   const reasonByDay = new Map<number, string[]>();
   const pidToParticipant = new Map(cohort.map(p => [p.id, p]));
 
   for (const a of checkAns) {
     accumulateZoneFromAnswer(zonesOverall, a.answerData);
-    const phase = stateCheckPhaseForAnswer(a.createdAt);
+    const q = checkQById.get(a.questionId);
+    const phase = stateCheckPhaseFromQuestion(q ?? {}, a.createdAt);
     accumulateZoneFromAnswer(zonesByPhase[phase], a.answerData);
+    phaseAnswerN[phase] += 1;
     const p = parseCheckinPayload(a.answerData);
     if (p.emotion) {
       const emo = String(p.emotion).trim().toLowerCase();
-      if (emo) emotionCounts.set(emo, (emotionCounts.get(emo) || 0) + 1);
+      if (emo) {
+        emotionCounts.set(emo, (emotionCounts.get(emo) || 0) + 1);
+        emotionCountsByPhase[phase].set(emo, (emotionCountsByPhase[phase].get(emo) || 0) + 1);
+      }
     }
     if (p.reason?.trim()) {
       reasons.push(p.reason.trim());
-      const qDay = publishedQ.find(q => q.id === a.questionId)?.dayNumber ?? filters.day ?? currentDay;
+      const qDay = q?.dayNumber ?? filters.day ?? currentDay;
       const d = qDay && qDay >= 1 ? qDay : currentDay;
       if (!reasonByDay.has(d)) reasonByDay.set(d, []);
       reasonByDay.get(d)!.push(p.reason.trim());
@@ -276,7 +293,9 @@ export async function buildPulseDashboard(
     for (const d of days) {
       const z = emptyZoneDistribution();
       const dayCheckIds = new Set(
-        publishedQ.filter(q => q.dayNumber === d && reflectionKindFromQuestion(q) === 'state_check').map(q => q.id),
+        publishedQ
+          .filter(q => questionMatchesDay(q, d) && reflectionKindFromQuestion(q) === 'state_check')
+          .map(q => q.id),
       );
       for (const a of checkAns) {
         if (!dayCheckIds.has(a.questionId)) continue;
@@ -325,7 +344,8 @@ export async function buildPulseDashboard(
       for (const a of checkAns) {
         if (!pids.has(a.participantId)) continue;
         accumulateZoneFromAnswer(z, a.answerData);
-        const phase = stateCheckPhaseForAnswer(a.createdAt);
+        const q = checkQById.get(a.questionId);
+        const phase = stateCheckPhaseFromQuestion(q ?? {}, a.createdAt);
         const bucket = phaseBuckets[phase];
         accumulateZoneFromAnswer(bucket.zones, a.answerData);
         bucket.n += 1;
@@ -448,6 +468,30 @@ export async function buildPulseDashboard(
       byGroup,
       compareZones,
       emotions: buildEmotionDistribution(emotionCounts, checkAns.length),
+      /** Доля каждой эмоции внутри фазы — для графика «в течение дня». */
+      emotionsByPhase: {
+        morning: buildEmotionDistribution(emotionCountsByPhase.morning, phaseAnswerN.morning),
+        day: buildEmotionDistribution(emotionCountsByPhase.day, phaseAnswerN.day),
+        evening: buildEmotionDistribution(emotionCountsByPhase.evening, phaseAnswerN.evening),
+      },
+      /** Строки 11 эмоций × утро/день/вечер — удобно для линий. */
+      emotionSeries: CHECKIN_EMOTION_IDS.map(id => {
+        const m = emotionCountsByPhase.morning.get(id) || 0;
+        const d = emotionCountsByPhase.day.get(id) || 0;
+        const e = emotionCountsByPhase.evening.get(id) || 0;
+        const pct = (n: number, total: number) =>
+          total ? Math.round((n / total) * 1000) / 10 : 0;
+        return {
+          emotion: id,
+          label: CHECKIN_EMOTION_LABELS[id],
+          morningPct: pct(m, phaseAnswerN.morning),
+          dayPct: pct(d, phaseAnswerN.day),
+          eveningPct: pct(e, phaseAnswerN.evening),
+          morningCount: m,
+          dayCount: d,
+          eveningCount: e,
+        };
+      }),
       note: '5 зон эмоций и 11 эмоций проверки состояния (как у участника).',
     },
     stateReasons: {

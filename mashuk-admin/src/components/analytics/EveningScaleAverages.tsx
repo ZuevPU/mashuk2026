@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useInsights } from '../insights/InsightsContext';
 import { formatForumDay } from './chartRu';
 import { DashCard, DashKpi, DashGrid, dashVal } from './dashboardUi';
@@ -55,10 +55,21 @@ export function EveningScaleAverages({
     return Array.from({ length: Math.min(Math.max(1, cur), 7) }, (_, i) => i + 1);
   }, [dayRows, meta?.currentForumDay, forumDay]);
 
-  const defaultDay = dayOptions.includes(Number(forumDay))
-    ? Number(forumDay)
-    : (dayOptions[dayOptions.length - 1] ?? 1);
+  const defaultDay = useMemo(() => {
+    const selected = Number(forumDay);
+    const withData = [...dayRows].reverse().find(d => d.answered > 0)?.day;
+    if (dayOptions.includes(selected)) {
+      const sel = dayRows.find(d => d.day === selected);
+      if (sel && sel.answered > 0) return selected;
+      if (withData != null) return withData;
+      return selected;
+    }
+    return withData ?? dayOptions[dayOptions.length - 1] ?? 1;
+  }, [dayOptions, dayRows, forumDay]);
   const [dirDay, setDirDay] = useState(defaultDay);
+  useEffect(() => {
+    setDirDay(defaultDay);
+  }, [defaultDay]);
 
   const dayChart = useMemo(() => dayRows.map(r => ({
     dayLabel: formatForumDay(r.day),
@@ -91,12 +102,19 @@ export function EveningScaleAverages({
     answered: r.answered,
   }));
 
+  const hasSeriesOnly = !list.length && dayRows.some(d => d.answered > 0);
+
   return (
     <div className="adm-dash-stack" style={{ gap: 12 }}>
       <DashCard title={title}>
         <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
           Среднее по каждому вопросу со шкалой (обычно 1–5). Ниже — график, таблица и разрезы по дням / направлениям.
         </p>
+        {hasSeriesOnly && (
+          <p className="adm-muted" style={{ fontSize: 13, marginTop: 0 }}>
+            За выбранный день сданных анкет пока нет. Ниже — сводка по дням смены (включая прошлые).
+          </p>
+        )}
         {!compact && (
           <DashGrid cols={3}>
             <DashKpi value={dashVal(overallAvg ?? null)} label="средняя по всем шкалам" accent="var(--m-accent)" />

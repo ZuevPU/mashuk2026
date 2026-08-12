@@ -23,7 +23,10 @@ import type { AnalyticsFilters } from './analyticsQuery.js';
 import { resolveDayRange } from './analyticsQuery.js';
 import { loadCohortParticipants } from './cohort.js';
 import { getForumSettings } from '../helpers.js';
-import { stateCheckPhaseForAnswer } from './touchpointMetrics.js';
+import {
+  isQuestionLiveForAnalytics,
+  stateCheckPhaseFromQuestion,
+} from './analyticsQuestionLive.js';
 import { buildKindDaySeries, forumSeriesDays } from './dayComparison.js';
 import { parseAfterBlocksPicks } from '../exports/nestedPickParse.js';
 
@@ -65,11 +68,10 @@ export type KindQuestionStat = {
 };
 
 function resolveStatePhase(r: KindAnswerRow): 'morning' | 'day' | 'evening' {
-  const tp = (r.timePoint || '').toLowerCase();
-  if (tp.includes('вечер')) return 'evening';
-  if (tp.includes('день')) return 'day';
-  if (tp.includes('утро')) return 'morning';
-  return stateCheckPhaseForAnswer(r.createdAt);
+  return stateCheckPhaseFromQuestion(
+    { timePoint: r.timePoint, title: r.questionTitle },
+    r.createdAt,
+  );
 }
 
 function publicAnswer(r: KindAnswerRow): KindQuestionAnswer {
@@ -177,11 +179,13 @@ export async function collectKindAnswerRows(
   const allQs = qConds.length
     ? await db.select().from(questions).where(and(...qConds))
     : await db.select().from(questions);
-  const kindQs = allQs.filter(q =>
-    (opts?.includeUnpublished || isPublishedStatus(q.status))
-    && matchesKind(q, mode)
-    && questionOnDays(q, days),
-  );
+  const now = new Date();
+  const kindQs = allQs.filter(q => {
+    const visible = opts?.includeUnpublished
+      ? isPublishedStatus(q.status) || q.status === 'draft'
+      : isQuestionLiveForAnalytics(q, now);
+    return visible && matchesKind(q, mode) && questionOnDays(q, days);
+  });
   const qIds = kindQs.map(q => q.id);
   if (!qIds.length) return { rows: [], questionMeta: [] };
 
@@ -305,7 +309,8 @@ export async function collectKindAnswerRows(
       emotion,
       emotionZone: zone,
       energy: Number.isFinite(energy) ? energy : null,
-      timePoint: payload.timePoint || q.timePoint || null,
+      // Слот вопроса важнее payload: клиент пишет timePoint || 'утро' и затирает «день».
+      timePoint: q.timePoint || payload.timePoint || null,
       filledAt: r.a.createdAt ? formatTsMsk(r.a.createdAt) : null,
       createdAt: r.a.createdAt ?? null,
     });

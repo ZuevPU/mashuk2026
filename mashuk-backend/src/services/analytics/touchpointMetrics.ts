@@ -1,19 +1,21 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { answers, participantDayState, questions } from '../../db/schema.js';
-import { isPublishedStatus } from '../publishStatus.js';
 import { reflectionKindFromQuestion } from '../reflectionTypeLabel.js';
 import {
   EXPORT_TOUCHPOINT_FILTERS,
   touchpointTypeForQuestion,
 } from '../exports/touchpointFilter.js';
-import { getMoscowPhase } from '../timePhase.js';
 import { TOUCHPOINT_SLOTS } from '../touchpointTemplates.js';
 import {
   isTouchpointQuestionForForumDay,
   questionMatchesTouchpointSlot,
   touchpointCompletionRatio,
 } from '../touchpointProgress.js';
+import {
+  isQuestionLiveForAnalytics,
+  stateCheckPhaseFromQuestion,
+} from './analyticsQuestionLive.js';
 
 type QuestionRow = typeof questions.$inferSelect;
 
@@ -36,7 +38,11 @@ async function loadPublishedQuestions(dayNumbers: number[], shiftId?: number | n
   const rows = conditions.length
     ? await db.select().from(questions).where(and(...conditions))
     : await db.select().from(questions);
-  return rows.filter(q => isPublishedStatus(q.status) && questionMatchesDays(q, dayNumbers));
+  const now = new Date();
+  return rows.filter(q =>
+    isQuestionLiveForAnalytics(q, now)
+    && questionMatchesDays(q, dayNumbers),
+  );
 }
 
 async function loadCohortAnswers(participantIds: number[], questionIds?: number[]) {
@@ -80,10 +86,7 @@ export async function touchpointCompletionByType(
   return out;
 }
 
-export function stateCheckPhaseForAnswer(createdAt: Date | null): 'morning' | 'day' | 'evening' {
-  if (!createdAt) return getMoscowPhase();
-  return getMoscowPhase(createdAt);
-}
+export { stateCheckPhaseForAnswer } from './analyticsQuestionLive.js';
 
 export async function countStateChecksByPhase(
   participantIds: number[],
@@ -94,10 +97,12 @@ export async function countStateChecksByPhase(
   if (!participantIds.length) return counts;
   const dayQs = (await loadPublishedQuestions(dayNumbers, shiftId))
     .filter(q => reflectionKindFromQuestion(q) === 'state_check');
+  const qById = new Map(dayQs.map(q => [q.id, q]));
   const qIds = dayQs.map(q => q.id);
   const ans = await loadCohortAnswers(participantIds, qIds);
   for (const a of ans) {
-    const phase = stateCheckPhaseForAnswer(a.createdAt);
+    const q = qById.get(a.questionId);
+    const phase = stateCheckPhaseFromQuestion(q ?? {}, a.createdAt);
     counts[phase] += 1;
   }
   return counts;
@@ -158,7 +163,8 @@ export async function buildTouchpointThresholdCoverage(
   const qRows = shiftId != null
     ? await db.select().from(questions).where(eq(questions.shiftId, shiftId))
     : await db.select().from(questions);
-  const published = qRows.filter(q => isPublishedStatus(q.status));
+  const now = new Date();
+  const published = qRows.filter(q => isQuestionLiveForAnalytics(q, now));
   const tpQs = published.filter(q => days.some(d => isTouchpointQuestionForForumDay(q, d)));
   const tpQIds = tpQs.map(q => q.id);
 
@@ -301,7 +307,8 @@ export async function buildTouchpointSlotCoverage(
   const qRows = shiftId != null
     ? await db.select().from(questions).where(eq(questions.shiftId, shiftId))
     : await db.select().from(questions);
-  const published = qRows.filter(q => isPublishedStatus(q.status));
+  const now = new Date();
+  const published = qRows.filter(q => isQuestionLiveForAnalytics(q, now));
   const tpQs = published.filter(q => days.some(d => isTouchpointQuestionForForumDay(q, d)));
   const tpQIds = tpQs.map(q => q.id);
 
@@ -426,7 +433,8 @@ export async function buildTouchpointSlotCoverageByGroup(
   const qRows = shiftId != null
     ? await db.select().from(questions).where(eq(questions.shiftId, shiftId))
     : await db.select().from(questions);
-  const published = qRows.filter(q => isPublishedStatus(q.status));
+  const now = new Date();
+  const published = qRows.filter(q => isQuestionLiveForAnalytics(q, now));
   const tpQs = published.filter(q => isTouchpointQuestionForForumDay(q, day));
   const tpQIds = tpQs.map(q => q.id);
 
@@ -540,7 +548,8 @@ export async function buildParticipantTouchpointEngagement(
   const qRows = shiftId != null
     ? await db.select().from(questions).where(eq(questions.shiftId, shiftId))
     : await db.select().from(questions);
-  const published = qRows.filter(q => isPublishedStatus(q.status));
+  const now = new Date();
+  const published = qRows.filter(q => isQuestionLiveForAnalytics(q, now));
   const tpQs = published.filter(q => days.some(d => isTouchpointQuestionForForumDay(q, d)));
   const tpQIds = tpQs.map(q => q.id);
 
