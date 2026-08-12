@@ -768,16 +768,28 @@ export function ActivityView({
               />
             </div>
           ))}
-          {(data.ratings?.medalsDay ?? []).length > 0 && (
-            <div className="lb-activity-block">
-              <h4>Медали за день</h4>
-              <LeaderboardTable
-                rows={toRows(data.ratings.medalsDay)}
-                filters={{ ...DEFAULT_LEADERBOARD_FILTERS, mode: 'points', medalFilter: 'count', scope: 'day' }}
-                maxRows={10}
-              />
-            </div>
-          )}
+          <div className="lb-activity-block">
+            <h4>Медали за все дни</h4>
+            <LeaderboardTable
+              rows={toRows(data.ratings?.medalsShift ?? [])}
+              filters={{ ...DEFAULT_LEADERBOARD_FILTERS, mode: 'points', medalFilter: 'count', scope: 'shift' }}
+              maxRows={10}
+            />
+            {(data.ratings?.medalsShift ?? []).length === 0 && (
+              <p className="adm-muted" style={{ fontSize: 12, margin: '8px 0 0' }}>Пока нет медалей за смену</p>
+            )}
+          </div>
+          <div className="lb-activity-block">
+            <h4>Медали за день</h4>
+            <LeaderboardTable
+              rows={toRows(data.ratings?.medalsDay ?? [])}
+              filters={{ ...DEFAULT_LEADERBOARD_FILTERS, mode: 'points', medalFilter: 'count', scope: 'day' }}
+              maxRows={10}
+            />
+            {(data.ratings?.medalsDay ?? []).length === 0 && (
+              <p className="adm-muted" style={{ fontSize: 12, margin: '8px 0 0' }}>Нет медалей за выбранный день</p>
+            )}
+          </div>
         </div>
         {(data.ratings?.nominations ?? []).length > 0 && (
           <div style={{ marginTop: 16 }}>

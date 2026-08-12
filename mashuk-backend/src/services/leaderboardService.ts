@@ -225,7 +225,9 @@ export async function computeMedalCountLeaderboard(
       const start = new Date(shift.startDate);
       start.setUTCHours(0, 0, 0, 0);
       const end = new Date(start);
-      end.setUTCDate(end.getUTCDate() + FORUM_RATING_MAX_DAY);
+      // Медали считаем по всей длине смены (не только 1–6 рейтинговых дней).
+      const spanDays = Math.max(1, Number(shift.totalDays) || FORUM_RATING_MAX_DAY);
+      end.setUTCDate(end.getUTCDate() + spanDays);
       conditions.push(gte(userMedals.awardedAt, start));
       conditions.push(lt(userMedals.awardedAt, end));
     }

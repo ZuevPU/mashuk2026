@@ -226,6 +226,16 @@ export async function buildActivityDashboard(filters: AnalyticsFilters, req?: Ad
     .slice(0, 10)
     .map((r, i) => ({ rank: i + 1, ...r }));
 
+  const medalShiftScores = await computeMedalCountLeaderboard(cohortIds, {
+    scope: 'shift',
+  });
+  const medalsShiftTop = allP
+    .map(p => ({ id: p.id, name: `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim(), direction: p.direction, points: medalShiftScores.get(p.id) ?? 0 }))
+    .filter(r => r.points > 0)
+    .sort((a, b) => b.points - a.points)
+    .slice(0, 10)
+    .map((r, i) => ({ rank: i + 1, ...r }));
+
   return {
     filters,
     days,
@@ -252,6 +262,7 @@ export async function buildActivityDashboard(filters: AnalyticsFilters, req?: Ad
       byDirection: ratingsByDirection,
       nominations: nominationRatings.filter(n => n.top.length > 0),
       medalsDay: medalsDayTop,
+      medalsShift: medalsShiftTop,
       forumDays: FORUM_RATING_MAX_DAY,
     },
     tasks: {

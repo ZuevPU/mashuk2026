@@ -106,7 +106,7 @@ export function scorePrefix(f: LeaderboardFiltersState): string {
 export function scopeLabel(scope: LeaderboardScope): string {
   if (scope === 'total') return 'Итоговый';
   if (scope === 'day') return 'За день';
-  return 'За смену (1–6)';
+  return 'За смену';
 }
 
 export function trackLabel(track: LeaderboardTrack): string {
