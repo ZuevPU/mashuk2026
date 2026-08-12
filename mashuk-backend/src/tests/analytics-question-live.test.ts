@@ -29,11 +29,30 @@ describe('isQuestionLiveForAnalytics', () => {
     }, now), true);
   });
 
-  it('excludes draft and hidden', () => {
+  it('excludes draft', () => {
     assert.equal(isQuestionLiveForAnalytics({ status: 'draft' }, now), false);
+  });
+
+  it('includes hidden after window opened (historical answers)', () => {
     assert.equal(isQuestionLiveForAnalytics({
       status: 'published',
       isHidden: true,
+      publishTime: new Date('2026-08-11T09:00:00+03:00'),
+    }, now), true);
+  });
+
+  it('includes archived questions for history', () => {
+    assert.equal(isQuestionLiveForAnalytics({
+      status: 'archived',
+      isHidden: true,
+    }, now), true);
+  });
+
+  it('excludes hidden published that has not opened yet', () => {
+    assert.equal(isQuestionLiveForAnalytics({
+      status: 'published',
+      isHidden: true,
+      publishTime: new Date('2026-08-12T13:00:00+03:00'),
     }, now), false);
   });
 });

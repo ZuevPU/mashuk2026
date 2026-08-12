@@ -39,9 +39,12 @@ export function createApp() {
   app.use(cors({
     origin(origin, callback) {
       if (isAllowedOrigin(origin)) {
-        callback(null, true);
+        // Reflect exact Origin so browser gets Access-Control-Allow-Origin
+        // (credentials:true cannot use '*').
+        callback(null, origin || true);
         return;
       }
+      console.warn('[cors] blocked origin:', origin || '(none)');
       callback(null, false);
     },
     credentials: true,
@@ -58,6 +61,17 @@ export function createApp() {
     optionsSuccessStatus: 204,
     maxAge: 86400,
   }));
+
+  // Если ответ упал до CORS (прокси/исключение) — всё равно отдадим Allow-Origin для наших хостов.
+  app.use((req, res, next) => {
+    const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+    if (origin && isAllowedOrigin(origin) && !res.getHeader('Access-Control-Allow-Origin')) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Vary', 'Origin');
+    }
+    next();
+  });
 
   app.use(express.json({ limit: '6mb' }));
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));

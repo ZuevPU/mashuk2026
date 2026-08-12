@@ -1,9 +1,23 @@
 /**
- * Для штаба/аналитики: вопрос «в эфире», а не просто status=published
- * с будущим publishTime (как у засеянных точек до окна).
+ * Для штаба/аналитики: вопрос уже «выходил в эфир».
+ * Не путать с мини-приложением: сюда входят archived/hidden после окна,
+ * иначе ответы прошлых дней пропадают из дашбордов.
  */
 import { getMoscowPhase } from '../timePhase.js';
 
+function publishTimeMs(publishTime: Date | string | null | undefined): number | null {
+  if (publishTime == null) return null;
+  const t = publishTime instanceof Date ? publishTime : new Date(publishTime);
+  return Number.isFinite(t.getTime()) ? t.getTime() : null;
+}
+
+/**
+ * Включать в аналитику:
+ * - published с publishTime ≤ now (или без publishTime)
+ * - archived (история ответов)
+ * - hidden, если окно уже наступало (или publishTime не задан)
+ * Исключать: draft и published с будущим publishTime (засеянные слоты).
+ */
 export function isQuestionLiveForAnalytics(
   q: {
     status?: string | null;
@@ -12,12 +26,23 @@ export function isQuestionLiveForAnalytics(
   },
   now = new Date(),
 ): boolean {
-  if (q.isHidden === true) return false;
-  if (q.status !== 'published') return false;
-  if (q.publishTime != null) {
-    const t = q.publishTime instanceof Date ? q.publishTime : new Date(q.publishTime);
-    if (Number.isFinite(t.getTime()) && t.getTime() > now.getTime()) return false;
+  const status = (q.status || 'published').toLowerCase();
+  if (status === 'draft') return false;
+
+  const openedAt = publishTimeMs(q.publishTime);
+  const notOpenedYet = openedAt != null && openedAt > now.getTime();
+
+  if (status === 'archived') {
+    // Архив всегда для истории; будущий publishTime у архива не бывает на практике.
+    return true;
   }
+
+  if (status !== 'published') return false;
+
+  // Ещё не открывшийся слот — не считаем (фикс «ложного» дня 5).
+  if (notOpenedYet) return false;
+
+  // isHidden после закрытия окна — ответы остаются в аналитике.
   return true;
 }
 
