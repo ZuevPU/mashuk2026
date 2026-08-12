@@ -17,6 +17,7 @@ import {
   buildTouchpointThresholdCoverage,
 } from './touchpointMetrics.js';
 import { getForumSettings } from '../helpers.js';
+import { computeLeaderboardScores } from '../leaderboardService.js';
 
 async function loadCommunityQueueCounts() {
   const [[pendingExchange], [orgWaiting], [activeExchange]] = await Promise.all([
@@ -159,7 +160,7 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
       .map(r => [r.direction, r.count]),
   );
 
-  // Без полного pointsLog — иначе /hub/forum часто упирается в таймаут прокси.
+  // Рейтинг — из денормализованных баллов участников (без скана pointsLog).
   const energyAgg = new Map<string, { sum: number; n: number }>();
   for (const r of energyRows) {
     if (r.avg == null || !r.responses) continue;
@@ -169,6 +170,21 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
     cur.n += r.responses;
     energyAgg.set(r.direction, cur);
   }
+
+  const registeredCohort = cohort.filter(p => p.onboardingCompletedAt);
+  const ratingScores = await computeLeaderboardScores(
+    registeredCohort.map(p => p.id),
+    { scope: 'total', track: 'total' },
+  );
+  const pointsByDir = new Map<string, { sum: number; n: number }>();
+  for (const p of registeredCohort) {
+    const d = (p.direction || '—').trim() || '—';
+    const cur = pointsByDir.get(d) ?? { sum: 0, n: 0 };
+    cur.sum += ratingScores.get(p.id) ?? 0;
+    cur.n += 1;
+    pointsByDir.set(d, cur);
+  }
+
   const directionMetrics = byDirection.map(row => {
     const zones = zoneByDir.get(row.direction) ?? {};
     const engagementLiftPct = Math.round(
@@ -180,13 +196,17 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
     const piggyPerCapita = row.registered
       ? Math.round((piggyCount / row.registered) * 100) / 100
       : 0;
+    const pAgg = pointsByDir.get(row.direction);
+    const avgPoints = pAgg && pAgg.n
+      ? Math.round((pAgg.sum / pAgg.n) * 10) / 10
+      : 0;
     return {
       direction: row.direction,
       registered: row.registered,
       coveragePct: row.activityRatePct,
       energyAvg,
       engagementLiftPct,
-      avgPoints: 0,
+      avgPoints,
       piggyCount,
       piggyPerCapita,
     };
