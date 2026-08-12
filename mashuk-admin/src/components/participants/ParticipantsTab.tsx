@@ -88,6 +88,8 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
   const [hiddenAllShifts, setHiddenAllShifts] = useState(true);
   const [hiddenTotal, setHiddenTotal] = useState(0);
   const [hiddenUnfilteredTotal, setHiddenUnfilteredTotal] = useState(0);
+  const [hardDeleteCount, setHardDeleteCount] = useState(0);
+  const [selfDeleteLogCount, setSelfDeleteLogCount] = useState(0);
   const [directions, setDirections] = useState<{ id: number; name: string }[]>([]);
   const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -127,9 +129,17 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
       setParticipants(res.participants || []);
       setParticipantsTotal(res.totalCount || 0);
       setCurrentShiftId(res.shiftId ?? null);
+      if (listMode === 'hidden') {
+        setHardDeleteCount(Number(res.hardDeleteCount) || 0);
+        setSelfDeleteLogCount(Number(res.selfDeleteLogCount) || 0);
+      }
       // Счётчик бейджа — всегда «все смены», чтобы не путать с пустым фильтром текущей смены
       const hiddenBadge = await adminFetch('/participants?onlySelfDeleted=true&allShifts=true&limit=1&page=1');
       setHiddenTotal(hiddenBadge.totalCount || 0);
+      if (listMode !== 'hidden') {
+        setHardDeleteCount(Number(hiddenBadge.hardDeleteCount) || 0);
+        setSelfDeleteLogCount(Number(hiddenBadge.selfDeleteLogCount) || 0);
+      }
       if (listMode === 'hidden') {
         const hasExtraFilters = Boolean(
           debouncedQ.trim()
@@ -307,8 +317,10 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
 
       {isHiddenList && (
         <div className="adm-forum-hint" style={{ marginBottom: 12 }}>
-          Здесь только мягкое удаление (`self_deleted_at`): выход участника или «Исключить из программы».
-          «Удалить безвозвратно» стирает запись из базы — такого человека в этом списке уже не будет.
+          Здесь только <b>мягкое</b> удаление: участник нажал «Удалить мой профиль» или админ выбрал «Исключить из программы».
+          Данные сохраняются, человека можно восстановить.
+          <br />
+          Действие «Удалить безвозвратно» стирает запись из базы — в этом списке такого человека <b>не будет</b>.
           <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
               <input
@@ -329,6 +341,9 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
                   : ''}
               </span>
             )}
+            <span className="adm-muted" style={{ fontSize: 12 }}>
+              Журнал: мягких выходов {selfDeleteLogCount} · безвозвратных удалений {hardDeleteCount}
+            </span>
           </div>
           {participantsTotal === 0 && hiddenUnfilteredTotal > 0 && (
             <p style={{ margin: '8px 0 0', color: '#9B2C2C' }}>
@@ -336,9 +351,12 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
             </p>
           )}
           {participantsTotal === 0 && hiddenUnfilteredTotal === 0 && (
-            <p style={{ margin: '8px 0 0' }}>
-              Сейчас в базе нет ни одного мягко удалённого профиля
-              {hiddenAllShifts ? '' : ' на этой смене'}. Если человек был — его могли восстановить или удалить безвозвратно (см. журнал действий админов).
+            <p style={{ margin: '8px 0 0', color: hardDeleteCount > 0 ? '#9B2C2C' : undefined }}>
+              Сейчас нет ни одного мягко удалённого профиля
+              {hiddenAllShifts ? '' : ' на этой смене'}.
+              {hardDeleteCount > 0
+                ? ` Зато в журнале ${hardDeleteCount} безвозвратных удалений — эти люди уже стёрты из базы и сюда не попадут.`
+                : ' Если человек «пропал» — проверьте журнал действий админов или что удаление шло через «Исключить из программы», а не «безвозвратно».'}
             </p>
           )}
         </div>

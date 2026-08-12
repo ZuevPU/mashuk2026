@@ -85,11 +85,29 @@ export const listParticipants = async (req: AdminRequest, res: Response): Promis
   }
   const result = await queryParticipants(parsed);
   const participants = await enrichParticipantsWithAvatarUrls(result.participants, { preferStored: false });
+
+  let hardDeleteCount: number | undefined;
+  let selfDeleteLogCount: number | undefined;
+  if (parsed.onlySelfDeleted) {
+    const [[hard], [selfLog]] = await Promise.all([
+      db.select({ c: count() }).from(adminActionsLog)
+        .where(eq(adminActionsLog.actionType, 'participant_delete')),
+      db.select({ c: count() }).from(adminActionsLog)
+        .where(or(
+          eq(adminActionsLog.actionType, 'participant_self_delete'),
+          eq(adminActionsLog.actionType, 'participant_remove_from_program'),
+        )!),
+    ]);
+    hardDeleteCount = Number(hard?.c ?? 0);
+    selfDeleteLogCount = Number(selfLog?.c ?? 0);
+  }
+
   res.json({
     ...result,
     participants,
     shiftId: allShiftsDeleted ? null : parsed.shiftId,
     allShifts: allShiftsDeleted,
+    ...(parsed.onlySelfDeleted ? { hardDeleteCount, selfDeleteLogCount } : {}),
   });
 };
 

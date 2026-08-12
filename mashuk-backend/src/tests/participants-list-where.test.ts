@@ -15,6 +15,18 @@ describe('participantsList deleted/hidden filters', () => {
     assert.equal(q.activity, 'active_today');
   });
 
+  it('defaults allShifts=true for onlySelfDeleted when omitted', () => {
+    const q = parseParticipantListQuery({ query: { onlySelfDeleted: 'true' } });
+    assert.equal(q.allShifts, true);
+  });
+
+  it('allows allShifts=false for onlySelfDeleted', () => {
+    const q = parseParticipantListQuery({
+      query: { onlySelfDeleted: 'true', allShifts: 'false' },
+    });
+    assert.equal(q.allShifts, false);
+  });
+
   it('builds where for hidden all-shifts without shift/activity constraints', () => {
     const where = buildParticipantWhere({
       onlySelfDeleted: true,

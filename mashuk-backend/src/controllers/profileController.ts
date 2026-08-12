@@ -274,11 +274,37 @@ export function depthForAnswerText(text: string) {
 /** Участник удаляет себя из программы: данные в БД сохраняются, выставляется self_deleted_at */
 export const deleteMyProfile = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
+    const me = req.participant!;
     const [updated] = await db.update(participants)
       .set({ selfDeletedAt: new Date() })
-      .where(eq(participants.id, req.participant!.id))
-      .returning({ selfDeletedAt: participants.selfDeletedAt });
-    res.json({ status: 'ok', deletedAt: updated?.selfDeletedAt });
+      .where(eq(participants.id, me.id))
+      .returning({
+        id: participants.id,
+        selfDeletedAt: participants.selfDeletedAt,
+        firstName: participants.firstName,
+        lastName: participants.lastName,
+        vkId: participants.vkId,
+      });
+    if (!updated?.selfDeletedAt) {
+      res.status(500).json({ error: 'Не удалось отметить профиль удалённым' });
+      return;
+    }
+    const { logAdminAction } = await import('../services/adminActionsLog.js');
+    await logAdminAction({
+      adminLogin: 'participant',
+      actionType: 'participant_self_delete',
+      section: 'participants',
+      objectId: me.id,
+      oldValue: {
+        vkId: me.vkId,
+        firstName: me.firstName,
+        lastName: me.lastName,
+        shiftId: me.shiftId,
+      },
+      newValue: { selfDeletedAt: updated.selfDeletedAt },
+      isCritical: true,
+    });
+    res.json({ status: 'ok', deletedAt: updated.selfDeletedAt });
   } catch (error) {
     console.error('deleteMyProfile:', error);
     res.status(500).json({ error: 'Internal server error' });

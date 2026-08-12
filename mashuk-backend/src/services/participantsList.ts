@@ -200,7 +200,12 @@ export function parseParticipantListQuery(req: { query: Record<string, unknown> 
     includeDeleted: req.query.includeDeleted === 'true' || req.query.includeDeleted === '1',
     onlySelfDeleted: req.query.onlySelfDeleted === 'true' || req.query.onlySelfDeleted === '1'
       || req.query.list === 'hidden',
-    allShifts: req.query.allShifts === 'true' || req.query.allShifts === '1',
+    // Для «Удалили профиль» по умолчанию все смены; явно allShifts=false — только текущая.
+    allShifts: req.query.allShifts === 'false' || req.query.allShifts === '0'
+      ? false
+      : (req.query.allShifts === 'true' || req.query.allShifts === '1'
+        || req.query.onlySelfDeleted === 'true' || req.query.onlySelfDeleted === '1'
+        || req.query.list === 'hidden'),
     ids,
     shiftId: req.query.shiftId != null && req.query.shiftId !== ''
       ? Number(req.query.shiftId)
