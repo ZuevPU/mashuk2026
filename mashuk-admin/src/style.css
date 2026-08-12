@@ -2039,17 +2039,21 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 .adm-dash-v2-placeholder strong { display: block; margin-bottom: 4px; font-size: 14px; }
 .adm-dash-stack { display: flex; flex-direction: column; gap: 0; }
 
-/* Штаб · Форум — лёгкая правая навигация по блокам (Apple-style TOC) */
+/* Штаб — лёгкая правая навигация по блокам линз (Apple-style TOC) */
+.adm-hub-layout,
 .adm-forum-layout {
   position: relative;
 }
+.adm-hub-anchor,
 .adm-forum-anchor {
   scroll-margin-top: 88px;
 }
+.adm-hub-side-nav,
 .adm-forum-side-nav {
   display: none;
 }
 @media (min-width: 1480px) {
+  .adm-hub-side-nav,
   .adm-forum-side-nav {
     display: block;
     position: fixed;
@@ -2064,11 +2068,13 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
     pointer-events: none;
     scrollbar-width: thin;
   }
+  .adm-hub-side-nav-inner,
   .adm-forum-side-nav-inner {
     pointer-events: auto;
     padding: 10px 0 10px 12px;
     border-left: 1px solid rgba(0, 0, 0, 0.08);
   }
+  .adm-hub-side-nav-title,
   .adm-forum-side-nav-title {
     margin: 0 0 8px 10px;
     font-size: 11px;
@@ -2078,6 +2084,7 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
     color: var(--m-text-secondary);
     opacity: 0.85;
   }
+  .adm-hub-side-nav-list,
   .adm-forum-side-nav-list {
     list-style: none;
     margin: 0;
@@ -2086,6 +2093,7 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
     flex-direction: column;
     gap: 1px;
   }
+  .adm-hub-side-nav-link,
   .adm-forum-side-nav-link {
     display: flex;
     align-items: center;
@@ -2106,10 +2114,12 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
     border-radius: 6px;
     transition: color 0.15s ease, background 0.15s ease;
   }
+  .adm-hub-side-nav-link:hover,
   .adm-forum-side-nav-link:hover {
     color: var(--m-text);
     background: rgba(0, 0, 0, 0.03);
   }
+  .adm-hub-side-nav-dot,
   .adm-forum-side-nav-dot {
     flex-shrink: 0;
     width: 5px;
@@ -2119,23 +2129,28 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
     background: rgba(0, 0, 0, 0.18);
     transition: background 0.15s ease, transform 0.15s ease;
   }
+  .adm-hub-side-nav-link.is-on,
   .adm-forum-side-nav-link.is-on {
     color: var(--m-text);
     font-weight: 600;
   }
+  .adm-hub-side-nav-link.is-on .adm-hub-side-nav-dot,
   .adm-forum-side-nav-link.is-on .adm-forum-side-nav-dot {
     background: var(--m-accent);
     transform: scale(1.15);
   }
+  .adm-hub-side-nav-label,
   .adm-forum-side-nav-label {
     min-width: 0;
   }
 }
 @media (min-width: 1680px) {
+  .adm-hub-side-nav,
   .adm-forum-side-nav {
     width: 168px;
     left: calc(var(--adm-sidebar-w) + 1180px + 16px);
   }
+  .adm-hub-side-nav-link,
   .adm-forum-side-nav-link {
     font-size: 13px;
     padding: 6px 10px 6px 0;

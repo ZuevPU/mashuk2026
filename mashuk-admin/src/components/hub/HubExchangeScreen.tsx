@@ -9,6 +9,7 @@ import {
   Flag,
   HBar,
 } from './dayResultsUi';
+import { HubLensLayout, type HubNavItem } from './HubSideNav';
 
 type ExchangeData = {
   meta: {
@@ -59,6 +60,17 @@ function covTone(cov: number): 'bad' | 'warn' | 'ok' {
  * Линза «Обмен опытом» — живость площадки вопросов/ответов.
  * GET /analytics/hub/exchange
  */
+const EXCHANGE_NAV: HubNavItem[] = [
+  { id: 'hub-exch-today', label: 'Сегодня' },
+  { id: 'hub-exch-decay', label: 'Затухание' },
+  { id: 'hub-exch-cats', label: 'Категории' },
+  { id: 'hub-exch-roles', label: 'Роли' },
+  { id: 'hub-exch-quality', label: 'Качество' },
+  { id: 'hub-exch-when', label: 'Когда' },
+  { id: 'hub-exch-gaps', label: 'Пробелы' },
+  { id: 'hub-exch-dynamics', label: 'Динамика' },
+];
+
 export function HubExchangeScreen() {
   const {
     adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group,
@@ -96,7 +108,7 @@ export function HubExchangeScreen() {
     : null;
 
   return (
-    <div className="adm-day-results">
+    <HubLensLayout className="adm-day-results" items={EXCHANGE_NAV} navLabel="Разделы обмена">
       <DashScreenTitle
         title="Обмен опытом"
         hint={
@@ -128,6 +140,7 @@ export function HubExchangeScreen() {
       {data && m && (
         <>
           <DayResultsSection
+            id="hub-exch-today"
             title="Модуль сегодня"
             note="Обмен опытом — не анкета: его нельзя «назначить». Здесь измеряется, живёт ли площадка сама."
           >
@@ -168,6 +181,7 @@ export function HubExchangeScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-exch-decay"
             title="Модуль затухает"
             note="Вопросы и ответы по дням — главный график. Накопительный итог скрыл бы падение."
           >
@@ -211,6 +225,7 @@ export function HubExchangeScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-exch-cats"
             title="Рубрикатор категорий"
             note="Доля «Другое» считается по дате создания — архив до релиза и новые вопросы не смешиваются."
           >
@@ -260,6 +275,7 @@ export function HubExchangeScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-exch-roles"
             title="Кто здесь есть"
             note="Спрашивать и отвечать — разные роли: рост отвечающих не компенсирует нехватку вопросов."
           >
@@ -331,6 +347,7 @@ export function HubExchangeScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-exch-quality"
             title="Качество ответов"
             note="Короткие ответы — реакции, а не содержание. Порог длины из ТЗ закрывает этот класс."
           >
@@ -393,6 +410,7 @@ export function HubExchangeScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-exch-when"
             title="Когда пишут"
             note="Обмен опытом живёт днём, между блоками — как копилка. Вечерние напоминания сюда не работают."
           >
@@ -428,6 +446,7 @@ export function HubExchangeScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-exch-gaps"
             title="Пробелы и здоровье данных"
             note="Что панель видит и где ещё есть риск расхождения с другими инструментами."
           >
@@ -447,6 +466,7 @@ export function HubExchangeScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-exch-dynamics"
             title="Динамика по дням форума"
             note="Новые вопросы за день, не накопленный итог."
           >
@@ -500,6 +520,6 @@ export function HubExchangeScreen() {
           </div>
         </>
       )}
-    </div>
+    </HubLensLayout>
   );
 }

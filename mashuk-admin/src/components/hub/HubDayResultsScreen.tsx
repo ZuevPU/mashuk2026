@@ -29,6 +29,7 @@ import {
   heatCellStyle,
   lowTone,
 } from './dayResultsUi';
+import { HubLensLayout, type HubNavItem } from './HubSideNav';
 import { ConclusionCard } from './directionNarrative';
 import { dayFixationNarr, dayOpenNarr } from './hubNarrative';
 
@@ -91,6 +92,20 @@ type DayResultsData = {
  * Линза «Итоги дня» — пульс вечерней анкеты для утреннего штаба.
  * GET /analytics/hub/day-results
  */
+const DAY_RESULTS_NAV: HubNavItem[] = [
+  { id: 'hub-day-pulse', label: 'Пульс' },
+  { id: 'hub-day-spine', label: 'Хребет' },
+  { id: 'hub-day-heatmap', label: 'Теплокарта' },
+  { id: 'hub-day-spread', label: 'Расхождение' },
+  { id: 'hub-day-groups', label: 'Группы' },
+  { id: 'hub-day-experiment', label: 'Эксперимент' },
+  { id: 'hub-day-fixation', label: 'Фиксация' },
+  { id: 'hub-day-role', label: 'Роль' },
+  { id: 'hub-day-practices', label: 'Практики' },
+  { id: 'hub-day-feedback', label: 'ОС' },
+  { id: 'hub-day-dynamics', label: 'Динамика' },
+];
+
 export function HubDayResultsScreen() {
   const {
     adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group,
@@ -161,7 +176,7 @@ export function HubDayResultsScreen() {
   }, [data, m]);
 
   return (
-    <div className="adm-day-results">
+    <HubLensLayout className="adm-day-results" items={DAY_RESULTS_NAV} navLabel="Разделы итогов дня">
       <DashScreenTitle
         title="Итоги дня — вечерняя анкета"
         hint={
@@ -206,6 +221,7 @@ export function HubDayResultsScreen() {
           )}
 
           <DayResultsSection
+            id="hub-day-pulse"
             title="Пульс дня"
             note="Четыре числа, по которым утренний штаб решает, менять ли что-то в программе."
           >
@@ -289,6 +305,7 @@ export function HubDayResultsScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-day-spine"
             title="Хребет дня"
             note="Диверг-шкала: линия — граница между «удовлетворён» (4–5) и «есть претензия» (1–3). Работает хвост слева, не среднее."
           >
@@ -310,6 +327,7 @@ export function HubDayResultsScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-day-heatmap"
             title="Направления × блоки программы"
             note="Цвет — отклонение от общего среднего по блоку, не абсолютная оценка. Внизу — средняя по всему форуму."
           >
@@ -376,6 +394,7 @@ export function HubDayResultsScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-day-spread"
             title="Где направления расходятся сильнее всего"
             note="Разница между самым довольным и самым недовольным направлением (n ≥ 10)."
           >
@@ -400,6 +419,7 @@ export function HubDayResultsScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-day-groups"
             title="Группы в зоне внимания"
             note="Только группы от 8 анкет — на меньших выборках одна плохая ночь двигает среднее."
           >
@@ -467,6 +487,7 @@ export function HubDayResultsScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-day-experiment"
             title="Ролевой эксперимент дня"
             note="Педагогическое ядро: не «понравилось», а получилось ли перенести приём на себя."
           >
@@ -494,6 +515,7 @@ export function HubDayResultsScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-day-fixation"
             title="Что зафиксировали о себе"
             note="Самоописание дня: повторяющиеся формулировки и развёрнутые комментарии участников."
           >
@@ -546,6 +568,7 @@ export function HubDayResultsScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-day-role"
             title="Роль, выбранная на завтра"
             note="Распределение ролей среди сдавших анкету."
           >
@@ -571,6 +594,7 @@ export function HubDayResultsScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-day-practices"
             title="Презентации практик участников"
             note={
               `Дошли до презентаций ${m.practiceAttended} человек из ${m.total}`
@@ -601,6 +625,7 @@ export function HubDayResultsScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-day-feedback"
             title="Качество обратной связи"
             note="Если доходимость до открытых вопросов падает — анкета длинная, а не участники ленивые."
           >
@@ -718,6 +743,7 @@ export function HubDayResultsScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-day-dynamics"
             title="Динамика по дням"
             note="Сквозные шкалы сравниваются напрямую. Разовые вопросы дня в динамику не попадают."
           >
@@ -769,6 +795,6 @@ export function HubDayResultsScreen() {
           </div>
         </>
       )}
-    </div>
+    </HubLensLayout>
   );
 }

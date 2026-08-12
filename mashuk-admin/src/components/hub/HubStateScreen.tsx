@@ -13,6 +13,7 @@ import {
   HBar,
   lowTone,
 } from './dayResultsUi';
+import { HubLensLayout, type HubNavItem } from './HubSideNav';
 import { ConclusionCard } from './directionNarrative';
 import { stateNarr } from './hubNarrative';
 
@@ -101,6 +102,21 @@ function negCellStyle(neg: number | null, _n: number): CSSProperties {
  * Линза «Состояние» — пульт проверок состояния для штаба.
  * GET /analytics/hub/state
  */
+const STATE_NAV: HubNavItem[] = [
+  { id: 'hub-state-now', label: 'Сейчас' },
+  { id: 'hub-state-phases', label: 'Срез' },
+  { id: 'hub-state-dirs', label: 'Направления' },
+  { id: 'hub-state-groups', label: 'Группы' },
+  { id: 'hub-state-reasons', label: 'Причины' },
+  { id: 'hub-state-energy', label: 'Энергия' },
+  { id: 'hub-state-traj', label: 'Траектории' },
+  { id: 'hub-state-dynamics', label: 'Динамика' },
+  { id: 'hub-state-path', label: 'Путь' },
+  { id: 'hub-state-emo-dyn', label: 'Эмоции' },
+  { id: 'hub-state-emo-heat', label: 'Теплокарта' },
+  { id: 'hub-state-protocol', label: 'Протокол' },
+];
+
 export function HubStateScreen() {
   const {
     adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group,
@@ -150,7 +166,7 @@ export function HubStateScreen() {
   }, [data, m]);
 
   return (
-    <div className="adm-day-results">
+    <HubLensLayout className="adm-day-results" items={STATE_NAV} navLabel="Разделы состояния">
       <DashScreenTitle
         title="Состояние участников"
         hint={
@@ -182,6 +198,7 @@ export function HubStateScreen() {
       {data && m && (
         <>
           <DayResultsSection
+            id="hub-state-now"
             title="Сейчас"
             note="Панель отвечает на один вопрос: куда идти в ближайший час."
           >
@@ -216,6 +233,7 @@ export function HubStateScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-state-phases"
             title="Срез дня по трём точкам"
             note="Утро, день и вечер — три независимых замера: состав отвечающих разный. Сравнивать можно доли внутри фазы."
           >
@@ -255,6 +273,7 @@ export function HubStateScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-state-dirs"
             title="Направления"
             note="Охват важнее среднего: направление, которое перестало отвечать, опаснее направления с низкой энергией."
           >
@@ -302,6 +321,7 @@ export function HubStateScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-state-groups"
             title="Группы: карта обхода"
             note="Серая клетка — меньше 5 ответов в фазе. Строки только от 15 ответов за день."
           >
@@ -346,6 +366,7 @@ export function HubStateScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-state-reasons"
             title="Причины"
             note="Темы негатива и дословные цитаты из зон «Риск» и «Усталость». Имена скрыты."
           >
@@ -406,6 +427,7 @@ export function HubStateScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-state-energy"
             title="Шкала энергии: осторожно"
             note="Среднюю энергии на решения не выносим: 5 и 10 часто артефакты ползунка."
           >
@@ -444,6 +466,7 @@ export function HubStateScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-state-traj"
             title="Траектории и охват"
             note="Переходы только по тем, кто отметился утром и вечером."
           >
@@ -505,7 +528,7 @@ export function HubStateScreen() {
             </div>
           </DayResultsSection>
 
-          <DayResultsSection title="Динамика по дням" note="Охват проверок состояния по дням форума.">
+          <DayResultsSection id="hub-state-dynamics" title="Динамика по дням" note="Охват проверок состояния по дням форума.">
             <DashCard>
               <div className="adm-day-results-dyn">
                 {[1, 2, 3, 4, 5, 6, 7, 8].map(d => {
@@ -535,6 +558,7 @@ export function HubStateScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-state-path"
             title="Путь участника"
             note="Средние эмоция и энергия по проверкам состояния: утро → день → вечер за всю смену."
           >
@@ -547,6 +571,7 @@ export function HubStateScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-state-emo-dyn"
             title="Динамика эмоций по смене"
             note="Отметьте эмоции — линии на обоих графиках. Глобальные фильтры штаба (дата / направление) применяются к данным."
           >
@@ -560,6 +585,7 @@ export function HubStateScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-state-emo-heat"
             title="Тепловая карта эмоций"
             note="Доля каждой эмоции по фазам утро / день / вечер за все дни смены."
           >
@@ -569,7 +595,7 @@ export function HubStateScreen() {
             />
           </DayResultsSection>
 
-          <DayResultsSection title="Протокол реагирования">
+          <DayResultsSection id="hub-state-protocol" title="Протокол реагирования">
             <DashCard>
               {data.protocol.map(r => (
                 <div key={r.when} className="adm-state-rule">
@@ -598,6 +624,6 @@ export function HubStateScreen() {
           </div>
         </>
       )}
-    </div>
+    </HubLensLayout>
   );
 }

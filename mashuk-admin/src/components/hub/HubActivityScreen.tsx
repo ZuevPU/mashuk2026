@@ -10,6 +10,7 @@ import {
   HBar,
   StackBar,
 } from './dayResultsUi';
+import { HubLensLayout, type HubNavItem } from './HubSideNav';
 
 const SEG_COLORS: Record<string, string> = {
   'Ядро': '#57bd9c',
@@ -61,6 +62,18 @@ type ActivityData = {
  * Линза «Активность» — вовлечённость, сегменты, выпадение.
  * GET /analytics/hub/activity
  */
+const ACTIVITY_NAV: HubNavItem[] = [
+  { id: 'hub-activity-engage', label: 'Вовлечённость' },
+  { id: 'hub-activity-types', label: 'Типы' },
+  { id: 'hub-activity-program', label: 'Программа' },
+  { id: 'hub-activity-exchange', label: 'Обмен' },
+  { id: 'hub-activity-dirs', label: 'Направления' },
+  { id: 'hub-activity-groups', label: 'Группы' },
+  { id: 'hub-activity-online', label: 'Онлайн' },
+  { id: 'hub-activity-limits', label: 'Границы' },
+  { id: 'hub-activity-dynamics', label: 'Динамика' },
+];
+
 export function HubActivityScreen() {
   const {
     adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group,
@@ -94,7 +107,7 @@ export function HubActivityScreen() {
   const people = Math.max(1, m?.people ?? 1);
 
   return (
-    <div className="adm-day-results">
+    <HubLensLayout className="adm-day-results" items={ACTIVITY_NAV} navLabel="Разделы активности">
       <DashScreenTitle
         title="Активность участников"
         hint={
@@ -126,6 +139,7 @@ export function HubActivityScreen() {
       {data && m && (
         <>
           <DayResultsSection
+            id="hub-activity-engage"
             title="Вовлечённость сегодня"
             note="Панель отвечает на вопрос «кто выпадает», а не «кто лучший». Рейтинг участников из этих данных строить нельзя."
           >
@@ -159,6 +173,7 @@ export function HubActivityScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-activity-types"
             title="Четыре типа участия"
             note="Две оси: точки выше медианы и есть ли баллы «Опыт». Разные квадранты — разные действия."
           >
@@ -213,6 +228,7 @@ export function HubActivityScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-activity-program"
             title="Прохождение программы"
             note={`Точки осмысления — сколько блоков закрыто рефлексией. Максимум на сегодня — ${m.maxPoints}.`}
           >
@@ -250,6 +266,7 @@ export function HubActivityScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-activity-exchange"
             title="Обмен опытом"
             note="Распределение принципиально другое: управлять средней величиной нельзя — только долей участвующих."
           >
@@ -315,6 +332,7 @@ export function HubActivityScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-activity-dirs"
             title="Направления"
             note="Состав участия важнее среднего: одинаковая средняя может складываться из ядра и тихих либо из ровной середины."
           >
@@ -370,6 +388,7 @@ export function HubActivityScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-activity-groups"
             title="Группы"
             note="Список для кураторов. Показаны группы от 15 человек."
           >
@@ -427,6 +446,7 @@ export function HubActivityScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-activity-online"
             title="Когда были в системе последний раз"
             note="Ритм суток подсказывает, когда напоминание дойдёт."
           >
@@ -463,6 +483,7 @@ export function HubActivityScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-activity-limits"
             title="Чего эта панель не делает"
             note="Ограничения важнее графиков: с баллами всегда возникает соблазн построить рейтинг."
           >
@@ -477,6 +498,7 @@ export function HubActivityScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-activity-dynamics"
             title="Динамика по дням форума"
             note="Доля участников с цифровой активностью за день (ответы, баллы, копилка; сегодня — ещё lastActiveAt). Сравнивать дни лучше по срезу на одно время суток."
           >
@@ -529,6 +551,6 @@ export function HubActivityScreen() {
           </div>
         </>
       )}
-    </div>
+    </HubLensLayout>
   );
 }

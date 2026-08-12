@@ -10,6 +10,7 @@ import {
   Flag,
   HBar,
 } from './dayResultsUi';
+import { HubLensLayout, type HubNavItem } from './HubSideNav';
 
 const ZONE_COLORS: Record<string, string> = {
   'Подъём': '#57bd9c',
@@ -62,6 +63,16 @@ type StatsData = {
  * Линза «Статистика» — пульт дня: всё ли, что открыли, собрало ответы.
  * GET /analytics/hub/stats
  */
+const STATS_NAV: HubNavItem[] = [
+  { id: 'hub-stats-overview', label: 'Обзор' },
+  { id: 'hub-stats-slots', label: 'Слоты' },
+  { id: 'hub-stats-zones', label: 'Зоны' },
+  { id: 'hub-stats-reconcile', label: 'Сверка' },
+  { id: 'hub-stats-next', label: 'Дальше' },
+  { id: 'hub-stats-gaps', label: 'Пробелы' },
+  { id: 'hub-stats-dynamics', label: 'Динамика' },
+];
+
 export function HubStatsScreen({
   onLensChange,
 }: {
@@ -101,7 +112,7 @@ export function HubStatsScreen({
     : 1;
 
   return (
-    <div className="adm-day-results">
+    <HubLensLayout className="adm-day-results" items={STATS_NAV} navLabel="Разделы статистики">
       <DashScreenTitle
         title="Статистика дня"
         hint={
@@ -133,6 +144,7 @@ export function HubStatsScreen({
       {m && (
         <>
           <DayResultsSection
+            id="hub-stats-overview"
             title="День собран на"
             note="Эта панель отвечает не на вопрос «как прошёл день», а на вопрос «всё ли, что мы открыли, собрало ответы»."
           >
@@ -171,6 +183,7 @@ export function HubStatsScreen({
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-stats-slots"
             title="Что открыто и что собрало ответы"
             note="Каждый квадрат — опубликованный вопрос дня. Зелёный собрал ответы, красный — пустой, серый ждёт своего окна."
           >
@@ -231,6 +244,7 @@ export function HubStatsScreen({
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-stats-zones"
             title="Эмоциональные зоны дня"
             note="Пять рабочих зон в долях от всех отметок состояния. Мёртвые счётчики старой модели — отдельно."
           >
@@ -269,6 +283,7 @@ export function HubStatsScreen({
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-stats-reconcile"
             title="Сверка с первичными выгрузками"
             note="Сводка и панели должны считать по одному определению — иначе штаб перестанет доверять обоим."
           >
@@ -309,6 +324,7 @@ export function HubStatsScreen({
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-stats-next"
             title="Куда идти дальше"
             note="Каждая плитка ведёт на свою панель с уже наложенным фильтром дня. Числа — из тех же расчётов, что внутри панелей."
           >
@@ -328,7 +344,7 @@ export function HubStatsScreen({
             </div>
           </DayResultsSection>
 
-          <DayResultsSection title="Чего не хватает / контроль пробелов">
+          <DayResultsSection id="hub-stats-gaps" title="Чего не хватает / контроль пробелов">
             <DashCard>
               {(data?.gaps ?? []).map(g => (
                 <div key={g.title} className="adm-stats-gap">
@@ -340,6 +356,7 @@ export function HubStatsScreen({
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-stats-dynamics"
             title="Динамика по дням форума"
             note="Доля участников с ответами, число пустых вопросов и доля усталости+риска."
           >
@@ -398,6 +415,6 @@ export function HubStatsScreen({
           </div>
         </>
       )}
-    </div>
+    </HubLensLayout>
   );
 }

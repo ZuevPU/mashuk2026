@@ -10,6 +10,7 @@ import {
   HBar,
   StackBar,
 } from './dayResultsUi';
+import { HubLensLayout, type HubNavItem } from './HubSideNav';
 import { ConclusionCard } from './directionNarrative';
 import { afterBlocksNarr } from './hubNarrative';
 
@@ -68,6 +69,16 @@ function covTone(cov: number): 'bad' | 'warn' | 'ok' {
  * Линза «После блоков» — присвоение материала программы.
  * GET /analytics/hub/after-blocks
  */
+const AFTER_NAV: HubNavItem[] = [
+  { id: 'hub-after-overview', label: 'Обзор' },
+  { id: 'hub-after-depth', label: 'Глубина' },
+  { id: 'hub-after-map', label: 'Карта' },
+  { id: 'hub-after-events', label: 'События' },
+  { id: 'hub-after-dirs', label: 'Направления' },
+  { id: 'hub-after-quotes', label: 'Цитаты' },
+  { id: 'hub-after-dynamics', label: 'Динамика' },
+];
+
 export function HubAfterBlocksScreen() {
   const {
     adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group,
@@ -134,7 +145,7 @@ export function HubAfterBlocksScreen() {
   }, [data]);
 
   return (
-    <div className="adm-day-results">
+    <HubLensLayout className="adm-day-results" items={AFTER_NAV} navLabel="Разделы после блоков">
       <DashScreenTitle
         title="Осмысление после блоков"
         hint={
@@ -166,6 +177,7 @@ export function HubAfterBlocksScreen() {
       {data && m && (
         <>
           <DayResultsSection
+            id="hub-after-overview"
             title="Что дал день"
             note="Эта анкета отвечает не на «понравилось ли», а на «дошло ли до практики». Удовлетворённость — в итогах дня, здесь — присвоение."
           >
@@ -198,6 +210,7 @@ export function HubAfterBlocksScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-after-depth"
             title="Глубина осмысления"
             note="Четыре уровня по речевым маркерам. Медиана длины рядом — быстрая проверка разметки: у переноса она должна быть выше, чем у реакции."
           >
@@ -239,6 +252,7 @@ export function HubAfterBlocksScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-after-map"
             title="Карта программы: охват × присвоение"
             note="По горизонтали — число ответов по подтеме, по вертикали — доля присвоения. Линия — средний индекс дня. Подтемы от 20 ответов."
           >
@@ -308,6 +322,7 @@ export function HubAfterBlocksScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-after-events"
             title="События программы"
             note="Доли считаются внутри события: один человек проходит несколько блоков."
           >
@@ -342,6 +357,7 @@ export function HubAfterBlocksScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-after-dirs"
             title="Направления и момент ответа"
             note="Слева — кто как осмысляет. Справа — глубина в зависимости от времени написания."
           >
@@ -413,6 +429,7 @@ export function HubAfterBlocksScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-after-quotes"
             title="Что именно уносят"
             note="Лента сильных ответов (перенос и связь с собой, длиннее 60 знаков). Рабочий материал для методистов."
           >
@@ -483,6 +500,7 @@ export function HubAfterBlocksScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-after-dynamics"
             title="Динамика по дням форума"
             note="Сквозная метрика — индекс присвоения. Он сравним между днями и не зависит от состава программы."
           >
@@ -536,6 +554,6 @@ export function HubAfterBlocksScreen() {
           </div>
         </>
       )}
-    </div>
+    </HubLensLayout>
   );
 }

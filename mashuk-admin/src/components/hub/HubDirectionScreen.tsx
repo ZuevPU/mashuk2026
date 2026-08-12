@@ -21,6 +21,7 @@ import {
   type OverviewRow,
   type StateCmpRow,
 } from './directionNarrative';
+import { HubLensLayout, type HubNavItem } from './HubSideNav';
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
@@ -147,6 +148,32 @@ function heatRank(vals: number[], v: number, up: boolean): string {
   return 'transparent';
 }
 
+const DIR_FORUM_NAV: HubNavItem[] = [
+  { id: 'hub-dir-forum-overview', label: 'Обзор' },
+  { id: 'hub-dir-forum-matrix', label: 'Матрица' },
+  { id: 'hub-dir-forum-feedback', label: 'ОС' },
+  { id: 'hub-dir-forum-state', label: 'Состояние' },
+  { id: 'hub-dir-forum-mechanics', label: 'Механизмы' },
+  { id: 'hub-dir-forum-tools', label: 'Копилка' },
+  { id: 'hub-dir-forum-readout', label: 'Вывод' },
+  { id: 'hub-dir-forum-actions', label: 'Сегодня' },
+  { id: 'hub-dir-forum-dynamics', label: 'Динамика' },
+];
+
+const DIR_DETAIL_NAV: HubNavItem[] = [
+  { id: 'hub-dir-kpi', label: 'KPI' },
+  { id: 'hub-dir-portrait', label: 'Портрет' },
+  { id: 'hub-dir-phases', label: 'Фазы' },
+  { id: 'hub-dir-emotions', label: 'Эмоции' },
+  { id: 'hub-dir-reasons', label: 'Причины' },
+  { id: 'hub-dir-after', label: 'После блоков' },
+  { id: 'hub-dir-piggy', label: 'Копилка' },
+  { id: 'hub-dir-exchange', label: 'Обмен' },
+  { id: 'hub-dir-summary', label: 'Итог' },
+  { id: 'hub-dir-groups', label: 'Группы' },
+  { id: 'hub-dir-rank', label: 'Ранг' },
+];
+
 /**
  * Штаб · Направления — два слоя:
  * 1) форум · сравнение
@@ -224,9 +251,10 @@ export function HubDirectionScreen() {
   }, [data, fl, cur]);
 
   const summary = narr ? dirSummary(narr) : null;
+  const dirNavItems = layer === 'forum' ? DIR_FORUM_NAV : DIR_DETAIL_NAV;
 
   return (
-    <div className="adm-day-results">
+    <HubLensLayout className="adm-day-results" items={dirNavItems} navLabel="Разделы направлений">
       <DashScreenTitle
         title={layer === 'forum' ? 'Штаб · Сравнение направлений' : cur !== '—' ? `Направление «${cur}»` : 'Направление'}
         hint={
@@ -302,6 +330,7 @@ export function HubDirectionScreen() {
       {data && layer === 'forum' && fl && (
         <>
           <DayResultsSection
+            id="hub-dir-forum-overview"
             title="Что собрано за день"
             note="Строка «на человека» важнее абсолютных чисел: она показывает, живёт ли инструмент в направлении."
           >
@@ -338,6 +367,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-dir-forum-matrix"
             title="Сводная матрица направлений"
             note="Цвет — место в ряду, не абсолютное значение. Объёмы нормированы на зарегистрированных."
           >
@@ -422,6 +452,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-dir-forum-feedback"
             title="Характер обратной связи"
             note="Важно соотношение «содержательное к пустому»: работает ли вопрос после блока или собирает отписки."
           >
@@ -453,6 +484,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-dir-forum-state"
             title="Состояние и энергия"
             note="Опираться на долю риска и топ-эмоцию. Энергию читать только как направление сдвига."
           >
@@ -504,6 +536,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-dir-forum-mechanics"
             title="Программа и обмен: два механизма"
             note="«Путь» — прохождение программы. «Опыт» — добровольное участие в обмене. Сводить в один балл нельзя."
           >
@@ -527,6 +560,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-dir-forum-tools"
             title="Копилка и обмен опытом"
             note="Здесь измеряется не объём, а намерение: какой тег преобладает и какая доля вопросов без рубрики."
           >
@@ -597,6 +631,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-dir-forum-readout"
             title="Что это значит · читаемый вывод"
             note="Текст собирается из тех же чисел, что и графики: пороги и сравнения заданы правилами."
           >
@@ -612,6 +647,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-dir-forum-actions"
             title="Куда идти сегодня"
             note="Направление попадает в список, если набрало минимум два сигнала: нагрузка, отдача или вовлечённость."
           >
@@ -628,7 +664,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           {data.series.length > 0 && (
-            <DayResultsSection title="Динамика по дням" note="Сравнение направлений по выбранному инструменту.">
+            <DayResultsSection id="hub-dir-forum-dynamics" title="Динамика по дням" note="Сравнение направлений по выбранному инструменту.">
               <HubDirectionDynamics
                 series={data.series}
                 instruments={data.instruments}
@@ -644,6 +680,7 @@ export function HubDirectionScreen() {
       {data && layer === 'dir' && (
         <>
           <DayResultsSection
+            id="hub-dir-kpi"
             title="Ключевые показатели"
             note="Число само по себе ничего не значит: важно, больше или меньше оно ожидаемого для размера направления."
           >
@@ -680,6 +717,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-dir-portrait"
             title="Портрет относительно форума"
             note="Отклонение от среднего по форуму. Зелёный — направление сильнее форума (для усталости — меньше)."
           >
@@ -718,6 +756,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-dir-phases"
             title="Состояние по фазам"
             note="Зоны внутри каждой проверки. Медиана энергии — справочно; картину задают зоны."
           >
@@ -756,6 +795,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-dir-emotions"
             title="Эмоции по фазам"
             note="Одна и та же эмоция в разное время означает разное: усталость утром — про сон, днём — про нагрузку блока."
           >
@@ -830,6 +870,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-dir-reasons"
             title="Причины состояния"
             note="Категории по тексту пояснения. Это то, что штаб может изменить завтра."
           >
@@ -851,6 +892,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-dir-after"
             title="Обратная связь после блоков"
             note="Содержательность важнее объёма. Дефект чаще в вопросе, а не в участниках."
           >
@@ -875,6 +917,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-dir-piggy"
             title="Копилка"
             note="Тег показывает, доходит ли запись до намерения."
           >
@@ -921,6 +964,7 @@ export function HubDirectionScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-dir-exchange"
             title="Обмен опытом"
             note="Спрашивать и отвечать — разные роли."
           >
@@ -950,6 +994,7 @@ export function HubDirectionScreen() {
 
           {summary && (
             <DayResultsSection
+              id="hub-dir-summary"
               title="Итог для утреннего штаба"
               note="Заголовки шести выводов и три первых действия — то, что куратор говорит за тридцать секунд."
             >
@@ -966,6 +1011,7 @@ export function HubDirectionScreen() {
 
           {data.groups.length > 0 && (
             <DayResultsSection
+              id="hub-dir-groups"
               title="Группы направления"
               note="Рабочий список: где проседает индекс или точки осмысления."
             >
@@ -999,7 +1045,7 @@ export function HubDirectionScreen() {
           )}
 
           {data.matrix.rows.length > 0 && (
-            <DayResultsSection title="Место в ряду направлений" note="Цвет — ранг среди направлений по метрике.">
+            <DayResultsSection id="hub-dir-rank" title="Место в ряду направлений" note="Цвет — ранг среди направлений по метрике.">
               <DashCard>
                 <div className="adm-day-results-scroll">
                   <table className="adm-day-results-table">
@@ -1035,6 +1081,6 @@ export function HubDirectionScreen() {
           )}
         </>
       )}
-    </div>
+    </HubLensLayout>
   );
 }

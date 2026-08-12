@@ -9,20 +9,23 @@ const SCALE_COLORS: Record<number, string> = {
 };
 
 export function DayResultsSection({
+  id,
   title,
   note,
   children,
 }: {
+  /** Якорь для правой навигации Штаба */
+  id?: string;
   title: string;
   note?: string;
   children?: ReactNode;
 }) {
   return (
-    <div className="adm-day-results-section">
+    <section id={id} className={`adm-day-results-section${id ? ' adm-hub-anchor' : ''}`}>
       <div className="adm-dash-section-label">{title}</div>
       {note ? <p className="adm-day-results-note">{note}</p> : null}
       {children}
-    </div>
+    </section>
   );
 }
 

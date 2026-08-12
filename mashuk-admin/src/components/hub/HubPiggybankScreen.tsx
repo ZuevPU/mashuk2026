@@ -9,6 +9,7 @@ import {
   Flag,
   HBar,
 } from './dayResultsUi';
+import { HubLensLayout, type HubNavItem } from './HubSideNav';
 
 const TAG_COLORS: Record<string, string> = {
   'мысль': '#6f7d95',
@@ -72,6 +73,17 @@ function covTone(cov: number): 'bad' | 'warn' | 'ok' {
  * Линза «Копилка» — охват и удержание добровольного инструмента.
  * GET /analytics/hub/piggybank · тексты заметок не выводятся.
  */
+const PIGGY_NAV: HubNavItem[] = [
+  { id: 'hub-piggy-overview', label: 'Обзор' },
+  { id: 'hub-piggy-tools', label: 'Инструменты' },
+  { id: 'hub-piggy-transfer', label: 'Перенос' },
+  { id: 'hub-piggy-sources', label: 'Источники' },
+  { id: 'hub-piggy-who', label: 'Кто' },
+  { id: 'hub-piggy-when', label: 'Когда' },
+  { id: 'hub-piggy-access', label: 'Доступ' },
+  { id: 'hub-piggy-dynamics', label: 'Динамика' },
+];
+
 export function HubPiggybankScreen() {
   const {
     adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group,
@@ -105,7 +117,7 @@ export function HubPiggybankScreen() {
   const c = data?.concentration;
 
   return (
-    <div className="adm-day-results">
+    <HubLensLayout className="adm-day-results" items={PIGGY_NAV} navLabel="Разделы копилки">
       <DashScreenTitle
         title="Копилка"
         hint={
@@ -137,6 +149,7 @@ export function HubPiggybankScreen() {
       {data && m && c && (
         <>
           <DayResultsSection
+            id="hub-piggy-overview"
             title="Как пользуются копилкой"
             note="Копилка — единственный добровольный инструмент форума. Метрика здесь не объём, а охват и удержание."
           >
@@ -170,6 +183,7 @@ export function HubPiggybankScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-piggy-tools"
             title="В таблице лежат два разных инструмента"
             note="Часть записей — не текст участника, а автоматически сохранённый материал программы. Их нельзя считать вместе с заметками."
           >
@@ -242,6 +256,7 @@ export function HubPiggybankScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-piggy-transfer"
             title="От наблюдения к переносу"
             note="Лестница присвоения только по собственным заметкам."
           >
@@ -274,6 +289,7 @@ export function HubPiggybankScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-piggy-sources"
             title="Откуда приходит материал"
             note="Доля с действием — теги «в работу» или «на будущее». Какие форматы дают задел, а не впечатление."
           >
@@ -312,6 +328,7 @@ export function HubPiggybankScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-piggy-who"
             title="Кто пользуется"
             note="Слева — лестница удержания. Справа — охват по направлениям."
           >
@@ -378,6 +395,7 @@ export function HubPiggybankScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-piggy-when"
             title="Когда записывают"
             note="Единственный инструмент, который живёт весь день, а не в окне вечерней анкеты."
           >
@@ -422,6 +440,7 @@ export function HubPiggybankScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-piggy-access"
             title="Границы доступа"
             note="Участник пишет копилку для себя, а не для организаторов. От этого зависит, что можно выводить в админку."
           >
@@ -436,6 +455,7 @@ export function HubPiggybankScreen() {
           </DayResultsSection>
 
           <DayResultsSection
+            id="hub-piggy-dynamics"
             title="Динамика по дням форума"
             note="Охват, доля вернувшихся и доля заметок с действием. Объём записей в динамику не идёт."
           >
@@ -489,6 +509,6 @@ export function HubPiggybankScreen() {
           </div>
         </>
       )}
-    </div>
+    </HubLensLayout>
   );
 }

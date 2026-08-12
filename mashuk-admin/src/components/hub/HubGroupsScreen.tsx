@@ -7,6 +7,7 @@ import {
   dashVal,
 } from '../analytics/dashboardUi';
 import { HubKpiRow } from './HubKpiRow';
+import { HubLensLayout, type HubNavItem } from './HubSideNav';
 import { downloadHubExport } from './hubExports';
 import { hubDisplayDay, hubFilterParams, isAllForumDay } from './hubQuery';
 import type { HubLens } from './HubTab';
@@ -81,6 +82,11 @@ function sortMark(sort: SortState, id: string): string {
 /**
  * Линза «Группы» — итоговая анкета по дням и 7 точек активности за выбранный день.
  */
+const GROUPS_NAV: HubNavItem[] = [
+  { id: 'hub-groups-kpi', label: 'Обзор' },
+  { id: 'hub-groups-table', label: 'Таблица' },
+];
+
 export function HubGroupsScreen({
   onLensChange,
 }: {
@@ -390,12 +396,13 @@ export function HubGroupsScreen({
   }
 
   return (
-    <div className="adm-dash-stack">
+    <HubLensLayout className="adm-dash-stack" items={GROUPS_NAV} navLabel="Разделы групп">
       <DashScreenTitle
         title="Группы"
         hint="Итоговая анкета по дням · 7 точек активности · средняя вовлечённость"
       />
 
+      <section id="hub-groups-kpi" className="adm-hub-anchor">
       <HubKpiRow
         cols={3}
         items={[
@@ -435,7 +442,9 @@ export function HubGroupsScreen({
           },
         ]}
       />
+      </section>
 
+      <section id="hub-groups-table" className="adm-hub-anchor">
       <SectionLabel>Группы · итоговая анкета и точки активности</SectionLabel>
       <DashCard title="Сводка по группам">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 8 }}>
@@ -568,6 +577,7 @@ export function HubGroupsScreen({
           </p>
         )}
       </DashCard>
-    </div>
+      </section>
+    </HubLensLayout>
   );
 }

@@ -43,7 +43,7 @@ import { RoleDirectionHeatmap } from './RoleDirectionHeatmap';
 import { TouchpointDirectionSlotChart, TouchpointSlotChart } from './TouchpointSlotChart';
 import { PiggybankDirectionMatrix } from './PiggybankDirectionMatrix';
 import { HubEmotionsDayChart } from './HubEmotionsDayChart';
-import { HubForumSideNav, type ForumNavItem } from './HubForumSideNav';
+import { HubLensLayout, type HubNavItem } from './HubSideNav';
 import { downloadHubExport, forumExportItems, forumPackExportItem } from './hubExports';
 import {
   hubDisplayDay,
@@ -52,7 +52,7 @@ import {
 } from './hubQuery';
 import type { HubLens } from './HubTab';
 
-const FORUM_NAV: ForumNavItem[] = [
+const FORUM_NAV: HubNavItem[] = [
   { id: 'forum-overview', label: 'Обзор' },
   { id: 'forum-directions', label: 'Направления' },
   { id: 'forum-emotions', label: 'Эмоции' },
@@ -336,8 +336,7 @@ export function HubForumScreen({
   const pulse = data.pulse?.emotionalPulse ?? {};
 
   return (
-    <div className="adm-forum-layout">
-      <div className="adm-dash-stack adm-forum-main">
+    <HubLensLayout items={FORUM_NAV} navLabel="Разделы форума" className="adm-dash-stack">
         <DashScreenTitle
           title="Штаб · Форум"
           hint={dayHintFull}
@@ -699,9 +698,6 @@ export function HubForumScreen({
           )}
           <PiggybankDirectionMatrix />
         </section>
-      </div>
-
-      <HubForumSideNav items={FORUM_NAV} />
-    </div>
+    </HubLensLayout>
   );
 }
