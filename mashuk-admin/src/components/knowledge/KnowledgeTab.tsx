@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
+import { AdminAccordion } from '../admin/AdminAccordion';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
 import { SpeakerMultiPick } from '../program/ProgramCatalogs';
@@ -7,7 +8,7 @@ import type { ProgramSpeaker } from '../program/types';
 import { KnowledgeBaseParticipantPreview } from './KnowledgeBaseParticipantPreview';
 import { MaterialCard, type MaterialRow } from './MaterialCard';
 import { MaterialTypesPanel } from './MaterialTypesPanel';
-import { KB_SECTIONS, compareKbMaterials, kbSubsectionOptions } from './kbSections';
+import { KB_SECTIONS, compareKbMaterials, kbSubsectionOptions, speakerSortKey } from './kbSections';
 
 type KbUnlock = {
   id: number;
@@ -15,6 +16,39 @@ type KbUnlock = {
   dayNumber: number;
   unlockedAt?: string;
 };
+
+type ListSortKey = 'section' | 'day' | 'speaker' | 'title' | 'type' | 'audience' | 'binding' | 'status';
+type ListSort = { key: ListSortKey; dir: 'asc' | 'desc' };
+
+function sortMark(sort: ListSort, key: ListSortKey): string {
+  if (sort.key !== key) return '';
+  return sort.dir === 'asc' ? ' ↑' : ' ↓';
+}
+
+function SortTh({
+  label: text,
+  sortKey,
+  sort,
+  onSort,
+}: {
+  label: string;
+  sortKey: ListSortKey;
+  sort: ListSort;
+  onSort: (key: ListSortKey) => void;
+}) {
+  return (
+    <th>
+      <button
+        type="button"
+        className="adm-link"
+        style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer', fontWeight: 650 }}
+        onClick={() => onSort(sortKey)}
+      >
+        {text}{sortMark(sort, sortKey)}
+      </button>
+    </th>
+  );
+}
 
 const emptyMaterial = () => ({
   dayNumber: 1,
@@ -84,6 +118,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   const [previewOpen, setPreviewOpen] = useState(false);
   const [kbForumThreshold, setKbForumThreshold] = useState(4);
   const [totalDays, setTotalDays] = useState(8);
+  const [listSort, setListSort] = useState<ListSort>({ key: 'section', dir: 'asc' });
 
   const openDayPreview = (day: number) => {
     setPreviewDay(day);
@@ -145,38 +180,95 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
     if (dayFilter) setPreviewDay(Number(dayFilter));
   }, [dayFilter]);
 
+  const speakerLabel = useCallback((m: MaterialRow) => {
+    if (m.speakerIds?.length) {
+      const names = speakers
+        .filter(s => m.speakerIds!.includes(s.id))
+        .map(s => s.name)
+        .filter(Boolean);
+      if (names.length) return names.join('; ');
+    }
+    return m.speakerName || '';
+  }, [speakers]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const speakerLabel = (m: MaterialRow) => {
-      if (m.speakerIds?.length) {
-        const names = speakers
-          .filter(s => m.speakerIds!.includes(s.id))
-          .map(s => s.name)
-          .filter(Boolean);
-        if (names.length) return names.join('; ');
+    const rows = materials.filter(m => {
+      if (dayFilter && String(m.dayNumber ?? '') !== dayFilter) return false;
+      if (directionFilter && (m.direction || '') !== directionFilter) return false;
+      if (sectionFilter && (m.kbSection || '') !== sectionFilter) return false;
+      if (eventFilter === 'general') {
+        if (m.eventId != null || m.isGeneral !== true) return false;
+      } else if (eventFilter && String(m.eventId ?? '') !== eventFilter) return false;
+      if (q) {
+        const hay = `${m.title || ''} ${m.topicTitle || ''} ${speakerLabel(m)}`.toLowerCase();
+        if (!hay.includes(q)) return false;
       }
-      return m.speakerName || '';
+      return true;
+    });
+
+    const eventTitle = (m: MaterialRow) => {
+      if (m.isGeneral) return 'общий';
+      if (m.eventId == null) return '';
+      return events.find(e => e.id === m.eventId)?.title || String(m.eventId);
     };
-    return materials
-      .filter(m => {
-        if (dayFilter && String(m.dayNumber ?? '') !== dayFilter) return false;
-        if (directionFilter && (m.direction || '') !== directionFilter) return false;
-        if (sectionFilter && (m.kbSection || '') !== sectionFilter) return false;
-        if (eventFilter === 'general') {
-          if (m.eventId != null || m.isGeneral !== true) return false;
-        } else if (eventFilter && String(m.eventId ?? '') !== eventFilter) return false;
-        if (q) {
-          const hay = `${m.title || ''} ${m.topicTitle || ''} ${speakerLabel(m)}`.toLowerCase();
-          if (!hay.includes(q)) return false;
-        }
-        return true;
-      })
-      .slice()
-      .sort((a, b) => compareKbMaterials(
-        { ...a, speakerName: speakerLabel(a) },
-        { ...b, speakerName: speakerLabel(b) },
-      ));
-  }, [materials, speakers, search, dayFilter, directionFilter, eventFilter, sectionFilter]);
+
+    const cmpField = (a: MaterialRow, b: MaterialRow): number => {
+      switch (listSort.key) {
+        case 'day':
+          return (a.dayNumber ?? 0) - (b.dayNumber ?? 0);
+        case 'speaker':
+          return speakerSortKey(speakerLabel(a)).localeCompare(speakerSortKey(speakerLabel(b)), 'ru')
+            || speakerLabel(a).localeCompare(speakerLabel(b), 'ru');
+        case 'title':
+          return (a.title || '').localeCompare(b.title || '', 'ru');
+        case 'type':
+          return (a.type || '').localeCompare(b.type || '', 'ru');
+        case 'audience':
+          return (a.direction || 'все').localeCompare(b.direction || 'все', 'ru');
+        case 'binding':
+          return eventTitle(a).localeCompare(eventTitle(b), 'ru');
+        case 'status':
+          return (a.status || '').localeCompare(b.status || '', 'ru');
+        case 'section':
+        default:
+          return compareKbMaterials(
+            { ...a, speakerName: speakerLabel(a) },
+            { ...b, speakerName: speakerLabel(b) },
+          );
+      }
+    };
+
+    return rows.slice().sort((a, b) => {
+      const byDay = (a.dayNumber ?? 0) - (b.dayNumber ?? 0);
+      if (byDay !== 0 && listSort.key !== 'day') return byDay;
+      const cmp = cmpField(a, b);
+      return listSort.dir === 'asc' ? cmp : -cmp;
+    });
+  }, [
+    materials, search, dayFilter, directionFilter, eventFilter, sectionFilter,
+    listSort, speakerLabel, events,
+  ]);
+
+  const materialsByDay = useMemo(() => {
+    const map = new Map<number, MaterialRow[]>();
+    for (const m of filtered) {
+      const day = m.dayNumber ?? 0;
+      if (!map.has(day)) map.set(day, []);
+      map.get(day)!.push(m);
+    }
+    return [...map.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([day, rows]) => ({ day, rows }));
+  }, [filtered]);
+
+  const toggleListSort = (key: ListSortKey) => {
+    setListSort(prev => (
+      prev.key === key
+        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'asc' }
+    ));
+  };
 
   const buildCreateBody = (status: 'draft' | 'published', extra: Record<string, unknown> = {}) => {
     const tags = newMaterial.tags.split(',').map(s => s.trim()).filter(Boolean);
@@ -280,6 +372,46 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
 
   if (loading && materials.length === 0) return <p className="adm-muted">Загрузка базы знаний…</p>;
 
+  const materialsTableHead = (
+    <thead>
+      <tr>
+        <SortTh label="Раздел / тема" sortKey="section" sort={listSort} onSort={toggleListSort} />
+        <SortTh label="День" sortKey="day" sort={listSort} onSort={toggleListSort} />
+        <SortTh label="Спикер" sortKey="speaker" sort={listSort} onSort={toggleListSort} />
+        <SortTh label="Название / ссылка" sortKey="title" sort={listSort} onSort={toggleListSort} />
+        <SortTh label="Тип" sortKey="type" sort={listSort} onSort={toggleListSort} />
+        <SortTh label="Аудитория" sortKey="audience" sort={listSort} onSort={toggleListSort} />
+        <SortTh label="Привязка" sortKey="binding" sort={listSort} onSort={toggleListSort} />
+        <SortTh label="Статус" sortKey="status" sort={listSort} onSort={toggleListSort} />
+      </tr>
+    </thead>
+  );
+
+  const renderMaterialRows = (rows: MaterialRow[]) => rows.map(m => (
+    <MaterialCard
+      key={m.id}
+      material={m}
+      typeOptions={materialTypes}
+      speakers={speakers}
+      events={events}
+      directions={directions}
+      dayOptions={dayOptions}
+      onPreview={() => openDayPreview(m.dayNumber ?? 1)}
+      onSave={body => act(async () => {
+        const res = await adminFetch(`/materials/${m.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        if (res?.material) {
+          setMaterials(prev => prev.map(x => (x.id === m.id ? { ...x, ...res.material } : x)));
+        } else {
+          await refreshMaterials();
+        }
+      }, 'Сохранено', { reload: false })}
+      onDelete={() => act(async () => {
+        await adminFetch(`/materials/${m.id}`, { method: 'DELETE' });
+        setMaterials(prev => prev.filter(x => x.id !== m.id));
+      }, 'Удалено', { reload: false })}
+    />
+  ));
+
   return (
     <div className="adm-forum adm-kb">
       <AdminPageHero
@@ -288,7 +420,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             ? `База знаний · ${materials.length} материалов`
             : `База знаний · ${filtered.length} из ${materials.length} материалов`
         }
-        hint="Разделы: тематические направления, уроки о важном, открытые уроки. Одна тема + несколько типов (презентация, видео…) — укажите одинаковую «Тему», они пойдут подряд у участника. После сохранения форма оставляет раздел/тему/спикеров."
+        hint="Материалы сгруппированы по дням смены. Одна «Тема» + несколько типов (презентация, видео…) идут подряд у участника. Типы и ручная разблокировка — внизу страницы."
       >
         {setTab && (
           <button type="button" className="adm-kb-btn adm-kb-btn-secondary" onClick={() => setTab('events')}>
@@ -297,80 +429,11 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
         )}
       </AdminPageHero>
 
-      <MaterialTypesPanel adminFetch={adminFetch} act={act} />
-
-      <div className="card adm-forum-block adm-kb-panel">
-        <div className="adm-kb-panel-head">
-          <h3>Разблокировка БЗ</h3>
-          <p className="adm-kb-panel-sub">
-            Порог форума: ≥ {kbForumThreshold} из 7 точек осмысления за день
-          </p>
-        </div>
-        <div className="adm-kb-toolbar">
-          <input
-            type="number"
-            className="adm-input"
-            value={kbUnlockForm.participantId}
-            onChange={e => setKbUnlockForm({ ...kbUnlockForm, participantId: e.target.value })}
-            placeholder="ID участника"
-          />
-          <select
-            className="adm-input adm-kb-control-sm"
-            value={kbUnlockForm.dayNumber}
-            onChange={e => setKbUnlockForm({ ...kbUnlockForm, dayNumber: Number(e.target.value) })}
-            title="День смены"
-          >
-            {dayOptions.map(d => (
-              <option key={d} value={d}>День {d}</option>
-            ))}
-          </select>
-          <button type="button" className="adm-kb-btn adm-kb-btn-secondary" onClick={() => {
-            const id = Number(kbUnlockForm.participantId);
-            if (id) openCard(id);
-          }}>Карточка</button>
-          <button type="button" className="adm-kb-btn adm-kb-btn-primary" onClick={() => act(async () => {
-            await adminFetch('/kb-unlocks', {
-              method: 'POST',
-              body: JSON.stringify({
-                participantId: Number(kbUnlockForm.participantId),
-                dayNumber: kbUnlockForm.dayNumber,
-              }),
-            });
-            await refreshUnlocks();
-          }, 'БЗ разблокирована')}>Разблокировать</button>
-        </div>
-        {kbUnlocks.length > 0 && (
-          <div className="adm-table-scroll adm-kb-mini-scroll">
-            <table className="adm-table adm-kb-mini-table">
-              <thead><tr><th>Участник</th><th>День</th><th>Когда</th><th /></tr></thead>
-              <tbody>
-                {kbUnlocks.slice(0, 30).map(u => (
-                  <tr key={u.id}>
-                    <td>{u.participantId}</td>
-                    <td>{u.dayNumber}</td>
-                    <td>{u.unlockedAt ? new Date(u.unlockedAt).toLocaleString('ru-RU') : '—'}</td>
-                    <td>
-                      <button type="button" className="adm-kb-btn adm-kb-btn-danger" onClick={() => {
-                        if (!confirmDelete('Отозвать разблокировку БЗ?')) return;
-                        act(async () => {
-                          await adminFetch(`/kb-unlocks/${u.participantId}/${u.dayNumber}`, { method: 'DELETE' });
-                          await refreshUnlocks();
-                        }, 'Отозвано');
-                      }}>Отозвать</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
       <div className="card adm-forum-block adm-kb-panel">
         <div className="adm-kb-panel-head">
           <h3>Материалы</h3>
           <p className="adm-kb-panel-sub">
-            Фильтры · предпросмотр · создание · правка в таблице
+            Фильтры · предпросмотр · создание · список по дням с сортировкой в таблице
           </p>
         </div>
         <div className="adm-kb-toolbar">
@@ -678,51 +741,103 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
         </div>
 
         <p className="adm-kb-table-hint">
-          Правка в таблице · клик по спикеру открывает карточку · внутри раздела — по фамилии, преза и материалы рядом
+          Материалы сгруппированы по дням — раскройте плашку дня. Клик по заголовку колонки сортирует список внутри дня.
         </p>
-        <div className="adm-table-scroll adm-kb-table-scroll">
-          <table className="adm-table adm-kb-inline-table">
-            <thead>
-              <tr>
-                <th>Раздел / тема</th>
-                <th>День</th>
-                <th>Спикер</th>
-                <th>Название / ссылка</th>
-                <th>Тип</th>
-                <th>Аудитория</th>
-                <th>Привязка</th>
-                <th>Статус</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(m => (
-                <MaterialCard
-                  key={m.id}
-                  material={m}
-                  typeOptions={materialTypes}
-                  speakers={speakers}
-                  events={events}
-                  directions={directions}
-                  dayOptions={dayOptions}
-                  onPreview={() => openDayPreview(m.dayNumber ?? 1)}
-                  onSave={body => act(async () => {
-                    const res = await adminFetch(`/materials/${m.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-                    if (res?.material) {
-                      setMaterials(prev => prev.map(x => (x.id === m.id ? { ...x, ...res.material } : x)));
-                    } else {
-                      await refreshMaterials();
-                    }
-                  }, 'Сохранено', { reload: false })}
-                  onDelete={() => act(async () => {
-                    await adminFetch(`/materials/${m.id}`, { method: 'DELETE' });
-                    setMaterials(prev => prev.filter(x => x.id !== m.id));
-                  }, 'Удалено', { reload: false })}
-                />
-              ))}
-            </tbody>
-          </table>
+
+        {filtered.length === 0 ? (
+          <p className="adm-muted">Нет материалов по фильтрам</p>
+        ) : (
+          <div className="adm-kb-day-list">
+            {materialsByDay.map(({ day, rows }, idx) => (
+              <AdminAccordion
+                key={day || 'none'}
+                title={day > 0 ? `День ${day}` : 'Без дня'}
+                summary={`${rows.length} мат.`}
+                defaultOpen={
+                  dayFilter
+                    ? String(day) === dayFilter
+                    : idx === 0 || day === previewDay
+                }
+              >
+                <div className="adm-table-scroll adm-kb-table-scroll">
+                  <table className="adm-table adm-kb-inline-table">
+                    {materialsTableHead}
+                    <tbody>{renderMaterialRows(rows)}</tbody>
+                  </table>
+                </div>
+              </AdminAccordion>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <MaterialTypesPanel adminFetch={adminFetch} act={act} />
+
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Разблокировка БЗ</h3>
+          <p className="adm-kb-panel-sub">
+            Порог форума: ≥ {kbForumThreshold} из 7 точек осмысления за день
+          </p>
         </div>
-        {filtered.length === 0 && <p className="adm-muted">Нет материалов по фильтрам</p>}
+        <div className="adm-kb-toolbar">
+          <input
+            type="number"
+            className="adm-input"
+            value={kbUnlockForm.participantId}
+            onChange={e => setKbUnlockForm({ ...kbUnlockForm, participantId: e.target.value })}
+            placeholder="ID участника"
+          />
+          <select
+            className="adm-input adm-kb-control-sm"
+            value={kbUnlockForm.dayNumber}
+            onChange={e => setKbUnlockForm({ ...kbUnlockForm, dayNumber: Number(e.target.value) })}
+            title="День смены"
+          >
+            {dayOptions.map(d => (
+              <option key={d} value={d}>День {d}</option>
+            ))}
+          </select>
+          <button type="button" className="adm-kb-btn adm-kb-btn-secondary" onClick={() => {
+            const id = Number(kbUnlockForm.participantId);
+            if (id) openCard(id);
+          }}>Карточка</button>
+          <button type="button" className="adm-kb-btn adm-kb-btn-primary" onClick={() => act(async () => {
+            await adminFetch('/kb-unlocks', {
+              method: 'POST',
+              body: JSON.stringify({
+                participantId: Number(kbUnlockForm.participantId),
+                dayNumber: kbUnlockForm.dayNumber,
+              }),
+            });
+            await refreshUnlocks();
+          }, 'БЗ разблокирована')}>Разблокировать</button>
+        </div>
+        {kbUnlocks.length > 0 && (
+          <div className="adm-table-scroll adm-kb-mini-scroll">
+            <table className="adm-table adm-kb-mini-table">
+              <thead><tr><th>Участник</th><th>День</th><th>Когда</th><th /></tr></thead>
+              <tbody>
+                {kbUnlocks.slice(0, 30).map(u => (
+                  <tr key={u.id}>
+                    <td>{u.participantId}</td>
+                    <td>{u.dayNumber}</td>
+                    <td>{u.unlockedAt ? new Date(u.unlockedAt).toLocaleString('ru-RU') : '—'}</td>
+                    <td>
+                      <button type="button" className="adm-kb-btn adm-kb-btn-danger" onClick={() => {
+                        if (!confirmDelete('Отозвать разблокировку БЗ?')) return;
+                        act(async () => {
+                          await adminFetch(`/kb-unlocks/${u.participantId}/${u.dayNumber}`, { method: 'DELETE' });
+                          await refreshUnlocks();
+                        }, 'Отозвано');
+                      }}>Отозвать</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

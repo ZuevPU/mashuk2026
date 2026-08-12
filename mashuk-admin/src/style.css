@@ -3985,6 +3985,35 @@ tr.adm-dir-me td { background: rgba(230, 174, 74, 0.09); }
 .adm-kb .adm-accordion-body {
   border-top-color: var(--kb-hairline, rgba(60, 60, 67, 0.12));
 }
+.adm-kb-day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+.adm-kb-day-list > .adm-accordion {
+  margin: 0;
+  box-shadow: none;
+  background: #F5F5F7;
+  border: 1px solid var(--kb-hairline, rgba(60, 60, 67, 0.12));
+}
+.adm-kb-day-list > .adm-accordion .adm-accordion-head {
+  padding: 12px 14px;
+}
+.adm-kb-day-list > .adm-accordion .adm-accordion-title {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.adm-kb-day-list > .adm-accordion .adm-accordion-body {
+  padding: 0 10px 12px;
+  background: #fff;
+  border-top: 1px solid var(--kb-hairline, rgba(60, 60, 67, 0.1));
+}
+.adm-kb-day-list .adm-kb-table-scroll {
+  margin-top: 8px;
+  border-radius: 10px;
+}
 
 /* ===== Tasks list · two-row compact cards (fit viewport width) ===== */
 .adm-tasks-list {
