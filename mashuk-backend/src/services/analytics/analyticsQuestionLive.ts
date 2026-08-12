@@ -16,8 +16,10 @@ function publishTimeMs(publishTime: Date | string | null | undefined): number | 
  * Включать в аналитику:
  * - published с publishTime ≤ now (или без publishTime)
  * - archived (история ответов)
- * - isHidden=true всегда (сняли с эфира после ответов; publishTime могли сбить «Пересчитать окна»)
- * Исключать: draft и ещё не открывшиеся published (засеянные слоты).
+ * - isHidden=true всегда (в т.ч. draft+скрыт — админка показывает «Скрыт»,
+ *   статус могли сбить «В черновики» / снятие с публикации)
+ * - draft, если окно уже наступало (сняли с публикации после ответов)
+ * Исключать: чистые черновики без наступившего окна и ещё не открывшиеся published.
  */
 export function isQuestionLiveForAnalytics(
   q: {
@@ -27,15 +29,21 @@ export function isQuestionLiveForAnalytics(
   },
   now = new Date(),
 ): boolean {
-  const status = (q.status || 'published').toLowerCase();
-  if (status === 'draft') return false;
-  if (status === 'archived') return true;
-  if (status !== 'published') return false;
-
-  // Скрыт админом = уже был в эфире. Не режем по publishTime.
+  // Скрыт админом = уже был в эфире. Независимо от status/publishTime.
   if (q.isHidden === true) return true;
 
+  const status = (q.status || 'published').toLowerCase();
+  if (status === 'archived') return true;
+
   const openedAt = publishTimeMs(q.publishTime);
+  const opened = openedAt != null && openedAt <= now.getTime();
+
+  if (status === 'draft') {
+    // «Снять с публикации» → draft + isHidden=false; ответы должны остаться в штабе.
+    return opened;
+  }
+
+  if (status !== 'published') return false;
   if (openedAt != null && openedAt > now.getTime()) return false;
   return true;
 }

@@ -29,8 +29,20 @@ describe('isQuestionLiveForAnalytics', () => {
     }, now), true);
   });
 
-  it('excludes draft', () => {
+  it('excludes never-opened draft', () => {
     assert.equal(isQuestionLiveForAnalytics({ status: 'draft' }, now), false);
+    assert.equal(isQuestionLiveForAnalytics({
+      status: 'draft',
+      publishTime: new Date('2026-08-12T13:00:00+03:00'),
+    }, now), false);
+  });
+
+  it('includes hidden even if status was demoted to draft', () => {
+    assert.equal(isQuestionLiveForAnalytics({
+      status: 'draft',
+      isHidden: true,
+      publishTime: new Date('2026-08-12T13:00:00+03:00'),
+    }, now), true);
   });
 
   it('includes hidden even if publishTime was shifted into the future', () => {
@@ -38,6 +50,14 @@ describe('isQuestionLiveForAnalytics', () => {
       status: 'published',
       isHidden: true,
       publishTime: new Date('2026-08-12T13:00:00+03:00'),
+    }, now), true);
+  });
+
+  it('includes unpublished draft after its window already opened', () => {
+    assert.equal(isQuestionLiveForAnalytics({
+      status: 'draft',
+      isHidden: false,
+      publishTime: new Date('2026-08-12T11:00:00+03:00'),
     }, now), true);
   });
 
