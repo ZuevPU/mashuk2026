@@ -30,6 +30,7 @@ import {
   lowTone,
 } from './dayResultsUi';
 import { HubLensLayout, type HubNavItem } from './HubSideNav';
+import { GoalProgressByDirectionChart, type GoalProgressByDirectionData } from './GoalProgressByDirectionChart';
 import { ConclusionCard } from './directionNarrative';
 import { dayFixationNarr, dayOpenNarr } from './hubNarrative';
 
@@ -78,6 +79,7 @@ type DayResultsData = {
   fixation: Array<{ name: string; n: number }>;
   fixationN: number;
   fixationQuotes?: Array<{ text: string; meta: string }>;
+  goalProgressByDirection?: GoalProgressByDirectionData | null;
   openQuotes?: Array<{ text: string; meta: string }>;
   practices: Array<{ name: string; n: number; mean: number }>;
   open: Array<{ key: string; label: string; n: number; fill: number; junk: number; medLen: number }>;
@@ -88,6 +90,11 @@ type DayResultsData = {
   exportPath?: string;
 };
 
+function isPracticePickLabel(text: string): boolean {
+  return /презентаци\S*.{0,80}практик/i.test(text)
+    || (/→/.test(text) && /\[\s*\d+\s*\/\s*10\s*\]/.test(text));
+}
+
 /**
  * Линза «Итоги дня» — пульс вечерней анкеты для утреннего штаба.
  * GET /analytics/hub/day-results
@@ -96,8 +103,7 @@ const DAY_RESULTS_NAV: HubNavItem[] = [
   { id: 'hub-day-pulse', label: 'Пульс' },
   { id: 'hub-day-spine', label: 'Хребет' },
   { id: 'hub-day-heatmap', label: 'Теплокарта' },
-  { id: 'hub-day-spread', label: 'Расхождение' },
-  { id: 'hub-day-groups', label: 'Группы' },
+  { id: 'hub-day-goal', label: 'Цель' },
   { id: 'hub-day-experiment', label: 'Эксперимент' },
   { id: 'hub-day-fixation', label: 'Фиксация' },
   { id: 'hub-day-role', label: 'Роль' },
@@ -155,15 +161,24 @@ export function HubDayResultsScreen() {
 
   const hasForumIndexSeries = forumIndexChart.some(r => r.index != null);
 
+  const fixationItems = useMemo(
+    () => (data?.fixation ?? []).filter(f => !isPracticePickLabel(f.name)),
+    [data],
+  );
+  const fixationQuotes = useMemo(
+    () => (data?.fixationQuotes ?? []).filter(q => !isPracticePickLabel(q.text)),
+    [data],
+  );
+
   const fixationConclusion = useMemo(() => {
     if (!data || !m) return null;
     return dayFixationNarr({
-      fixationN: data.fixationN,
+      fixationN: fixationItems.reduce((s, f) => s + f.n, 0),
       submitted: m.submitted,
-      fixation: data.fixation,
-      fixationQuotesN: data.fixationQuotes?.length ?? 0,
+      fixation: fixationItems,
+      fixationQuotesN: fixationQuotes.length,
     });
-  }, [data, m]);
+  }, [data, m, fixationItems, fixationQuotes]);
 
   const openConclusion = useMemo(() => {
     if (!data || !m) return null;
@@ -394,96 +409,42 @@ export function HubDayResultsScreen() {
           </DayResultsSection>
 
           <DayResultsSection
-            id="hub-day-spread"
-            title="Где направления расходятся сильнее всего"
-            note="Разница между самым довольным и самым недовольным направлением (n ≥ 10)."
+            id="hub-day-goal"
+            title="Движение к цели по направлениям"
+            note="Где ты сейчас находишься в движении к своей цели (даже если она поменялась или уточнилась). Сверху — средняя 1–5, ниже — доли ответов."
           >
-            <DashCard>
-              {(() => {
-                const sorted = [...data.blocks].sort((a, b) => b.spread - a.spread);
-                const mx = Math.max(...sorted.map(b => b.spread), 0.01);
-                return sorted.map(b => (
-                  <div key={b.key} className="adm-day-results-row">
-                    <div>
-                      <div className="adm-day-results-lb">{b.label}</div>
-                      <HBar
-                        widthPct={(b.spread / mx) * 100}
-                        color={b.spread >= 0.5 ? '#e2685e' : '#6f7d95'}
-                      />
-                    </div>
-                    <div className="adm-day-results-nb">{b.spread.toFixed(2)}</div>
-                  </div>
-                ));
-              })()}
-            </DashCard>
-          </DayResultsSection>
-
-          <DayResultsSection
-            id="hub-day-groups"
-            title="Группы в зоне внимания"
-            note="Только группы от 8 анкет — на меньших выборках одна плохая ночь двигает среднее."
-          >
-            <div className="adm-dash-grid adm-dash-grid-2">
-              <DashCard title="Слабые группы">
-                {data.worstGroups.length === 0 ? (
-                  <p className="adm-muted">Нет групп с n ≥ 8.</p>
-                ) : (
-                  <table className="adm-table adm-day-results-table">
-                    <thead>
-                      <tr>
-                        <th>Группа</th>
-                        <th>Направление</th>
-                        <th style={{ textAlign: 'center' }}>N</th>
-                        <th style={{ textAlign: 'center' }}>Индекс</th>
-                        <th>Слабое место</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.worstGroups.map(r => (
-                        <tr key={r.group}>
-                          <td style={{ fontWeight: 600 }}>{r.group}</td>
-                          <td className="adm-muted">{r.dir}</td>
-                          <td style={{ textAlign: 'center' }} className="adm-muted">{r.n}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            <Flag tone={r.idx < 4.4 ? 'bad' : 'warn'}>{r.idx}</Flag>
-                          </td>
-                          <td className="adm-muted">{r.weak} · {r.weakVal}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+            {data.goalProgressByDirection?.byDirection?.length ? (
+              <>
+                <DashCard title="Средняя по направлениям">
+                  {(() => {
+                    const rows = [...data.goalProgressByDirection.byDirection]
+                      .filter(r => r.avg != null)
+                      .sort((a, b) => (b.avg ?? 0) - (a.avg ?? 0));
+                    const mx = 5;
+                    return rows.map(r => (
+                      <div key={r.direction} className="adm-day-results-row">
+                        <div>
+                          <div className="adm-day-results-lb">{r.direction}</div>
+                          <HBar widthPct={((r.avg ?? 0) / mx) * 100} color="#007AFF" />
+                        </div>
+                        <div className="adm-day-results-nb">
+                          {r.avg}
+                          <span className="adm-muted" style={{ fontWeight: 500 }}> · {r.answered}</span>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </DashCard>
+                <GoalProgressByDirectionChart
+                  data={data.goalProgressByDirection}
+                  title="Доли ответов 1–5"
+                />
+              </>
+            ) : (
+              <DashCard>
+                <p className="adm-muted">Нет ответов по этому вопросу в срезе дня.</p>
               </DashCard>
-              <DashCard title="Лучшие группы дня">
-                <p className="adm-day-results-note" style={{ marginTop: 0 }}>
-                  Источник практик, а не только повод похвалить
-                </p>
-                {data.bestGroups.length === 0 ? (
-                  <p className="adm-muted">Нет групп с n ≥ 8.</p>
-                ) : (
-                  <table className="adm-table adm-day-results-table">
-                    <tbody>
-                      {data.bestGroups.map(r => (
-                        <tr key={r.group}>
-                          <td style={{ fontWeight: 600 }}>{r.group}</td>
-                          <td style={{ textAlign: 'center' }} className="adm-muted">{r.n} анкет</td>
-                          <td style={{ textAlign: 'right' }}>
-                            <Flag tone="ok">{r.idx}</Flag>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-                {data.bestGroups[0] && data.worstGroups[0] && (
-                  <p className="adm-day-results-callout">
-                    Разрыв между верхом и низом —{' '}
-                    <b>{(data.bestGroups[0].idx - data.worstGroups[0].idx).toFixed(2)}</b>
-                    {' '}балла при одинаковой программе.
-                  </p>
-                )}
-              </DashCard>
-            </div>
+            )}
           </DayResultsSection>
 
           <DayResultsSection
@@ -519,13 +480,13 @@ export function HubDayResultsScreen() {
             title="Что зафиксировали о себе"
             note="Самоописание дня: повторяющиеся формулировки и развёрнутые комментарии участников."
           >
-            <DashCard title={`Формулировки · ${data.fixationN}`}>
-              {data.fixation.length === 0 ? (
+            <DashCard title={`Формулировки · ${fixationItems.reduce((s, f) => s + f.n, 0)}`}>
+              {fixationItems.length === 0 ? (
                 <p className="adm-muted">Нет данных.</p>
               ) : (
                 (() => {
-                  const mx = Math.max(...data.fixation.map(f => f.n), 1);
-                  return data.fixation.map(f => (
+                  const mx = Math.max(...fixationItems.map(f => f.n), 1);
+                  return fixationItems.map(f => (
                     <div key={f.name} className="adm-day-results-row">
                       <div>
                         <div className="adm-day-results-lb">{f.name}</div>
@@ -538,27 +499,27 @@ export function HubDayResultsScreen() {
               )}
             </DashCard>
             <DashCard
-              title={`Комментарии · ${(data.fixationQuotes ?? []).length}`}
+              title={`Комментарии · ${fixationQuotes.length}`}
               className="adm-hub-quotes-card"
             >
-              {(data.fixationQuotes ?? []).length === 0 ? (
+              {fixationQuotes.length === 0 ? (
                 <p className="adm-muted">Нет развёрнутых текстов фиксации.</p>
               ) : (
                 <>
-                  {(data.fixationQuotes ?? []).slice(0, fixQuoteLimit).map((q, i) => (
+                  {fixationQuotes.slice(0, fixQuoteLimit).map((q, i) => (
                     <div key={i} className="adm-state-quote">
                       {q.text}
                       <span className="adm-state-quote-m">{q.meta}</span>
                     </div>
                   ))}
-                  {(data.fixationQuotes ?? []).length > fixQuoteLimit && (
+                  {fixationQuotes.length > fixQuoteLimit && (
                     <button
                       type="button"
                       className="adm-btn adm-btn-ghost"
                       style={{ marginTop: 10 }}
-                      onClick={() => setFixQuoteLimit(n => Math.min(n + 24, (data.fixationQuotes ?? []).length))}
+                      onClick={() => setFixQuoteLimit(n => Math.min(n + 24, fixationQuotes.length))}
                     >
-                      Показать ещё ({(data.fixationQuotes ?? []).length - fixQuoteLimit})
+                      Показать ещё ({fixationQuotes.length - fixQuoteLimit})
                     </button>
                   )}
                 </>

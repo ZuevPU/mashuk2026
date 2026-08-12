@@ -81,9 +81,11 @@ function ChartTooltip({
 export function GoalProgressByDirectionChart({
   data,
   onOpenDirection,
+  title = 'Движение к цели · по направлениям',
 }: {
   data: GoalProgressByDirectionData | null | undefined;
   onOpenDirection?: (direction: string) => void;
+  title?: string;
 }) {
   const [unit, setUnit] = useState<'pct' | 'count'>('pct');
   const rows = data?.byDirection ?? [];
@@ -105,7 +107,6 @@ export function GoalProgressByDirectionChart({
   if (!data || !rows.length) return null;
 
   const height = Math.max(240, rows.length * 44 + 56);
-  const title = 'Движение к цели · по направлениям';
 
   return (
     <DashCard title={title}>

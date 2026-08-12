@@ -11,6 +11,7 @@ import { isOrganizerDirection } from '../leaderboardQuery.js';
 import { getMoscowParts } from '../timePhase.js';
 import { EVENING_SCALE_KEYS } from '../touchpointTemplates.js';
 import { buildPracticeRecommendNps, extractPracticeScores } from './practiceRecommendNps.js';
+import { buildGoalProgressByDirection } from './goalProgressByDirection.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import { resolveDayRange } from './analyticsQuery.js';
 import { loadCohortParticipants } from './cohort.js';
@@ -37,6 +38,15 @@ const PRACTICE_NPS_FIELD_KEYS = new Set(['recommendYes', 'recommendScore', 'prac
 function isPracticeNpsField(f: { key: string; type: string }): boolean {
   if (PRACTICE_NPS_FIELD_KEYS.has(f.key)) return true;
   return f.type === 'program_event';
+}
+
+/** Выбор практики из программы: «Презентации … → Название [10/10]». */
+function isPracticePickText(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (/презентаци\S*.{0,40}практик/i.test(t) && /→/.test(t)) return true;
+  if (/→/.test(t) && /\[\s*\d+\s*\/\s*10\s*\]/.test(t)) return true;
+  return false;
 }
 
 function isScaleField(f: EveningField): boolean {
@@ -311,9 +321,17 @@ function buildFixation(
   submitted: EveningExportRow[],
 ): { items: { name: string; n: number }[]; n: number; quotes: Array<{ text: string; meta: string }> } {
   const candidates = fields.filter(f =>
-    /^new_field/i.test(f.key)
-    || /фиксир/i.test(f.label || '')
-    || /зону роста|способ действия|непривычно/i.test(f.label || ''),
+    !isPracticeNpsField(f)
+    && f.type !== 'scale_1_5'
+    && f.type !== 'scale_1_10'
+    && f.type !== 'yes_no'
+    && f.type !== 'choice'
+    && f.type !== 'role_select'
+    && (
+      /^new_field/i.test(f.key)
+      || /фиксир/i.test(f.label || '')
+      || /зону роста|способ действия|непривычно/i.test(f.label || '')
+    ),
   );
   if (!candidates.length) return { items: [], n: 0, quotes: [] };
   const merged = mergeFieldKeys(candidates.map(f => ({ key: f.key, label: f.label || f.key })));
@@ -326,7 +344,7 @@ function buildFixation(
         const f = candidates.find(c => c.key === key);
         if (!f) continue;
         const t = textOf(f, r);
-        if (!t) continue;
+        if (!t || isPracticePickText(t)) continue;
         const id = `${r.participantId}:${t}`;
         if (seenPid.has(id)) continue;
         seenPid.add(id);
@@ -514,6 +532,7 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
 
   const fixation = buildFixation(fields, submittedRows);
   const openQuotes = buildOpenQuotes(fields, submittedRows);
+  const goalProgressByDirection = buildGoalProgressByDirection(fields, submittedRows);
 
   const roles = buildChoiceBuckets(
     fields,
@@ -639,6 +658,7 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
     fixation: fixation.items,
     fixationN: fixation.n,
     fixationQuotes: fixation.quotes,
+    goalProgressByDirection,
     openQuotes,
     practices,
     open,
