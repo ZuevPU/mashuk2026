@@ -37,11 +37,13 @@ import { DirectionEnergyCompareChart } from './DirectionEnergyCompareChart';
 import { DirectionEmotionEnergyBlock } from './DirectionEmotionEnergyBlock';
 import { DirectionRadarCompare } from './DirectionRadarCompare';
 import { StateReasonsByDirectionTable } from './StateReasonsByDirectionTable';
-import { RoleDirectionHeatmap } from './RoleDirectionHeatmap';
 import { HubRoleDynamics } from './HubRoleDynamics';
+import { HubRoleExperimentDigest } from './HubRoleExperimentDigest';
+import { RoleDirectionHeatmap } from './RoleDirectionHeatmap';
 import { TouchpointDirectionSlotChart, TouchpointSlotChart } from './TouchpointSlotChart';
 import { PiggybankDirectionMatrix } from './PiggybankDirectionMatrix';
 import { HubEmotionsDayChart } from './HubEmotionsDayChart';
+import { HubForumSideNav, type ForumNavItem } from './HubForumSideNav';
 import { downloadHubExport, forumExportItems, forumPackExportItem } from './hubExports';
 import {
   hubDisplayDay,
@@ -49,6 +51,21 @@ import {
   isAllForumDay,
 } from './hubQuery';
 import type { HubLens } from './HubTab';
+
+const FORUM_NAV: ForumNavItem[] = [
+  { id: 'forum-overview', label: 'Обзор' },
+  { id: 'forum-directions', label: 'Направления' },
+  { id: 'forum-emotions', label: 'Эмоции' },
+  { id: 'forum-energy', label: 'Энергия' },
+  { id: 'forum-roles', label: 'Роли' },
+  { id: 'forum-touchpoints', label: 'Точки дня' },
+  { id: 'forum-exchange', label: 'Обмен' },
+  { id: 'forum-signals', label: 'Сигналы' },
+  { id: 'forum-community', label: 'Сообщество' },
+  { id: 'forum-evening', label: 'Анкета' },
+  { id: 'forum-after', label: 'После блоков' },
+  { id: 'forum-piggybank', label: 'Копилка' },
+];
 
 type DaySeriesRow = {
   day: number;
@@ -319,339 +336,372 @@ export function HubForumScreen({
   const pulse = data.pulse?.emotionalPulse ?? {};
 
   return (
-    <div className="adm-dash-stack">
-      <DashScreenTitle
-        title="Штаб · Форум"
-        hint={dayHintFull}
-      />
+    <div className="adm-forum-layout">
+      <div className="adm-dash-stack adm-forum-main">
+        <DashScreenTitle
+          title="Штаб · Форум"
+          hint={dayHintFull}
+        />
 
-      {statusBar}
-      {loadError && (
-        <p className="adm-muted" style={{ margin: 0, color: '#ef4444', fontSize: 13 }}>{loadError}</p>
-      )}
-      {Array.isArray(data?.diagnostics?.notes) && data.diagnostics.notes.length > 0 && (
-        <DashCard title="Почему пусто">
-          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.45 }}>
-            {(data.diagnostics.notes as string[]).map((n) => (
-              <li key={n}>{n}</li>
-            ))}
-          </ul>
-        </DashCard>
-      )}
+        {statusBar}
+        {loadError && (
+          <p className="adm-muted" style={{ margin: 0, color: '#ef4444', fontSize: 13 }}>{loadError}</p>
+        )}
+        {Array.isArray(data?.diagnostics?.notes) && data.diagnostics.notes.length > 0 && (
+          <DashCard title="Почему пусто">
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.45 }}>
+              {(data.diagnostics.notes as string[]).map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          </DashCard>
+        )}
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end' }}>
-        {exports.map(item => (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end' }}>
+          {exports.map(item => (
+            <button
+              key={item.id}
+              type="button"
+              className="adm-btn adm-btn-secondary adm-btn-sm"
+              onClick={() => {
+                void downloadHubExport(item).catch((err: unknown) => {
+                  window.alert(err instanceof Error ? err.message : 'Не удалось скачать файл');
+                });
+              }}
+            >
+              Скачать · {item.label}
+            </button>
+          ))}
           <button
-            key={item.id}
             type="button"
-            className="adm-btn adm-btn-secondary adm-btn-sm"
+            className="adm-btn adm-btn-primary adm-btn-sm"
             onClick={() => {
-              void downloadHubExport(item).catch((err: unknown) => {
+              void downloadHubExport(forumPackExportItem(exportScope)).catch((err: unknown) => {
                 window.alert(err instanceof Error ? err.message : 'Не удалось скачать файл');
               });
             }}
           >
-            Скачать · {item.label}
+            Выгрузить всё · D{selectedDay}
           </button>
-        ))}
-        <button
-          type="button"
-          className="adm-btn adm-btn-primary adm-btn-sm"
-          onClick={() => {
-            void downloadHubExport(forumPackExportItem(exportScope)).catch((err: unknown) => {
-              window.alert(err instanceof Error ? err.message : 'Не удалось скачать файл');
-            });
-          }}
-        >
-          Выгрузить всё · D{selectedDay}
-        </button>
+        </div>
+
+        <section id="forum-overview" className="adm-forum-anchor">
+          <HubKpiRow
+            items={[
+              {
+                value: `${selectedDay} / 8`,
+                label: 'день форума',
+                sub: meta?.currentForumDay != null ? `сейчас идёт ${meta.currentForumDay}` : undefined,
+                accent: 'var(--m-accent)',
+              },
+              {
+                value: dashVal(kpi.registered),
+                label: 'зарегистрировано',
+              },
+              {
+                value: dashVal(kpi.activeToday),
+                label: 'активны за день',
+                trend: formatDelta(deltas.active),
+                trendTone: deltaTone(deltas.active),
+              },
+              {
+                value: kpi.touchpointCoveragePct != null ? `${kpi.touchpointCoveragePct}%` : '—',
+                label: 'охват активности',
+                trend: formatDelta(deltas.coverage, ' п.п.'),
+                trendTone: deltaTone(deltas.coverage),
+                accent: '#22c55e',
+              },
+              {
+                value: dashVal(kpi.avgEnergy),
+                label: 'средняя энергия',
+                sub: 'шкала 0–10',
+                trend: formatDelta(energyDelta),
+                trendTone: deltaTone(energyDelta),
+                accent: '#f59e0b',
+              },
+              {
+                value: kpi.riskFatiguePct != null ? `${kpi.riskFatiguePct}%` : '—',
+                label: 'риск + усталость',
+                accent: '#ef4444',
+              },
+              {
+                value: `${dashVal(kpi.eveningSubmitted)} / ${dashVal(kpi.afterBlocksSubmitted)}`,
+                label: 'итоги дня / после блоков',
+                sub: `охват ${kpi.eveningFillPct ?? '—'}% · ${kpi.afterBlocksFillPct ?? '—'}%`,
+              },
+              {
+                value: dashVal(kpi.stateCheckSubmitted),
+                label: 'проверка состояния',
+                sub: kpi.stateCheckFillPct != null ? `охват ${kpi.stateCheckFillPct}%` : undefined,
+              },
+              {
+                value: `${dashVal(kpi.phaseCounts?.morning)} / ${dashVal(kpi.phaseCounts?.day)} / ${dashVal(kpi.phaseCounts?.evening)}`,
+                label: 'состояние утро · день · вечер',
+              },
+              {
+                value: dashVal(kpi.zeroActivityCount),
+                label: 'зарегистрированы, 0 активности',
+                accent: '#ef4444',
+              },
+            ]}
+          />
+        </section>
+
+        <section id="forum-directions" className="adm-forum-anchor">
+          <SectionLabel>Направления</SectionLabel>
+          <DashCard title="Сводка по направлениям">
+            {(data.byDirection ?? []).length === 0 ? (
+              <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>Нет направлений в срезе.</p>
+            ) : (
+              <table className="adm-table">
+                <thead>
+                  <tr><th>Направление</th><th>Зарег.</th><th>Активны</th><th>%</th><th /></tr>
+                </thead>
+                <tbody>
+                  {(data.byDirection as { direction: string; registered: number; activeParticipants: number; activityRatePct: number }[]).map(row => (
+                    <tr key={row.direction}>
+                      <td>{row.direction}</td>
+                      <td>{row.registered}</td>
+                      <td>{row.activeParticipants}</td>
+                      <td>{row.activityRatePct}%</td>
+                      <td>
+                        <button type="button" className="adm-link" onClick={() => openDirection(row.direction)}>
+                          Открыть →
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </DashCard>
+        </section>
+
+        <section id="forum-emotions" className="adm-forum-anchor">
+          <SectionLabel>Эмоции и энергия</SectionLabel>
+          <ZoneBars title="Зоны эмоций · форум" zones={pulse.zonesPercent} />
+          <DashGrid cols={3}>
+            <ZoneBars title="Зоны · утро" zones={pulse.byPhase?.morning} />
+            <ZoneBars title="Зоны · день" zones={pulse.byPhase?.day} />
+            <ZoneBars title="Зоны · вечер" zones={pulse.byPhase?.evening} />
+          </DashGrid>
+          <PhaseEmotionPulseChart byPhase={pulse.byPhase} />
+          <DirectionEmotionPulseChart
+            byDirection={pulse.byDirection}
+            byDirectionPhase={pulse.byDirectionPhase}
+            onOpenDirection={openDirection}
+          />
+          <DirectionZonePhaseTable
+            rows={pulse.byDirectionPhase}
+            onOpenDirection={openDirection}
+          />
+          <HubEmotionsDayChart
+            emotions={pulse.emotions as {
+              id?: string; label: string; count: number; pct: number;
+            }[] | undefined}
+            emotionSeries={pulse.emotionSeries as {
+              emotion: string;
+              label: string;
+              morningPct: number;
+              dayPct: number;
+              eveningPct: number;
+              morningCount?: number;
+              dayCount?: number;
+              eveningCount?: number;
+            }[] | undefined}
+            emotionsForum={pulse.emotionsForum as {
+              id?: string; label: string; count: number; pct: number;
+            }[] | undefined}
+            byDirectionPhase={pulse.byDirectionPhase}
+            byDirectionPhaseForum={pulse.byDirectionPhaseForum}
+            directions={(data.byDirection ?? []).map((r: { direction: string }) => r.direction)}
+            directionEmotionEnergy={data.directionEmotionEnergy ?? pulse.directionEmotionEnergy}
+          />
+          {zoneDayRows.length > 0 && (
+            <DashCard title="Динамика зон по дням">
+              <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
+                Каждая линия — эмоциональная зона, ось Y — доля ответов в %.
+              </p>
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={zoneDayRows}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="day" />
+                  <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} />
+                  <Tooltip content={<ChartTooltipRu />} />
+                  <Legend />
+                  {ZONE_ORDER.map(key => (
+                    <Line
+                      key={key}
+                      type="monotone"
+                      dataKey={key}
+                      name={formatZoneName(key)}
+                      stroke={ZONE_COLORS[key]}
+                      dot={false}
+                      strokeWidth={2}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </DashCard>
+          )}
+        </section>
+
+        <section id="forum-energy" className="adm-forum-anchor">
+          <SectionLabel>Средняя энергия</SectionLabel>
+          <EnergyAverages
+            avg={pulse.avgEnergy}
+            byDay={pulse.energyByDay}
+            byDirectionDay={pulse.energyByDirectionDay}
+            title="Средняя энергия · 0–10"
+          />
+          <DirectionEmotionEnergyBlock
+            rows={data.directionEmotionEnergy ?? pulse.directionEmotionEnergy}
+            onOpenDirection={openDirection}
+          />
+          <DirectionEnergyCompareChart byDirectionDay={pulse.energyByDirectionDay} />
+          <DirectionRadarCompare rows={data.directionMetrics} />
+          <StateReasonsByDirectionTable
+            rows={data.pulse?.stateReasons?.byDirection}
+            directions={(data.byDirection ?? []).map((r: { direction: string }) => r.direction)}
+            onOpenDirection={openDirection}
+          />
+        </section>
+
+        <section id="forum-roles" className="adm-forum-anchor">
+          <SectionLabel>Роли</SectionLabel>
+          <HubRoleDynamics
+            data={data.roleDynamics}
+            toolbarDirection={direction || undefined}
+            onOpenDirection={openDirection}
+          />
+          <HubRoleExperimentDigest />
+          <RoleDirectionHeatmap
+            data={data.roleDirectionMatrix}
+            onOpenDirection={openDirection}
+          />
+        </section>
+
+        <section id="forum-touchpoints" className="adm-forum-anchor">
+          <SectionLabel>Точки дня · охват</SectionLabel>
+          <TouchpointSlotChart
+            data={data.touchpointSlotCoverage ?? data.pulse?.activity?.touchpointSlotCoverage}
+          />
+          <TouchpointDirectionSlotChart
+            data={data.touchpointSlotCoverage ?? data.pulse?.activity?.touchpointSlotCoverage}
+          />
+          <TouchpointCoveragePanel data={data.touchpointThreshold ?? data.pulse?.activity?.touchpointThreshold} />
+
+          <DayComparisonPanel
+            title="Динамика по дням · форум"
+            series={daySeries}
+            byDirectionDaySeries={data.byDirectionDaySeries ?? data.pulse?.activity?.byDirectionDaySeries}
+            metrics={PULSE_DAY_METRICS}
+          />
+        </section>
+
+        <section id="forum-exchange" className="adm-forum-anchor">
+          <SectionLabel>Обмен опытом</SectionLabel>
+          {qaByDay.some(r => r.questions > 0 || r.answers > 0) && (
+            <DashCard title="Вопросы и ответы по дням">
+              <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
+                Синяя — вопросы · бирюзовая — ответы.
+              </p>
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={qaByDay} margin={{ left: 4, right: 8, top: 8, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5ea" />
+                  <XAxis dataKey="dayLabel" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                  <Tooltip content={<ChartTooltipRu />} />
+                  <Legend />
+                  <Line type="monotone" dataKey="questions" name="Вопросы" stroke="#2563eb" strokeWidth={2.5} dot />
+                  <Line type="monotone" dataKey="answers" name="Ответы" stroke="#0A7B6F" strokeWidth={2.5} dot />
+                </LineChart>
+              </ResponsiveContainer>
+            </DashCard>
+          )}
+          <ExchangeAnalyticsPanel data={data.exchange} />
+        </section>
+
+        <section id="forum-signals" className="adm-forum-anchor">
+          <SectionLabel>Сигналы</SectionLabel>
+          <SignalsTable
+            rows={data.byDirection ?? data.pulse?.activity?.completionByDirection}
+            onOpenDirection={openDirection}
+          />
+        </section>
+
+        <section id="forum-community" className="adm-forum-anchor">
+          <SectionLabel>Очереди и сообщество</SectionLabel>
+          <DashGrid cols={3}>
+            <DashCard title="На модерации · обмен">
+              <div style={{ fontSize: 28, fontWeight: 700 }}>{dashVal(data.community?.pendingExchange)}</div>
+              <button type="button" className="adm-link" style={{ marginTop: 8 }} onClick={() => setTab('moderation' as Tab)}>
+                Открыть →
+              </button>
+            </DashCard>
+            <DashCard title="Обращения к дирекции">
+              <div style={{ fontSize: 28, fontWeight: 700 }}>{dashVal(data.community?.orgQuestionsWaiting)}</div>
+              <button type="button" className="adm-link" style={{ marginTop: 8 }} onClick={() => setTab('forum' as Tab)}>
+                Открыть →
+              </button>
+            </DashCard>
+            <DashCard title="Одобрено в ленте">
+              <div style={{ fontSize: 28, fontWeight: 700 }}>{dashVal(data.community?.activeExchange)}</div>
+              <button type="button" className="adm-link" style={{ marginTop: 8 }} onClick={() => setTab('moderation' as Tab)}>
+                Открыть →
+              </button>
+            </DashCard>
+          </DashGrid>
+        </section>
+
+        <section id="forum-evening" className="adm-forum-anchor">
+          <SectionLabel>Итоговая анкета · сводка</SectionLabel>
+          <EveningScaleAverages
+            compact
+            rows={data.evening?.scaleAverages}
+            overallAvg={data.evening?.scaleOverallAvg}
+            byDay={data.evening?.scaleByDay}
+            byDirectionDay={data.evening?.scaleByDirectionDay}
+          />
+          <PracticeRecommendNpsTable
+            data={data.evening?.practiceRecommendNps}
+            title="Готов ли рекомендовать эту практику коллегам?"
+          />
+        </section>
+
+        <section id="forum-after" className="adm-forum-anchor">
+          <SectionLabel>После блоков · сводка</SectionLabel>
+          <DashCard title="После блоков">
+            <p style={{ margin: 0, fontSize: 13 }}>
+              Ответов: <strong>{dashVal(kpi.afterBlocksSubmitted)}</strong>
+              {kpi.afterBlocksFillPct != null ? ` · охват ${kpi.afterBlocksFillPct}%` : ''}
+            </p>
+            <p className="adm-muted" style={{ fontSize: 12, margin: '6px 0 8px' }}>
+              Качественная рефлексия (свободный текст), без шкалы 1–5. Полный разбор — в линзе «Направление».
+            </p>
+            {afterByEvent.length > 0 && (
+              <SrcBars items={afterByEvent.map(d => ({
+                label: `${d.label} (${d.pct}%)`,
+                count: d.count,
+              }))} />
+            )}
+          </DashCard>
+        </section>
+
+        <section id="forum-piggybank" className="adm-forum-anchor">
+          <SectionLabel>Копилка · сводка</SectionLabel>
+          {(data.piggybank?.topThemes ?? []).length > 0 && (
+            <DashCard title="Топ тем копилки">
+              <TagPills items={(data.piggybank.topThemes as { token: string; count: number }[]).map(t => ({
+                label: `${t.token} · ${t.count}`,
+              }))} />
+            </DashCard>
+          )}
+          <PiggybankDirectionMatrix />
+        </section>
       </div>
 
-      <HubKpiRow
-        items={[
-          {
-            value: `${selectedDay} / 8`,
-            label: 'день форума',
-            sub: meta?.currentForumDay != null ? `сейчас идёт ${meta.currentForumDay}` : undefined,
-            accent: 'var(--m-accent)',
-          },
-          {
-            value: dashVal(kpi.registered),
-            label: 'зарегистрировано',
-          },
-          {
-            value: dashVal(kpi.activeToday),
-            label: 'активны за день',
-            trend: formatDelta(deltas.active),
-            trendTone: deltaTone(deltas.active),
-          },
-          {
-            value: kpi.touchpointCoveragePct != null ? `${kpi.touchpointCoveragePct}%` : '—',
-            label: 'охват активности',
-            trend: formatDelta(deltas.coverage, ' п.п.'),
-            trendTone: deltaTone(deltas.coverage),
-            accent: '#22c55e',
-          },
-          {
-            value: dashVal(kpi.avgEnergy),
-            label: 'средняя энергия',
-            sub: 'шкала 0–10',
-            trend: formatDelta(energyDelta),
-            trendTone: deltaTone(energyDelta),
-            accent: '#f59e0b',
-          },
-          {
-            value: kpi.riskFatiguePct != null ? `${kpi.riskFatiguePct}%` : '—',
-            label: 'риск + усталость',
-            accent: '#ef4444',
-          },
-          {
-            value: `${dashVal(kpi.eveningSubmitted)} / ${dashVal(kpi.afterBlocksSubmitted)}`,
-            label: 'итоги дня / после блоков',
-            sub: `охват ${kpi.eveningFillPct ?? '—'}% · ${kpi.afterBlocksFillPct ?? '—'}%`,
-          },
-          {
-            value: dashVal(kpi.stateCheckSubmitted),
-            label: 'проверка состояния',
-            sub: kpi.stateCheckFillPct != null ? `охват ${kpi.stateCheckFillPct}%` : undefined,
-          },
-          {
-            value: `${dashVal(kpi.phaseCounts?.morning)} / ${dashVal(kpi.phaseCounts?.day)} / ${dashVal(kpi.phaseCounts?.evening)}`,
-            label: 'состояние утро · день · вечер',
-          },
-          {
-            value: dashVal(kpi.zeroActivityCount),
-            label: 'зарегистрированы, 0 активности',
-            accent: '#ef4444',
-          },
-        ]}
-      />
-
-      <SectionLabel>Направления</SectionLabel>
-      <DashCard title="Сводка по направлениям">
-        {(data.byDirection ?? []).length === 0 ? (
-          <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>Нет направлений в срезе.</p>
-        ) : (
-          <table className="adm-table">
-            <thead>
-              <tr><th>Направление</th><th>Зарег.</th><th>Активны</th><th>%</th><th /></tr>
-            </thead>
-            <tbody>
-              {(data.byDirection as { direction: string; registered: number; activeParticipants: number; activityRatePct: number }[]).map(row => (
-                <tr key={row.direction}>
-                  <td>{row.direction}</td>
-                  <td>{row.registered}</td>
-                  <td>{row.activeParticipants}</td>
-                  <td>{row.activityRatePct}%</td>
-                  <td>
-                    <button type="button" className="adm-link" onClick={() => openDirection(row.direction)}>
-                      Открыть →
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </DashCard>
-
-      <SectionLabel>Эмоции и энергия</SectionLabel>
-      <ZoneBars title="Зоны эмоций · форум" zones={pulse.zonesPercent} />
-      <DashGrid cols={3}>
-        <ZoneBars title="Зоны · утро" zones={pulse.byPhase?.morning} />
-        <ZoneBars title="Зоны · день" zones={pulse.byPhase?.day} />
-        <ZoneBars title="Зоны · вечер" zones={pulse.byPhase?.evening} />
-      </DashGrid>
-      <PhaseEmotionPulseChart byPhase={pulse.byPhase} />
-      <DirectionEmotionPulseChart
-        byDirection={pulse.byDirection}
-        byDirectionPhase={pulse.byDirectionPhase}
-        onOpenDirection={openDirection}
-      />
-      <DirectionZonePhaseTable
-        rows={pulse.byDirectionPhase}
-        onOpenDirection={openDirection}
-      />
-      <HubEmotionsDayChart
-        emotions={pulse.emotions as {
-          id?: string; label: string; count: number; pct: number;
-        }[] | undefined}
-        emotionSeries={pulse.emotionSeries as {
-          emotion: string;
-          label: string;
-          morningPct: number;
-          dayPct: number;
-          eveningPct: number;
-          morningCount?: number;
-          dayCount?: number;
-          eveningCount?: number;
-        }[] | undefined}
-        emotionsForum={pulse.emotionsForum as {
-          id?: string; label: string; count: number; pct: number;
-        }[] | undefined}
-        byDirectionPhase={pulse.byDirectionPhase}
-        byDirectionPhaseForum={pulse.byDirectionPhaseForum}
-        directions={(data.byDirection ?? []).map((r: { direction: string }) => r.direction)}
-        directionEmotionEnergy={data.directionEmotionEnergy ?? pulse.directionEmotionEnergy}
-      />
-      {zoneDayRows.length > 0 && (
-        <DashCard title="Динамика зон по дням">
-          <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
-            Каждая линия — эмоциональная зона, ось Y — доля ответов в %.
-          </p>
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={zoneDayRows}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" />
-              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} />
-              <Tooltip content={<ChartTooltipRu />} />
-              <Legend />
-              {ZONE_ORDER.map(key => (
-                <Line
-                  key={key}
-                  type="monotone"
-                  dataKey={key}
-                  name={formatZoneName(key)}
-                  stroke={ZONE_COLORS[key]}
-                  dot={false}
-                  strokeWidth={2}
-                />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </DashCard>
-      )}
-      <EnergyAverages
-        avg={pulse.avgEnergy}
-        byDay={pulse.energyByDay}
-        byDirectionDay={pulse.energyByDirectionDay}
-        title="Средняя энергия · 0–10"
-      />
-      <DirectionEmotionEnergyBlock
-        rows={data.directionEmotionEnergy ?? pulse.directionEmotionEnergy}
-        onOpenDirection={openDirection}
-      />
-      <DirectionEnergyCompareChart byDirectionDay={pulse.energyByDirectionDay} />
-      <DirectionRadarCompare rows={data.directionMetrics} />
-      <StateReasonsByDirectionTable
-        rows={data.pulse?.stateReasons?.byDirection}
-        directions={(data.byDirection ?? []).map((r: { direction: string }) => r.direction)}
-        onOpenDirection={openDirection}
-      />
-      <HubRoleDynamics
-        data={data.roleDynamics}
-        toolbarDirection={direction || undefined}
-        onOpenDirection={openDirection}
-      />
-      <RoleDirectionHeatmap
-        data={data.roleDirectionMatrix}
-        onOpenDirection={openDirection}
-      />
-
-      <SectionLabel>Точки дня · охват</SectionLabel>
-      <TouchpointSlotChart
-        data={data.touchpointSlotCoverage ?? data.pulse?.activity?.touchpointSlotCoverage}
-      />
-      <TouchpointDirectionSlotChart
-        data={data.touchpointSlotCoverage ?? data.pulse?.activity?.touchpointSlotCoverage}
-      />
-      <TouchpointCoveragePanel data={data.touchpointThreshold ?? data.pulse?.activity?.touchpointThreshold} />
-
-      <DayComparisonPanel
-        title="Динамика по дням · форум"
-        series={daySeries}
-        byDirectionDaySeries={data.byDirectionDaySeries ?? data.pulse?.activity?.byDirectionDaySeries}
-        metrics={PULSE_DAY_METRICS}
-      />
-
-      <SectionLabel>Обмен опытом</SectionLabel>
-      {qaByDay.some(r => r.questions > 0 || r.answers > 0) && (
-        <DashCard title="Вопросы и ответы по дням">
-          <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
-            Синяя — вопросы · бирюзовая — ответы.
-          </p>
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={qaByDay} margin={{ left: 4, right: 8, top: 8, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5ea" />
-              <XAxis dataKey="dayLabel" tick={{ fontSize: 11 }} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-              <Tooltip content={<ChartTooltipRu />} />
-              <Legend />
-              <Line type="monotone" dataKey="questions" name="Вопросы" stroke="#2563eb" strokeWidth={2.5} dot />
-              <Line type="monotone" dataKey="answers" name="Ответы" stroke="#0A7B6F" strokeWidth={2.5} dot />
-            </LineChart>
-          </ResponsiveContainer>
-        </DashCard>
-      )}
-      <ExchangeAnalyticsPanel data={data.exchange} />
-
-      <SectionLabel>Сигналы</SectionLabel>
-      <SignalsTable
-        rows={data.byDirection ?? data.pulse?.activity?.completionByDirection}
-        onOpenDirection={openDirection}
-      />
-
-      <SectionLabel>Очереди и сообщество</SectionLabel>
-      <DashGrid cols={3}>
-        <DashCard title="На модерации · обмен">
-          <div style={{ fontSize: 28, fontWeight: 700 }}>{dashVal(data.community?.pendingExchange)}</div>
-          <button type="button" className="adm-link" style={{ marginTop: 8 }} onClick={() => setTab('moderation' as Tab)}>
-            Открыть →
-          </button>
-        </DashCard>
-        <DashCard title="Обращения к дирекции">
-          <div style={{ fontSize: 28, fontWeight: 700 }}>{dashVal(data.community?.orgQuestionsWaiting)}</div>
-          <button type="button" className="adm-link" style={{ marginTop: 8 }} onClick={() => setTab('forum' as Tab)}>
-            Открыть →
-          </button>
-        </DashCard>
-        <DashCard title="Одобрено в ленте">
-          <div style={{ fontSize: 28, fontWeight: 700 }}>{dashVal(data.community?.activeExchange)}</div>
-          <button type="button" className="adm-link" style={{ marginTop: 8 }} onClick={() => setTab('moderation' as Tab)}>
-            Открыть →
-          </button>
-        </DashCard>
-      </DashGrid>
-
-      <SectionLabel>Итоговая анкета · сводка</SectionLabel>
-      <EveningScaleAverages
-        compact
-        rows={data.evening?.scaleAverages}
-        overallAvg={data.evening?.scaleOverallAvg}
-        byDay={data.evening?.scaleByDay}
-        byDirectionDay={data.evening?.scaleByDirectionDay}
-      />
-      <PracticeRecommendNpsTable
-        data={data.evening?.practiceRecommendNps}
-        title="Готов ли рекомендовать эту практику коллегам?"
-      />
-
-      <SectionLabel>После блоков · сводка</SectionLabel>
-      <DashCard title="После блоков">
-        <p style={{ margin: 0, fontSize: 13 }}>
-          Ответов: <strong>{dashVal(kpi.afterBlocksSubmitted)}</strong>
-          {kpi.afterBlocksFillPct != null ? ` · охват ${kpi.afterBlocksFillPct}%` : ''}
-        </p>
-        <p className="adm-muted" style={{ fontSize: 12, margin: '6px 0 8px' }}>
-          Качественная рефлексия (свободный текст), без шкалы 1–5. Полный разбор — в линзе «Направление».
-        </p>
-        {afterByEvent.length > 0 && (
-          <SrcBars items={afterByEvent.map(d => ({
-            label: `${d.label} (${d.pct}%)`,
-            count: d.count,
-          }))} />
-        )}
-      </DashCard>
-
-      <SectionLabel>Копилка · сводка</SectionLabel>
-      {(data.piggybank?.topThemes ?? []).length > 0 && (
-        <DashCard title="Топ тем копилки">
-          <TagPills items={(data.piggybank.topThemes as { token: string; count: number }[]).map(t => ({
-            label: `${t.token} · ${t.count}`,
-          }))} />
-        </DashCard>
-      )}
-      <PiggybankDirectionMatrix />
+      <HubForumSideNav items={FORUM_NAV} />
     </div>
   );
 }
