@@ -44,8 +44,9 @@ type Block = {
 type HeatRow = {
   dir: string;
   n: number;
-  vals: Array<{ v: number; dev: number }>;
+  vals: Array<{ v: number | null; dev: number }>;
   idx: number;
+  isForum?: boolean;
 };
 
 type DayResultsData = {
@@ -64,6 +65,7 @@ type DayResultsData = {
   };
   blocks: Block[];
   heat: HeatRow[];
+  heatForum?: HeatRow | null;
   worstGroups: Array<{
     group: string; dir: string; n: number; idx: number; weak: string; weakVal: number;
   }>;
@@ -282,7 +284,7 @@ export function HubDayResultsScreen() {
 
           <DayResultsSection
             title="Направления × блоки программы"
-            note="Цвет — отклонение от общего среднего по блоку, не абсолютная оценка."
+            note="Цвет — отклонение от общего среднего по блоку, не абсолютная оценка. Внизу — средняя по всему форуму."
           >
             <DashCard className="adm-day-results-scroll">
               {data.heat.length === 0 || data.blocks.length === 0 ? (
@@ -307,6 +309,13 @@ export function HubDayResultsScreen() {
                         <td>{r.dir}</td>
                         <td style={{ textAlign: 'center' }} className="adm-muted">{r.n}</td>
                         {r.vals.map((c, i) => {
+                          if (c.v == null) {
+                            return (
+                              <td key={data.blocks[i]?.key ?? i} style={{ padding: 4, textAlign: 'center' }}>
+                                <span className="adm-muted">—</span>
+                              </td>
+                            );
+                          }
                           const st = heatCellStyle(c.dev);
                           return (
                             <td key={data.blocks[i]?.key ?? i} style={{ padding: 4 }}>
@@ -319,6 +328,20 @@ export function HubDayResultsScreen() {
                         <td style={{ textAlign: 'center', fontWeight: 600 }}>{r.idx.toFixed(2)}</td>
                       </tr>
                     ))}
+                    {data.heatForum && (
+                      <tr style={{ background: 'var(--m-bg, #f5f5f7)', fontWeight: 600 }}>
+                        <td>{data.heatForum.dir}</td>
+                        <td style={{ textAlign: 'center' }} className="adm-muted">{data.heatForum.n}</td>
+                        {data.heatForum.vals.map((c, i) => (
+                          <td key={`forum-${data.blocks[i]?.key ?? i}`} style={{ padding: 4 }}>
+                            <span className="adm-day-results-cell" style={{ background: 'transparent' }}>
+                              {c.v == null ? '—' : c.v.toFixed(2)}
+                            </span>
+                          </td>
+                        ))}
+                        <td style={{ textAlign: 'center' }}>{data.heatForum.idx.toFixed(2)}</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               )}

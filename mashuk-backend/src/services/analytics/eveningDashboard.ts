@@ -13,6 +13,8 @@ import { loadCohortParticipants } from './cohort.js';
 import { getForumSettings } from '../helpers.js';
 import { buildEveningDaySeries, forumSeriesDays } from './dayComparison.js';
 import { buildPracticeRecommendNps } from './practiceRecommendNps.js';
+import { pickPreferredScaleFields } from './dayResultsMetrics.js';
+import { EVENING_SCALE_KEYS } from '../touchpointTemplates.js';
 
 /** Эти поля сворачиваем в таблицу NPS по практикам — не дублируем графиком. */
 const PRACTICE_NPS_FIELD_KEYS = new Set(['recommendYes', 'recommendScore', 'practiceEvent', 'practiceName']);
@@ -255,9 +257,19 @@ export async function buildEveningDashboard(
     submittedRows.map(r => r.ratings as Record<string, unknown>),
   );
 
-  const scaleFields = fields.filter(
+  const scaleFieldsRaw = fields.filter(
     f => (f.type === 'scale_1_5' || f.type === 'scale_1_10') && !isPracticeNpsField(f),
   );
+  const scaleFields = pickPreferredScaleFields(
+    scaleFieldsRaw,
+    key => submittedRows.filter(r => {
+      const raw = r.ratings[key];
+      const num = typeof raw === 'number' ? raw : Number(raw);
+      return Number.isFinite(num) && num >= 1 && num <= 10;
+    }).length,
+  );
+  const scaleOrder = new Map(EVENING_SCALE_KEYS.map((k, i) => [k, i]));
+  scaleFields.sort((a, b) => (scaleOrder.get(a.key as never) ?? 99) - (scaleOrder.get(b.key as never) ?? 99));
 
   function scaleStatsForRows(slice: EveningExportRow[]) {
     const byQuestion = scaleFields.map(f => {

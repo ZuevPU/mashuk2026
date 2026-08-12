@@ -205,3 +205,65 @@ export function mergeFieldKeys(
   }
   return byLabel;
 }
+
+/**
+ * Тема шкалы для дедупа: «housing» с подписью про куратора = та же тема, что curator.
+ * В анкете часто переименовывают housing → «работу куратора», оставляя пустой curator.
+ */
+export function eveningScaleTopicKey(f: { key: string; label?: string | null }): string {
+  const key = (f.key || '').trim();
+  const label = (f.label || '').toLowerCase();
+  if (key === 'curator' || /куратор/.test(label)) return '__curator__';
+  if (key === 'housing' || /проживан|быт/.test(label)) return '__housing__';
+  return key || label || 'unknown';
+}
+
+/**
+ * Оставляет одну шкалу на тему (куратор / проживание / …), с наибольшим числом ответов.
+ */
+export function pickPreferredScaleFields<T extends { key: string; label?: string | null }>(
+  fields: T[],
+  answerCount: (key: string) => number,
+): T[] {
+  const groups = new Map<string, T[]>();
+  const firstIndex = new Map<string, number>();
+  fields.forEach((f, i) => {
+    const topic = eveningScaleTopicKey(f);
+    if (!groups.has(topic)) {
+      groups.set(topic, []);
+      firstIndex.set(topic, i);
+    }
+    groups.get(topic)!.push(f);
+  });
+
+  const out: T[] = [];
+  for (const [topic, group] of groups) {
+    if (group.length === 1) {
+      const only = group[0]!;
+      out.push(
+        topic === '__curator__'
+          ? { ...only, label: 'Работа куратора группы' }
+          : only,
+      );
+      continue;
+    }
+    const ranked = [...group].sort((a, b) => {
+      const dn = answerCount(b.key) - answerCount(a.key);
+      if (dn !== 0) return dn;
+      if (a.key === 'curator') return -1;
+      if (b.key === 'curator') return 1;
+      return a.key.localeCompare(b.key);
+    });
+    const winner = ranked[0]!;
+    out.push(
+      topic === '__curator__'
+        ? { ...winner, label: 'Работа куратора группы' }
+        : winner,
+    );
+  }
+
+  out.sort((a, b) =>
+    (firstIndex.get(eveningScaleTopicKey(a)) ?? 99)
+    - (firstIndex.get(eveningScaleTopicKey(b)) ?? 99));
+  return out;
+}

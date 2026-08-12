@@ -24,6 +24,7 @@ import {
   medianLen,
   mergeFieldKeys,
   pickGroupExtremes,
+  pickPreferredScaleFields,
   round1,
   round2,
   scaleDist,
@@ -173,9 +174,17 @@ function buildHeat(
   heat: Array<{
     dir: string;
     n: number;
-    vals: Array<{ v: number; dev: number }>;
+    vals: Array<{ v: number | null; dev: number }>;
     idx: number;
+    isForum?: boolean;
   }>;
+  forum: {
+    dir: string;
+    n: number;
+    vals: Array<{ v: number | null; dev: number }>;
+    idx: number;
+    isForum: true;
+  } | null;
 } {
   const dirMap = new Map<string, EveningExportRow[]>();
   for (const r of submitted) {
@@ -186,17 +195,18 @@ function buildHeat(
   const heat = [...dirMap.entries()]
     .map(([dir, rows]) => {
       const vals = blocks.map(b => {
+        const maxScale = 5;
         const scaleVals: number[] = [];
         for (const r of rows) {
-          const n = numScale(r.ratings[b.key], 5);
+          const n = numScale(r.ratings[b.key], maxScale);
           if (n != null) scaleVals.push(n);
         }
         const v = mean(scaleVals);
-        if (v == null) return { v: 0, dev: 0, empty: true as const };
+        if (v == null) return { v: null as number | null, dev: 0, empty: true as const };
         return { v, dev: deviation(v, b.mean), empty: false as const };
       });
-      if (vals.every(v => 'empty' in v && v.empty)) return null;
-      const idxVals = vals.filter(v => !('empty' in v && v.empty)).map(v => v.v);
+      if (vals.every(v => v.empty)) return null;
+      const idxVals = vals.filter(v => !v.empty && v.v != null).map(v => v.v as number);
       return {
         dir,
         n: rows.length,
@@ -206,7 +216,18 @@ function buildHeat(
     })
     .filter((x): x is NonNullable<typeof x> => x != null)
     .sort((a, b) => a.idx - b.idx);
-  return { dirs: heat.map(h => h.dir), heat };
+
+  const forum = blocks.length && submitted.length
+    ? {
+      dir: 'Весь форум',
+      n: submitted.length,
+      vals: blocks.map(b => ({ v: b.mean as number | null, dev: 0 })),
+      idx: mean(blocks.map(b => b.mean)) ?? 0,
+      isForum: true as const,
+    }
+    : null;
+
+  return { dirs: heat.map(h => h.dir), heat, forum };
 }
 
 function buildGroups(blocks: BlockStat[], submitted: EveningExportRow[]) {
@@ -406,15 +427,21 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
 
   const scaleFields = fields.filter(isScaleField);
   // шкалы с данными + канонические ключи, если есть ответы
-  const activeScales = scaleFields.filter(f =>
+  const withAnswers = scaleFields.filter(f =>
     submittedRows.some(r => numScale(r.ratings[f.key], f.type === 'scale_1_10' ? 10 : 5) != null),
+  );
+  // housing часто переименован в «куратора», а curator почти пустой — оставляем одну колонку.
+  const activeScales = pickPreferredScaleFields(
+    withAnswers,
+    key => submittedRows.filter(r => numScale(r.ratings[key], 5) != null
+      || numScale(r.ratings[key], 10) != null).length,
   );
   // если конфиг не отфильтровал — предпочитаем порядок EVENING_SCALE_KEYS
   const order = new Map(EVENING_SCALE_KEYS.map((k, i) => [k, i]));
   activeScales.sort((a, b) => (order.get(a.key as never) ?? 99) - (order.get(b.key as never) ?? 99));
 
   const blocks = buildBlocks(activeScales, submittedRows);
-  const { dirs, heat } = buildHeat(blocks, submittedRows);
+  const { dirs, heat, forum: heatForum } = buildHeat(blocks, submittedRows);
   const groups = buildGroups(blocks, submittedRows);
 
   const dayIndex = blocks.length
@@ -553,6 +580,7 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
     blocks,
     dirs,
     heat,
+    heatForum,
     worstGroups: groups.worst,
     bestGroups: groups.best,
     roles: rolesFinal,

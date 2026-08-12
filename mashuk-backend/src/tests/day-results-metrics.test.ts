@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import {
   directionSpread,
   deviation,
+  eveningScaleTopicKey,
   formalSharePct,
   isFormalAnswer,
   lowSharePct,
   pickGroupExtremes,
+  pickPreferredScaleFields,
   scaleDist,
   transferIndexPct,
 } from '../services/analytics/dayResultsMetrics.js';
@@ -68,5 +70,26 @@ describe('dayResultsMetrics', () => {
       { name: 'Осознанно решил(а) отказаться', n: 29 },
     ]);
     assert.equal(pct, 49);
+  });
+
+  it('keeps housing-as-curator and drops empty curator twin', () => {
+    assert.equal(
+      eveningScaleTopicKey({ key: 'housing', label: 'Оцени / работу куратора группы' }),
+      '__curator__',
+    );
+    assert.equal(
+      eveningScaleTopicKey({ key: 'curator', label: 'Работа куратора группы' }),
+      '__curator__',
+    );
+    const picked = pickPreferredScaleFields(
+      [
+        { key: 'food', label: 'Питание' },
+        { key: 'housing', label: 'Оцени по шкале / работу куратора группы' },
+        { key: 'curator', label: 'Работа куратора группы' },
+      ],
+      key => (key === 'housing' ? 639 : key === 'curator' ? 1 : 100),
+    );
+    assert.deepEqual(picked.map(f => f.key), ['food', 'housing']);
+    assert.equal(picked[1]?.label, 'Работа куратора группы');
   });
 });
