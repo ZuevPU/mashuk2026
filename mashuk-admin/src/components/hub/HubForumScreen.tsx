@@ -43,6 +43,7 @@ import { RoleDirectionHeatmap } from './RoleDirectionHeatmap';
 import { TouchpointDirectionSlotChart, TouchpointSlotChart } from './TouchpointSlotChart';
 import { PiggybankDirectionMatrix } from './PiggybankDirectionMatrix';
 import { HubEmotionsDayChart } from './HubEmotionsDayChart';
+import { DeferMount } from './DeferMount';
 import { HubLensLayout, type HubNavItem } from './HubSideNav';
 import { downloadHubExport, forumExportItems, forumPackExportItem } from './hubExports';
 import {
@@ -50,7 +51,7 @@ import {
   hubFilterParams,
   isAllForumDay,
 } from './hubQuery';
-import type { HubLens } from './HubTab';
+import type { HubLens } from './hubLenses';
 
 const FORUM_NAV: HubNavItem[] = [
   { id: 'forum-overview', label: 'Обзор' },
@@ -76,8 +77,11 @@ type DaySeriesRow = {
   answers?: number;
 };
 
-/** v5: глобальный фильтр «весь форум» + направление без сброса скролла */
-const FORUM_CACHE_PREFIX = 'mashuk_hub_forum_v5:';
+/** v6: TTL + лимит ключей, чтобы localStorage не раздувался */
+const FORUM_CACHE_PREFIX = 'mashuk_hub_forum_v6:';
+const FORUM_CACHE_ANY = 'mashuk_hub_forum_';
+const FORUM_CACHE_TTL_MS = 5 * 60 * 1000;
+const FORUM_CACHE_MAX_KEYS = 8;
 
 type ForumCacheEntry = {
   updatedAt: string;
@@ -94,7 +98,44 @@ function forumCacheKey(
   return `${FORUM_CACHE_PREFIX}${day}|${ageCategory || ''}|${activity || ''}|${direction || ''}|${group || ''}`;
 }
 
+function pruneForumCache(keepKey?: string) {
+  try {
+    const now = Date.now();
+    const kept: { key: string; at: number }[] = [];
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith(FORUM_CACHE_ANY)) continue;
+      if (!key.startsWith(FORUM_CACHE_PREFIX)) {
+        localStorage.removeItem(key);
+        continue;
+      }
+      if (key === keepKey) continue;
+      let at = 0;
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key) || '') as ForumCacheEntry;
+        at = parsed?.updatedAt ? Date.parse(parsed.updatedAt) : 0;
+      } catch {
+        at = 0;
+      }
+      if (!at || now - at > FORUM_CACHE_TTL_MS) {
+        localStorage.removeItem(key);
+        continue;
+      }
+      kept.push({ key, at });
+    }
+    kept.sort((a, b) => a.at - b.at);
+    const maxOthers = Math.max(0, FORUM_CACHE_MAX_KEYS - (keepKey ? 1 : 0));
+    while (kept.length > maxOthers) {
+      const drop = kept.shift();
+      if (drop) localStorage.removeItem(drop.key);
+    }
+  } catch {
+    /* quota / private mode */
+  }
+}
+
 function readForumCache(key: string): ForumCacheEntry | null {
+  pruneForumCache(key);
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
@@ -108,10 +149,16 @@ function readForumCache(key: string): ForumCacheEntry | null {
 
 function writeForumCache(key: string, data: unknown): string {
   const updatedAt = new Date().toISOString();
+  pruneForumCache(key);
   try {
     localStorage.setItem(key, JSON.stringify({ updatedAt, data }));
   } catch {
-    /* quota / private mode */
+    pruneForumCache();
+    try {
+      localStorage.setItem(key, JSON.stringify({ updatedAt, data }));
+    } catch {
+      /* quota / private mode */
+    }
   }
   return updatedAt;
 }
@@ -176,7 +223,8 @@ export function HubForumScreen({
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
     const gen = ++loadGen.current;
-    setLoading(true);
+    const silent = Boolean(opts?.silent && dataRef.current);
+    if (!silent) setLoading(true);
     setLoadError(null);
     const params = hubFilterParams({
       mode: 'day',
@@ -226,13 +274,25 @@ export function HubForumScreen({
       setData(cached.data);
       setUpdatedAt(cached.updatedAt);
       setLoadError(null);
+    } else {
+      dataRef.current = null;
+      setData(null);
+      setUpdatedAt(null);
     }
     void refresh({ silent: true });
-    const timer = window.setInterval(() => {
+
+    const poll = () => {
+      if (document.hidden) return;
       void refresh({ silent: true });
-    }, FORUM_POLL_MS);
+    };
+    const timer = window.setInterval(poll, FORUM_POLL_MS);
+    const onVis = () => {
+      if (!document.hidden) void refresh({ silent: true });
+    };
+    document.addEventListener('visibilitychange', onVis);
     return () => {
       window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVis);
       loadGen.current += 1;
     };
   }, [cacheKey, refresh]);
@@ -478,6 +538,7 @@ export function HubForumScreen({
 
         <section id="forum-emotions" className="adm-forum-anchor">
           <SectionLabel>Эмоции и энергия</SectionLabel>
+          <DeferMount minHeight={720}>
           <ZoneBars title="Зоны эмоций · форум" zones={pulse.zonesPercent} />
           <DashGrid cols={3}>
             <ZoneBars title="Зоны · утро" zones={pulse.byPhase?.morning} />
@@ -543,10 +604,12 @@ export function HubForumScreen({
               </ResponsiveContainer>
             </DashCard>
           )}
+          </DeferMount>
         </section>
 
         <section id="forum-energy" className="adm-forum-anchor">
           <SectionLabel>Средняя энергия</SectionLabel>
+          <DeferMount minHeight={520}>
           <EnergyAverages
             avg={pulse.avgEnergy}
             byDay={pulse.energyByDay}
@@ -564,10 +627,12 @@ export function HubForumScreen({
             directions={(data.byDirection ?? []).map((r: { direction: string }) => r.direction)}
             onOpenDirection={openDirection}
           />
+          </DeferMount>
         </section>
 
         <section id="forum-roles" className="adm-forum-anchor">
           <SectionLabel>Роли</SectionLabel>
+          <DeferMount minHeight={480}>
           <HubRoleDynamics
             data={data.roleDynamics}
             toolbarDirection={direction || undefined}
@@ -578,10 +643,12 @@ export function HubForumScreen({
             data={data.roleDirectionMatrix}
             onOpenDirection={openDirection}
           />
+          </DeferMount>
         </section>
 
         <section id="forum-touchpoints" className="adm-forum-anchor">
           <SectionLabel>Точки дня · охват</SectionLabel>
+          <DeferMount minHeight={480}>
           <TouchpointSlotChart
             data={data.touchpointSlotCoverage ?? data.pulse?.activity?.touchpointSlotCoverage}
           />
@@ -596,10 +663,12 @@ export function HubForumScreen({
             byDirectionDaySeries={data.byDirectionDaySeries ?? data.pulse?.activity?.byDirectionDaySeries}
             metrics={PULSE_DAY_METRICS}
           />
+          </DeferMount>
         </section>
 
         <section id="forum-exchange" className="adm-forum-anchor">
           <SectionLabel>Обмен опытом</SectionLabel>
+          <DeferMount minHeight={360}>
           {qaByDay.some(r => r.questions > 0 || r.answers > 0) && (
             <DashCard title="Вопросы и ответы по дням">
               <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
@@ -619,6 +688,7 @@ export function HubForumScreen({
             </DashCard>
           )}
           <ExchangeAnalyticsPanel data={data.exchange} />
+          </DeferMount>
         </section>
 
         <section id="forum-signals" className="adm-forum-anchor">
@@ -655,6 +725,7 @@ export function HubForumScreen({
 
         <section id="forum-evening" className="adm-forum-anchor">
           <SectionLabel>Итоговая анкета · сводка</SectionLabel>
+          <DeferMount minHeight={360}>
           <EveningScaleAverages
             compact
             rows={data.evening?.scaleAverages}
@@ -666,6 +737,7 @@ export function HubForumScreen({
             data={data.evening?.practiceRecommendNps}
             title="Готов ли рекомендовать эту практику коллегам?"
           />
+          </DeferMount>
         </section>
 
         <section id="forum-after" className="adm-forum-anchor">

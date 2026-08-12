@@ -10,7 +10,7 @@ import { HubKpiRow } from './HubKpiRow';
 import { HubLensLayout, type HubNavItem } from './HubSideNav';
 import { downloadHubExport } from './hubExports';
 import { hubDisplayDay, hubFilterParams, isAllForumDay } from './hubQuery';
-import type { HubLens } from './HubTab';
+import type { HubLens } from './hubLenses';
 
 type EveningDayCell = {
   day: number;

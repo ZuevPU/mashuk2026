@@ -124,22 +124,32 @@ function insightsForSeries(
 
 function RoleBarCell({
   pct,
+  count,
   color,
+  unit,
 }: {
   pct: number;
+  count: number;
   color: string;
+  unit: 'count' | 'pct';
 }) {
   const fill = Math.max(0, Math.min(100, pct));
+  const empty = (unit === 'pct' ? pct : count) <= 0;
+  const label = empty
+    ? '·'
+    : unit === 'pct'
+      ? `${Math.round(pct)}%`
+      : String(count);
   return (
     <div
-      title={`${Math.round(pct)}%`}
+      title={`${count} чел. · ${Math.round(pct)}%`}
       style={{
         position: 'relative',
         height: 28,
         borderRadius: 999,
         background: '#eceae6',
         overflow: 'hidden',
-        minWidth: 56,
+        minWidth: 64,
       }}
     >
       <div
@@ -166,7 +176,7 @@ function RoleBarCell({
           color: fill >= 42 ? '#1a1a1a' : '#333',
         }}
       >
-        {pct > 0 ? Math.round(pct) : '·'}
+        {label}
       </span>
     </div>
   );
@@ -184,6 +194,7 @@ export function HubRoleDynamics({ data, toolbarDirection, onOpenDirection }: Pro
     if (toolbarDirection && directions.includes(toolbarDirection)) return toolbarDirection;
     return 'forum';
   });
+  const [unit, setUnit] = useState<'count' | 'pct'>('pct');
 
   // Синхрон с тулбаром, если пользователь выбрал направление сверху
   const effectiveScope = useMemo(() => {
@@ -350,11 +361,40 @@ export function HubRoleDynamics({ data, toolbarDirection, onOpenDirection }: Pro
       )}
 
       <DashCard title="Динамика всех шести ролей">
-        <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 12 }}>
-          Доля участников с ролью по дням
-          {effectiveScope === 'forum' ? ' · форум' : ` · ${effectiveScope}`}.
-          Роль дня = активная роль проверки состояния, иначе стартовая.
-        </p>
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 10,
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginTop: -4,
+          marginBottom: 12,
+        }}
+        >
+          <p className="adm-muted" style={{ fontSize: 12, margin: 0, flex: '1 1 220px' }}>
+            Доля участников с ролью по дням
+            {effectiveScope === 'forum' ? ' · форум' : ` · ${effectiveScope}`}.
+            Роль дня = активная роль проверки состояния, иначе стартовая.
+          </p>
+          <div className="adm-forum-seg" role="group" aria-label="Единицы на графике">
+            <button
+              type="button"
+              className={unit === 'count' ? 'on' : ''}
+              aria-pressed={unit === 'count'}
+              onClick={() => setUnit('count')}
+            >
+              Числа
+            </button>
+            <button
+              type="button"
+              className={unit === 'pct' ? 'on' : ''}
+              aria-pressed={unit === 'pct'}
+              onClick={() => setUnit('pct')}
+            >
+              %
+            </button>
+          </div>
+        </div>
 
         {!byDay.length ? (
           <p className="adm-muted" style={{ fontSize: 13, margin: 0 }}>Нет дневных срезов.</p>
@@ -387,10 +427,14 @@ export function HubRoleDynamics({ data, toolbarDirection, onOpenDirection }: Pro
                     </td>
                     {byDay.map(d => {
                       const cell = d.cells.find(c => c.roleKey === role.roleKey);
-                      const pct = cell?.pct ?? 0;
                       return (
                         <td key={d.day} style={{ borderBottom: 'none', padding: '2px 6px', verticalAlign: 'middle' }}>
-                          <RoleBarCell pct={pct} color={role.color} />
+                          <RoleBarCell
+                            pct={cell?.pct ?? 0}
+                            count={cell?.count ?? 0}
+                            color={role.color}
+                            unit={unit}
+                          />
                         </td>
                       );
                     })}
@@ -401,7 +445,9 @@ export function HubRoleDynamics({ data, toolbarDirection, onOpenDirection }: Pro
           </div>
         )}
         <p className="adm-muted" style={{ fontSize: 11, margin: '10px 0 0' }}>
-          Длина цветной полосы помогает сравнивать значения; числа — точная доля участников.
+          {unit === 'pct'
+            ? 'Длина полосы и числа — доля участников за день.'
+            : 'Длина полосы — доля за день; числа — сколько человек с этой ролью.'}
           {effectiveScope !== 'forum' && onOpenDirection && (
             <>
               {' '}

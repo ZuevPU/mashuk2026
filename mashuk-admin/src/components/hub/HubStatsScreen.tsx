@@ -4,7 +4,7 @@ import { DashCard, DashScreenTitle } from '../analytics/dashboardUi';
 import { HubKpiRow } from './HubKpiRow';
 import { downloadHubExport } from './hubExports';
 import { hubDisplayDay, hubFilterParams, isAllForumDay } from './hubQuery';
-import type { HubLens } from './HubTab';
+import type { HubLens } from './hubLenses';
 import {
   DayResultsSection,
   Flag,

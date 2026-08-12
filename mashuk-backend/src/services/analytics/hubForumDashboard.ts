@@ -18,7 +18,7 @@ import {
   buildTouchpointThresholdCoverage,
 } from './touchpointMetrics.js';
 import { getForumSettings } from '../helpers.js';
-import { computeLeaderboardScores } from '../leaderboardService.js';
+import { participantRatingScore } from '../pointsService.js';
 
 async function loadCommunityQueueCounts() {
   const [[pendingExchange], [orgWaiting], [activeExchange]] = await Promise.all([
@@ -173,15 +173,11 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
   }
 
   const registeredCohort = cohort.filter(p => p.onboardingCompletedAt);
-  const ratingScores = await computeLeaderboardScores(
-    registeredCohort.map(p => p.id),
-    { scope: 'total', track: 'total' },
-  );
   const pointsByDir = new Map<string, { sum: number; n: number }>();
   for (const p of registeredCohort) {
     const d = (p.direction || '—').trim() || '—';
     const cur = pointsByDir.get(d) ?? { sum: 0, n: 0 };
-    cur.sum += ratingScores.get(p.id) ?? 0;
+    cur.sum += participantRatingScore(p);
     cur.n += 1;
     pointsByDir.set(d, cur);
   }
@@ -302,7 +298,8 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
   };
 }
 
-/** Вторая фаза: точки охвата + heatmap ролей + обмен (после основного /hub/forum). */
+/** Вторая фаза: точки охвата + heatmap ролей + обмен (после основного /hub/forum).
+ *  Когорта берётся из короткого кэша loadCohortParticipants — без повторного SELECT. */
 export async function buildHubForumExtras(filters: AnalyticsFilters, req?: AdminRequest) {
   const forumFilters: AnalyticsFilters = { ...filters };
   const cohort = await loadCohortParticipants(forumFilters, req);

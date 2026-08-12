@@ -1,5 +1,5 @@
 import { useInsights } from '../insights/InsightsContext';
-import type { HubLens } from './HubTab';
+import type { HubLens } from './hubLenses';
 import { HUB_FORUM_DAY_ALL, hubDirections, isAllForumDay, isOrganizerDirection } from './hubQuery';
 
 const LENS_LABELS: Record<HubLens, string> = {

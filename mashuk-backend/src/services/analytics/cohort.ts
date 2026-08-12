@@ -1,4 +1,4 @@
-import { eq, and, isNull, inArray, sql } from 'drizzle-orm';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { participants, directions } from '../../db/schema.js';
 import { buildParticipantWhere, type ParticipantListQuery } from '../participantsList.js';
@@ -7,7 +7,42 @@ import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { matchesActivity, matchesAgeCategory, AGE_CATEGORY_BUCKETS } from './cohortFilters.js';
 import { isOrganizerDirection } from '../leaderboardQuery.js';
 
-export async function loadCohortParticipants(filters: AnalyticsFilters, req?: AdminRequest) {
+const COHORT_CACHE_TTL_MS = 45_000;
+const COHORT_CACHE_MAX = 12;
+
+type CohortRow = Awaited<ReturnType<typeof loadCohortUncached>>[number];
+type CacheRec = { at: number; rows: CohortRow[] };
+
+const cohortCache = new Map<string, CacheRec>();
+const cohortInflight = new Map<string, Promise<CohortRow[]>>();
+
+function cohortCacheKey(filters: AnalyticsFilters, req?: AdminRequest): string {
+  const curatorDir = req?.adminRole === 'curator'
+    ? String((req as AdminRequest & { directionId?: number }).directionId ?? '')
+    : '';
+  return [
+    filters.shiftId ?? '',
+    filters.participantId ?? '',
+    filters.roleKey ?? '',
+    filters.direction ?? '',
+    filters.group ?? '',
+    filters.ageCategory ?? '',
+    filters.activity ?? '',
+    curatorDir,
+  ].join('|');
+}
+
+function rememberCohort(key: string, rows: CohortRow[]) {
+  cohortCache.set(key, { at: Date.now(), rows });
+  if (cohortCache.size <= COHORT_CACHE_MAX) return;
+  const oldest = [...cohortCache.entries()].sort((a, b) => a[1].at - b[1].at);
+  while (oldest.length > COHORT_CACHE_MAX) {
+    const drop = oldest.shift();
+    if (drop) cohortCache.delete(drop[0]);
+  }
+}
+
+async function loadCohortUncached(filters: AnalyticsFilters, req?: AdminRequest) {
   const q: ParticipantListQuery = { includeDeleted: false };
   if (filters.shiftId != null) q.shiftId = filters.shiftId;
   if (filters.participantId) q.ids = [filters.participantId];
@@ -38,6 +73,10 @@ export async function loadCohortParticipants(filters: AnalyticsFilters, req?: Ad
     region: participants.region,
     workplace: participants.workplace,
     growthRole: participants.growthRole,
+    pathPoints: participants.pathPoints,
+    experiencePoints: participants.experiencePoints,
+    bonusPoints: participants.bonusPoints,
+    forumPoints: participants.forumPoints,
   }).from(participants)
     .leftJoin(directions, eq(participants.directionId, directions.id))
     .where(where ?? isNull(participants.selfDeletedAt));
@@ -63,6 +102,36 @@ export async function loadCohortParticipants(filters: AnalyticsFilters, req?: Ad
     rows = rows.filter(p => matchesActivity(p.position, filters.activity));
   }
   return rows;
+}
+
+/**
+ * Когорта участников для аналитики. Короткий in-memory кэш + coalescing,
+ * чтобы /hub/forum и /hub/forum-extras (и параллельные билдеры) не ходили в БД дважды.
+ */
+export async function loadCohortParticipants(filters: AnalyticsFilters, req?: AdminRequest) {
+  const key = cohortCacheKey(filters, req);
+  const hit = cohortCache.get(key);
+  if (hit && Date.now() - hit.at < COHORT_CACHE_TTL_MS) {
+    return hit.rows.slice();
+  }
+
+  let pending = cohortInflight.get(key);
+  if (!pending) {
+    pending = loadCohortUncached(filters, req).then(
+      rows => {
+        rememberCohort(key, rows);
+        cohortInflight.delete(key);
+        return rows;
+      },
+      err => {
+        cohortInflight.delete(key);
+        throw err;
+      },
+    );
+    cohortInflight.set(key, pending);
+  }
+  const rows = await pending;
+  return rows.slice();
 }
 
 export async function cohortParticipantIds(filters: AnalyticsFilters, req?: AdminRequest): Promise<number[]> {
