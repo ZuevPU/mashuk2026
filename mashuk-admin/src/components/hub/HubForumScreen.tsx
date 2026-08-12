@@ -54,7 +54,8 @@ type DaySeriesRow = {
   answers?: number;
 };
 
-const FORUM_CACHE_PREFIX = 'mashuk_hub_forum_v1:';
+/** v3: сброс кэша после фикса скрытых state_check в аналитике */
+const FORUM_CACHE_PREFIX = 'mashuk_hub_forum_v3:';
 
 type ForumCacheEntry = {
   updatedAt: string;

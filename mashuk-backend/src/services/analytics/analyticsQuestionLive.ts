@@ -16,8 +16,8 @@ function publishTimeMs(publishTime: Date | string | null | undefined): number | 
  * Включать в аналитику:
  * - published с publishTime ≤ now (или без publishTime)
  * - archived (история ответов)
- * - hidden после открытия окна
- * Исключать: draft и published с будущим publishTime (засеянные слоты).
+ * - isHidden=true всегда (сняли с эфира после ответов; publishTime могли сбить «Пересчитать окна»)
+ * Исключать: draft и ещё не открывшиеся published (засеянные слоты).
  */
 export function isQuestionLiveForAnalytics(
   q: {
@@ -29,13 +29,14 @@ export function isQuestionLiveForAnalytics(
 ): boolean {
   const status = (q.status || 'published').toLowerCase();
   if (status === 'draft') return false;
-
-  const openedAt = publishTimeMs(q.publishTime);
-  const notOpenedYet = openedAt != null && openedAt > now.getTime();
-
   if (status === 'archived') return true;
   if (status !== 'published') return false;
-  if (notOpenedYet) return false;
+
+  // Скрыт админом = уже был в эфире. Не режем по publishTime.
+  if (q.isHidden === true) return true;
+
+  const openedAt = publishTimeMs(q.publishTime);
+  if (openedAt != null && openedAt > now.getTime()) return false;
   return true;
 }
 
