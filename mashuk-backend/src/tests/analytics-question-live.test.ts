@@ -97,4 +97,26 @@ describe('stateCheckPhaseFromQuestion', () => {
       'day',
     );
   });
+
+  it('matches exact touchpoint checkin titles', () => {
+    assert.equal(
+      stateCheckPhaseFromQuestion({ title: 'Утренняя проверка состояния', timePoint: null }, null),
+      'morning',
+    );
+    assert.equal(
+      stateCheckPhaseFromQuestion({ title: 'Дневная проверка состояния', timePoint: 'утро' }, null),
+      'day',
+    );
+    assert.equal(
+      stateCheckPhaseFromQuestion({ title: 'Вечерняя проверка состояния', timePoint: 'утро' }, null),
+      'evening',
+    );
+  });
+
+  it('uses timePoint день when title has no phase words', () => {
+    assert.equal(
+      stateCheckPhaseFromQuestion({ title: 'Проверка состояния', timePoint: 'день' }, null),
+      'day',
+    );
+  });
 });

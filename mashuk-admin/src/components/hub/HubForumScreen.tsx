@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
@@ -113,8 +113,10 @@ function formatDelta(delta: number | null, suffix = ''): string | undefined {
   return `${sign}${delta}${suffix} к пред. дню`;
 }
 
+const FORUM_POLL_MS = 60_000;
+
 /**
- * Линза «Форум» — данные только по кнопке «Обновить» (или из кэша при повторном открытии).
+ * Линза «Форум» — автозагрузка при открытии / смене дня и опрос раз в минуту.
  */
 export function HubForumScreen({
   onLensChange,
@@ -129,25 +131,14 @@ export function HubForumScreen({
   const [loading, setLoading] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const loadGen = useRef(0);
 
   const selectedDay = Number(forumDay) || meta?.currentForumDay || 1;
   const cacheKey = forumCacheKey(String(selectedDay), ageCategory || '', activity || '');
 
-  /** При смене дня/фильтров — только кэш, без автозапроса к серверу. */
-  useEffect(() => {
-    const cached = readForumCache(cacheKey);
-    if (cached) {
-      setData(cached.data);
-      setUpdatedAt(cached.updatedAt);
-      setLoadError(null);
-    } else {
-      setData(null);
-      setUpdatedAt(null);
-    }
-  }, [cacheKey]);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const refresh = useCallback(async (opts?: { silent?: boolean }) => {
+    const gen = ++loadGen.current;
+    if (!opts?.silent) setLoading(true);
     setLoadError(null);
     const params = hubFilterParams({
       mode: 'day',
@@ -158,13 +149,14 @@ export function HubForumScreen({
     const qs = params.toString();
     try {
       const res = await adminFetch(`/analytics/hub/forum?${qs}`) as Record<string, unknown>;
+      if (gen !== loadGen.current) return;
       setData(res);
       const ts = writeForumCache(cacheKey, res);
       setUpdatedAt(ts);
       setLoading(false);
-      // Тяжёлые панели — второй запрос, не блокирует KPI.
       try {
         const extras = await adminFetch(`/analytics/hub/forum-extras?${qs}`) as Record<string, unknown>;
+        if (gen !== loadGen.current) return;
         const merged = {
           ...res,
           touchpointThreshold: extras.touchpointThreshold ?? null,
@@ -178,10 +170,31 @@ export function HubForumScreen({
         /* extras optional */
       }
     } catch {
-      setLoadError('Не удалось загрузить данные. Сервер перегружен или таймаут — подождите и нажмите «Обновить» ещё раз.');
+      if (gen !== loadGen.current) return;
+      setLoadError('Не удалось загрузить данные. Сервер перегружен или таймаут — обновится автоматически.');
       setLoading(false);
     }
   }, [adminFetch, selectedDay, ageCategory, activity, cacheKey]);
+
+  useEffect(() => {
+    const cached = readForumCache(cacheKey);
+    if (cached) {
+      setData(cached.data);
+      setUpdatedAt(cached.updatedAt);
+      setLoadError(null);
+    } else {
+      setData(null);
+      setUpdatedAt(null);
+    }
+    void refresh({ silent: Boolean(cached) });
+    const timer = window.setInterval(() => {
+      void refresh({ silent: true });
+    }, FORUM_POLL_MS);
+    return () => {
+      window.clearInterval(timer);
+      loadGen.current += 1;
+    };
+  }, [cacheKey, refresh]);
 
   const daySeries = (data?.daySeries ?? data?.pulse?.activity?.daySeries ?? []) as DaySeriesRow[];
 
@@ -237,20 +250,14 @@ export function HubForumScreen({
     onLensChange('direction');
   };
 
-  const refreshBar = (
+  const statusBar = (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 4 }}>
-      <button
-        type="button"
-        className="adm-btn adm-btn-primary adm-btn-sm"
-        disabled={loading}
-        onClick={() => { void refresh(); }}
-      >
-        {loading ? 'Обновление…' : 'Обновить'}
-      </button>
       <span className="adm-muted" style={{ fontSize: 12 }}>
-        {updatedAt
-          ? `Обновлено: ${formatUpdatedAtRu(updatedAt)} (МСК)`
-          : 'Данные ещё не загружались — нажмите «Обновить»'}
+        {loading && !data
+          ? 'Загрузка…'
+          : updatedAt
+            ? `Обновлено: ${formatUpdatedAtRu(updatedAt)} (МСК) · авто каждые ${FORUM_POLL_MS / 1000} с`
+            : 'Загрузка…'}
       </span>
       {loading && (
         <div className="tab-loading" style={{ flex: '1 1 160px', minWidth: 120, margin: 0 }}>
@@ -260,33 +267,18 @@ export function HubForumScreen({
     </div>
   );
 
-  if (!data && !loading) {
+  if (!data) {
     return (
       <div className="adm-dash-stack">
         <DashScreenTitle
           title="Штаб · Форум"
-          hint={`День ${selectedDay} из 8 · данные по кнопке «Обновить»`}
+          hint={`День ${selectedDay} из 8 · автообновление`}
         />
-        {refreshBar}
+        {statusBar}
         <DashCard title="Форум">
           <p className="adm-muted" style={{ margin: 0 }}>
-            {loadError || 'Нет сохранённых данных за этот день. Нажмите «Обновить», чтобы загрузить сводку.'}
+            {loadError || 'Загрузка сводки форума…'}
           </p>
-        </DashCard>
-      </div>
-    );
-  }
-
-  if (!data && loading) {
-    return (
-      <div className="adm-dash-stack">
-        <DashScreenTitle
-          title="Штаб · Форум"
-          hint={`День ${selectedDay} из 8 · загрузка…`}
-        />
-        {refreshBar}
-        <DashCard title="Форум">
-          <p className="adm-muted" style={{ margin: 0 }}>Загрузка данных…</p>
         </DashCard>
       </div>
     );
@@ -302,7 +294,7 @@ export function HubForumScreen({
         hint={`День ${selectedDay} из 8 · общая сводка без дублей 14 панелей`}
       />
 
-      {refreshBar}
+      {statusBar}
       {loadError && (
         <p className="adm-muted" style={{ margin: 0, color: '#ef4444', fontSize: 13 }}>{loadError}</p>
       )}

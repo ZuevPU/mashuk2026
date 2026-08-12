@@ -4,6 +4,7 @@
  * иначе ответы прошлых дней пропадают из дашбордов.
  */
 import { getMoscowPhase } from '../timePhase.js';
+import { TOUCHPOINT_SLOTS } from '../touchpointTemplates.js';
 
 function publishTimeMs(publishTime: Date | string | null | undefined): number | null {
   if (publishTime == null) return null;
@@ -15,7 +16,7 @@ function publishTimeMs(publishTime: Date | string | null | undefined): number | 
  * Включать в аналитику:
  * - published с publishTime ≤ now (или без publishTime)
  * - archived (история ответов)
- * - hidden, если окно уже наступало (или publishTime не задан)
+ * - hidden после открытия окна
  * Исключать: draft и published с будущим publishTime (засеянные слоты).
  */
 export function isQuestionLiveForAnalytics(
@@ -32,17 +33,9 @@ export function isQuestionLiveForAnalytics(
   const openedAt = publishTimeMs(q.publishTime);
   const notOpenedYet = openedAt != null && openedAt > now.getTime();
 
-  if (status === 'archived') {
-    // Архив всегда для истории; будущий publishTime у архива не бывает на практике.
-    return true;
-  }
-
+  if (status === 'archived') return true;
   if (status !== 'published') return false;
-
-  // Ещё не открывшийся слот — не считаем (фикс «ложного» дня 5).
   if (notOpenedYet) return false;
-
-  // isHidden после закрытия окна — ответы остаются в аналитике.
   return true;
 }
 
@@ -51,19 +44,53 @@ export function stateCheckPhaseForAnswer(createdAt: Date | null): 'morning' | 'd
   return getMoscowPhase(createdAt);
 }
 
+function phaseFromTouchpointSlot(
+  title: string | null | undefined,
+): 'morning' | 'day' | 'evening' | null {
+  const raw = (title || '').trim();
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  const slot = TOUCHPOINT_SLOTS.find(s =>
+    s.type === 'checkin'
+    && (s.title === raw || s.title.toLowerCase() === lower),
+  );
+  if (!slot) return null;
+  if (slot.timePoint === 'утро') return 'morning';
+  if (slot.timePoint === 'день') return 'day';
+  if (slot.timePoint === 'вечер') return 'evening';
+  return null;
+}
+
+/** Cyrillic-safe: JS \\b не считает кириллицу «словом». */
+function hasPhaseToken(text: string, token: string): boolean {
+  const t = text.toLowerCase();
+  const re = new RegExp(`(^|[^\\p{L}\\p{N}_])${token}([^\\p{L}\\p{N}_]|$)`, 'iu');
+  return re.test(t);
+}
+
 /**
  * Фаза проверки состояния.
- * Сначала название (Утренняя/Дневная/Вечерняя) — в payload часто лежит
- * дефолт «утро» с клиента, который перебивает реальный слот.
+ * 1) Точный слот из TOUCHPOINT_SLOTS (Утренняя/Дневная/Вечерняя проверка…)
+ * 2) Ключевые слова в названии
+ * 3) timePoint вопроса (не payload-дефолт «утро»)
+ * 4) Время ответа
  */
 export function stateCheckPhaseFromQuestion(
   q: { timePoint?: string | null; title?: string | null },
   createdAt?: Date | null,
 ): 'morning' | 'day' | 'evening' {
+  const fromSlot = phaseFromTouchpointSlot(q.title);
+  if (fromSlot) return fromSlot;
+
   const title = (q.title || '').toLowerCase();
-  if (/вечерн|\bвечер\b/.test(title)) return 'evening';
-  if (/дневн|днём|днем|обед|\bдень\b/.test(title)) return 'day';
-  if (/утрен|\bутро\b/.test(title)) return 'morning';
+  if (title) {
+    if (/вечерн/.test(title) || hasPhaseToken(title, 'вечер')) return 'evening';
+    // «дневн» раньше голого «день» — «Дневная проверка…»
+    if (/дневн|днём|днем|обед|середине дня|середина дня/.test(title) || hasPhaseToken(title, 'день')) {
+      return 'day';
+    }
+    if (/утрен/.test(title) || hasPhaseToken(title, 'утро')) return 'morning';
+  }
 
   const tp = (q.timePoint || '').toLowerCase().trim();
   if (tp === 'evening' || tp.includes('вечер')) return 'evening';
