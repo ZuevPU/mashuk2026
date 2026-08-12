@@ -38,7 +38,7 @@ import { DirectionEmotionEnergyBlock } from './DirectionEmotionEnergyBlock';
 import { DirectionRadarCompare } from './DirectionRadarCompare';
 import { StateReasonsByDirectionTable } from './StateReasonsByDirectionTable';
 import { RoleDirectionHeatmap } from './RoleDirectionHeatmap';
-import { TouchpointSlotChart } from './TouchpointSlotChart';
+import { TouchpointDirectionSlotChart, TouchpointSlotChart } from './TouchpointSlotChart';
 import { PiggybankDirectionMatrix } from './PiggybankDirectionMatrix';
 import { HubEmotionsDayChart } from './HubEmotionsDayChart';
 import { downloadHubExport, forumExportItems, forumPackExportItem } from './hubExports';
@@ -508,6 +508,9 @@ export function HubForumScreen({
 
       <SectionLabel>Точки дня · охват</SectionLabel>
       <TouchpointSlotChart
+        data={data.touchpointSlotCoverage ?? data.pulse?.activity?.touchpointSlotCoverage}
+      />
+      <TouchpointDirectionSlotChart
         data={data.touchpointSlotCoverage ?? data.pulse?.activity?.touchpointSlotCoverage}
       />
       <TouchpointCoveragePanel data={data.touchpointThreshold ?? data.pulse?.activity?.touchpointThreshold} />

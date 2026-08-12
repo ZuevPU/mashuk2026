@@ -271,38 +271,70 @@ export type TouchpointSlotCoverageDay = {
   slots: TouchpointSlotCoverageRow[];
 };
 
+export type TouchpointSlotDirectionCoverage = {
+  direction: string;
+  registered: number;
+  slots: TouchpointSlotCoverageRow[];
+};
+
+export type TouchpointSlotCoverageResult = {
+  slotsTotal: number;
+  byDay: TouchpointSlotCoverageDay[];
+  /** Сводка по всем дням среза (day=0): уникальные участники, закрывшие слот хотя бы раз. */
+  forum: TouchpointSlotCoverageDay;
+  byDirectionDay: Array<{ day: number; directions: TouchpointSlotDirectionCoverage[] }>;
+  byDirectionForum: TouchpointSlotDirectionCoverage[];
+};
+
+function emptySlotRows(): TouchpointSlotCoverageRow[] {
+  return TOUCHPOINT_SLOTS.map(slot => ({
+    index: slot.index,
+    title: slot.title,
+    shortLabel: TOUCHPOINT_SLOT_SHORT_LABELS[slot.index] ?? slot.title,
+    openMin: slot.openMin,
+    closeMin: slot.closeMin,
+    hasQuestion: slot.index === 7,
+    completed: 0,
+    coveragePct: 0,
+  }));
+}
+
+function coveragePctOf(completed: number, registered: number): number {
+  return registered ? Math.round((completed / registered) * 1000) / 10 : 0;
+}
+
 /**
  * Охват каждого из 7 слотов: доля зарегистрированных, закрывших слот в день
  * (уникальные участники с ответом на любой matching-вопрос слота).
+ * Плюс сводка «весь форум» и разрез по направлениям.
  */
 export async function buildTouchpointSlotCoverage(
-  cohort: { id: number; onboardingCompletedAt?: Date | null }[],
+  cohort: { id: number; direction?: string | null; onboardingCompletedAt?: Date | null }[],
   days: number[],
   shiftId?: number | null,
-): Promise<{ slotsTotal: number; byDay: TouchpointSlotCoverageDay[] }> {
+): Promise<TouchpointSlotCoverageResult> {
   const slotsTotal = TOUCHPOINT_SLOTS.length;
   const registered = cohort.filter(p => p.onboardingCompletedAt);
   const ids = registered.map(p => p.id);
 
-  if (!days.length || !ids.length) {
-    return {
-      slotsTotal,
-      byDay: days.map(day => ({
-        day,
-        registered: registered.length,
-        slots: TOUCHPOINT_SLOTS.map(slot => ({
-          index: slot.index,
-          title: slot.title,
-          shortLabel: TOUCHPOINT_SLOT_SHORT_LABELS[slot.index] ?? slot.title,
-          openMin: slot.openMin,
-          closeMin: slot.closeMin,
-          hasQuestion: false,
-          completed: 0,
-          coveragePct: 0,
-        })),
-      })),
-    };
-  }
+  const emptyForum: TouchpointSlotCoverageDay = {
+    day: 0,
+    registered: registered.length,
+    slots: emptySlotRows(),
+  };
+  const emptyResult = (): TouchpointSlotCoverageResult => ({
+    slotsTotal,
+    byDay: days.map(day => ({
+      day,
+      registered: registered.length,
+      slots: emptySlotRows(),
+    })),
+    forum: emptyForum,
+    byDirectionDay: days.map(day => ({ day, directions: [] })),
+    byDirectionForum: [],
+  });
+
+  if (!days.length || !ids.length) return emptyResult();
 
   const qRows = shiftId != null
     ? await db.select().from(questions).where(eq(questions.shiftId, shiftId))
@@ -343,36 +375,106 @@ export async function buildTouchpointSlotCoverage(
       .map(s => `${s.participantId}:${s.dayNumber}`),
   );
 
-  const byDay: TouchpointSlotCoverageDay[] = days.map(day => {
+  const byDirPeople = new Map<string, typeof registered>();
+  for (const p of registered) {
+    const d = (p.direction || '—').trim() || '—';
+    if (!byDirPeople.has(d)) byDirPeople.set(d, []);
+    byDirPeople.get(d)!.push(p);
+  }
+  const directionNames = [...byDirPeople.keys()].sort((a, b) => a.localeCompare(b, 'ru'));
+
+  const slotQsByDay = new Map<number, Map<number, Set<number>>>();
+  const slotHasQByDay = new Map<number, Map<number, boolean>>();
+  for (const day of days) {
     const dayQs = tpQs.filter(q => isTouchpointQuestionForForumDay(q, day));
-    const slots = TOUCHPOINT_SLOTS.map(slot => {
+    const qMap = new Map<number, Set<number>>();
+    const hasMap = new Map<number, boolean>();
+    for (const slot of TOUCHPOINT_SLOTS) {
       const matched = dayQs.filter(q => questionMatchesTouchpointSlot(q, slot));
-      const qIds = new Set(matched.map(q => q.id));
+      qMap.set(slot.index, new Set(matched.map(q => q.id)));
+      hasMap.set(slot.index, matched.length > 0 || slot.index === 7);
+    }
+    slotQsByDay.set(day, qMap);
+    slotHasQByDay.set(day, hasMap);
+  }
+
+  function personCompletedSlot(
+    pid: number,
+    day: number,
+    slotIndex: number,
+  ): boolean {
+    const qIds = slotQsByDay.get(day)?.get(slotIndex) ?? new Set();
+    const answeredIds = answeredByPid.get(pid) ?? new Set<number>();
+    if ([...qIds].some(qid => answeredIds.has(qid))) return true;
+    return slotIndex === 7 && eveningDone.has(`${pid}:${day}`);
+  }
+
+  function slotsForPeople(
+    people: typeof registered,
+    day: number | null,
+  ): TouchpointSlotCoverageRow[] {
+    return TOUCHPOINT_SLOTS.map(slot => {
       let completed = 0;
-      for (const p of registered) {
-        const answeredIds = answeredByPid.get(p.id) ?? new Set<number>();
-        const answeredSlot = [...qIds].some(qid => answeredIds.has(qid));
-        const eveningSlot = slot.index === 7 && eveningDone.has(`${p.id}:${day}`);
-        if (answeredSlot || eveningSlot) completed += 1;
+      if (day != null) {
+        for (const p of people) {
+          if (personCompletedSlot(p.id, day, slot.index)) completed += 1;
+        }
+      } else {
+        // Весь форум: уникальный участник, закрывший слот хотя бы в один день.
+        for (const p of people) {
+          if (days.some(d => personCompletedSlot(p.id, d, slot.index))) completed += 1;
+        }
       }
-      const coveragePct = registered.length
-        ? Math.round((completed / registered.length) * 1000) / 10
-        : 0;
+      const hasQuestion = day != null
+        ? Boolean(slotHasQByDay.get(day)?.get(slot.index))
+        : days.some(d => slotHasQByDay.get(d)?.get(slot.index));
       return {
         index: slot.index,
         title: slot.title,
         shortLabel: TOUCHPOINT_SLOT_SHORT_LABELS[slot.index] ?? slot.title,
         openMin: slot.openMin,
         closeMin: slot.closeMin,
-        hasQuestion: matched.length > 0 || slot.index === 7,
+        hasQuestion,
         completed,
-        coveragePct,
+        coveragePct: coveragePctOf(completed, people.length),
       };
     });
-    return { day, registered: registered.length, slots };
+  }
+
+  const byDay: TouchpointSlotCoverageDay[] = days.map(day => ({
+    day,
+    registered: registered.length,
+    slots: slotsForPeople(registered, day),
+  }));
+
+  const forum: TouchpointSlotCoverageDay = {
+    day: 0,
+    registered: registered.length,
+    slots: slotsForPeople(registered, null),
+  };
+
+  const byDirectionDay = days.map(day => ({
+    day,
+    directions: directionNames.map(direction => {
+      const people = byDirPeople.get(direction) ?? [];
+      return {
+        direction,
+        registered: people.length,
+        slots: slotsForPeople(people, day),
+      };
+    }),
+  }));
+
+  const byDirectionForum: TouchpointSlotDirectionCoverage[] = directionNames.map(direction => {
+    const people = byDirPeople.get(direction) ?? [];
+    return {
+      direction,
+      registered: people.length,
+      slots: slotsForPeople(people, null),
+    };
   });
 
-  return { slotsTotal, byDay };
+  return { slotsTotal, byDay, forum, byDirectionDay, byDirectionForum };
 }
 
 export type TouchpointSlotGroupCoverage = {
