@@ -3,6 +3,8 @@ import { confirmDelete } from '../../admin/confirmDelete';
 import { ADMIN_SHIFT_CHANGED_EVENT, getAdminEditingShiftId } from '../../admin/client';
 import { label } from '../../labels/ru';
 import { AdminAccordion } from '../admin/AdminAccordion';
+import { AdminPageHero } from '../admin/AdminPageHero';
+import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
 import { PlaceSelect, ProgramPlacesBlock } from './ProgramPlacesBlock';
 import { ProgramBlockTypesBlock } from './ProgramCatalogs';
 import { ProgramCalendarGrid } from './ProgramCalendarGrid';
@@ -18,6 +20,16 @@ import {
 } from './types';
 
 import type { AdminTabProps } from '../admin/types';
+
+const PROGRAM_NAV: HubNavItem[] = [
+  { id: 'prog-hero', label: 'Обзор' },
+  { id: 'prog-calendar', label: 'Календарь' },
+  { id: 'prog-tags', label: 'Теги' },
+  { id: 'prog-places', label: 'Места' },
+  { id: 'prog-types', label: 'Типы' },
+  { id: 'prog-days', label: 'Дни' },
+  { id: 'prog-publish', label: 'Публикация' },
+];
 
 function programDayStorageKey(shiftId: number | null): string {
   return `mashuk_admin_program_day_${shiftId ?? 'default'}`;
@@ -283,39 +295,39 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
 
 
   return (
-    <div className="adm-forum adm-program">
-      <div className="card adm-forum-hero adm-program-hero-compact">
-        <h2 className="adm-forum-hero-title">
-          Программа смены · <span className="adm-forum-accent">{shiftStats.total} событий</span>
-          {' · '}{shiftStats.visible} опубликовано
-        </h2>
-        <p className="adm-forum-hint">
-          Текущий день форума для участников: {forumCurrentDay}. Выбранный день: {selectedDay} из {totalDays}
-          {' · '}
-          <strong>{dayPublished ? label('day_published') : label('day_draft')}</strong>
-        </p>
-        <div className="adm-forum-toolbar">
-          <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={publishDay} disabled={dayEvents.length === 0}>
-            Опубликовать день {selectedDay}
-          </button>
-          {dayEvents.length === 0 && (
-            <>
-              <label className="adm-forum-inline">
-                Скопировать с дня
-                <select value={copyFromDay} onChange={e => setCopyFromDay(Number(e.target.value))}>
-                  {Array.from({ length: totalDays }, (_, i) => i + 1).filter(d => d !== selectedDay).map(d => (
-                    <option key={d} value={d}>День {d}</option>
-                  ))}
-                </select>
-              </label>
-              <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={copyDay}>Копировать</button>
-            </>
-          )}
-        </div>
-      </div>
+    <HubLensLayout className="adm-forum adm-program adm-kb" items={PROGRAM_NAV} navLabel="Разделы программы">
+      <section id="prog-hero" className="adm-forum-anchor">
+        <AdminPageHero
+          title={`Программа смены · ${shiftStats.total} событий · ${shiftStats.visible} опубликовано`}
+          hint={`Текущий день форума для участников: ${forumCurrentDay}. Выбранный день: ${selectedDay} из ${totalDays} · ${dayPublished ? label('day_published') : label('day_draft')}`}
+        >
+          <div className="adm-forum-toolbar">
+            <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={publishDay} disabled={dayEvents.length === 0}>
+              Опубликовать день {selectedDay}
+            </button>
+            {dayEvents.length === 0 && (
+              <>
+                <label className="adm-forum-inline">
+                  Скопировать с дня
+                  <select value={copyFromDay} onChange={e => setCopyFromDay(Number(e.target.value))}>
+                    {Array.from({ length: totalDays }, (_, i) => i + 1).filter(d => d !== selectedDay).map(d => (
+                      <option key={d} value={d}>День {d}</option>
+                    ))}
+                  </select>
+                </label>
+                <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={copyDay}>Копировать</button>
+              </>
+            )}
+          </div>
+        </AdminPageHero>
+      </section>
 
-      <div className="card adm-forum-block">
-        <h3>Календарь смены</h3>
+      <section id="prog-calendar" className="adm-forum-anchor">
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Календарь смены</h3>
+          <p className="adm-kb-panel-sub">Клик по слоту — создать или открыть событие. Публикация дня — в блоке ниже.</p>
+        </div>
         <ProgramCalendarGrid
           events={allEvents}
           totalDays={totalDays}
@@ -333,8 +345,9 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
           }}
         />
       </div>
+      </section>
 
-      <AdminAccordion title="Тематические теги" summary={`${tags.length} тегов`}>
+      <AdminAccordion id="prog-tags" title="Тематические теги" summary={`${tags.length} тегов`}>
         <p className="adm-forum-hint">
           Совпадают с интересами из регистрации — от них строится блок «Рекомендуем тебе».
           {setTab && (
@@ -468,7 +481,7 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
         </details>
       </AdminAccordion>
 
-      <AdminAccordion title="Места проведения" summary={`${places.length} мест`}>
+      <AdminAccordion id="prog-places" title="Места проведения" summary={`${places.length} мест`}>
         <p className="adm-muted adm-forum-hint">Справочник мест — для поля «Место» в событиях программы.</p>
         <ProgramPlacesBlock
           places={places}
@@ -508,7 +521,7 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
         />
       </AdminAccordion>
 
-      <AdminAccordion title="Типы блоков" summary={`${blockTypes.length} типов`}>
+      <AdminAccordion id="prog-types" title="Типы блоков" summary={`${blockTypes.length} типов`}>
         <ProgramBlockTypesBlock
           blockTypes={blockTypes}
           newName={newBlockTypeName}
@@ -543,7 +556,7 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
         />
       </AdminAccordion>
 
-      <AdminAccordion title="Дни смены" summary={`${dayTabs.length} дней`}>
+      <AdminAccordion id="prog-days" title="Дни смены" summary={`${dayTabs.length} дней`}>
         <p className="adm-forum-hint">Добавление дня увеличивает totalDays при необходимости. «Черновик дня» снимает публикацию со всех событий дня.</p>
         <div className="adm-seg adm-forum-day-seg" style={{ marginBottom: 12 }}>
           {dayTabs.map(d => (
@@ -677,7 +690,7 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
         </div>
       </AdminAccordion>
 
-      <AdminAccordion title="Публикация и версии" summary={`день ${selectedDay}`}>
+      <AdminAccordion id="prog-publish" title="Публикация и версии" summary={`день ${selectedDay}`}>
         <p className="adm-forum-hint">
           После публикации участники увидят события дня {selectedDay} в приложении (при условии, что события не в черновике).
           Событий на дне: {dayEvents.length} · {dayPublished ? label('day_published') : label('day_draft')}
@@ -719,6 +732,6 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
         adminFetch={adminFetch}
         act={act}
       />
-    </div>
+    </HubLensLayout>
   );
 }

@@ -4,6 +4,7 @@ import { adminFetchHtml, downloadDataUrl } from '../../admin/client';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import { Pagination } from '../admin/Pagination';
 import type { AdminTabProps } from '../admin/types';
+import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
 import type { ProgramPlace } from '../program/types';
 import { TaskCategoriesBlock } from './TaskCategoriesBlock';
 import { TaskForm } from './TaskForm';
@@ -25,6 +26,12 @@ type ListTab = 'active' | 'drafts' | 'archive';
 type PageSize = 50 | 100 | 500;
 
 const PAGE_SIZE_OPTIONS: PageSize[] = [50, 100, 500];
+
+const TASKS_LIST_NAV: HubNavItem[] = [
+  { id: 'tasks-hero', label: 'Обзор' },
+  { id: 'tasks-cats', label: 'Категории' },
+  { id: 'tasks-list', label: 'Список' },
+];
 
 function buildListQuery(params: {
   tab: ListTab;
@@ -289,7 +296,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
   if (view === 'form') {
     return (
-      <div className="adm-forum adm-tasks">
+      <div className="adm-forum adm-tasks adm-kb">
         <TaskForm
           draft={draft}
           categories={categories}
@@ -324,30 +331,34 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     { key: 'archive', label: 'Архив' },
   ];
 
+  const listNav = showCategories
+    ? TASKS_LIST_NAV
+    : TASKS_LIST_NAV.filter(i => i.id !== 'tasks-cats');
+
   return (
-    <div className="adm-forum adm-tasks">
+    <HubLensLayout className="adm-forum adm-tasks adm-kb" items={listNav} navLabel="Разделы заданий">
+      <section id="tasks-hero" className="adm-forum-anchor">
       <AdminPageHero
         title={
           listQueryHasFilters
             ? `Задания · ${filteredTotal} в фильтре · ${totalAll} всего`
             : `Задания · ${filteredTotal} в списке · ${totalAll} всего`
         }
-        hint="Список заданий форума. Справочник категорий — ниже. Проверка ответов играпрактиком — в меню строки. Лимита на создание нет."
+        hint="Список заданий форума. Справочник категорий — ниже. Проверка ответов играпрактиком — в меню строки."
       >
-        <div className="adm-seg" style={{ marginBottom: 12 }}>
+        <div className="adm-forum-seg" style={{ marginBottom: 12 }}>
           {tabs.map(t => (
             <button key={t.key} type="button" className={tab === t.key ? 'on' : ''} onClick={() => setTab(t.key)}>
               {t.label}
             </button>
           ))}
         </div>
-        <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+        <div className="adm-kb-toolbar" style={{ marginBottom: 0 }}>
           <input
-            className="adm-input"
+            className="adm-input adm-kb-search"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Поиск…"
-            style={{ flex: 1, minWidth: 160 }}
           />
           <select className="adm-input" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
             <option value="">Все категории</option>
@@ -355,7 +366,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          <select className="adm-input" value={dayFilter} onChange={e => setDayFilter(e.target.value)}>
+          <select className="adm-input adm-kb-control-sm" value={dayFilter} onChange={e => setDayFilter(e.target.value)}>
             <option value="">Все дни</option>
             {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
               <option key={d} value={d}>День {d}</option>
@@ -367,7 +378,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
               <option key={m.key} value={m.key}>{m.label}</option>
             ))}
           </select>
-          <div className="adm-seg" title="Сколько заданий показать на странице">
+          <div className="adm-forum-seg" title="Сколько заданий показать на странице">
             {PAGE_SIZE_OPTIONS.map(n => (
               <button
                 key={n}
@@ -391,20 +402,22 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         </div>
 
         {selectedIds.size > 0 && (
-          <div className="adm-bulk-toolbar" style={{ marginTop: 12, padding: '8px 12px', background: '#F5F0E8', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>Выбрано: {selectedIds.size}</span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('publish')}>Опубликовать</button>
-              <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('hide')}>Скрыть</button>
-              <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('unhide')}>Показать</button>
-              <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('draft')}>В черновики</button>
-              <button type="button" className="adm-btn btn-danger adm-btn-xs" onClick={() => bulkAction('delete')}>Удалить</button>
+          <div className="adm-bulk-toolbar adm-kb-bulk">
+            <span className="adm-kb-bulk-count">Выбрано: {selectedIds.size}</span>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => bulkAction('publish')}>Опубликовать</button>
+              <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => bulkAction('hide')}>Скрыть</button>
+              <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => bulkAction('unhide')}>Показать</button>
+              <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => bulkAction('draft')}>В черновики</button>
+              <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={() => bulkAction('delete')}>Удалить</button>
             </div>
           </div>
         )}
       </AdminPageHero>
+      </section>
 
       {showCategories && (
+        <section id="tasks-cats" className="adm-forum-anchor">
         <TaskCategoriesBlock
           categories={categories}
           newName={newCategoryName}
@@ -412,13 +425,16 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           onAdd={addCategory}
           onDelete={deleteCategory}
         />
+        </section>
       )}
 
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-          <span className="adm-muted" style={{ fontSize: 12 }}>
+      <section id="tasks-list" className="adm-forum-anchor">
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Список</h3>
+          <p className="adm-kb-panel-sub">
             Показано {tasks.length} из {filteredTotal} · по {pageSize} на странице
-          </span>
+          </p>
         </div>
         <TasksListTable
           tasks={tasks}
@@ -436,6 +452,7 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         />
         <Pagination page={page} total={filteredTotal} limit={pageSize} setPage={setPage} />
       </div>
+      </section>
 
       {moderatingTask && (
         <TaskSubmissionsModeration
@@ -446,6 +463,6 @@ export function TasksTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           onClose={() => setModeratingTask(null)}
         />
       )}
-    </div>
+    </HubLensLayout>
   );
 }

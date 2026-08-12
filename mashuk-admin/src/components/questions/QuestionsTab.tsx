@@ -3,6 +3,7 @@ import { confirmDelete } from '../../admin/confirmDelete';
 import { ADMIN_SHIFT_CHANGED_EVENT, adminDownloadBinary, getAdminEditingShiftId } from '../../admin/client';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
+import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
 import { AnswerConfirmationSettings, type AnswerConfirmForm } from './AnswerConfirmationSettings';
 import { ExchangeLimitsSettings, type ExchangeLimitsForm } from './ExchangeLimitsSettings';
 import { ExchangeAdminPanel } from './ExchangeAdminPanel';
@@ -23,6 +24,21 @@ import {
   emptyDraft,
 } from './types';
 import { ROLE_OPTIONS } from '../onboarding/roleOptions';
+
+const QUESTIONS_LIST_NAV: HubNavItem[] = [
+  { id: 'q-hero', label: 'Обзор' },
+  { id: 'q-content', label: 'Контент' },
+];
+
+const QUESTIONS_TOOLS_NAV: HubNavItem[] = [
+  { id: 'q-hero', label: 'Обзор' },
+  { id: 'q-tools', label: 'Инструменты' },
+];
+
+const QUESTIONS_CONFIRM_NAV: HubNavItem[] = [
+  { id: 'q-hero', label: 'Обзор' },
+  { id: 'q-confirm', label: 'Подтверждение' },
+];
 
 type QuestionsTabProps = AdminTabProps & {
   onOpenCard?: (id: number) => void;
@@ -443,7 +459,16 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   }
 
   return (
-    <div className="adm-forum">
+    <HubLensLayout
+      className="adm-forum adm-kb"
+      items={
+        view === 'tools' ? QUESTIONS_TOOLS_NAV
+          : view === 'confirm' ? QUESTIONS_CONFIRM_NAV
+            : QUESTIONS_LIST_NAV
+      }
+      navLabel="Разделы вопросов"
+    >
+      <section id="q-hero" className="adm-forum-anchor">
       <AdminPageHero
         title={`Вопросы · ${questions.length} в списке · ${totalAll} всего`}
         hint={
@@ -452,9 +477,10 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             : 'Выберите смену в шапке сверху — вопросы разделены по сменам. Обмен и дирекция — просмотр и модерация.'
         }
       />
+      </section>
 
       {view === 'confirm' && (
-        <>
+        <section id="q-confirm" className="adm-forum-anchor">
           <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" style={{ marginBottom: 8 }} onClick={() => setView('list')}>← К списку</button>
           <AnswerConfirmationSettings
             form={answerConfirmForm}
@@ -464,13 +490,19 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
               body: JSON.stringify({ answerConfirmation: answerConfirmForm }),
             }), 'Сохранено')}
           />
-        </>
+        </section>
       )}
 
       {view === 'tools' && (
-        <div className="card adm-forum-block">
+        <section id="q-tools" className="adm-forum-anchor">
+        <div className="card adm-forum-block adm-kb-panel">
           <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" style={{ marginBottom: 8 }} onClick={() => setView('list')}>← К списку</button>
-          <h3>Инструменты</h3>
+          <div className="adm-kb-panel-head">
+            <h3>Инструменты</h3>
+            <p className="adm-kb-panel-sub">
+              Шаблоны точек осмысления, копирование дня и пересчёт баллов / окон.
+            </p>
+          </div>
           <p className="adm-muted" style={{ fontSize: 13, marginBottom: 12, lineHeight: 1.45 }}>
             Здесь копируются <strong>7 точек осмысления / проверки состояния</strong> в разделе «Общение».
             Большая <strong>итоговая анкета вечера</strong> (оценки 1–5, выводы, роль на завтра) настраивается отдельно:
@@ -555,6 +587,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             </span>
           </div>
         </div>
+        </section>
       )}
 
       {view === 'form' && (
@@ -648,8 +681,8 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
       )}
 
       {view === 'list' && (
-        <>
-          <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+        <section id="q-content" className="adm-forum-anchor">
+          <div className="adm-kb-toolbar" style={{ marginBottom: 8 }}>
             <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setView('confirm')}>Подтверждение ответа</button>
             <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setView('tools')}>Инструменты</button>
             {kindTab !== 'exchange' && kindTab !== 'org_director' && (
@@ -705,7 +738,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             )}
           </div>
 
-          <div className="adm-seg" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
+          <div className="adm-forum-seg" style={{ marginBottom: 12 }}>
             {KIND_TABS.map(t => (
               <button key={t.key} type="button" className={kindTab === t.key ? 'on' : ''} onClick={() => setKindTab(t.key)}>
                 {t.label}
@@ -850,10 +883,10 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
               )}
 
               {!readOnly && selectedIds.size > 0 && (
-                <div className="form-row card" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 12, alignItems: 'center', background: '#F5F0E8', padding: '8px 12px' }}>
-                  <span style={{ fontWeight: 700 }}>Выбрано: {selectedIds.size}</span>
+                <div className="adm-kb-bulk" style={{ marginBottom: 12 }}>
+                  <span className="adm-kb-bulk-count">Выбрано: {selectedIds.size}</span>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('publish')}>Опубликовать</button>
+                    <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => bulkAction('publish')}>Опубликовать</button>
                     <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('hide')}>Скрыть</button>
                     <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('unhide')}>Показать</button>
                     <button type="button" className="adm-btn adm-btn-secondary adm-btn-xs" onClick={() => bulkAction('draft')}>В черновики</button>
@@ -890,7 +923,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
               />
             </>
           )}
-        </>
+        </section>
       )}
 
       {notifyModal && (
@@ -941,6 +974,6 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
           onClose={() => setPracticesResultsId(null)}
         />
       )}
-    </div>
+    </HubLensLayout>
   );
 }

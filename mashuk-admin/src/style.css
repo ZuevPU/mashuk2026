@@ -3934,3 +3934,48 @@ tr.adm-dir-me td { background: rgba(230, 174, 74, 0.09); }
   }
   .adm-final-profile-topbar { flex-wrap: wrap; }
 }
+
+/* ===== Apple shell extras (shifts / bulk / accordion) ===== */
+.adm-shifts-pick {
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  margin-bottom: 10px;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.adm-shifts-pick.is-on {
+  border-color: rgba(0, 122, 255, 0.4) !important;
+  box-shadow: 0 0 0 1.5px #007AFF, 0 8px 24px rgba(0, 122, 255, 0.1);
+}
+.adm-shifts-sandbox-badge {
+  background: rgba(175, 82, 222, 0.12) !important;
+  color: #AF52DE !important;
+}
+.adm-kb-bulk {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--kb-fill, rgba(120, 120, 128, 0.08));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1px solid var(--kb-hairline, rgba(60, 60, 67, 0.12));
+}
+.adm-kb-bulk-count {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--m-text);
+}
+.adm-kb .adm-accordion-title {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.adm-kb .adm-accordion-body {
+  border-top-color: var(--kb-hairline, rgba(60, 60, 67, 0.12));
+}

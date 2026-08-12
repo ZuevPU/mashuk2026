@@ -2,10 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
+import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
 import type { ProgramSpeaker } from '../program/types';
 import { speakerFullLabel, speakerSearchHaystack } from './speakerFormat';
 
 type RowDraft = { name: string; credentials: string };
+
+const SPEAKERS_NAV: HubNavItem[] = [
+  { id: 'speakers-hero', label: 'Обзор' },
+  { id: 'speakers-list', label: 'Справочник' },
+];
+
 
 const emptyDraft = (): RowDraft => ({ name: '', credentials: '' });
 
@@ -103,18 +110,23 @@ export function SpeakersTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   };
 
   return (
-    <div className="adm-speakers-page">
-      <AdminPageHero
-        title="Спикеры"
-        hint="База для программы и базы знаний: ФИО и регалии. Редактируйте прямо в таблице — «Сохранить» для строки или «Удалить»."
-      />
+    <HubLensLayout className="adm-forum adm-speakers-page adm-kb" items={SPEAKERS_NAV} navLabel="Разделы спикеров">
+      <section id="speakers-hero" className="adm-forum-anchor">
+        <AdminPageHero
+          title="Спикеры"
+          hint="База для программы и базы знаний: ФИО и регалии. Редактируйте прямо в таблице — «Сохранить» для строки или «Удалить»."
+        />
+      </section>
 
-      <div className="card adm-forum-block">
-        <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', marginBottom: 12 }}>
-          <h3 style={{ margin: 0 }}>Справочник ({speakers.length})</h3>
+      <section id="speakers-list" className="adm-forum-anchor">
+      <div className="card adm-forum-block adm-kb-panel">
+        <div className="adm-kb-panel-head">
+          <h3>Справочник ({speakers.length})</h3>
+          <p className="adm-kb-panel-sub">Поиск и правки в таблице. Новая строка — сверху.</p>
+        </div>
+        <div className="adm-kb-toolbar">
           <input
-            className="adm-input"
-            style={{ maxWidth: 280, marginLeft: 'auto' }}
+            className="adm-input adm-kb-search"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Поиск по ФИО и регалиям…"
@@ -235,6 +247,7 @@ export function SpeakersTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           </p>
         )}
       </div>
-    </div>
+      </section>
+    </HubLensLayout>
   );
 }

@@ -221,7 +221,7 @@ export function OrgDirectorPanel({ adminFetch, act, reloadKey, search = '', onOp
 
   return (
     <div className="adm-stack">
-      <div className="adm-seg" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
+      <div className="adm-forum-seg" style={{ marginBottom: 12 }}>
         {([
           ['all', 'Все'],
           ['waiting', 'Ожидают ответа'],
@@ -243,11 +243,11 @@ export function OrgDirectorPanel({ adminFetch, act, reloadKey, search = '', onOp
         ))}
       </div>
 
-      <p className="adm-muted" style={{ marginTop: 0, fontSize: 13 }}>
+      <p className="adm-kb-panel-sub" style={{ marginTop: 0, marginBottom: 12 }}>
         Показаны все обращения: и ожидающие, и уже отвеченные. Нажмите на текст вопроса, чтобы открыть карточку.
       </p>
 
-      <div style={{ overflowX: 'auto' }}>
+      <div className="adm-kb-table-scroll">
         <table className="adm-table">
           <thead>
             <tr>

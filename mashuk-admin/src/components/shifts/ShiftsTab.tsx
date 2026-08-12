@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getAdminEditingShiftId, setAdminEditingShiftId } from '../../admin/client';
+import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
+import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
+
+const SHIFTS_NAV: HubNavItem[] = [
+  { id: 'shifts-hero', label: 'Обзор' },
+  { id: 'shifts-create', label: 'Новая' },
+  { id: 'shifts-list', label: 'Список' },
+  { id: 'shifts-edit', label: 'Карточка' },
+];
 
 type Shift = {
   id: number;
@@ -310,41 +319,46 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   }
 
   return (
-    <div className="adm-forum">
-      <div className="adm-forum-hero card">
-        <h2 className="adm-forum-hero-title">Смены форума</h2>
-        <p className="adm-forum-hint">
-          Активная смена видна участникам. «Редактируем смену» задаёт контекст для вкладок «Программа», «Вопросы» и других.
-        </p>
-        <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
-          <label className="adm-forum-inline">
-            Редактируем смену
-            <select
-              className="adm-input"
-              style={{ minWidth: 220 }}
-              value={editingShiftId ?? ''}
-              onChange={e => {
-                const id = e.target.value ? Number(e.target.value) : null;
-                setEditingContext(id);
-                if (id != null) setSelectedId(id);
-              }}
-            >
-              {shifts.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.code}){s.id === activeShiftId ? ' · для участников' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setShowCreate(v => !v)}>
-            {showCreate ? 'Скрыть форму' : 'Новая смена'}
-          </button>
-        </div>
-      </div>
+    <HubLensLayout className="adm-forum adm-kb" items={SHIFTS_NAV} navLabel="Разделы смен">
+      <section id="shifts-hero" className="adm-forum-anchor">
+        <AdminPageHero
+          title="Смены форума"
+          hint="Активная смена видна участникам. «Редактируем смену» задаёт контекст для вкладок «Программа», «Вопросы» и других."
+        >
+          <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
+            <label className="adm-forum-inline">
+              Редактируем смену
+              <select
+                className="adm-input"
+                style={{ minWidth: 220 }}
+                value={editingShiftId ?? ''}
+                onChange={e => {
+                  const id = e.target.value ? Number(e.target.value) : null;
+                  setEditingContext(id);
+                  if (id != null) setSelectedId(id);
+                }}
+              >
+                {shifts.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.code}){s.id === activeShiftId ? ' · для участников' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setShowCreate(v => !v)}>
+              {showCreate ? 'Скрыть форму' : 'Новая смена'}
+            </button>
+          </div>
+        </AdminPageHero>
+      </section>
 
       {showCreate && (
-        <div className="card adm-forum-block">
-          <h3>Новая смена</h3>
+        <section id="shifts-create" className="adm-forum-anchor">
+        <div className="card adm-forum-block adm-kb-panel">
+          <div className="adm-kb-panel-head">
+            <h3>Новая смена</h3>
+            <p className="adm-kb-panel-sub">Код, название, даты и режим песочницы.</p>
+          </div>
           <div className="adm-forum-grid-2">
             <label className="adm-field">
               <span className="adm-label">Код</span>
@@ -396,10 +410,11 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             <button type="button" className="adm-btn adm-btn-primary" onClick={createShift}>Создать</button>
           </div>
         </div>
+        </section>
       )}
 
       <div className="adm-forum-grid-2" style={{ alignItems: 'start' }}>
-        <div>
+        <section id="shifts-list" className="adm-forum-anchor">
           {shifts.map(s => {
             const isActive = s.id === activeShiftId || s.status === 'active';
             const isSelected = s.id === selectedId;
@@ -408,14 +423,7 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
               <button
                 key={s.id}
                 type="button"
-                className="card adm-forum-block"
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  borderColor: isSelected ? 'var(--m-accent)' : undefined,
-                  boxShadow: isSelected ? '0 0 0 1px var(--m-accent)' : undefined,
-                }}
+                className={`card adm-forum-block adm-kb-panel adm-shifts-pick${isSelected ? ' is-on' : ''}`}
                 onClick={() => setSelectedId(s.id)}
               >
                 <div className="adm-forum-toolbar" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
@@ -425,7 +433,7 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                       {STATUS_LABELS[s.status] || s.status}
                     </span>
                     {s.isSandbox && (
-                      <span className="adm-program-badge" style={{ background: '#E9D8FD', color: '#553C9A' }}>
+                      <span className="adm-program-badge adm-shifts-sandbox-badge">
                         Песочница
                       </span>
                     )}
@@ -438,27 +446,30 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                   {formatDateRu(s.startDate)} — {endDateLabel(s.startDate, s.totalDays)} · день {s.currentDay ?? 1}/{s.totalDays ?? 8}
                 </div>
                 {isActive && (
-                  <p className="adm-forum-hint" style={{ marginTop: 8, marginBottom: 0, color: '#276749' }}>
+                  <p className="adm-kb-panel-sub" style={{ marginTop: 8, color: '#34C759' }}>
                     Видна участникам
                   </p>
                 )}
                 {isEditingCtx && !isActive && (
-                  <p className="adm-forum-hint" style={{ marginTop: 8, marginBottom: 0 }}>
+                  <p className="adm-kb-panel-sub" style={{ marginTop: 8 }}>
                     Контекст редактирования
                   </p>
                 )}
               </button>
             );
           })}
-        </div>
+        </section>
 
-        <div className="card adm-forum-block">
+        <section id="shifts-edit" className="adm-forum-anchor">
+        <div className="card adm-forum-block adm-kb-panel">
           {!selected || !draft ? (
             <p className="adm-muted">Выберите смену слева</p>
           ) : (
             <>
-              <h3>{selected.name}</h3>
-              <p className="adm-forum-hint">Код: {selected.code}</p>
+              <div className="adm-kb-panel-head">
+                <h3>{selected.name}</h3>
+                <p className="adm-kb-panel-sub">Код: {selected.code}</p>
+              </div>
               <div className="adm-forum-grid-2">
                 <label className="adm-field">
                   <span className="adm-label">Название</span>
@@ -629,7 +640,8 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             </>
           )}
         </div>
+        </section>
       </div>
-    </div>
+    </HubLensLayout>
   );
 }

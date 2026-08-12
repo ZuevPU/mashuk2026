@@ -10,16 +10,17 @@ type Props = {
 
 export function TaskCategoriesBlock({ categories, newName, onNewNameChange, onAdd, onDelete }: Props) {
   return (
-    <div className="card adm-forum-block">
-      <h3>Категории заданий</h3>
-      <p className="adm-forum-hint">Справочник для dropdown в форме задания и фильтра списка.</p>
-      <div className="adm-forum-toolbar">
+    <div className="card adm-forum-block adm-kb-panel">
+      <div className="adm-kb-panel-head">
+        <h3>Категории заданий</h3>
+        <p className="adm-kb-panel-sub">Справочник для dropdown в форме задания и фильтра списка.</p>
+      </div>
+      <div className="adm-kb-toolbar">
         <input
-          className="adm-input"
+          className="adm-input adm-kb-search"
           value={newName}
           onChange={e => onNewNameChange(e.target.value)}
           placeholder="Название категории"
-          style={{ maxWidth: 280 }}
         />
         <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={onAdd}>
           Добавить
