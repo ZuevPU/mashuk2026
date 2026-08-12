@@ -2,8 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { ChartTooltipRu, EMOTION_COLORS, EMOTION_ORDER, formatForumDay } from './chartRu';
-import { OrientableBarChart } from './orientableBars';
+import { ChartTooltipRu, formatForumDay } from './chartRu';
 
 type PathStep = {
   key: string;
@@ -26,21 +25,6 @@ type EmotionSeriesRow = {
   morningCount: number;
   dayCount: number;
   eveningCount: number;
-};
-
-type DayPhasePoint = {
-  day: number;
-  morningPct: number | null;
-  dayPct: number | null;
-  eveningPct: number | null;
-  morningCount: number;
-  dayCount: number;
-  eveningCount: number;
-};
-
-type EmotionDynamics = {
-  days?: number[];
-  emotions?: { id: string; label: string; byDay: DayPhasePoint[] }[];
 };
 
 type EnergyDynamics = {
@@ -81,17 +65,13 @@ function MethodHint({ text }: { text: string }) {
   );
 }
 
-function emotionColor(id: string): string {
-  return EMOTION_COLORS[id] ?? '#64748b';
-}
-
 export function ParticipantPathPanel({
   data,
-  emotionDynamics,
   energyDynamics,
 }: {
   data: PathData | null | undefined;
-  emotionDynamics?: EmotionDynamics | null;
+  /** @deprecated emotions live in EmotionDynamicsPanel */
+  emotionDynamics?: unknown;
   energyDynamics?: EnergyDynamics | null;
 }) {
   const [mode, setMode] = useState<'table' | 'chart'>('chart');
@@ -123,65 +103,6 @@ export function ParticipantPathPanel({
       n: 'n' in s ? (s.n as number) : (s as PathStep).energy?.count ?? 0,
     }));
   }, [energyDynamics, data?.energySeries, steps]);
-
-  /** Emotions continuous path across all days × phases */
-  const emotionTimeline = useMemo(() => {
-    const days = emotionDynamics?.days?.length
-      ? emotionDynamics.days
-      : (energyDynamics?.days?.length
-        ? energyDynamics.days
-        : Array.from({ length: 8 }, (_, i) => i + 1));
-    const emos = emotionDynamics?.emotions?.length
-      ? emotionDynamics.emotions
-      : EMOTION_ORDER.map(id => ({
-        id,
-        label: emotionSeries.find(e => e.emotion === id)?.label ?? id,
-        byDay: [] as DayPhasePoint[],
-      }));
-
-    if (emotionDynamics?.emotions?.length) {
-      const rows: Record<string, string | number | null>[] = [];
-      for (const day of days) {
-        for (const phase of [
-          { label: 'Утро', pct: (d: DayPhasePoint) => d.morningPct },
-          { label: 'День', pct: (d: DayPhasePoint) => d.dayPct },
-          { label: 'Вечер', pct: (d: DayPhasePoint) => d.eveningPct },
-        ]) {
-          const row: Record<string, string | number | null> = {
-            label: `${formatForumDay(day)} · ${phase.label}`,
-          };
-          for (const emo of emos) {
-            const hit = emo.byDay.find(d => d.day === day);
-            row[emo.id] = hit ? phase.pct(hit) : null;
-          }
-          rows.push(row);
-        }
-      }
-      return { rows, emotions: emos.map(e => ({ id: e.id, label: e.label })) };
-    }
-
-    // Fallback: only 3 phase points from compact emotionSeries
-    const labels = ['Утро', 'День', 'Вечер'] as const;
-    const keys = ['morningPct', 'dayPct', 'eveningPct'] as const;
-    const rows = labels.map((label, i) => {
-      const row: Record<string, string | number | null> = { label };
-      for (const e of emotionSeries) row[e.emotion] = e[keys[i]];
-      return row;
-    });
-    return {
-      rows,
-      emotions: emotionSeries.map(e => ({ id: e.emotion, label: e.label })),
-    };
-  }, [emotionDynamics, energyDynamics?.days, emotionSeries]);
-
-  const emotionBarRows = useMemo(() => (
-    emotionSeries.map(e => ({
-      name: e.label,
-      morning: e.morningPct,
-      day: e.dayPct,
-      evening: e.eveningPct,
-    }))
-  ), [emotionSeries]);
 
   if (!hasAny) {
     return (
@@ -320,57 +241,6 @@ export function ParticipantPathPanel({
                 ) : null}
               </LineChart>
             </ResponsiveContainer>
-          </div>
-
-          <div className="adm-chart-frame">
-            <div className="adm-dash-card-title">Динамика эмоций · утро / день / вечер за все дни (%)</div>
-            <p className="adm-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
-              Непрерывный путь смены: доля каждой эмоции в фазе
-            </p>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={emotionTimeline.rows} margin={{ top: 8, right: 12, left: 0, bottom: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e5ea" />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fontSize: 9, fill: '#86868b' }}
-                  interval={0}
-                  angle={-35}
-                  textAnchor="end"
-                  height={60}
-                />
-                <YAxis domain={[0, 'auto']} tick={{ fontSize: 11, fill: '#86868b' }} width={36} unit="%" />
-                <Tooltip content={<ChartTooltipRu />} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                {emotionTimeline.emotions.map(e => (
-                  <Line
-                    key={e.id}
-                    type="monotone"
-                    dataKey={e.id}
-                    name={e.label}
-                    stroke={emotionColor(e.id)}
-                    strokeWidth={1.5}
-                    dot={{ r: 2 }}
-                    connectNulls
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div>
-            <div className="adm-dash-card-title">Доля каждой эмоции по фазам · сводка за смену (%)</div>
-            <OrientableBarChart
-              data={emotionBarRows}
-              categoryKey="name"
-              series={[
-                { dataKey: 'morning', name: 'Утро', fill: '#94a3b8' },
-                { dataKey: 'day', name: 'День', fill: '#1F3A5F' },
-                { dataKey: 'evening', name: 'Вечер', fill: '#0A7B6F' },
-              ]}
-              height={Math.max(260, emotionBarRows.length * 32)}
-              yAxisWidth={120}
-              showLegend
-            />
           </div>
         </div>
       )}

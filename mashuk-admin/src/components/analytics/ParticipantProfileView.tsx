@@ -7,10 +7,8 @@ import {
   DashCard, DashGrid, DashKpi, DashScreenTitle, SectionLabel, ZoneBars, dashVal,
 } from './dashboardUi';
 import { AnswerLengthPanel } from './AnswerLengthPanel';
-import { EmotionDynamicsPanel } from './EmotionDynamicsPanel';
 import { EnergyAverages } from './EnergyAverages';
 import { OrientableBarChart } from './orientableBars';
-import { ParticipantPathPanel } from './ParticipantPathPanel';
 import { TouchpointCoveragePanel } from './TouchpointCoveragePanel';
 
 function nLabel(v: unknown, count?: number | null): string {
@@ -486,12 +484,6 @@ export function ParticipantProfileView({ data }: { data: any }) {
           />
         </DashGrid>
 
-        <ParticipantPathPanel
-          data={feeling.pathShift ?? feeling.path}
-          emotionDynamics={feeling.emotionDynamics}
-          energyDynamics={feeling.energyDynamics}
-        />
-
         <div style={{ marginTop: 16 }} className="adm-chart-frame">
           <div className="adm-dash-card-title">
             Энергия · непрерывный путь по смене
@@ -570,12 +562,6 @@ export function ParticipantProfileView({ data }: { data: any }) {
             yAxisWidth={130}
           />
         </div>
-
-        <EmotionDynamicsPanel
-          intraDay={feeling.path?.emotionSeries}
-          dynamics={feeling.emotionDynamics}
-          defaultEmotion={feeling.mostFrequentEmotion}
-        />
 
         <div style={{ marginTop: 16 }}>
           <div className="adm-dash-card-title">Эмоциональные зоны</div>

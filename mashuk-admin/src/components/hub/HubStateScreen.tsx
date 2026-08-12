@@ -1,9 +1,12 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { useInsights } from '../insights/InsightsContext';
 import { DashCard, DashScreenTitle } from '../analytics/dashboardUi';
+import { EmotionDynamicsPanel } from '../analytics/EmotionDynamicsPanel';
+import { EmotionPhaseHeatmap } from '../analytics/EmotionPhaseHeatmap';
+import { ParticipantPathPanel } from '../analytics/ParticipantPathPanel';
 import { HubKpiRow } from './HubKpiRow';
 import { downloadHubExport } from './hubExports';
-import { hubFilterParams } from './hubQuery';
+import { hubDisplayDay, hubFilterParams, isAllForumDay } from './hubQuery';
 import {
   DayResultsSection,
   Flag,
@@ -64,6 +67,12 @@ type StateData = {
   }>;
   protocol: Array<{ when: string; what: string }>;
   exportPath?: string;
+  participantPath?: {
+    path?: unknown;
+    pathShift?: unknown;
+    emotionDynamics?: unknown;
+    energyDynamics?: unknown;
+  };
 };
 
 function covTone(cov: number): 'bad' | 'warn' | 'ok' {
@@ -109,13 +118,13 @@ export function HubStateScreen() {
     adminFetch(`/analytics/hub/state?${params.toString()}`)
       .then(res => setData(res as StateData))
       .catch((e: unknown) => {
-        setData(null);
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить состояние');
       })
       .finally(() => setLoading(false));
   }, [adminFetch, forumDay, direction, group, ageCategory, activity]);
 
-  const selectedDay = Number(forumDay) || meta?.currentForumDay || 1;
+  const allForum = isAllForumDay(forumDay);
+  const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);
   const m = data?.meta;
 
   return (
@@ -133,7 +142,7 @@ export function HubStateScreen() {
         {[1, 2, 3, 4, 5, 6, 7, 8].map(d => {
           const cls = [
             'adm-day-results-day',
-            d === selectedDay ? 'is-on' : '',
+            d === selectedDay && !allForum ? 'is-on' : '',
             d < selectedDay ? 'is-past' : '',
           ].filter(Boolean).join(' ');
           return (
@@ -144,10 +153,11 @@ export function HubStateScreen() {
         })}
       </div>
 
-      {loading && <p className="adm-muted">Загрузка…</p>}
+      {loading && !data && <p className="adm-muted">Загрузка…</p>}
+      {loading && !!data && <p className="adm-muted" style={{ fontSize: 12 }}>Обновление…</p>}
       {err && <p className="adm-muted" style={{ color: '#b91c1c' }}>{err}</p>}
 
-      {data && m && !loading && (
+      {data && m && (
         <>
           <DayResultsSection
             title="Сейчас"
@@ -486,6 +496,41 @@ export function HubStateScreen() {
                 })}
               </div>
             </DashCard>
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Путь участника"
+            note="Средние эмоция и энергия по проверкам состояния: утро → день → вечер за всю смену."
+          >
+            <ParticipantPathPanel
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              data={(data.participantPath?.pathShift ?? data.participantPath?.path) as any}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              energyDynamics={data.participantPath?.energyDynamics as any}
+            />
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Динамика эмоций по смене"
+            note="Отметьте эмоции — линии на обоих графиках. Глобальные фильтры штаба (дата / направление) применяются к данным."
+          >
+            <EmotionDynamicsPanel
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              intraDay={(data.participantPath?.pathShift as any)?.emotionSeries
+                ?? (data.participantPath?.path as any)?.emotionSeries}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              dynamics={data.participantPath?.emotionDynamics as any}
+            />
+          </DayResultsSection>
+
+          <DayResultsSection
+            title="Тепловая карта эмоций"
+            note="Доля каждой эмоции по фазам утро / день / вечер за все дни смены."
+          >
+            <EmotionPhaseHeatmap
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              dynamics={data.participantPath?.emotionDynamics as any}
+            />
           </DayResultsSection>
 
           <DayResultsSection title="Протокол реагирования">

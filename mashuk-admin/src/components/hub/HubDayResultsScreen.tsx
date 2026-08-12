@@ -16,7 +16,7 @@ import {
 import { ChartTooltipRu, formatForumDay } from '../analytics/chartRu';
 import { HubKpiRow } from './HubKpiRow';
 import { downloadHubExport } from './hubExports';
-import { hubFilterParams } from './hubQuery';
+import { hubDisplayDay, hubFilterParams, isAllForumDay } from './hubQuery';
 import {
   DayResultsSection,
   EXPERIMENT_COLORS,
@@ -109,13 +109,13 @@ export function HubDayResultsScreen() {
     adminFetch(`/analytics/hub/day-results?${params.toString()}`)
       .then(res => setData(res as DayResultsData))
       .catch((e: unknown) => {
-        setData(null);
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить итоги дня');
       })
       .finally(() => setLoading(false));
   }, [adminFetch, forumDay, direction, group, ageCategory, activity]);
 
-  const selectedDay = Number(forumDay) || meta?.currentForumDay || 1;
+  const allForum = isAllForumDay(forumDay);
+  const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);
   const m = data?.meta;
 
   const forumIndexChart = useMemo(() => {
@@ -149,7 +149,7 @@ export function HubDayResultsScreen() {
         {[1, 2, 3, 4, 5, 6, 7, 8].map(d => {
           const cls = [
             'adm-day-results-day',
-            d === selectedDay ? 'is-on' : '',
+            d === selectedDay && !allForum ? 'is-on' : '',
             d < selectedDay ? 'is-past' : '',
           ].filter(Boolean).join(' ');
           return (
@@ -165,10 +165,11 @@ export function HubDayResultsScreen() {
         })}
       </div>
 
-      {loading && <p className="adm-muted">Загрузка…</p>}
+      {loading && !data && <p className="adm-muted">Загрузка…</p>}
+      {loading && !!data && <p className="adm-muted" style={{ fontSize: 12 }}>Обновление…</p>}
       {err && <p className="adm-muted" style={{ color: '#b91c1c' }}>{err}</p>}
 
-      {data && m && !loading && (
+      {data && m && (
         <>
           {(data.diagnostics?.notes?.length ?? 0) > 0 && (
             <DashCard title="Диагностика данных">

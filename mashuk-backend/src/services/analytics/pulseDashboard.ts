@@ -44,6 +44,61 @@ function startOfTodayUtc(): Date {
 }
 
 type CohortRow = Awaited<ReturnType<typeof loadCohortParticipants>>[number];
+type PhaseKey = 'morning' | 'day' | 'evening';
+
+function emptyEmotionPhaseMaps(): Record<PhaseKey, Map<string, number>> {
+  return { morning: new Map(), day: new Map(), evening: new Map() };
+}
+
+function emptyPhaseAnswerN(): Record<PhaseKey, number> {
+  return { morning: 0, day: 0, evening: 0 };
+}
+
+function buildEmotionSeriesRows(
+  emotionCountsByPhase: Record<PhaseKey, Map<string, number>>,
+  phaseAnswerN: Record<PhaseKey, number>,
+) {
+  const pct = (n: number, total: number) =>
+    total ? Math.round((n / total) * 1000) / 10 : 0;
+  return CHECKIN_EMOTION_IDS.map(id => {
+    const m = emotionCountsByPhase.morning.get(id) || 0;
+    const d = emotionCountsByPhase.day.get(id) || 0;
+    const e = emotionCountsByPhase.evening.get(id) || 0;
+    return {
+      emotion: id,
+      label: CHECKIN_EMOTION_LABELS[id],
+      morningPct: pct(m, phaseAnswerN.morning),
+      dayPct: pct(d, phaseAnswerN.day),
+      eveningPct: pct(e, phaseAnswerN.evening),
+      morningCount: m,
+      dayCount: d,
+      eveningCount: e,
+    };
+  });
+}
+
+function accumulateEmotionCounts(
+  rows: { questionId: number; answerData: unknown; createdAt: Date | null }[],
+  checkQById: Map<number, { timePoint?: string | null; title?: string | null; dayNumber?: number | null }>,
+) {
+  const emotionCounts = new Map<string, number>();
+  const emotionCountsByPhase = emptyEmotionPhaseMaps();
+  const phaseAnswerN = emptyPhaseAnswerN();
+  let answerN = 0;
+  for (const a of rows) {
+    answerN += 1;
+    const q = checkQById.get(a.questionId);
+    const phase = stateCheckPhaseFromQuestion(q ?? {}, a.createdAt);
+    phaseAnswerN[phase] += 1;
+    const p = parseCheckinPayload(a.answerData);
+    if (!p.emotion) continue;
+    const emo = String(p.emotion).trim().toLowerCase();
+    if (!emo) continue;
+    emotionCounts.set(emo, (emotionCounts.get(emo) || 0) + 1);
+    emotionCountsByPhase[phase].set(emo, (emotionCountsByPhase[phase].get(emo) || 0) + 1);
+  }
+  return { emotionCounts, emotionCountsByPhase, phaseAnswerN, answerN };
+}
 
 type DirectionSignal = {
   direction: string;
@@ -254,13 +309,6 @@ export async function buildPulseDashboard(
     day: emptyZoneDistribution(),
     evening: emptyZoneDistribution(),
   };
-  const emotionCounts = new Map<string, number>();
-  const emotionCountsByPhase: Record<'morning' | 'day' | 'evening', Map<string, number>> = {
-    morning: new Map(),
-    day: new Map(),
-    evening: new Map(),
-  };
-  const phaseAnswerN = { morning: 0, day: 0, evening: 0 };
   const reasons: string[] = [];
   const reasonByDay = new Map<number, string[]>();
   const pidToParticipant = new Map(cohort.map(p => [p.id, p]));
@@ -270,15 +318,7 @@ export async function buildPulseDashboard(
     const q = checkQById.get(a.questionId);
     const phase = stateCheckPhaseFromQuestion(q ?? {}, a.createdAt);
     accumulateZoneFromAnswer(zonesByPhase[phase], a.answerData);
-    phaseAnswerN[phase] += 1;
     const p = parseCheckinPayload(a.answerData);
-    if (p.emotion) {
-      const emo = String(p.emotion).trim().toLowerCase();
-      if (emo) {
-        emotionCounts.set(emo, (emotionCounts.get(emo) || 0) + 1);
-        emotionCountsByPhase[phase].set(emo, (emotionCountsByPhase[phase].get(emo) || 0) + 1);
-      }
-    }
     if (p.reason?.trim()) {
       reasons.push(p.reason.trim());
       const qDay = q?.dayNumber ?? filters.day ?? currentDay;
@@ -287,6 +327,40 @@ export async function buildPulseDashboard(
       reasonByDay.get(d)!.push(p.reason.trim());
     }
   }
+
+  const {
+    emotionCounts,
+    emotionCountsByPhase,
+    phaseAnswerN,
+  } = accumulateEmotionCounts(checkAns, checkQById);
+
+  /** Эмоции за весь форум (дни 1…currentDay) — даже если выбран один день. */
+  let forumCheckAns = checkAns;
+  let forumCheckQById: Map<number, (typeof checkQs)[number]> = checkQById;
+  const daysCoverSeries = days.length === seriesDays.length
+    && seriesDays.every(d => days.includes(d));
+  if (!daysCoverSeries) {
+    const forumCheckQs = publishedQ.filter(q => {
+      if (!seriesDays.some(d => questionMatchesDay(q, d))) return false;
+      return reflectionKindFromQuestion(q) === 'state_check';
+    });
+    forumCheckQById = new Map(forumCheckQs.map(q => [q.id, q]));
+    const forumCheckQIds = forumCheckQs.map(q => q.id);
+    const missingIds = forumCheckQIds.filter(id => !checkQIdSet.has(id));
+    const extraAns = ids.length && missingIds.length
+      ? await db.select().from(answers).where(and(
+        inArray(answers.participantId, ids),
+        inArray(answers.questionId, missingIds),
+      ))
+      : [];
+    forumCheckAns = [
+      ...checkAns,
+      ...extraAns.filter(a => forumCheckQById.has(a.questionId)),
+    ];
+  }
+  const forumEmotionsAcc = daysCoverSeries
+    ? { emotionCounts, emotionCountsByPhase, phaseAnswerN, answerN: checkAns.length }
+    : accumulateEmotionCounts(forumCheckAns, forumCheckQById);
 
   const zoneByDay: { day: number; zones: Record<string, number> }[] = [];
   if (filters.mode === 'shift' || filters.mode === 'compare') {
@@ -307,7 +381,6 @@ export async function buildPulseDashboard(
 
   const byDirection: { direction: string; zones: Record<string, number> }[] = [];
   const byGroup: { direction: string; group: string; zones: Record<string, number> }[] = [];
-  type PhaseKey = 'morning' | 'day' | 'evening';
   type PhaseBucket = {
     zones: ReturnType<typeof emptyZoneDistribution>;
     emotions: Map<string, number>;
@@ -318,14 +391,69 @@ export async function buildPulseDashboard(
     emotions: new Map(),
     n: 0,
   });
-  const byDirectionPhase: {
+  type DirectionPhaseRow = {
     direction: string;
     byPhase: Record<PhaseKey, {
       zones: Record<EmotionZoneKey, number>;
       emotions: Record<string, number>;
       n: number;
     }>;
-  }[] = [];
+  };
+  const buildByDirectionPhase = (
+    ansRows: typeof checkAns,
+    qById: Map<number, (typeof checkQs)[number]>,
+  ): DirectionPhaseRow[] => {
+    const out: DirectionPhaseRow[] = [];
+    const dirMap = new Map<string, typeof cohort>();
+    for (const p of cohort) {
+      const d = p.direction || '—';
+      if (!dirMap.has(d)) dirMap.set(d, []);
+      dirMap.get(d)!.push(p);
+    }
+    for (const [direction, list] of dirMap) {
+      const pids = new Set(list.map(p => p.id));
+      const phaseBuckets: Record<PhaseKey, PhaseBucket> = {
+        morning: emptyPhaseBucket(),
+        day: emptyPhaseBucket(),
+        evening: emptyPhaseBucket(),
+      };
+      for (const a of ansRows) {
+        if (!pids.has(a.participantId)) continue;
+        const q = qById.get(a.questionId);
+        const phase = stateCheckPhaseFromQuestion(q ?? {}, a.createdAt);
+        const bucket = phaseBuckets[phase];
+        accumulateZoneFromAnswer(bucket.zones, a.answerData);
+        bucket.n += 1;
+        const payload = parseCheckinPayload(a.answerData);
+        const emo = payload.emotion ? String(payload.emotion).trim().toLowerCase() : '';
+        if (emo) bucket.emotions.set(emo, (bucket.emotions.get(emo) || 0) + 1);
+      }
+      const phaseOut = {} as DirectionPhaseRow['byPhase'];
+      for (const phase of ['morning', 'day', 'evening'] as PhaseKey[]) {
+        const bucket = phaseBuckets[phase];
+        const emotionPct: Record<string, number> = {};
+        for (const id of CHECKIN_EMOTION_IDS) {
+          emotionPct[id] = bucket.n
+            ? Math.round(((bucket.emotions.get(id) || 0) / bucket.n) * 1000) / 10
+            : 0;
+        }
+        for (const [id, count] of bucket.emotions) {
+          if (id in emotionPct) continue;
+          emotionPct[id] = bucket.n ? Math.round((count / bucket.n) * 1000) / 10 : 0;
+        }
+        phaseOut[phase] = {
+          zones: zonesToPercent(bucket.zones),
+          emotions: emotionPct,
+          n: bucket.n,
+        };
+      }
+      out.push({ direction, byPhase: phaseOut });
+    }
+    out.sort((a, b) => a.direction.localeCompare(b.direction, 'ru'));
+    return out;
+  };
+
+  const byDirectionPhase: DirectionPhaseRow[] = [];
   if (!filters.direction) {
     const dirMap = new Map<string, typeof cohort>();
     for (const p of cohort) {
@@ -354,11 +482,7 @@ export async function buildPulseDashboard(
         if (emo) bucket.emotions.set(emo, (bucket.emotions.get(emo) || 0) + 1);
       }
       byDirection.push({ direction, zones: zonesToPercent(z) });
-      const phaseOut = {} as Record<PhaseKey, {
-        zones: Record<EmotionZoneKey, number>;
-        emotions: Record<string, number>;
-        n: number;
-      }>;
+      const phaseOut = {} as DirectionPhaseRow['byPhase'];
       for (const phase of ['morning', 'day', 'evening'] as PhaseKey[]) {
         const bucket = phaseBuckets[phase];
         const emotionPct: Record<string, number> = {};
@@ -396,6 +520,12 @@ export async function buildPulseDashboard(
     }
     byDirectionPhase.sort((a, b) => a.direction.localeCompare(b.direction, 'ru'));
   }
+
+  const byDirectionPhaseForum = !filters.direction
+    ? (daysCoverSeries
+      ? byDirectionPhase
+      : buildByDirectionPhase(forumCheckAns, forumCheckQById))
+    : [];
 
   const reasonByDirection: { direction: string; topTokens: ReturnType<typeof topReasonTokens> }[] = [];
   const reasonByGroup: { direction: string; group: string; topTokens: ReturnType<typeof topReasonTokens> }[] = [];
@@ -475,23 +605,17 @@ export async function buildPulseDashboard(
         evening: buildEmotionDistribution(emotionCountsByPhase.evening, phaseAnswerN.evening),
       },
       /** Строки 11 эмоций × утро/день/вечер — удобно для линий. */
-      emotionSeries: CHECKIN_EMOTION_IDS.map(id => {
-        const m = emotionCountsByPhase.morning.get(id) || 0;
-        const d = emotionCountsByPhase.day.get(id) || 0;
-        const e = emotionCountsByPhase.evening.get(id) || 0;
-        const pct = (n: number, total: number) =>
-          total ? Math.round((n / total) * 1000) / 10 : 0;
-        return {
-          emotion: id,
-          label: CHECKIN_EMOTION_LABELS[id],
-          morningPct: pct(m, phaseAnswerN.morning),
-          dayPct: pct(d, phaseAnswerN.day),
-          eveningPct: pct(e, phaseAnswerN.evening),
-          morningCount: m,
-          dayCount: d,
-          eveningCount: e,
-        };
-      }),
+      emotionSeries: buildEmotionSeriesRows(emotionCountsByPhase, phaseAnswerN),
+      /** Среднее и серии за весь форум (дни 1…текущий), независимо от фильтра дня. */
+      emotionsForum: buildEmotionDistribution(
+        forumEmotionsAcc.emotionCounts,
+        forumEmotionsAcc.answerN,
+      ),
+      emotionSeriesForum: buildEmotionSeriesRows(
+        forumEmotionsAcc.emotionCountsByPhase,
+        forumEmotionsAcc.phaseAnswerN,
+      ),
+      byDirectionPhaseForum,
       note: '5 зон эмоций и 11 эмоций проверки состояния (как у участника).',
     },
     stateReasons: {

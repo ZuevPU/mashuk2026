@@ -10,6 +10,29 @@ export function hubDirections(directions: string[] | null | undefined): string[]
   return (directions ?? []).filter(d => !isOrganizerDirection(d));
 }
 
+/** Значение селекта «Дата» = весь форум (все дни смены). */
+export const HUB_FORUM_DAY_ALL = 'all';
+
+export function isAllForumDay(forumDay: string | null | undefined): boolean {
+  const v = String(forumDay ?? '').trim().toLowerCase();
+  return v === '' || v === HUB_FORUM_DAY_ALL || v === 'shift';
+}
+
+/** Число дня из фильтра; null если выбран весь форум. */
+export function hubDayNumber(forumDay: string | null | undefined): number | null {
+  if (isAllForumDay(forumDay)) return null;
+  const n = Number(forumDay);
+  return Number.isFinite(n) && n >= 1 ? n : null;
+}
+
+/** День для подписей/дельт: при «весь форум» — текущий день форума. */
+export function hubDisplayDay(
+  forumDay: string | null | undefined,
+  fallback = 1,
+): number {
+  return hubDayNumber(forumDay) ?? fallback;
+}
+
 /** Общие query-параметры фильтров «Штаба» для analytics/hub и dashboards. */
 export function hubFilterParams(opts: {
   mode?: string;
@@ -20,8 +43,14 @@ export function hubFilterParams(opts: {
   activity?: string;
 }): URLSearchParams {
   const params = new URLSearchParams();
-  if (opts.mode) params.set('mode', opts.mode);
-  if (opts.forumDay) params.set('day', opts.forumDay);
+  const allForum = isAllForumDay(opts.forumDay);
+  if (allForum) {
+    params.set('mode', 'shift');
+  } else {
+    params.set('mode', opts.mode || 'day');
+    const day = hubDayNumber(opts.forumDay);
+    if (day != null) params.set('day', String(day));
+  }
   if (opts.direction) params.set('direction', opts.direction);
   if (opts.group) params.set('group', opts.group);
   if (opts.ageCategory) params.set('ageCategory', opts.ageCategory);

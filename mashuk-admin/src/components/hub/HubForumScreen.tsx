@@ -42,7 +42,11 @@ import { TouchpointDirectionSlotChart, TouchpointSlotChart } from './TouchpointS
 import { PiggybankDirectionMatrix } from './PiggybankDirectionMatrix';
 import { HubEmotionsDayChart } from './HubEmotionsDayChart';
 import { downloadHubExport, forumExportItems, forumPackExportItem } from './hubExports';
-import { hubFilterParams } from './hubQuery';
+import {
+  hubDisplayDay,
+  hubFilterParams,
+  isAllForumDay,
+} from './hubQuery';
 import type { HubLens } from './HubTab';
 
 type DaySeriesRow = {
@@ -54,16 +58,22 @@ type DaySeriesRow = {
   answers?: number;
 };
 
-/** v3: сброс кэша после фикса скрытых state_check в аналитике */
-const FORUM_CACHE_PREFIX = 'mashuk_hub_forum_v3:';
+/** v5: глобальный фильтр «весь форум» + направление без сброса скролла */
+const FORUM_CACHE_PREFIX = 'mashuk_hub_forum_v5:';
 
 type ForumCacheEntry = {
   updatedAt: string;
   data: unknown;
 };
 
-function forumCacheKey(day: string, ageCategory: string, activity: string): string {
-  return `${FORUM_CACHE_PREFIX}${day}|${ageCategory || ''}|${activity || ''}`;
+function forumCacheKey(
+  day: string,
+  ageCategory: string,
+  activity: string,
+  direction: string,
+  group: string,
+): string {
+  return `${FORUM_CACHE_PREFIX}${day}|${ageCategory || ''}|${activity || ''}|${direction || ''}|${group || ''}`;
 }
 
 function readForumCache(key: string): ForumCacheEntry | null {
@@ -126,6 +136,7 @@ export function HubForumScreen({
 }) {
   const {
     adminFetch, forumDay, setDirection, setGroup, setTab, meta, ageCategory, activity,
+    direction, group,
   } = useInsights();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<any>(null);
@@ -133,17 +144,27 @@ export function HubForumScreen({
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const loadGen = useRef(0);
+  const dataRef = useRef<unknown>(null);
 
-  const selectedDay = Number(forumDay) || meta?.currentForumDay || 1;
-  const cacheKey = forumCacheKey(String(selectedDay), ageCategory || '', activity || '');
+  const allForum = isAllForumDay(forumDay);
+  const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);
+  const cacheKey = forumCacheKey(
+    allForum ? 'all' : String(selectedDay),
+    ageCategory || '',
+    activity || '',
+    direction || '',
+    group || '',
+  );
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
     const gen = ++loadGen.current;
-    if (!opts?.silent) setLoading(true);
+    setLoading(true);
     setLoadError(null);
     const params = hubFilterParams({
       mode: 'day',
-      forumDay: String(selectedDay),
+      forumDay,
+      direction,
+      group,
       ageCategory,
       activity,
     });
@@ -151,6 +172,7 @@ export function HubForumScreen({
     try {
       const res = await adminFetch(`/analytics/hub/forum?${qs}`) as Record<string, unknown>;
       if (gen !== loadGen.current) return;
+      dataRef.current = res;
       setData(res);
       const ts = writeForumCache(cacheKey, res);
       setUpdatedAt(ts);
@@ -165,6 +187,7 @@ export function HubForumScreen({
           roleDirectionMatrix: extras.roleDirectionMatrix ?? null,
           exchange: extras.exchange ?? res.exchange ?? null,
         };
+        dataRef.current = merged;
         setData(merged);
         writeForumCache(cacheKey, merged);
       } catch {
@@ -175,19 +198,17 @@ export function HubForumScreen({
       setLoadError('Не удалось загрузить данные. Сервер перегружен или таймаут — обновится автоматически.');
       setLoading(false);
     }
-  }, [adminFetch, selectedDay, ageCategory, activity, cacheKey]);
+  }, [adminFetch, forumDay, direction, group, ageCategory, activity, cacheKey]);
 
   useEffect(() => {
     const cached = readForumCache(cacheKey);
     if (cached) {
+      dataRef.current = cached.data;
       setData(cached.data);
       setUpdatedAt(cached.updatedAt);
       setLoadError(null);
-    } else {
-      setData(null);
-      setUpdatedAt(null);
     }
-    void refresh({ silent: Boolean(cached) });
+    void refresh({ silent: true });
     const timer = window.setInterval(() => {
       void refresh({ silent: true });
     }, FORUM_POLL_MS);
@@ -268,12 +289,19 @@ export function HubForumScreen({
     </div>
   );
 
+  const dayHint = allForum
+    ? 'Весь форум · автообновление'
+    : `День ${selectedDay} из 8 · автообновление`;
+  const dayHintFull = allForum
+    ? 'Весь форум · общая сводка'
+    : `День ${selectedDay} из 8 · общая сводка без дублей 14 панелей`;
+
   if (!data) {
     return (
       <div className="adm-dash-stack">
         <DashScreenTitle
           title="Штаб · Форум"
-          hint={`День ${selectedDay} из 8 · автообновление`}
+          hint={dayHint}
         />
         {statusBar}
         <DashCard title="Форум">
@@ -292,7 +320,7 @@ export function HubForumScreen({
     <div className="adm-dash-stack">
       <DashScreenTitle
         title="Штаб · Форум"
-        hint={`День ${selectedDay} из 8 · общая сводка без дублей 14 панелей`}
+        hint={dayHintFull}
       />
 
       {statusBar}
@@ -456,6 +484,12 @@ export function HubForumScreen({
           dayCount?: number;
           eveningCount?: number;
         }[] | undefined}
+        emotionsForum={pulse.emotionsForum as {
+          id?: string; label: string; count: number; pct: number;
+        }[] | undefined}
+        byDirectionPhase={pulse.byDirectionPhase}
+        byDirectionPhaseForum={pulse.byDirectionPhaseForum}
+        directions={(data.byDirection ?? []).map((r: { direction: string }) => r.direction)}
       />
       {zoneDayRows.length > 0 && (
         <DashCard title="Динамика зон по дням">

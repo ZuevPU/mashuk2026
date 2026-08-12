@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useInsights } from '../insights/InsightsContext';
 import { DashCard, DashScreenTitle } from '../analytics/dashboardUi';
 import { HubKpiRow } from './HubKpiRow';
-import { hubFilterParams, hubDirections, isOrganizerDirection } from './hubQuery';
+import { hubDisplayDay, hubFilterParams, hubDirections, isAllForumDay, isOrganizerDirection } from './hubQuery';
 import {
   DayResultsSection,
   Flag,
@@ -173,13 +173,13 @@ export function HubDirectionScreen() {
     adminFetch(`/analytics/hub/direction?${params.toString()}`)
       .then(res => setData(res as DirData))
       .catch((e: unknown) => {
-        setData(null);
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить направление');
       })
       .finally(() => setLoading(false));
   }, [adminFetch, forumDay, direction, ageCategory, activity]);
 
-  const selectedDay = Number(forumDay) || meta?.currentForumDay || 1;
+  const allForum = isAllForumDay(forumDay);
+  const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);
   const cur = data?.meta.selectedDir || direction || '—';
   const m = data?.meta;
   const themeMax = Math.max(...(data?.state.themes.map(t => t.n) ?? [1]), 1);
@@ -204,7 +204,7 @@ export function HubDirectionScreen() {
         {[1, 2, 3, 4, 5, 6, 7, 8].map(d => {
           const cls = [
             'adm-day-results-day',
-            d === selectedDay ? 'is-on' : '',
+            d === selectedDay && !allForum ? 'is-on' : '',
             d < selectedDay ? 'is-past' : '',
           ].filter(Boolean).join(' ');
           return (
@@ -229,7 +229,8 @@ export function HubDirectionScreen() {
         ))}
       </div>
 
-      {loading && <p className="adm-muted">Загрузка…</p>}
+      {loading && !data && <p className="adm-muted">Загрузка…</p>}
+      {loading && !!data && <p className="adm-muted" style={{ fontSize: 12 }}>Обновление…</p>}
       {err && <p className="adm-error">{err}</p>}
 
       {data && (

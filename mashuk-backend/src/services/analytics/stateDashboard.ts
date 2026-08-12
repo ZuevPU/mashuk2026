@@ -16,6 +16,13 @@ import {
 } from './questionKindDashboard.js';
 import { stateCheckPhaseFromQuestion } from './analyticsQuestionLive.js';
 import {
+  buildEmotionDayPhaseDynamics,
+  buildEnergyDayPhaseDynamics,
+  buildParticipantPathAcrossDays,
+  buildParticipantPathSeries,
+  type PathAnswerInput,
+} from './participantPathSeries.js';
+import {
   PHASE_ORDER,
   PHASE_RU,
   ZONE_ORDER,
@@ -57,9 +64,22 @@ function pct(n: number, d: number): number {
   return d ? round1((n / d) * 100) : 0;
 }
 
+function toPathAnswers(rows: KindAnswerRow[]): PathAnswerInput[] {
+  return rows.map(r => ({
+    participantId: r.participantId,
+    energy: r.energy,
+    emotion: r.emotion,
+    emotionZone: r.emotionZone ?? null,
+    timePoint: r.timePoint ?? null,
+    createdAt: r.createdAt ?? null,
+    day: r.day ?? null,
+  }));
+}
+
 export async function buildStateDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
   const settings = await getForumSettings();
   const currentDay = settings.currentDay ?? 1;
+  const totalDays = Math.min(Math.max(settings.totalDays ?? 8, 1), 8);
   const days = resolveDayRange(filters, currentDay);
   const dayFilter = days.length === 1 ? days[0] : null;
 
@@ -72,6 +92,30 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
   const rows = withoutOrganizers(
     dayFilter != null ? rawRows.filter(r => r.day === dayFilter) : rawRows,
   );
+
+  /** Путь участника — всегда за смену (1…totalDays), с учётом направления/группы фильтров. */
+  const needShiftCollect = dayFilter != null;
+  const shiftRows = withoutOrganizers(
+    needShiftCollect
+      ? (await collectKindAnswerRows('state_check', {
+        ...filters,
+        mode: 'shift',
+        day: null,
+        compareDays: [],
+      })).rows
+      : rawRows,
+  );
+  const pathAnswersDay = toPathAnswers(rows);
+  const pathAnswersShift = toPathAnswers(shiftRows);
+  const participantPath = buildParticipantPathSeries(pathAnswersDay, {
+    dayFilter: dayFilter,
+  });
+  const participantPathShift = buildParticipantPathAcrossDays(pathAnswersShift, {
+    maxDay: totalDays,
+  });
+  const emotionDynamics = buildEmotionDayPhaseDynamics(pathAnswersShift, { maxDay: totalDays });
+  emotionDynamics.note = 'Доля эмоции по фазам утро / день / вечер за все дни смены.';
+  const energyDynamics = buildEnergyDayPhaseDynamics(pathAnswersShift, { maxDay: totalDays });
 
   const participantIds = new Set(rows.map(r => r.participantId));
   const reasonsAll = rows.map(r => (r.answer || '').trim()).filter(Boolean);
@@ -325,6 +369,12 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
     transition,
     coverage,
     daySeries,
+    participantPath: {
+      path: participantPath,
+      pathShift: participantPathShift,
+      emotionDynamics,
+      energyDynamics,
+    },
     protocol: [
       { when: 'Немедленно', what: 'Участник дважды подряд в зоне «Риск» — куратор группы получает имя. Штаб видит только счётчик.' },
       { when: 'В течение часа', what: 'Группа: ≥25% ответов фазы в минусе при n ≥ 5 — куратор в группу, вопрос на вечернем разборе.' },

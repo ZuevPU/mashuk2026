@@ -40,7 +40,7 @@ async function loadCommunityQueueCounts() {
  * и без тяжёлых панелей точек (их грузит buildHubForumExtras).
  */
 export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
-  const forumFilters: AnalyticsFilters = { ...filters, direction: null, group: null };
+  const forumFilters: AnalyticsFilters = { ...filters };
   const slim = { slim: true as const };
 
   const [
@@ -302,7 +302,7 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
 
 /** Вторая фаза: точки охвата + heatmap ролей + обмен (после основного /hub/forum). */
 export async function buildHubForumExtras(filters: AnalyticsFilters, req?: AdminRequest) {
-  const forumFilters: AnalyticsFilters = { ...filters, direction: null, group: null };
+  const forumFilters: AnalyticsFilters = { ...filters };
   const cohort = await loadCohortParticipants(forumFilters, req);
   const settings = await getForumSettings();
   const currentDay = settings.currentDay ?? 1;

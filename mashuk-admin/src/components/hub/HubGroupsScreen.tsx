@@ -8,7 +8,7 @@ import {
 } from '../analytics/dashboardUi';
 import { HubKpiRow } from './HubKpiRow';
 import { downloadHubExport } from './hubExports';
-import { hubFilterParams } from './hubQuery';
+import { hubDisplayDay, hubFilterParams, isAllForumDay } from './hubQuery';
 import type { HubLens } from './HubTab';
 
 type EveningDayCell = {
@@ -118,7 +118,8 @@ export function HubGroupsScreen({
   const byGroupRaw = (data?.byGroup ?? []) as GroupRow[];
   const slotsMeta = (data?.touchpointSlotsMeta ?? []) as SlotMeta[];
   const kpi = data?.kpi ?? {};
-  const selectedDay = Number(data?.selectedDay ?? forumDay) || meta?.currentForumDay || 1;
+  const allForum = isAllForumDay(forumDay);
+  const selectedDay = hubDisplayDay(String(data?.selectedDay ?? forumDay), meta?.currentForumDay || 1);
   const touchpointDay = Number(data?.touchpointDay ?? selectedDay) || selectedDay;
 
   const columns = useMemo<ColDef[]>(() => {

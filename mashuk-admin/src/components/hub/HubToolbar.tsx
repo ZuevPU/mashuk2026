@@ -1,6 +1,6 @@
 import { useInsights } from '../insights/InsightsContext';
 import type { HubLens } from './HubTab';
-import { hubDirections, isOrganizerDirection } from './hubQuery';
+import { HUB_FORUM_DAY_ALL, hubDirections, isAllForumDay, isOrganizerDirection } from './hubQuery';
 
 const LENS_LABELS: Record<HubLens, string> = {
   forum: 'Форум',
@@ -45,6 +45,7 @@ export function HubToolbar({
 
   const directionOptions = hubDirections(meta?.filters?.directions);
   const directionValue = isOrganizerDirection(direction) ? '' : direction;
+  const dateValue = isAllForumDay(forumDay) ? HUB_FORUM_DAY_ALL : forumDay;
 
   return (
     <div className="adm-insights-toolbar card adm-forum-block">
@@ -69,8 +70,17 @@ export function HubToolbar({
       <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', marginTop: 8 }}>
         <label className="adm-insights-filter">
           Дата
-          <select className="adm-input" value={forumDay} onChange={e => setForumDay(e.target.value)}>
-            {(meta?.forumDays ?? [1, 2, 3, 4, 5, 6, 7, 8].map(d => ({ day: d, label: `D${d}`, calendarDate: null as string | null }))).map(d => (
+          <select
+            className="adm-input"
+            value={dateValue}
+            onChange={e => setForumDay(e.target.value)}
+          >
+            <option value={HUB_FORUM_DAY_ALL}>Весь форум</option>
+            {(meta?.forumDays ?? [1, 2, 3, 4, 5, 6, 7, 8].map(d => ({
+              day: d,
+              label: `D${d}`,
+              calendarDate: null as string | null,
+            }))).map(d => (
               <option key={d.day} value={String(d.day)}>
                 {d.label}{d.calendarDate ? ` · ${d.calendarDate}` : ''}
               </option>
@@ -82,7 +92,10 @@ export function HubToolbar({
           <select
             className="adm-input"
             value={directionValue}
-            onChange={e => { setDirection(e.target.value); setGroup(''); }}
+            onChange={e => {
+              setDirection(e.target.value);
+              setGroup('');
+            }}
           >
             <option value="">Все направления</option>
             {directionOptions.map(d => (

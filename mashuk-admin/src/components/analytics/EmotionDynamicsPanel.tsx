@@ -68,27 +68,6 @@ function emotionColor(id: string): string {
   return EMOTION_COLORS[id] ?? '#3182CE';
 }
 
-/** Heat for share 0…100% — cool (low) → warm (high), same idea as evening heatmap. */
-function heatBgPct(pct: number | null): string {
-  if (pct == null || !Number.isFinite(pct)) return '#f3f4f6';
-  const t = Math.min(1, Math.max(0, pct / 100));
-  if (t < 0.2) {
-    return `rgba(148, 163, 184, ${(0.12 + t).toFixed(2)})`;
-  }
-  if (t < 0.45) {
-    return `rgba(49, 130, 206, ${(0.18 + (t - 0.2) * 0.8).toFixed(2)})`;
-  }
-  if (t < 0.7) {
-    return `rgba(10, 123, 111, ${(0.28 + (t - 0.45) * 0.9).toFixed(2)})`;
-  }
-  return `rgba(56, 161, 105, ${Math.min(0.9, 0.45 + (t - 0.7) * 1.2).toFixed(2)})`;
-}
-
-function heatTextPct(pct: number | null): string {
-  if (pct == null) return '#9ca3af';
-  return pct >= 45 ? '#fff' : '#1a202c';
-}
-
 function avgPhasePct(d: DayPhasePoint): number | null {
   const vals = [d.morningPct, d.dayPct, d.eveningPct].filter((v): v is number => v != null);
   if (!vals.length) return null;
@@ -357,84 +336,6 @@ export function EmotionDynamicsPanel({
               </div>
             </>
           )}
-
-          <div style={{ marginTop: 14 }}>
-            <div className="adm-dash-card-title" style={{ marginBottom: 6 }}>
-              Тепловая карта · доля эмоции по фазам всех дней (%)
-            </div>
-            <p className="adm-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
-              Строки — выбранные эмоции, столбцы — День N · Утро / День / Вечер за всю смену
-            </p>
-            <div className="adm-table-scroll">
-              <table className="adm-table adm-table-compact" style={{ width: '100%', minWidth: Math.max(640, 120 + days.length * 3 * 56) }}>
-                <thead>
-                  <tr>
-                    <th style={{ position: 'sticky', left: 0, background: '#fff', zIndex: 1 }}>Эмоция</th>
-                    {days.flatMap(day => (
-                      [
-                        <th key={`${day}-m`} style={{ fontSize: 10, whiteSpace: 'nowrap' }}>{formatForumDay(day)}·У</th>,
-                        <th key={`${day}-d`} style={{ fontSize: 10, whiteSpace: 'nowrap' }}>{formatForumDay(day)}·Д</th>,
-                        <th key={`${day}-e`} style={{ fontSize: 10, whiteSpace: 'nowrap' }}>{formatForumDay(day)}·В</th>,
-                      ]
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedList.map((o) => {
-                    const byDay = (dynamics?.emotions ?? []).find(e => e.id === o.id)?.byDay ?? [];
-                    return (
-                      <tr key={o.id}>
-                        <td style={{ position: 'sticky', left: 0, background: '#fff', zIndex: 1, whiteSpace: 'nowrap' }}>
-                          <span style={{
-                            display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
-                            background: emotionColor(o.id), marginRight: 6,
-                          }}
-                          />
-                          {o.label}
-                        </td>
-                        {days.flatMap((day) => {
-                          const hit = byDay.find(d => d.day === day);
-                          const cells: { pct: number | null; n: number; title: string }[] = [
-                            {
-                              pct: hit?.morningPct ?? null,
-                              n: hit?.morningCount ?? 0,
-                              title: `${o.label} · ${formatForumDay(day)} · Утро`,
-                            },
-                            {
-                              pct: hit?.dayPct ?? null,
-                              n: hit?.dayCount ?? 0,
-                              title: `${o.label} · ${formatForumDay(day)} · День`,
-                            },
-                            {
-                              pct: hit?.eveningPct ?? null,
-                              n: hit?.eveningCount ?? 0,
-                              title: `${o.label} · ${formatForumDay(day)} · Вечер`,
-                            },
-                          ];
-                          return cells.map((c, idx) => (
-                            <td
-                              key={`${o.id}-${day}-${idx}`}
-                              title={`${c.title}: ${c.pct ?? '—'}% · N=${c.n}`}
-                              style={{
-                                textAlign: 'center',
-                                fontSize: 11,
-                                fontWeight: 600,
-                                background: heatBgPct(c.pct),
-                                color: heatTextPct(c.pct),
-                                minWidth: 44,
-                              }}
-                            >
-                              {c.pct != null ? c.pct : '—'}
-                            </td>
-                          ));
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
       ) : null}
     </div>

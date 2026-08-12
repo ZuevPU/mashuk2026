@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useInsights, type DashboardId } from './InsightsContext';
 import { DASH_TAB_SHORT } from '../analytics/dashboardUi';
+import { isAllForumDay } from '../hub/hubQuery';
 
 export function InsightsChrome({ children }: { children: ReactNode }) {
   const {
@@ -89,7 +90,8 @@ export function InsightsChrome({ children }: { children: ReactNode }) {
           <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', marginTop: 8 }}>
             <label className="adm-insights-filter">
               Дата
-              <select className="adm-input" value={forumDay} onChange={e => setForumDay(e.target.value)}>
+              <select className="adm-input" value={isAllForumDay(forumDay) ? 'all' : forumDay} onChange={e => setForumDay(e.target.value)}>
+                <option value="all">Весь форум</option>
                 {(meta?.forumDays ?? [1, 2, 3, 4, 5, 6, 7, 8].map(d => ({ day: d, label: `D${d}`, calendarDate: null }))).map(d => (
                   <option key={d.day} value={String(d.day)}>
                     {d.label}{d.calendarDate ? ` · ${d.calendarDate}` : ''}

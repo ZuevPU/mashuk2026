@@ -3,7 +3,7 @@ import { useInsights } from '../insights/InsightsContext';
 import { DashCard, DashScreenTitle } from '../analytics/dashboardUi';
 import { HubKpiRow } from './HubKpiRow';
 import { downloadHubExport } from './hubExports';
-import { hubFilterParams } from './hubQuery';
+import { hubDisplayDay, hubFilterParams, isAllForumDay } from './hubQuery';
 import {
   DayResultsSection,
   Flag,
@@ -87,13 +87,13 @@ export function HubAfterBlocksScreen() {
     adminFetch(`/analytics/hub/after-blocks?${params.toString()}`)
       .then(res => setData(res as AfterBlocksData))
       .catch((e: unknown) => {
-        setData(null);
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить осмысление');
       })
       .finally(() => setLoading(false));
   }, [adminFetch, forumDay, direction, group, ageCategory, activity]);
 
-  const selectedDay = Number(forumDay) || meta?.currentForumDay || 1;
+  const allForum = isAllForumDay(forumDay);
+  const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);
   const m = data?.meta;
 
   const filteredQuotes = useMemo(() => {
@@ -121,7 +121,7 @@ export function HubAfterBlocksScreen() {
         {[1, 2, 3, 4, 5, 6, 7, 8].map(d => {
           const cls = [
             'adm-day-results-day',
-            d === selectedDay ? 'is-on' : '',
+            d === selectedDay && !allForum ? 'is-on' : '',
             d < selectedDay ? 'is-past' : '',
           ].filter(Boolean).join(' ');
           return (
@@ -132,10 +132,11 @@ export function HubAfterBlocksScreen() {
         })}
       </div>
 
-      {loading && <p className="adm-muted">Загрузка…</p>}
+      {loading && !data && <p className="adm-muted">Загрузка…</p>}
+      {loading && !!data && <p className="adm-muted" style={{ fontSize: 12 }}>Обновление…</p>}
       {err && <p className="adm-muted" style={{ color: '#b91c1c' }}>{err}</p>}
 
-      {data && m && !loading && (
+      {data && m && (
         <>
           <DayResultsSection
             title="Что дал день"

@@ -3,7 +3,7 @@ import { useInsights } from '../insights/InsightsContext';
 import { DashCard, DashScreenTitle } from '../analytics/dashboardUi';
 import { HubKpiRow } from './HubKpiRow';
 import { downloadHubExport } from './hubExports';
-import { hubFilterParams } from './hubQuery';
+import { hubDisplayDay, hubFilterParams, isAllForumDay } from './hubQuery';
 import type { HubLens } from './HubTab';
 import {
   DayResultsSection,
@@ -88,13 +88,13 @@ export function HubStatsScreen({
     adminFetch(`/analytics/hub/stats?${params.toString()}`)
       .then(res => setData(res as StatsData))
       .catch((e: unknown) => {
-        setData(null);
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить статистику дня');
       })
       .finally(() => setLoading(false));
   }, [adminFetch, forumDay, direction, group, ageCategory, activity]);
 
-  const selectedDay = Number(forumDay) || meta?.currentForumDay || 1;
+  const allForum = isAllForumDay(forumDay);
+  const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);
   const m = data?.meta;
   const zoneMax = data?.zones.length
     ? Math.max(...data.zones.map(z => z.n), 1)
@@ -115,7 +115,7 @@ export function HubStatsScreen({
         {[1, 2, 3, 4, 5, 6, 7, 8].map(d => {
           const cls = [
             'adm-day-results-day',
-            d === selectedDay ? 'is-on' : '',
+            d === selectedDay && !allForum ? 'is-on' : '',
             d < selectedDay ? 'is-past' : '',
           ].filter(Boolean).join(' ');
           return (
@@ -126,7 +126,8 @@ export function HubStatsScreen({
         })}
       </div>
 
-      {loading && <p className="adm-muted">Загрузка…</p>}
+      {loading && !data && <p className="adm-muted">Загрузка…</p>}
+      {loading && !!data && <p className="adm-muted" style={{ fontSize: 12 }}>Обновление…</p>}
       {err && <p className="adm-error">{err}</p>}
 
       {m && (

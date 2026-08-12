@@ -179,10 +179,22 @@ export function InsightsProvider({
     setForumDayState(d);
     persist({ forumDay: d });
   }, [persist]);
-  const setDirection = (v: string) => { setDirectionState(v); persist({ direction: v }); };
-  const setGroup = (v: string) => { setGroupState(v); persist({ group: v }); };
-  const setAgeCategory = (v: string) => { setAgeCategoryState(v); persist({ ageCategory: v }); };
-  const setActivity = (v: string) => { setActivityState(v); persist({ activity: v }); };
+  const setDirection = useCallback((v: string) => {
+    setDirectionState(v);
+    persist({ direction: v });
+  }, [persist]);
+  const setGroup = useCallback((v: string) => {
+    setGroupState(v);
+    persist({ group: v });
+  }, [persist]);
+  const setAgeCategory = useCallback((v: string) => {
+    setAgeCategoryState(v);
+    persist({ ageCategory: v });
+  }, [persist]);
+  const setActivity = useCallback((v: string) => {
+    setActivityState(v);
+    persist({ activity: v });
+  }, [persist]);
   const setActiveDashboardId = (id: DashboardId | string) => {
     const next = normalizeDashboardId(id);
     setActiveDashboardIdState(next);
@@ -248,7 +260,9 @@ export function InsightsProvider({
     adminFetch,
     analyticsDashboardAllowlist,
   }), [
-    forumDay, setForumDay, direction, group, ageCategory, activity, activeDashboardId, meta, metaLoading,
+    forumDay, setForumDay, direction, setDirection, group, setGroup,
+    ageCategory, setAgeCategory, activity, setActivity,
+    activeDashboardId, meta, metaLoading,
     reloadMeta, setTab, activeSection, adminFetch, analyticsDashboardAllowlist,
   ]);
 
