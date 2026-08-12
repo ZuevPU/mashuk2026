@@ -197,6 +197,7 @@ export async function sendCommunityMessage(
 /** Категория push для проверки pushOptOut участника */
 export function pushCategoryOf(triggerType: string): string {
   if (triggerType === 'question_publish' || /^question_publish/i.test(triggerType)) return 'touchpoints';
+  if (/^question_notify/i.test(triggerType)) return 'touchpoints';
   if (/^transactional_exchange/i.test(triggerType)) return 'exchange';
   if (/^auto_slot_/i.test(triggerType) || /^auto_retry_slot_/i.test(triggerType)) return 'touchpoints';
   if (/^touchpoint_/i.test(triggerType)) return 'touchpoints';

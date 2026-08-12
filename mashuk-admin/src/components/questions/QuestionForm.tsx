@@ -742,14 +742,18 @@ export function QuestionForm({
             </label>
           </div>
 
+          <p className="adm-muted" style={{ fontSize: 12, margin: '8px 0' }}>
+            Точки осмысления и проверки состояния сами рассылают уведомление (мини-приложение + ЛС сообщества),
+            когда вы публикуете сейчас или наступает время публикации. Повтор в тот же день не шлётся.
+          </p>
           <label className="adm-forum-check">
             <input type="checkbox" checked={draft.pushOnPublish} onChange={e => onChange({ pushOnPublish: e.target.checked })} />
-            Уведомление при публикации
+            Доп. уведомление с своим текстом (для других типов вопросов)
           </label>
           {draft.pushOnPublish && (
             <label className="adm-field">
-              <span className="adm-label">Шаблон push</span>
-              <input className="adm-input" value={draft.pushTemplate} onChange={e => onChange({ pushTemplate: e.target.value })} placeholder="Новый вопрос: {title}" />
+              <span className="adm-label">Текст доп. push</span>
+              <input className="adm-input" value={draft.pushTemplate} onChange={e => onChange({ pushTemplate: e.target.value })} placeholder="Новый вопрос: …" />
             </label>
           )}
 

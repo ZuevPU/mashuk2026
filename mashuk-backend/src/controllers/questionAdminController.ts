@@ -8,9 +8,10 @@ import {
   adminActionsLog,
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
-import { sendPushNotification } from '../services/pushService.js';
-import { resolveBroadcastParticipantIds } from '../services/pushAudienceResolve.js';
-import { questionAudienceAllowsParticipant } from '../services/questionEligibility.js';
+import {
+  autoNotifyTouchpointIfLive,
+  notifyQuestionAudience,
+} from '../services/questionAutoNotify.js';
 import {
   questionCreateSchema, questionUpdateSchema, parseBody,
   copyQuestionsSelectedSchema, copyQuestionToDaySchema, reorderQuestionOptionsSchema,
@@ -21,44 +22,6 @@ import {
 } from '../services/questionAdminHelpers.js';
 import { TOUCHPOINT_SLOTS, windowsForDay } from '../services/touchpointTemplates.js';
 import { formatQuestionTimeWindow } from '../services/reflectionTypeLabel.js';
-
-async function resolveQuestionNotifyAudience(
-  q: typeof questions.$inferSelect,
-): Promise<number[]> {
-  const baseIds = await resolveBroadcastParticipantIds(q.shiftId);
-  if (!baseIds.length) return [];
-  if ((q.audienceType || 'all') === 'all') return baseIds;
-
-  const rows = await db.select({
-    id: participants.id,
-    directionId: participants.directionId,
-    direction: participants.direction,
-    groupId: participants.groupId,
-    pedagogicalRole: participants.pedagogicalRole,
-    strongRole: participants.strongRole,
-  }).from(participants).where(inArray(participants.id, baseIds));
-
-  return rows
-    .filter(p => questionAudienceAllowsParticipant(q, p))
-    .map(p => p.id);
-}
-
-/** Sends exactly `messageText` (+ deep link suffix in delivery). Empty text = no send. */
-async function notifyQuestionAudience(
-  q: typeof questions.$inferSelect,
-  messageText?: string | null,
-  triggerType = 'question_notify',
-): Promise<{ sentTo: number; text: string }> {
-  const text = (messageText || '').trim();
-  if (!text) return { sentTo: 0, text: '' };
-  const ids = await resolveQuestionNotifyAudience(q);
-  if (ids.length) {
-    await sendPushNotification(ids, text, triggerType, {
-      appLinkHash: `#/questions?q=${q.id}`,
-    });
-  }
-  return { sentTo: ids.length, text };
-}
 
 function participantDisplayName(p: typeof participants.$inferSelect | null): string | undefined {
   if (!p) return undefined;
@@ -267,8 +230,17 @@ export const crudQuestions = {
     if (!values.type) values.type = 'open';
     if (!values.status) values.status = 'draft';
     const [q] = await db.insert(questions).values({ ...values, shiftId }).returning();
-    if (q.pushOnPublish && q.status === 'published') {
-      await notifyQuestionAudience(q, q.pushTemplate, 'question_publish');
+    // Точки осмысления / state_check — авто-рассылка, когда уже «в эфире»
+    // (опубликован сейчас; по времени — подхватит push-планировщик).
+    if (q.status === 'published') {
+      await autoNotifyTouchpointIfLive(q);
+      if (q.pushOnPublish) {
+        // Опциональный кастомный пуш (не точка) — только если живой и есть текст
+        const custom = (q.pushTemplate || '').trim();
+        if (custom) {
+          await notifyQuestionAudience(q, custom, `question_publish_${q.id}`);
+        }
+      }
     }
     res.json({ question: serializeAdminQuestion(q, 0) });
   },
@@ -331,6 +303,9 @@ export const crudQuestions = {
         parentQuestionId: id,
       };
       const [created] = await db.insert(questions).values(copyFields).returning();
+      if (created.status === 'published') {
+        await autoNotifyTouchpointIfLive(created);
+      }
       const { logAdminAction } = await import('../services/adminActionsLog.js');
       await logAdminAction({
         req, actionType: 'question_update', section: 'questions', objectId: created.id,
@@ -367,8 +342,15 @@ export const crudQuestions = {
       : await db.select().from(questions).where(eq(questions.id, id)).limit(1);
     const wasPublished = before.status === 'published';
     const isPublished = updated?.status === 'published';
-    if (updated?.pushOnPublish && isPublished && !wasPublished) {
-      await notifyQuestionAudience(updated, updated.pushTemplate, 'question_publish');
+    if (updated && isPublished) {
+      // Идемпотентно: если точка уже в эфире — разошлём (или пропустим, если уже слали сегодня)
+      await autoNotifyTouchpointIfLive(updated);
+      if (updated.pushOnPublish && !wasPublished) {
+        const custom = (updated.pushTemplate || '').trim();
+        if (custom) {
+          await notifyQuestionAudience(updated, custom, `question_publish_${updated.id}`);
+        }
+      }
     }
     res.json({ question: serializeAdminQuestion(updated!, Number(answerCount)), versioned: false });
   },
@@ -646,6 +628,10 @@ export const crudQuestions = {
       void all;
     } else if (action === 'publish') {
       await db.update(questions).set({ status: 'published', isHidden: false }).where(inArray(questions.id, ids));
+      const published = await db.select().from(questions).where(inArray(questions.id, ids));
+      for (const q of published) {
+        await autoNotifyTouchpointIfLive(q);
+      }
     } else if (action === 'draft') {
       await db.update(questions).set({ status: 'draft' }).where(inArray(questions.id, ids));
     }
