@@ -111,6 +111,7 @@ function negCellStyle(neg: number | null, _n: number): CSSProperties {
 }
 
 type QuotePhase = 'all' | 'morning' | 'day' | 'evening';
+type QuoteDayPart = 'morning' | 'day' | 'evening';
 type StateQuote = StateData['quotes'][number];
 
 const ZONE_FROM_KEY: Record<string, string> = {
@@ -121,7 +122,7 @@ const ZONE_FROM_KEY: Record<string, string> = {
   risk: 'Риск',
 };
 
-function quotePhaseKey(q: StateQuote): QuotePhase | 'other' {
+function quotePhaseKey(q: StateQuote): QuoteDayPart | 'other' {
   if (q.phaseKey === 'morning' || q.phaseKey === 'day' || q.phaseKey === 'evening') return q.phaseKey;
   const src = `${q.phase || ''} ${q.meta || ''}`.toLowerCase();
   if (src.includes('вечер')) return 'evening';
@@ -256,7 +257,7 @@ export function HubStateScreen() {
     if (!data) return { phases, zones };
     for (const q of data.quotes) {
       const p = quotePhaseKey(q);
-      if (p !== 'other') phases[p] += 1;
+      if (p === 'morning' || p === 'day' || p === 'evening') phases[p] += 1;
       const z = quoteZoneLabel(q);
       zones[z] = (zones[z] || 0) + 1;
     }
