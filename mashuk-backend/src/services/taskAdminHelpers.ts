@@ -265,6 +265,17 @@ export function isTaskOnForumDay(task: Pick<typeof tasks.$inferSelect, 'dayNumbe
   return days.includes(forumDay);
 }
 
+/** День, на который записываем XP задания: однодневное → его день, иначе текущий день форума. */
+export function resolveTaskAwardForumDay(
+  task: Pick<typeof tasks.$inferSelect, 'dayNumbers' | 'dayNumber'>,
+  currentDay: number,
+): number {
+  const days = taskDayNumbers(task);
+  if (days.length === 1) return days[0]!;
+  if (days.includes(currentDay)) return currentDay;
+  return currentDay;
+}
+
 export function isTaskPublishedVisible(
   task: typeof tasks.$inferSelect,
   now: Date,

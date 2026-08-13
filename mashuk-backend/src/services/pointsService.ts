@@ -3,8 +3,21 @@ import { db } from '../db/index.js';
 import { pointsLog, levelsConfig, participants, answers, questions } from '../db/schema.js';
 import { env } from '../config/env.js';
 import { ACTION_CATALOG } from './levelsActionCatalog.js';
+import { getForumSettings, resolveEffectiveCurrentDay } from './helpers.js';
 
 export type PointTrack = 'path' | 'experience';
+
+export function isActivePointsLogAction(actionType: string | null | undefined): boolean {
+  return !(actionType || '').endsWith('_revoke');
+}
+
+export async function resolveAwardForumDay(explicit?: number | null): Promise<number> {
+  if (explicit != null && Number.isFinite(explicit) && explicit >= 1) {
+    return Math.floor(explicit);
+  }
+  const settings = await getForumSettings();
+  return resolveEffectiveCurrentDay(settings);
+}
 
 const PATH_ACTIONS = new Set([
   'question_answer',
@@ -381,12 +394,13 @@ export async function awardPoints(
     experience: beforeRow?.experiencePoints ?? 0,
   };
   const trackEarly = pointsTrackForAction(actionType);
+  const stampedDay = await resolveAwardForumDay(forumDay);
 
   /** Даже при 0 XP / капе — проверить бонус «полный день» и серии. */
   const runBonusHooks = async () => {
     const { afterPointsAwarded } = await import('./ratingBonusesService.js');
     await afterPointsAwarded(participantId, trackEarly, 0, pointsBefore, {
-      forumDay,
+      forumDay: stampedDay,
       actionType,
     });
   };
@@ -421,7 +435,7 @@ export async function awardPoints(
     participantId,
     actionType,
     points,
-    forumDay: forumDay ?? null,
+    forumDay: stampedDay,
     submissionId: opts?.submissionId ?? null,
   }).returning({ id: pointsLog.id });
 
@@ -443,7 +457,7 @@ export async function awardPoints(
 
   const { afterPointsAwarded } = await import('./ratingBonusesService.js');
   await afterPointsAwarded(participantId, track, points, pointsBefore, {
-    forumDay,
+    forumDay: stampedDay,
     actionType,
   });
 

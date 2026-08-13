@@ -2,6 +2,8 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { participants, pointsLog, ratingRecalcRuns } from '../db/schema.js';
 import { pointsTrackForAction } from './pointsService.js';
+import { getForumSettings } from './helpers.js';
+import { inferForumDayFromTimestamp } from './timePhase.js';
 
 export function normalizeLevelThresholds(raw: unknown): number[] {
   const fallback = [0, 100, 250, 500, 1000];
@@ -13,6 +15,25 @@ export function normalizeLevelThresholds(raw: unknown): number[] {
     .map(t => Number(t.from))
     .filter(n => Number.isFinite(n))
     .sort((a, b) => a - b);
+}
+
+export async function backfillMissingForumDays(): Promise<number> {
+  const settings = await getForumSettings();
+  const startDate = settings.startDate ? new Date(settings.startDate) : null;
+  if (!startDate || Number.isNaN(startDate.getTime())) return 0;
+  const totalDays = Number(settings.totalDays) || 8;
+  const rows = await db.select({
+    id: pointsLog.id,
+    createdAt: pointsLog.createdAt,
+  }).from(pointsLog).where(isNull(pointsLog.forumDay));
+  let updated = 0;
+  for (const row of rows) {
+    const day = inferForumDayFromTimestamp(row.createdAt ?? new Date(), startDate, totalDays);
+    if (day == null) continue;
+    await db.update(pointsLog).set({ forumDay: day }).where(eq(pointsLog.id, row.id));
+    updated += 1;
+  }
+  return updated;
 }
 
 export async function recalculateAllParticipantTotals(adminId?: number): Promise<{
@@ -31,6 +52,7 @@ export async function recalculateAllParticipantTotals(adminId?: number): Promise
   }).returning();
 
   try {
+    await backfillMissingForumDays();
     // Сначала доначислить бонусы «полный день» / «регулярность», выровнять тарифы
     const { backfillRatingBonusesForAll } = await import('./ratingBonusesService.js');
     const bonusResult = await backfillRatingBonusesForAll();

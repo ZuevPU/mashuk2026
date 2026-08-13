@@ -438,10 +438,18 @@ export const adjustParticipantPoints = async (req: AdminRequest, res: Response):
       if (d.getTime() >= min && d.getTime() <= max) effectiveAt = d;
     }
   }
+  const { resolveAwardForumDay } = await import('../services/pointsService.js');
+  const { inferForumDayFromTimestamp } = await import('../services/timePhase.js');
+  const settings = await loadForumSettings();
+  const forumDay = effectiveAt
+    ? (inferForumDayFromTimestamp(effectiveAt, settings.startDate ?? null, settings.totalDays ?? 8)
+      ?? await resolveAwardForumDay())
+    : await resolveAwardForumDay();
   const logValues = (actionType: string, pts: number) => ({
     participantId,
     actionType,
     points: pts,
+    forumDay,
     ...(effectiveAt ? { createdAt: effectiveAt } : {}),
   });
   if (points > 0) {

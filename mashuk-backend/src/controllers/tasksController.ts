@@ -1,9 +1,9 @@
 import { Response } from 'express';
 import { eq, and, lte, or, isNull, ilike, ne, isNotNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { tasks, taskSubmissions, questions, answers, participants, taskTeamConfirmations } from '../db/schema.js';
+import { tasks, taskSubmissions, questions, answers, participants, taskTeamConfirmations, pointsLog } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
-import { getForumSettings } from '../services/helpers.js';
+import { getForumSettings, resolveEffectiveCurrentDay } from '../services/helpers.js';
 import { resolveTaskAwardPoints } from '../services/taskPoints.js';
 import { sendPushNotification } from '../services/pushService.js';
 import { evaluateMedalsForParticipant } from '../services/medalEvaluator.js';
@@ -30,7 +30,7 @@ import {
   notifyTeamConfirmRequest,
   tryFinalizeTeamSubmission,
 } from '../services/teamTaskService.js';
-import { getMoscowParts } from '../services/timePhase.js';
+import { forumDayWindowMsk, getMoscowParts, pointsLogCountsForForumDay } from '../services/timePhase.js';
 import {
   completeSubmissionRewards,
   enrichSubmissionRow,
@@ -40,6 +40,7 @@ import {
 import { findTaskByQrCode, normalizeTaskQrCode } from '../services/qrService.js';
 import { resolveForumDayForNewEntry } from '../services/piggybankService.js';
 import { isUniqueViolation } from '../services/qrScanGuard.js';
+import { isActivePointsLogAction, pointsTrackForAction } from '../services/pointsService.js';
 
 async function resolveTaskListState(
   task: typeof tasks.$inferSelect,
@@ -143,6 +144,10 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
     };
 
     const dayStart = mskTodayStart(now);
+    const currentDay = resolveEffectiveCurrentDay(settings, now);
+    const dayWindow = settings.startDate
+      ? forumDayWindowMsk(new Date(settings.startDate), currentDay)
+      : { start: dayStart, end: new Date(dayStart.getTime() + 86_400_000) };
 
     const mapped = await Promise.all(allTasks.map(async t => {
       const taskSubs = subsByTask.get(t.id) ?? [];
@@ -156,7 +161,7 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
       if (!isTaskSubmissionOpen(t, now) && !displaySub) return null;
       const methods = taskMethodsForParticipant(t);
       const todayCompletedCount = taskSubs.filter(s =>
-        s.status === 'approved' && s.checkedAt && s.checkedAt >= dayStart,
+        s.status === 'approved' && s.checkedAt && s.checkedAt >= dayWindow.start && s.checkedAt < dayWindow.end,
       ).length;
       // Prefer admin rich-text / description — never let a stale shortDescription override it.
       const plainFromHtml = (t.descriptionHtml || '')
@@ -202,13 +207,27 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
     if (filter === 'done') result = result.filter(t => t.status === 'done');
     if (filter === 'pending') result = result.filter(t => t.status === 'pending');
 
-    const pointsToday = submissions
-      .filter(s => s.status === 'approved' && s.checkedAt && s.checkedAt >= dayStart)
-      .reduce((sum, s) => sum + (s.pointsAwarded ?? 0), 0);
+    const xpLogs = await db.select({
+      actionType: pointsLog.actionType,
+      points: pointsLog.points,
+      forumDay: pointsLog.forumDay,
+      createdAt: pointsLog.createdAt,
+    }).from(pointsLog).where(and(
+      eq(pointsLog.participantId, req.participant!.id),
+      isNull(pointsLog.revokedAt),
+    ));
+    const pointsToday = xpLogs.reduce((sum, row) => {
+      if (!isActivePointsLogAction(row.actionType)) return sum;
+      if (!pointsLogCountsForForumDay(row, currentDay, dayWindow)) return sum;
+      if (pointsTrackForAction(row.actionType || '') !== 'experience') return sum;
+      return sum + (row.points ?? 0);
+    }, 0);
 
-    const experienceTotal = req.participant!.experiencePoints ?? 0;
+    const [fresh] = await db.select({
+      experiencePoints: participants.experiencePoints,
+    }).from(participants).where(eq(participants.id, req.participant!.id)).limit(1);
+    const experienceTotal = fresh?.experiencePoints ?? req.participant!.experiencePoints ?? 0;
 
-    const currentDay = settings.currentDay ?? 1;
     const dayQuestions = await db.select().from(questions)
       .where(and(
         eq(questions.status, 'published'),

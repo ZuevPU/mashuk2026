@@ -347,3 +347,45 @@ export function toTouchpointUiStatus(
 export function isSameMoscowCalendarDay(a: Date, b = new Date()): boolean {
   return getMoscowParts(a).dateKey === getMoscowParts(b).dateKey;
 }
+
+const MSK_DAY_MS = 86_400_000;
+const MSK_ROLLOVER_MS = FORUM_DAY_ROLLOVER_HOUR_MSK * 60 * 60 * 1000;
+
+/**
+ * Окно дня форума в МСК: день 1 с 00:00 даты старта, далее с 02:00
+ * операционной даты до 02:00 следующего календарного дня.
+ */
+export function forumDayWindowMsk(
+  startDate: Date,
+  day: number,
+): { start: Date; end: Date } {
+  const startParts = getMoscowParts(startDate);
+  const startMidnight = Date.parse(`${startParts.dateKey}T00:00:00+03:00`);
+  const dayMidnight = startMidnight + Math.max(0, day - 1) * MSK_DAY_MS;
+  const start = day <= 1
+    ? new Date(dayMidnight)
+    : new Date(dayMidnight + MSK_ROLLOVER_MS);
+  const end = new Date(dayMidnight + MSK_DAY_MS + MSK_ROLLOVER_MS);
+  return { start, end };
+}
+
+/** Исторический forum_day по created_at — только календарь смены, без admin currentDay. */
+export function inferForumDayFromTimestamp(
+  at: Date,
+  startDate: Date | null | undefined,
+  totalDays = 8,
+): number | null {
+  return getCalendarForumDay(startDate, at, totalDays);
+}
+
+export function pointsLogCountsForForumDay(
+  row: { forumDay?: number | null; createdAt?: Date | null },
+  day: number,
+  window: { start: Date; end: Date } | null,
+): boolean {
+  if (row.forumDay === day) return true;
+  if (row.forumDay != null) return false;
+  if (!window || !row.createdAt) return false;
+  const t = row.createdAt.getTime();
+  return t >= window.start.getTime() && t < window.end.getTime();
+}

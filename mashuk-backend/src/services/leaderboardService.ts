@@ -1,9 +1,10 @@
-import { and, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { participants, pointsLog, userMedals, tasks, taskSubmissions } from '../db/schema.js';
 import { pointsTrackForAction, totalRatingScore, isUnifiedRatingEnabled, participantRatingScore } from './pointsService.js';
 import { resolveActiveShift } from './shiftService.js';
 import { FORUM_RATING_MAX_DAY } from './leaderboardQuery.js';
+import { forumDayWindowMsk } from './timePhase.js';
 
 export type LeaderboardScope = 'total' | 'day' | 'shift';
 export type LeaderboardMode = 'points' | 'medals' | 'nomination';
@@ -106,11 +107,23 @@ export async function computeLeaderboardScores(
   const conditions = [
     inArray(pointsLog.participantId, participantIds),
     isNull(pointsLog.revokedAt),
-    sql`${pointsLog.points} > 0`,
     sql`${pointsLog.actionType} NOT LIKE '%\\_revoke' ESCAPE '\\'`,
   ];
   if (opts.scope === 'day' && opts.day) {
-    conditions.push(eq(pointsLog.forumDay, opts.day));
+    const shift = await resolveActiveShift();
+    if (shift?.startDate) {
+      const dayWindow = forumDayWindowMsk(new Date(shift.startDate), opts.day);
+      conditions.push(or(
+        eq(pointsLog.forumDay, opts.day),
+        and(
+          isNull(pointsLog.forumDay),
+          gte(pointsLog.createdAt, dayWindow.start),
+          lt(pointsLog.createdAt, dayWindow.end),
+        ),
+      )!);
+    } else {
+      conditions.push(eq(pointsLog.forumDay, opts.day));
+    }
   } else if (opts.scope === 'shift') {
     // Include undated legacy awards (forum_day NULL) — many accruals historically omitted the day.
     conditions.push(sql`(
@@ -148,13 +161,7 @@ function taskMatchesForumDay(
 async function forumDayTimeBounds(day: number): Promise<{ start: Date; end: Date } | null> {
   const shift = await resolveActiveShift();
   if (!shift?.startDate) return null;
-  const base = new Date(shift.startDate);
-  const start = new Date(base);
-  start.setUTCDate(start.getUTCDate() + (day - 1));
-  start.setUTCHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
-  return { start, end };
+  return forumDayWindowMsk(new Date(shift.startDate), day);
 }
 
 export async function computeNominationLeaderboard(

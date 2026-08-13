@@ -5,7 +5,8 @@ import { awardPoints } from './pointsService.js';
 import { resolveTaskAwardPoints } from './taskPoints.js';
 import { evaluateMedalsForParticipant } from './medalEvaluator.js';
 import { awardTaskLinkedMedals } from './taskMedalAward.js';
-import { taskMethodsForParticipant } from './taskAdminHelpers.js';
+import { taskMethodsForParticipant, resolveTaskAwardForumDay } from './taskAdminHelpers.js';
+import { getForumSettings, resolveEffectiveCurrentDay } from './helpers.js';
 
 export const PROOF_TYPES = ['qr', 'photo', 'post', 'volunteer', 'moderator', 'team'] as const;
 export const VERIFICATION_TYPES = ['auto', 'manual_moderator', 'manual_volunteer', 'team_confirm'] as const;
@@ -200,13 +201,15 @@ export async function completeSubmissionRewards(
   } = {},
 ): Promise<{ pointsLogId: number | null; userMedalId: number | null; lifecycleStage: LifecycleStage }> {
   const pts = await resolveTaskAwardPoints(task);
+  const settings = await getForumSettings();
+  const forumDay = resolveTaskAwardForumDay(task, resolveEffectiveCurrentDay(settings));
   const leaderId = participantIds[0];
   let pointsLogId: number | null = null;
   let userMedalId: number | null = null;
 
   for (const pid of participantIds) {
     if (pts > 0) {
-      const result = await awardPoints(pid, 'task_complete', pts, task.dayNumber ?? undefined, {
+      const result = await awardPoints(pid, 'task_complete', pts, forumDay, {
         submissionId,
         ignoreMaxAccruals: opts.ignoreMaxAccruals,
       });

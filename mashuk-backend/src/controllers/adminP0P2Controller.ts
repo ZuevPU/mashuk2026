@@ -9,6 +9,7 @@ import {
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { getForumSettings } from '../services/helpers.js';
+import { inferForumDayFromTimestamp } from '../services/timePhase.js';
 import { deactivateOtherConsents } from './consentsController.js';
 import { evaluateAllMedals, getMedalRuleProgress, parseMedalRule } from '../services/medalEvaluator.js';
 import { clubMatchNightly, synthesizeOutcomes } from '../services/gigachatService.js';
@@ -704,6 +705,8 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
       forumDay: pointsLog.forumDay,
       points: pointsLog.points,
       revokedAt: pointsLog.revokedAt,
+      actionType: pointsLog.actionType,
+      createdAt: pointsLog.createdAt,
     }).from(pointsLog).where(eq(pointsLog.participantId, id)),
     db.select().from(medals).where(eq(medals.isActive, true)).orderBy(asc(medals.name)),
   ]);
@@ -714,10 +717,19 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
     return true;
   });
 
+  const settings = await getForumSettings();
   const byDay: Record<string, number> = {};
   for (const row of allPointsRows) {
     if (row.revokedAt) continue;
-    const key = String(row.forumDay ?? 0);
+    if ((row.actionType || '').endsWith('_revoke')) continue;
+    const inferred = row.forumDay
+      ?? inferForumDayFromTimestamp(
+        row.createdAt ?? new Date(),
+        settings.startDate ?? null,
+        settings.totalDays ?? 8,
+      )
+      ?? 0;
+    const key = String(inferred);
     byDay[key] = (byDay[key] || 0) + (row.points ?? 0);
   }
   const pointsSummary = {
