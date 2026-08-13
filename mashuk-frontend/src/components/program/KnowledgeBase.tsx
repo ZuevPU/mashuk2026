@@ -14,6 +14,7 @@ interface Material {
   typeLabel?: string;
   description?: string;
   url?: string;
+  fileUrl?: string | null;
   isNew?: boolean;
   speakerName?: string;
   speakerInitials?: string;
@@ -350,7 +351,7 @@ export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
                               type="button"
                               className="kb-artifact-open"
                               onClick={() => m.url && openExternalUrl(m.url)}
-                              disabled={!m.url}
+                              disabled={!m.url && !m.fileUrl}
                             >
                               <span className="kb-artifact-type">{m.typeLabel || m.type || 'Материал'}</span>
                               <span className="kb-artifact-title">
@@ -358,6 +359,15 @@ export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
                                 {m.isNew && <span className="kb-mat-new">Новый</span>}
                               </span>
                             </button>
+                            {m.fileUrl && (
+                              <button
+                                type="button"
+                                className="kb-piggy-btn"
+                                onClick={() => openExternalUrl(m.fileUrl!)}
+                              >
+                                Файл
+                              </button>
+                            )}
                             <button
                               type="button"
                               className="kb-piggy-btn"

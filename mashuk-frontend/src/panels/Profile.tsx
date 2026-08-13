@@ -10,7 +10,7 @@ import { buildParticipantVolunteerUrl } from '../utils/qrDeepLink';
 import { requestVkPushPermission } from '../utils/pushNotifications';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { ParticipantAvatarCircle } from '../components/ParticipantAvatarCircle';
-import { QrCodeImage } from '../components/QrCodeImage';
+import { PiggybankEntryText } from '../components/PiggybankEntryText';
 
 const TAGS = ['', ...PIGGYBANK_TAGS];
 const SOURCES = ['', ...PIGGYBANK_SOURCES];
@@ -1352,7 +1352,7 @@ export const ProfilePanel: React.FC<{
                     <div key={e.id} style={{ fontSize: 12, marginTop: 8, borderTop: '1px solid #eee', paddingTop: 6 }}>
                       <span style={{ color: '#B8621A', fontWeight: 700 }}>#{e.tag}</span>
                       {e.source ? ` · ${e.source}` : ' · без источника'}
-                      <div>{e.text}</div>
+                      <PiggybankEntryText text={e.text || ''} />
                     </div>
                   ))}
               </div>
@@ -1521,7 +1521,7 @@ export const ProfilePanel: React.FC<{
                   )}
                 </div>
                 <div style={{ fontSize: 12, marginTop: 4, color: removed ? '#7a2e2e' : undefined }}>
-                  {entry.text}
+                  <PiggybankEntryText text={entry.text || ''} />
                 </div>
               </div>
             );})}

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { openExternalUrl } from '../../utils/openUrl';
 import mentorshipCover from '../../assets/courses/mentorship.png';
 import pedagogyCover from '../../assets/courses/pedagogy.png';
+import mashukLogo from '../../assets/courses/mashuk-knowledge-logo.png';
 
 export const MASHUK_COURSES = [
   {
@@ -25,7 +26,8 @@ export const MASHUK_COURSES = [
 export function MashukCoursesButton({ onOpen }: { onOpen: () => void }) {
   return (
     <button type="button" className="kb-courses-btn" onClick={onOpen}>
-      Онлайн-курсы от Центра знаний Машук
+      <span>Онлайн-курсы от</span>
+      <img className="kb-courses-logo" src={mashukLogo} alt="Центр знаний Машук" />
     </button>
   );
 }
@@ -75,9 +77,11 @@ export function MashukCoursesSheet({
             </article>
           ))}
         </div>
-        <button type="button" className="kb-courses-close" onClick={onClose}>
-          Закрыть
-        </button>
+        <div className="kb-courses-footer">
+          <button type="button" className="kb-courses-close" onClick={onClose}>
+            Закрыть
+          </button>
+        </div>
       </div>
     </div>
   );

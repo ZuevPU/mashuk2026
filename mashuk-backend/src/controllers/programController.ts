@@ -140,6 +140,7 @@ function mapMaterialForClient(
     typeLabel,
     description: m.description,
     url: m.url || m.fileUrl || null,
+    fileUrl: m.url && m.fileUrl && m.fileUrl !== m.url ? m.fileUrl : null,
     isNew: materialIsNew(m, now),
     speakerName,
     speakerInitials: m.speakerInitials || (speakerName ? speakerName.slice(0, 2).toUpperCase() : undefined),
@@ -735,12 +736,15 @@ export const saveMaterialToPiggybank = async (req: ParticipantRequest, res: Resp
       return;
     }
 
+    const link = (mat.url || '').trim();
+    const file = (mat.fileUrl || '').trim();
     const text = [
       eventTitle ? `Блок: ${eventTitle}` : null,
       `Материал: ${mat.title}`,
       mat.description ? `— ${mat.description}` : '',
       body.note?.trim() ? `Заметка: ${body.note.trim()}` : '',
-      mat.url ? `Ссылка: ${mat.url}` : '',
+      link ? `Ссылка: ${link}` : '',
+      file && file !== link ? `Файл: ${file}` : '',
     ].filter(Boolean).join('\n');
 
     const entry = await createPiggybankEntry({
