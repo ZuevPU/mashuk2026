@@ -5,6 +5,7 @@ import { openExternalUrl } from '../../utils/openUrl';
 import { apiPost } from '../../api/client';
 import { PIGGYBANK_SOURCES, PIGGYBANK_TAGS, inferSourceFromEventTitle } from '../../data/piggybank';
 import { KB_SECTIONS, kbSectionMeta, kbSubsectionLabel } from './kbSections';
+import { MashukCoursesButton, useMashukCourses } from './MashukCourses';
 
 interface Material {
   id: number;
@@ -96,6 +97,7 @@ export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
   const [piggyStep, setPiggyStep] = useState<'tags' | 'source'>('tags');
   const [toast, setToast] = useState<string | null>(null);
   const [sectionFilter, setSectionFilter] = useState<string>('all');
+  const { openCourses, sheet: coursesSheet } = useMashukCourses();
   const routeNavigator = useRouteNavigator();
 
   const catalog = kb?.sections?.length ? kb.sections : KB_SECTIONS.map(s => ({
@@ -182,19 +184,23 @@ export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
 
   if (kb.lockReason === 'point_b' || kb.day === 8) {
     return (
-      <div className="kb-lock">
-        <div className="kb-lock-icon">🎯</div>
-        <div className="kb-lock-t">Заключительный день</div>
-        <div className="kb-lock-s">{kb.lockMessage || 'Заполни Точку Б — финальную рефлексию смены'}</div>
-        <button
-          type="button"
-          className="m-prio-btn"
-          style={{ marginTop: 12 }}
-          onClick={() => routeNavigator.push('/questions')}
-        >
-          Перейти к Точке Б →
-        </button>
-      </div>
+      <>
+        <div className="kb-lock">
+          <div className="kb-lock-icon">🎯</div>
+          <div className="kb-lock-t">Заключительный день</div>
+          <div className="kb-lock-s">{kb.lockMessage || 'Заполни Точку Б — финальную рефлексию смены'}</div>
+          <button
+            type="button"
+            className="m-prio-btn"
+            style={{ marginTop: 12 }}
+            onClick={() => routeNavigator.push('/questions')}
+          >
+            Перейти к Точке Б →
+          </button>
+          <MashukCoursesButton onOpen={openCourses} />
+        </div>
+        {coursesSheet}
+      </>
     );
   }
 
@@ -205,20 +211,24 @@ export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
     const pct = Math.min(100, Math.round((done / req) * 100));
     const isFuture = kb.lockReason === 'future_day';
     return (
-      <div className="kb-lock">
-        <div className="kb-lock-icon">🔒</div>
-        <div className="kb-lock-t">{isFuture ? 'День ещё не наступил' : 'База знаний заблокирована'}</div>
-        <div className="kb-lock-s">
-          {kb.lockMessage || (isFuture
-            ? `Откроется, когда наступит день ${kb.day}`
-            : (kb.ruleLabel || `Пройдите ${req} из ${total} точек осмысления за день`))}
-        </div>
-        {!isFuture && (
-          <div className="kb-lock-bar">
-            <div className="kb-lock-fill" style={{ width: `${pct}%` }} />
+      <>
+        <div className="kb-lock">
+          <div className="kb-lock-icon">🔒</div>
+          <div className="kb-lock-t">{isFuture ? 'День ещё не наступил' : 'База знаний заблокирована'}</div>
+          <div className="kb-lock-s">
+            {kb.lockMessage || (isFuture
+              ? `Откроется, когда наступит день ${kb.day}`
+              : (kb.ruleLabel || `Пройдите ${req} из ${total} точек осмысления за день`))}
           </div>
-        )}
-      </div>
+          {!isFuture && (
+            <div className="kb-lock-bar">
+              <div className="kb-lock-fill" style={{ width: `${pct}%` }} />
+            </div>
+          )}
+          <MashukCoursesButton onOpen={openCourses} />
+        </div>
+        {coursesSheet}
+      </>
     );
   }
 
@@ -304,6 +314,10 @@ export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
           )}
         </div>
       )}
+
+      <div className="kb-courses-open-slot">
+        <MashukCoursesButton onOpen={openCourses} />
+      </div>
 
       {materials.length === 0 ? (
         <div style={{ textAlign: 'center', color: '#888', padding: 16, fontSize: 12 }}>Материалы появятся после мероприятий</div>
@@ -418,6 +432,7 @@ export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
           </div>
         </div>
       )}
+      {coursesSheet}
     </>
   );
 }
