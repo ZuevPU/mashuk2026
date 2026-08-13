@@ -2,6 +2,13 @@ import { inArray } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { participantDayState } from '../../db/schema.js';
 import { listPedagogicalRoleOptions } from '../roleService.js';
+import {
+  buildRoleJourney,
+  emptyRoleJourney,
+  latestRoleOf,
+  type RoleJourneyPack,
+  type RolePersonSnap,
+} from './roleJourney.js';
 
 export type RoleShare = {
   roleKey: string;
@@ -173,6 +180,7 @@ export async function buildRoleDynamicsHub(
   forumByDay: RoleDayShares[];
   byDirection: { direction: string; byDay: RoleDayShares[] }[];
   insights: RoleInsight[];
+  journey: RoleJourneyPack;
 }> {
   const catalog = await listPedagogicalRoleOptions();
   const byKey = new Map(catalog.map(r => [r.roleKey, r.name]));
@@ -201,6 +209,7 @@ export async function buildRoleDynamicsHub(
       forumByDay: days.map(day => ({ day, n: 0, cells: emptyShares() })),
       byDirection: [],
       insights: [{ metric: '—', text: 'Нет зарегистрированных участников в срезе.' }],
+      journey: { forum: emptyRoleJourney(roles), byDirection: [] },
     };
   }
 
@@ -280,6 +289,24 @@ export async function buildRoleDynamicsHub(
     return { direction, byDay };
   });
 
+  const snapsFor = (
+    people: typeof registered,
+  ): RolePersonSnap[] => people.map(p => {
+    const start = p.pedagogicalRole && roleKeySet.has(p.pedagogicalRole) ? p.pedagogicalRole : null;
+    return {
+      start,
+      now: latestRoleOf(p.id, days, activeByPidDay, start),
+    };
+  });
+
+  const journey: RoleJourneyPack = {
+    forum: buildRoleJourney(snapsFor(registered), roles),
+    byDirection: directions.map(direction => {
+      const people = registered.filter(p => ((p.direction || '—').trim() || '—') === direction);
+      return { direction, journey: buildRoleJourney(snapsFor(people), roles) };
+    }),
+  };
+
   return {
     roles,
     days,
@@ -287,5 +314,6 @@ export async function buildRoleDynamicsHub(
     forumByDay,
     byDirection,
     insights: buildInsights(forumByDay, roles),
+    journey,
   };
 }

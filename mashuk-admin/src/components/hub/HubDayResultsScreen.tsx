@@ -34,6 +34,10 @@ import { GoalProgressByDirectionChart, type GoalProgressByDirectionData } from '
 import { ConclusionCard } from './directionNarrative';
 import { dayFixationNarr, dayOpenNarr } from './hubNarrative';
 
+function isGoalProgressBlock(label: string): boolean {
+  return /движен\S* к своей цели|находишься в движен/i.test(label);
+}
+
 type Block = {
   key: string;
   label: string;
@@ -168,6 +172,13 @@ export function HubDayResultsScreen() {
   const fixationQuotes = useMemo(
     () => (data?.fixationQuotes ?? []).filter(q => !isPracticePickLabel(q.text)),
     [data],
+  );
+
+  const programBlocks = useMemo(
+    () => (data?.blocks ?? [])
+      .map((block, i) => ({ block, i }))
+      .filter(({ block }) => !isGoalProgressBlock(block.label)),
+    [data?.blocks],
   );
 
   const fixationConclusion = useMemo(() => {
@@ -325,7 +336,7 @@ export function HubDayResultsScreen() {
             note="Диверг-шкала: линия — граница между «удовлетворён» (4–5) и «есть претензия» (1–3). Работает хвост слева, не среднее."
           >
             <DashCard>
-              {[...data.blocks].sort((a, b) => b.low - a.low).map(b => (
+              {[...programBlocks.map(p => p.block)].sort((a, b) => b.low - a.low).map(b => (
                 <div key={b.key} className="adm-day-results-spine">
                   <div className="adm-day-results-spine-nm">{b.label}</div>
                   <SpineBar dist={b.dist} />
@@ -336,7 +347,7 @@ export function HubDayResultsScreen() {
                   </div>
                 </div>
               ))}
-              {!data.blocks.length && <p className="adm-muted">Нет оценок по шкалам за этот день.</p>}
+              {!programBlocks.length && <p className="adm-muted">Нет оценок по шкалам за этот день.</p>}
               <SpineLegend />
             </DashCard>
           </DayResultsSection>
@@ -347,7 +358,7 @@ export function HubDayResultsScreen() {
             note="Цвет — отклонение от общего среднего по блоку, не абсолютная оценка. Внизу — средняя по всему форуму."
           >
             <DashCard className="adm-day-results-scroll">
-              {data.heat.length === 0 || data.blocks.length === 0 ? (
+              {data.heat.length === 0 || programBlocks.length === 0 ? (
                 <p className="adm-muted">Недостаточно данных для тепловой карты.</p>
               ) : (
                 <table className="adm-table adm-day-results-table">
@@ -355,12 +366,11 @@ export function HubDayResultsScreen() {
                     <tr>
                       <th>Направление</th>
                       <th style={{ textAlign: 'center' }}>N</th>
-                      {data.blocks.map(b => (
-                        <th key={b.key} style={{ textAlign: 'center', maxWidth: 74, whiteSpace: 'normal' }}>
-                          {b.label}
+                      {programBlocks.map(({ block }) => (
+                        <th key={block.key} style={{ textAlign: 'center', maxWidth: 74, whiteSpace: 'normal' }}>
+                          {block.label}
                         </th>
                       ))}
-                      <th style={{ textAlign: 'center' }}>Индекс</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -368,38 +378,40 @@ export function HubDayResultsScreen() {
                       <tr key={r.dir}>
                         <td>{r.dir}</td>
                         <td style={{ textAlign: 'center' }} className="adm-muted">{r.n}</td>
-                        {r.vals.map((c, i) => {
-                          if (c.v == null) {
+                        {programBlocks.map(({ block, i }) => {
+                          const c = r.vals[i];
+                          if (!c || c.v == null) {
                             return (
-                              <td key={data.blocks[i]?.key ?? i} style={{ padding: 4, textAlign: 'center' }}>
+                              <td key={block.key} style={{ padding: 4, textAlign: 'center' }}>
                                 <span className="adm-muted">—</span>
                               </td>
                             );
                           }
                           const st = heatCellStyle(c.dev);
                           return (
-                            <td key={data.blocks[i]?.key ?? i} style={{ padding: 4 }}>
+                            <td key={block.key} style={{ padding: 4 }}>
                               <span className="adm-day-results-cell" style={st}>
                                 {c.v.toFixed(2)}
                               </span>
                             </td>
                           );
                         })}
-                        <td style={{ textAlign: 'center', fontWeight: 600 }}>{r.idx.toFixed(2)}</td>
                       </tr>
                     ))}
                     {data.heatForum && (
                       <tr style={{ background: 'var(--m-bg, #f5f5f7)', fontWeight: 600 }}>
                         <td>{data.heatForum.dir}</td>
                         <td style={{ textAlign: 'center' }} className="adm-muted">{data.heatForum.n}</td>
-                        {data.heatForum.vals.map((c, i) => (
-                          <td key={`forum-${data.blocks[i]?.key ?? i}`} style={{ padding: 4 }}>
-                            <span className="adm-day-results-cell" style={{ background: 'transparent' }}>
-                              {c.v == null ? '—' : c.v.toFixed(2)}
-                            </span>
-                          </td>
-                        ))}
-                        <td style={{ textAlign: 'center' }}>{data.heatForum.idx.toFixed(2)}</td>
+                        {programBlocks.map(({ block, i }) => {
+                          const c = data.heatForum?.vals[i];
+                          return (
+                            <td key={`forum-${block.key}`} style={{ padding: 4 }}>
+                              <span className="adm-day-results-cell" style={{ background: 'transparent' }}>
+                                {c?.v == null ? '—' : c.v.toFixed(2)}
+                              </span>
+                            </td>
+                          );
+                        })}
                       </tr>
                     )}
                   </tbody>

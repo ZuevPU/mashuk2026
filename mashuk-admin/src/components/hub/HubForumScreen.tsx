@@ -80,7 +80,7 @@ type DaySeriesRow = {
 };
 
 /** v6: TTL + лимит ключей, чтобы localStorage не раздувался */
-const FORUM_CACHE_PREFIX = 'mashuk_hub_forum_v6:';
+const FORUM_CACHE_PREFIX = 'mashuk_hub_forum_v7:';
 const FORUM_CACHE_ANY = 'mashuk_hub_forum_';
 const FORUM_CACHE_TTL_MS = 5 * 60 * 1000;
 const FORUM_CACHE_MAX_KEYS = 8;
@@ -649,7 +649,7 @@ export function HubForumScreen({
 
         <section id="forum-roles" className="adm-forum-anchor">
           <SectionLabel>Роли</SectionLabel>
-          <DeferMount minHeight={480}>
+          <DeferMount minHeight={720}>
           <HubRoleDynamics
             data={data.roleDynamics}
             toolbarDirection={direction || undefined}

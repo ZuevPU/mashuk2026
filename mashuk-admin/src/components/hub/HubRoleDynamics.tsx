@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { formatForumDay } from '../analytics/chartRu';
 import { DashCard, SectionLabel } from '../analytics/dashboardUi';
+import { HubRoleProgressBoard, type RoleJourney } from './HubRoleProgressBoard';
 
 export type RoleShare = {
   roleKey: string;
@@ -26,6 +27,10 @@ export type RoleDynamicsData = {
   forumByDay?: RoleDayShares[];
   byDirection?: { direction: string; byDay: RoleDayShares[] }[];
   insights?: Array<{ metric: string; text: string }>;
+  journey?: {
+    forum?: RoleJourney;
+    byDirection?: { direction: string; journey: RoleJourney }[];
+  };
 };
 
 type Props = {
@@ -218,6 +223,11 @@ export function HubRoleDynamics({ data, toolbarDirection, onOpenDirection }: Pro
     return data?.starting?.byDirection?.find(d => d.direction === effectiveScope)?.n ?? 0;
   }, [data, effectiveScope]);
 
+  const journey = useMemo(() => {
+    if (effectiveScope === 'forum') return data?.journey?.forum ?? null;
+    return data?.journey?.byDirection?.find(d => d.direction === effectiveScope)?.journey ?? null;
+  }, [data, effectiveScope]);
+
   const insights = useMemo(() => {
     if (effectiveScope === 'forum' && (data?.insights?.length ?? 0) > 0) {
       return data!.insights!;
@@ -264,6 +274,17 @@ export function HubRoleDynamics({ data, toolbarDirection, onOpenDirection }: Pro
           </select>
         </label>
       </div>
+
+      <HubRoleProgressBoard
+        journey={journey}
+        scopeNote={effectiveScope === 'forum' ? 'текущий срез форума' : effectiveScope}
+        quote={insights[0] ? {
+          text: insights[0].text,
+          caption: insights[0].metric && insights[0].metric !== '—'
+            ? `Сдвиг · ${insights[0].metric}`
+            : 'Характерный сдвиг по срезу',
+        } : null}
+      />
 
       <DashCard title="Стартовые роли">
         <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 10 }}>

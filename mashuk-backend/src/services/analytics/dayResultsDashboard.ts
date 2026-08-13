@@ -11,7 +11,7 @@ import { isOrganizerDirection } from '../leaderboardQuery.js';
 import { getMoscowParts } from '../timePhase.js';
 import { EVENING_SCALE_KEYS } from '../touchpointTemplates.js';
 import { buildPracticeRecommendNps, extractPracticeScores } from './practiceRecommendNps.js';
-import { buildGoalProgressByDirection } from './goalProgressByDirection.js';
+import { buildGoalProgressByDirection, isGoalProgressField } from './goalProgressByDirection.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import { resolveDayRange } from './analyticsQuery.js';
 import { loadCohortParticipants } from './cohort.js';
@@ -507,7 +507,9 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
   const order = new Map(EVENING_SCALE_KEYS.map((k, i) => [k, i]));
   activeScales.sort((a, b) => (order.get(a.key as never) ?? 99) - (order.get(b.key as never) ?? 99));
 
-  const blocks = buildBlocks(activeScales, submittedRows);
+  // «Движение к цели» — отдельный блок дашборда, не колонка тепловой карты.
+  const programScales = activeScales.filter(f => !isGoalProgressField(f));
+  const blocks = buildBlocks(programScales, submittedRows);
   const { dirs, heat, forum: heatForum } = buildHeat(blocks, submittedRows);
   const groups = buildGroups(blocks, submittedRows);
 
@@ -602,7 +604,7 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
     const allSubmitted = all.rows.filter(
       r => r.status === 'сдано' && !isOrganizerDirection(r.directionName || r.p.direction),
     );
-    const allScales = all.fields.filter(isScaleField);
+    const allScales = all.fields.filter(f => isScaleField(f) && !isGoalProgressField(f));
     daySeries = seriesDays.map(day => {
       const dayRows = allSubmitted.filter(r => r.dayNumber === day);
       const dayBlocks = buildBlocks(allScales, dayRows);
@@ -616,7 +618,7 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
   } else {
     daySeries = seriesDays.map(day => {
       const dayRows = submittedRows.filter(r => r.dayNumber === day);
-      const dayBlocks = buildBlocks(activeScales, dayRows);
+      const dayBlocks = buildBlocks(programScales, dayRows);
       return {
         day,
         index: dayIndexForRows(dayBlocks, dayRows),
