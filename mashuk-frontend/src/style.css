@@ -1600,35 +1600,63 @@ body {
 .kb-courses-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
-  background: rgba(15, 18, 28, 0.42);
+  z-index: 240;
+  background: rgba(0, 0, 0, 0.4);
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 12px 10px calc(12px + var(--m-tabbar-clearance));
+  flex-direction: column;
+  padding-top: max(8px, env(safe-area-inset-top, 0px));
   box-sizing: border-box;
 }
 .kb-courses-sheet {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
   max-width: 420px;
-  max-height: calc(100dvh - 24px - var(--m-tabbar-clearance));
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   background: #F2F2F7;
-  border-radius: 22px;
-  padding: 8px 14px 0;
+  border-radius: 14px 14px 0 0;
   box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
 }
-.kb-courses-handle {
-  width: 36px;
-  height: 5px;
-  border-radius: 99px;
-  background: rgba(60, 60, 67, 0.22);
-  margin: 4px auto 10px;
+.kb-courses-x {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(120, 120, 128, 0.16);
+  color: #3A3A3C;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.kb-courses-x:active {
+  background: rgba(120, 120, 128, 0.28);
+}
+.kb-courses-x svg {
+  display: block;
+}
+.kb-courses-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 0px));
 }
 .kb-courses-head {
-  flex: 0 0 auto;
+  padding-right: 44px;
 }
 .kb-courses-head h3 {
   margin: 2px 0 4px;
@@ -1645,7 +1673,7 @@ body {
   color: #1D2A5B;
 }
 .kb-courses-head p {
-  margin: 0 0 12px;
+  margin: 0 0 14px;
   font-size: 13px;
   line-height: 1.35;
   color: #6C6C70;
@@ -1654,25 +1682,21 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow: auto;
-  flex: 1 1 auto;
-  min-height: 0;
-  padding-bottom: 8px;
-  -webkit-overflow-scrolling: touch;
 }
 .kb-course-card {
   background: #fff;
   border-radius: 16px;
   overflow: hidden;
   border: 0.5px solid rgba(60, 60, 67, 0.12);
+  flex: 0 0 auto;
 }
 .kb-course-cover {
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  background: #EEF1F7;
+  object-fit: contain;
+  background: #fff;
+  vertical-align: top;
 }
 .kb-course-body { padding: 12px 13px 14px; }
 .kb-course-body h4 {
@@ -1716,25 +1740,6 @@ body {
   cursor: pointer;
 }
 .kb-course-reg:active { opacity: 0.88; }
-.kb-courses-footer {
-  flex: 0 0 auto;
-  background: #F2F2F7;
-  padding: 4px 0 10px;
-  border-top: 0.5px solid rgba(60, 60, 67, 0.12);
-}
-.kb-courses-close {
-  display: block;
-  width: 100%;
-  margin: 0;
-  border: 0;
-  background: transparent;
-  color: #007AFF;
-  font: inherit;
-  font-size: 16px;
-  font-weight: 600;
-  padding: 12px;
-  cursor: pointer;
-}
 .kb-progress { background: var(--m-surface-alt); border-radius: 4px; height: 6px; margin: 10px 0; }
 .kb-progress-fill { background: var(--m-accent); height: 6px; border-radius: 4px; }
 .kb-section-chips {

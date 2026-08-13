@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { openExternalUrl } from '../../utils/openUrl';
 import mentorshipCover from '../../assets/courses/mentorship.png';
 import pedagogyCover from '../../assets/courses/pedagogy.png';
@@ -39,48 +39,64 @@ export function MashukCoursesSheet({
   open: boolean;
   onClose: () => void;
 }) {
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
   if (!open) return null;
   return (
     <div className="kb-courses-overlay" onClick={onClose} role="presentation">
       <div
         className="kb-courses-sheet"
         role="dialog"
+        aria-modal="true"
         aria-labelledby="kb-courses-title"
         onClick={e => e.stopPropagation()}
       >
-        <div className="kb-courses-handle" aria-hidden />
-        <div className="kb-courses-head">
-          <div className="kb-courses-kicker">Центр знаний «Машук»</div>
-          <h3 id="kb-courses-title">Онлайн-курсы</h3>
-          <p>Запись открыта. Сначала наставничество, затем педагогика будущего.</p>
-        </div>
-        <div className="kb-courses-list">
-          {MASHUK_COURSES.map(course => (
-            <article key={course.id} className="kb-course-card">
-              <img className="kb-course-cover" src={course.image} alt="" />
-              <div className="kb-course-body">
-                <h4>{course.title}</h4>
-                <p>{course.description}</p>
-                <div className="kb-course-tags">
-                  {course.tags.map(tag => (
-                    <span key={tag}>#{tag}</span>
-                  ))}
+        <button type="button" className="kb-courses-x" onClick={onClose} aria-label="Закрыть">
+          <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden>
+            <path
+              d="M2.1 2.1l7.8 7.8M9.9 2.1L2.1 9.9"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+        <div className="kb-courses-scroll">
+          <div className="kb-courses-head">
+            <div className="kb-courses-kicker">Центр знаний «Машук»</div>
+            <h3 id="kb-courses-title">Онлайн-курсы</h3>
+            <p>Приходи учиться в Центр знаний «Машук» — онлайн, бесплатно и эффективно.</p>
+          </div>
+          <div className="kb-courses-list">
+            {MASHUK_COURSES.map(course => (
+              <article key={course.id} className="kb-course-card">
+                <img className="kb-course-cover" src={course.image} alt="" />
+                <div className="kb-course-body">
+                  <h4>{course.title}</h4>
+                  <p>{course.description}</p>
+                  <div className="kb-course-tags">
+                    {course.tags.map(tag => (
+                      <span key={tag}>#{tag}</span>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="kb-course-reg"
+                    onClick={() => openExternalUrl(course.registerUrl)}
+                  >
+                    Регистрация
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="kb-course-reg"
-                  onClick={() => openExternalUrl(course.registerUrl)}
-                >
-                  Регистрация
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-        <div className="kb-courses-footer">
-          <button type="button" className="kb-courses-close" onClick={onClose}>
-            Закрыть
-          </button>
+              </article>
+            ))}
+          </div>
         </div>
       </div>
     </div>
