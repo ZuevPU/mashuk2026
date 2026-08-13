@@ -158,7 +158,7 @@ export const HomePanel: React.FC<{
         if (err instanceof ApiError && err.status === 403) {
           routeNavigator.push('/registration');
         } else {
-          setError('Не удалось загрузить главную. Проверьте подключение к серверу.');
+          setError('Видимо, есть проблемы с интернетом. Проверьте сеть и нажмите «Повторить».');
         }
       })
       .finally(() => setLoading(false));
@@ -249,7 +249,15 @@ export const HomePanel: React.FC<{
       <Panel id={id}>
         <PanelHeader fixed>Главная</PanelHeader>
         <Group>
-          <div className="m-card" style={{ color: '#C53030' }}>{error || 'Нет данных'}</div>
+          <div className="m-card" style={{ textAlign: 'center' }}>
+            <div className="m-hdr-fl" style={{ marginTop: 0 }}>Фокус дня</div>
+            <div style={{ fontSize: 16, fontWeight: 800, margin: '6px 0 8px' }}>
+              Связь с Машуком чуть зависла
+            </div>
+            <p style={{ fontSize: 13, color: '#555', margin: 0, lineHeight: 1.45 }}>
+              {error || 'Видимо, есть проблемы с интернетом. Проверьте сеть и нажмите «Повторить».'}
+            </p>
+          </div>
           <ButtonLike onClick={() => reload()}>Повторить</ButtonLike>
         </Group>
       </Panel>

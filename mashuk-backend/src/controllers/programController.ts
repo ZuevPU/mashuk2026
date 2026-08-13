@@ -247,6 +247,7 @@ export const getKnowledgeBaseDays = async (req: ParticipantRequest, res: Respons
         ...access,
         dayTitle: focus?.title ?? `День ${day}`,
         dayDescription: focus?.text ?? null,
+        dayDescriptionHtml: focus?.textHtml ?? null,
         opensOn: getForumDayDateLabel(settings.startDate ?? null, day),
       });
     }
@@ -684,6 +685,7 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
       ...access,
       dayTitle: focus?.title ?? `День ${day}`,
       dayDescription: focus?.text ?? null,
+      dayDescriptionHtml: focus?.textHtml ?? null,
       opensOn,
       lockMessage,
       sections: publicKbSectionsCatalog(),

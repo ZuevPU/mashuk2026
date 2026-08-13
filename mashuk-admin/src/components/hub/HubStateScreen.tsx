@@ -61,7 +61,16 @@ type StateData = {
   themesNeg: Array<{ name: string; n: number }>;
   themesPos: Array<{ name: string; n: number }>;
   negCount: number;
-  quotes: Array<{ text: string; meta: string }>;
+  posCount?: number;
+  quotes: Array<{
+    text: string;
+    meta: string;
+    phase?: string;
+    phaseKey?: 'morning' | 'day' | 'evening';
+    zone?: string;
+    dir?: string;
+    polarity?: 'pos' | 'neg' | 'neu';
+  }>;
   quotesTotal?: number;
   energyHist: Array<{ v: number; n: number }>;
   energyMedian: number | null;
@@ -98,6 +107,33 @@ function negCellStyle(neg: number | null, _n: number): CSSProperties {
   };
 }
 
+type QuotePhase = 'all' | 'morning' | 'day' | 'evening';
+type QuoteTone = 'all' | 'pos' | 'neg';
+type StateQuote = StateData['quotes'][number];
+
+function quotePhaseKey(q: StateQuote): QuotePhase | 'other' {
+  if (q.phaseKey === 'morning' || q.phaseKey === 'day' || q.phaseKey === 'evening') return q.phaseKey;
+  const src = `${q.phase || ''} ${q.meta || ''}`.toLowerCase();
+  if (src.includes('вечер')) return 'evening';
+  if (src.includes('утро')) return 'morning';
+  if (src.includes('день')) return 'day';
+  return 'other';
+}
+
+function quoteTone(q: StateQuote): 'pos' | 'neg' | 'neu' {
+  if (q.polarity === 'pos' || q.polarity === 'neg' || q.polarity === 'neu') return q.polarity;
+  const zone = (q.zone || q.meta.split(' · ')[1] || '').trim();
+  if (zone === 'Риск' || zone === 'Усталость') return 'neg';
+  if (zone === 'Подъём' || zone === 'Включение') return 'pos';
+  return 'neu';
+}
+
+function quoteDir(q: StateQuote): string {
+  if (q.dir) return q.dir;
+  const parts = q.meta.split(' · ');
+  return (parts[2] || '').trim();
+}
+
 /**
  * Линза «Состояние» — пульт проверок состояния для штаба.
  * GET /analytics/hub/state
@@ -125,6 +161,10 @@ export function HubStateScreen() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [quoteLimit, setQuoteLimit] = useState(24);
+  const [quotePhase, setQuotePhase] = useState<QuotePhase>('all');
+  const [quoteToneFilter, setQuoteToneFilter] = useState<QuoteTone>('all');
+  const [quoteDirFilter, setQuoteDirFilter] = useState('');
+  const [quoteSort, setQuoteSort] = useState<'neg' | 'pos'>('neg');
 
   useEffect(() => {
     setLoading(true);
@@ -145,6 +185,10 @@ export function HubStateScreen() {
       .finally(() => setLoading(false));
   }, [adminFetch, forumDay, direction, group, ageCategory, activity]);
 
+  useEffect(() => {
+    setQuoteLimit(24);
+  }, [quotePhase, quoteToneFilter, quoteDirFilter, quoteSort, forumDay, direction, group]);
+
   const allForum = isAllForumDay(forumDay);
   const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);
   const m = data?.meta;
@@ -164,6 +208,39 @@ export function HubStateScreen() {
       psychoCount: m.psychoCount,
     });
   }, [data, m]);
+
+  const quoteDirs = useMemo(() => {
+    if (!data) return [];
+    return [...new Set(data.quotes.map(quoteDir).filter(d => d && d !== '—'))].sort((a, b) => a.localeCompare(b, 'ru'));
+  }, [data]);
+
+  const filteredQuotes = useMemo(() => {
+    if (!data) return [];
+    const list = data.quotes.filter(q => {
+      if (quotePhase !== 'all' && quotePhaseKey(q) !== quotePhase) return false;
+      if (quoteToneFilter !== 'all' && quoteTone(q) !== quoteToneFilter) return false;
+      if (quoteDirFilter && quoteDir(q) !== quoteDirFilter) return false;
+      return true;
+    });
+    const rank = (q: StateQuote) => {
+      const t = quoteTone(q);
+      if (quoteSort === 'neg') return t === 'neg' ? 0 : t === 'neu' ? 1 : 2;
+      return t === 'pos' ? 0 : t === 'neu' ? 1 : 2;
+    };
+    return [...list].sort((a, b) => rank(a) - rank(b));
+  }, [data, quotePhase, quoteToneFilter, quoteDirFilter, quoteSort]);
+
+  const quoteCounts = useMemo(() => {
+    const phases = { morning: 0, day: 0, evening: 0 };
+    const tones = { pos: 0, neg: 0, neu: 0 };
+    if (!data) return { phases, tones };
+    for (const q of data.quotes) {
+      const p = quotePhaseKey(q);
+      if (p !== 'other') phases[p] += 1;
+      tones[quoteTone(q)] += 1;
+    }
+    return { phases, tones };
+  }, [data]);
 
   return (
     <HubLensLayout className="adm-day-results" items={STATE_NAV} navLabel="Разделы состояния">
@@ -368,8 +445,9 @@ export function HubStateScreen() {
           <DayResultsSection
             id="hub-state-reasons"
             title="Причины"
-            note="Темы негатива и дословные цитаты из зон «Риск» и «Усталость». Имена скрыты."
+            note="Все текстовые комментарии из проверок состояния: утро, день и вечер, плюс и минус. Имена скрыты."
           >
+            <div className="adm-dash-grid adm-dash-grid-2">
             <DashCard title={`Темы негативных причин · ${data.negCount}`}>
               {data.themesNeg.length === 0 ? (
                 <p className="adm-muted">Нет размеченных тем.</p>
@@ -396,28 +474,118 @@ export function HubStateScreen() {
                 </p>
               )}
             </DashCard>
+            <DashCard title={`Темы положительных причин · ${data.posCount ?? 0}`}>
+              {data.themesPos.length === 0 ? (
+                <p className="adm-muted">Нет размеченных тем.</p>
+              ) : (
+                (() => {
+                  const mx = Math.max(...data.themesPos.map(x => x.n), 1);
+                  return data.themesPos.map(x => (
+                    <div key={x.name} className="adm-day-results-row">
+                      <div>
+                        <div className="adm-day-results-lb">{x.name}</div>
+                        <HBar
+                          widthPct={(x.n / mx) * 100}
+                          color="#57bd9c"
+                        />
+                      </div>
+                      <div className="adm-day-results-nb">{x.n}</div>
+                    </div>
+                  ));
+                })()
+              )}
+            </DashCard>
+            </div>
             <DashCard
-              title={`Комментарии участников · ${data.quotesTotal ?? data.quotes.length}`}
+              title={`Комментарии участников · ${filteredQuotes.length}${
+                filteredQuotes.length !== (data.quotesTotal ?? data.quotes.length)
+                  ? ` из ${data.quotesTotal ?? data.quotes.length}`
+                  : ''
+              }`}
               className="adm-hub-quotes-card"
             >
-              {data.quotes.length === 0 ? (
-                <p className="adm-muted">Нет цитат из минуса.</p>
+              <div className="adm-state-quote-filters">
+                <div className="adm-forum-seg" role="group" aria-label="Часть дня">
+                  {([
+                    ['all', 'Все'],
+                    ['morning', `Утро · ${quoteCounts.phases.morning}`],
+                    ['day', `День · ${quoteCounts.phases.day}`],
+                    ['evening', `Вечер · ${quoteCounts.phases.evening}`],
+                  ] as const).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={quotePhase === key ? 'on' : ''}
+                      onClick={() => setQuotePhase(key)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="adm-forum-seg" role="group" aria-label="Тональность">
+                  {([
+                    ['all', 'Все'],
+                    ['pos', `Положительные · ${quoteCounts.tones.pos}`],
+                    ['neg', `Отрицательные · ${quoteCounts.tones.neg}`],
+                  ] as const).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={quoteToneFilter === key ? 'on' : ''}
+                      onClick={() => setQuoteToneFilter(key)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="adm-forum-seg" role="group" aria-label="Сортировка">
+                  <button
+                    type="button"
+                    className={quoteSort === 'neg' ? 'on' : ''}
+                    onClick={() => setQuoteSort('neg')}
+                  >
+                    Сначала минус
+                  </button>
+                  <button
+                    type="button"
+                    className={quoteSort === 'pos' ? 'on' : ''}
+                    onClick={() => setQuoteSort('pos')}
+                  >
+                    Сначала плюс
+                  </button>
+                </div>
+                <label className="adm-insights-filter">
+                  Направление
+                  <select
+                    className="adm-input"
+                    value={quoteDirFilter}
+                    onChange={e => setQuoteDirFilter(e.target.value)}
+                  >
+                    <option value="">Все направления</option>
+                    {quoteDirs.map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {filteredQuotes.length === 0 ? (
+                <p className="adm-muted">Нет комментариев по выбранным фильтрам.</p>
               ) : (
                 <>
-                  {data.quotes.slice(0, quoteLimit).map((q, i) => (
-                    <div key={i} className="adm-state-quote">
+                  {filteredQuotes.slice(0, quoteLimit).map((q, i) => (
+                    <div key={i} className={`adm-state-quote is-${quoteTone(q)}`}>
                       {q.text}
                       <span className="adm-state-quote-m">{q.meta}</span>
                     </div>
                   ))}
-                  {data.quotes.length > quoteLimit && (
+                  {filteredQuotes.length > quoteLimit && (
                     <button
                       type="button"
                       className="adm-btn adm-btn-ghost"
                       style={{ marginTop: 10 }}
-                      onClick={() => setQuoteLimit(n => Math.min(n + 24, data.quotes.length))}
+                      onClick={() => setQuoteLimit(n => Math.min(n + 24, filteredQuotes.length))}
                     >
-                      Показать ещё ({data.quotes.length - quoteLimit})
+                      Показать ещё ({filteredQuotes.length - quoteLimit})
                     </button>
                   )}
                 </>

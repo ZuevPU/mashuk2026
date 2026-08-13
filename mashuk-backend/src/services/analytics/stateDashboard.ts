@@ -35,6 +35,7 @@ import {
   isPsychoReason,
   median,
   negSharePct,
+  quotePolarity,
   round1,
   zoneDistCounts,
   type PhaseKey,
@@ -247,7 +248,7 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
     }))
     .sort((a, b) => b.n - a.n);
 
-  // Reasons / themes — only risk+fatigue for neg themes & quotes
+  // Reasons / themes — neg themes from risk+fatigue; quotes = all polarities
   const negReasons = rows
     .filter(r => isNegZone(zoneOf(r)) && (r.answer || '').trim())
     .map(r => ({
@@ -263,14 +264,34 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
 
   const themesNeg = countThemes(negReasons.filter(r => !r.psycho).map(r => r.text));
   const themesPos = countThemes(posReasons);
-  const quotes = negReasons
+  const allQuotes = rows
+    .filter(r => (r.answer || '').trim())
+    .map(r => {
+      const zone = zoneOf(r);
+      const phase = resolvePhase(r);
+      const text = r.answer.trim();
+      return {
+        text,
+        phase: PHASE_RU[phase],
+        phaseKey: phase,
+        zone: zone ? ZONE_RU[zone] : '—',
+        dir: (r.direction || '—').trim() || '—',
+        polarity: quotePolarity(zone),
+        psycho: isPsychoReason(text),
+        at: r.createdAt?.getTime() ?? 0,
+      };
+    })
     .filter(r => !r.psycho)
-    .sort((a, b) => b.text.length - a.text.length)
-    .slice(0, 60)
-    .map(r => ({
-      text: r.text.slice(0, 400),
-      meta: `${r.phase} · ${r.zone} · ${r.dir}`,
-    }));
+    .sort((a, b) => b.at - a.at || b.text.length - a.text.length);
+  const quotes = allQuotes.slice(0, 500).map(r => ({
+    text: r.text.slice(0, 400),
+    meta: `${r.phase} · ${r.zone} · ${r.dir}`,
+    phase: r.phase,
+    phaseKey: r.phaseKey,
+    zone: r.zone,
+    dir: r.dir,
+    polarity: r.polarity,
+  }));
   const psychoCount = negReasons.filter(r => r.psycho).length;
   const reasonCoveragePct = pct(reasonsAll.length, answers || 1);
   const noReasonPct = pct(Math.max(0, answers - reasonsAll.length), answers || 1);
@@ -371,7 +392,7 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
     negCount: negReasons.filter(r => !r.psycho).length,
     posCount: posReasons.length,
     quotes,
-    quotesTotal: negReasons.filter(r => !r.psycho).length,
+    quotesTotal: allQuotes.length,
     transition,
     coverage,
     daySeries,

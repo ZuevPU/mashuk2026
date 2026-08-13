@@ -1,5 +1,6 @@
 import React from 'react';
 import '../../style.css';
+import { focusBodyHtml } from '../../utils/focusHtml';
 
 interface HeaderInfoProps {
   firstName: string;
@@ -16,40 +17,11 @@ interface HeaderInfoProps {
   progressPercent: number;
 }
 
-function plainToFocusHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br/>');
-}
-
-/** Map editor inline text-align to CSS classes (more reliable in VK WebView). */
-function prepareFocusHtml(html: string): string {
-  if (typeof document === 'undefined') return html;
-  const root = document.createElement('div');
-  root.innerHTML = html;
-  root.querySelectorAll<HTMLElement>('[style*="text-align"], [align]').forEach((el) => {
-    const styleAlign = el.style?.textAlign?.toLowerCase();
-    const attrAlign = (el.getAttribute('align') || '').toLowerCase();
-    const align = styleAlign || attrAlign;
-    if (!align || !['center', 'right', 'left', 'justify'].includes(align)) return;
-    el.classList.add(`m-hdr-align-${align}`);
-    el.style.textAlign = '';
-    if (!el.getAttribute('style')?.trim()) el.removeAttribute('style');
-    el.removeAttribute('align');
-  });
-  return root.innerHTML;
-}
-
 export const HeaderInfo: React.FC<HeaderInfoProps> = ({
   firstName, lastName, direction, groupName, dayCount, totalDays, currentDateStr,
   focusTitle, focusSubtitle, focusSubtitleHtml, focusKeyQuestion, progressPercent,
 }) => {
-  const rawHtml = (focusSubtitleHtml && focusSubtitleHtml.trim())
-    ? focusSubtitleHtml
-    : (focusSubtitle ? plainToFocusHtml(focusSubtitle) : '');
-  const bodyHtml = rawHtml ? prepareFocusHtml(rawHtml) : '';
+  const bodyHtml = focusBodyHtml(focusSubtitleHtml, focusSubtitle);
 
   return (
     <div className="m-hdr">

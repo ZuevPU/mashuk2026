@@ -1804,6 +1804,8 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   line-height: 1.45;
   color: #5D4B37;
   margin-top: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .adm-forum-focus-preview .adm-forum-focus-html p,
 .adm-forum-focus-preview .adm-forum-focus-html div { margin: 0 0 0.35em; }
@@ -3234,11 +3236,26 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   margin: 14px 0;
   font-size: 13.5px;
 }
+.adm-state-quote.is-pos { border-left-color: #57bd9c; }
+.adm-state-quote.is-neu { border-left-color: #6f7d95; }
 .adm-state-quote-m {
   display: block;
   color: var(--m-text-secondary);
   font-size: 11.5px;
   margin-top: 5px;
+}
+.adm-state-quote-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: flex-end;
+  margin-bottom: 8px;
+}
+.adm-state-quote-filters .adm-insights-filter {
+  min-width: 180px;
+}
+.adm-state-quote-filters .adm-input {
+  min-width: 180px;
 }
 .adm-state-hist {
   display: flex;

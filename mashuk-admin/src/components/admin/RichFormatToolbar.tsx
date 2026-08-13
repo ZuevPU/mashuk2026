@@ -105,11 +105,46 @@ export function RichFormatToolbar({ editorRef, onAfterCommand }: ToolbarProps) {
   );
 }
 
+const BLOCK_TAGS = new Set(['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE', 'TR']);
+
+function decodeEntities(raw: string): string {
+  return raw
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function normalizePlain(text: string): string {
+  return text
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** Keep line breaks from <br> / block tags so words do not glue together. */
 export function htmlToPlain(html: string): string {
+  if (!html) return '';
   if (typeof document === 'undefined') {
-    return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    return normalizePlain(decodeEntities(
+      html
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|h[1-6]|li|blockquote|tr)>/gi, '\n')
+        .replace(/<[^>]+>/g, ''),
+    ));
   }
-  const d = document.createElement('div');
-  d.innerHTML = html || '';
-  return (d.innerText || d.textContent || '').trim();
+  const root = document.createElement('div');
+  root.innerHTML = html;
+  const walk = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent || '';
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const el = node as HTMLElement;
+    if (el.tagName === 'BR') return '\n';
+    const inner = Array.from(el.childNodes).map(walk).join('');
+    return BLOCK_TAGS.has(el.tagName) ? `${inner}\n` : inner;
+  };
+  return normalizePlain(walk(root));
 }

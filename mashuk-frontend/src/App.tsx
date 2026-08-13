@@ -19,7 +19,7 @@ import { DelayedSurveyPanel } from './panels/DelayedSurvey';
 import { ScanPanel } from './panels/Scan';
 import { OpenInVkScreen } from './components/OpenInVkScreen';
 import { hasUsableLaunchParams, peekPendingTaskQr } from './utils/launchParams';
-import { apiGet, getApiUrl, getHashSearchParams, initAuth, setStoredShiftId } from './api/client';
+import { apiGet, getHashSearchParams, initAuth, setStoredShiftId } from './api/client';
 
 export const ModalContext = createContext<{ setModal: (modal: ReactNode | null) => void }>({ setModal: () => {} });
 export const useAppModal = () => useContext(ModalContext);
@@ -160,8 +160,7 @@ export const App = () => {
       }
     } catch (error) {
       console.error('Init error', error);
-      const apiUrl = getApiUrl();
-      let message = error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? error.message : String(error);
       if (
         message.includes('No Bearer token')
         || message.includes('Unauthorized')
@@ -171,10 +170,7 @@ export const App = () => {
         setInitError('__OPEN_IN_VK__');
         return;
       }
-      if (message.includes('Invalid sign')) {
-        message = 'Ошибка VK-авторизации (неверная подпись). Проверьте на backend переменную VK_APP_SECRET — это «Защищённый ключ» из dev.vk.com → ваше приложение → Настройки → Ключи.';
-      }
-      setInitError(`Ошибка: ${message} | API: ${apiUrl}`);
+      setInitError('__NETWORK__');
     } finally {
       setInitComplete(true);
       setLoading(false);
@@ -248,8 +244,27 @@ export const App = () => {
 
   if (initError) {
     return (
-      <div className="mashuk-root" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 24, textAlign: 'center' }}>
-        <div className="m-card" style={{ color: '#C53030', marginBottom: 16, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{initError}</div>
+      <div
+        className="mashuk-root"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+          padding: 24,
+          textAlign: 'center',
+        }}
+      >
+        <div className="m-card" style={{ maxWidth: 360, marginBottom: 16 }}>
+          <div className="m-hdr-fl" style={{ marginTop: 0 }}>Фокус дня</div>
+          <div style={{ fontSize: 18, fontWeight: 800, margin: '6px 0 10px', color: 'var(--m-text-main)', lineHeight: 1.3 }}>
+            Связь с Машуком чуть зависла
+          </div>
+          <p style={{ fontSize: 14, color: '#555', margin: 0, lineHeight: 1.45 }}>
+            Видимо, есть проблемы с интернетом. Проверьте сеть и нажмите «Повторить» — день никуда не денется.
+          </p>
+        </div>
         <Button size="l" onClick={runInit}>Повторить</Button>
       </div>
     );

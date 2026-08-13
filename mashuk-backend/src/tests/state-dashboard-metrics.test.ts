@@ -7,6 +7,7 @@ import {
   countThemes,
   isPsychoReason,
   negSharePct,
+  quotePolarity,
   zoneDistCounts,
 } from '../services/analytics/stateDashboardMetrics.js';
 
@@ -38,6 +39,15 @@ describe('stateDashboardMetrics', () => {
     ]);
     assert.ok(themes.some(t => t.name === 'Быт и инфраструктура'));
     assert.ok(!themes.some(t => t.name === 'Внешние события'));
+  });
+
+  it('quotePolarity maps emotion zones to tone', () => {
+    assert.equal(quotePolarity('risk'), 'neg');
+    assert.equal(quotePolarity('fatigue'), 'neg');
+    assert.equal(quotePolarity('lift'), 'pos');
+    assert.equal(quotePolarity('engagement'), 'pos');
+    assert.equal(quotePolarity('neutral'), 'neu');
+    assert.equal(quotePolarity(null), 'neu');
   });
 
   it('buildTransition fills 5×5 matrix', () => {

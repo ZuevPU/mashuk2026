@@ -1356,7 +1356,15 @@ export const upsertDayFocus = async (req: AdminRequest, res: Response): Promise<
   const html = typeof textHtml === 'string' ? textHtml : null;
   const plain = typeof text === 'string'
     ? text
-    : (html ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : null);
+    : (html
+      ? html
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|h[1-6]|li|blockquote)>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+      : null);
   const [existing] = await db.select().from(dayFocus).where(and(
     eq(dayFocus.dayNumber, dayNumber),
     eq(dayFocus.shiftId, shiftId),

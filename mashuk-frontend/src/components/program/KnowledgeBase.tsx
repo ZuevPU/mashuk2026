@@ -50,6 +50,7 @@ interface KnowledgeBaseProps {
     day?: number;
     dayTitle?: string;
     dayDescription?: string | null;
+    dayDescriptionHtml?: string | null;
     opensOn?: string | null;
   } | null;
 }

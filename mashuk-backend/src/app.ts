@@ -54,6 +54,7 @@ export function createApp() {
       'Authorization',
       'X-Admin-Shift-Id',
       'X-Test-Vk-Id',
+      'X-Shift-Id',
       'Accept',
       'Origin',
     ],
@@ -69,6 +70,17 @@ export function createApp() {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader('Vary', 'Origin');
+    }
+    if (origin && isAllowedOrigin(origin) && req.method === 'OPTIONS') {
+      if (!res.getHeader('Access-Control-Allow-Headers')) {
+        res.setHeader(
+          'Access-Control-Allow-Headers',
+          'Content-Type, Authorization, X-Admin-Shift-Id, X-Test-Vk-Id, X-Shift-Id, Accept, Origin',
+        );
+      }
+      if (!res.getHeader('Access-Control-Allow-Methods')) {
+        res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+      }
     }
     next();
   });

@@ -36,6 +36,15 @@ export function isNegZone(zone: string | null | undefined): boolean {
   return zone === 'risk' || zone === 'fatigue';
 }
 
+export type QuotePolarity = 'pos' | 'neg' | 'neu';
+
+/** Тональность комментария по зоне эмоции: подъём/включение → плюс, усталость/риск → минус. */
+export function quotePolarity(zone: string | null | undefined): QuotePolarity {
+  if (zone === 'risk' || zone === 'fatigue') return 'neg';
+  if (zone === 'lift' || zone === 'engagement') return 'pos';
+  return 'neu';
+}
+
 export function zoneDistCounts(zones: Iterable<string | null | undefined>): number[] {
   const counts: Record<ZoneKey, number> = {
     lift: 0, engagement: 0, neutral: 0, fatigue: 0, risk: 0,

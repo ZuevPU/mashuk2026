@@ -8,6 +8,7 @@ import { ProgramTimeline, type ProgramEvent, type ProgramSlot } from '../compone
 import { KnowledgeBasePanel } from '../components/program/KnowledgeBase';
 import { EmptyState } from '../components/EmptyState';
 import { apiGet, apiPost, ApiError } from '../api/client';
+import { focusBodyHtml } from '../utils/focusHtml';
 type DayStatus = 'done' | 'today' | 'future' | 'locked';
 
 export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
@@ -295,6 +296,10 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
     return () => setModal(null);
   }, [setModal]);
 
+  const kbFocusHtml = kb
+    ? focusBodyHtml(kb.dayDescriptionHtml || kb.dayDescription_html, kb.dayDescription)
+    : '';
+
   return (
     <Panel id={id}>
       <PanelHeader fixed>Программа</PanelHeader>
@@ -382,7 +387,12 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
               {kb?.dayTitle && (
                 <div className="m-card" style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 14, fontWeight: 800 }}>{kb.dayTitle}</div>
-                  {kb.dayDescription && <div style={{ fontSize: 11, color: '#666', marginTop: 4, lineHeight: 1.4 }}>{kb.dayDescription}</div>}
+                  {kbFocusHtml ? (
+                    <div
+                      className="m-kb-focus-body"
+                      dangerouslySetInnerHTML={{ __html: kbFocusHtml }}
+                    />
+                  ) : null}
                   <div style={{ fontSize: 10, color: '#888', marginTop: 6 }}>
                     Точки осмысления: {kb.touchpointsCompleted ?? 0} / {kb.touchpointsTotal ?? 7}
                   </div>
