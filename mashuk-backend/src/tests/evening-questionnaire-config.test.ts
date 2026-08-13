@@ -2,9 +2,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
+  copyEveningQuestionnaireContent,
+  eveningOvernightAppliesToDay,
   filterEveningConfigForDirection,
   getEveningOpensAtMsk,
   isEveningOpenForConfig,
+  isEveningOpenForDay,
   isFieldForDirection,
   isFieldVisible,
   resolveEveningConfigForDay,
@@ -221,5 +224,63 @@ describe('eveningQuestionnaireConfig', () => {
     assert.equal(filtered.steps.length, 2);
     assert.deepEqual(filtered.steps[0].fields.map(f => f.key), ['a']);
     assert.deepEqual(filtered.steps[1].fields.map(f => f.key), ['c']);
+  });
+
+  it('overnight 00:00–01:00 MSK is opt-in and only for the operational day', () => {
+    const at0030 = new Date('2026-07-01T21:30:00.000Z'); // 00:30 MSK 2 July
+    const cfg = { steps: [] as never[], opensAtMsk: '22:00' };
+    assert.equal(isEveningOpenForConfig(cfg, at0030), false);
+    assert.equal(isEveningOpenForConfig(cfg, at0030, { allowOvernight: true }), true);
+    assert.equal(isEveningOpenForConfig(cfg, at0030, { allowOvernight: false }), false);
+
+    const start = new Date('2026-07-01T00:00:00+03:00');
+    const settings = { startDate: start, currentDay: 1, totalDays: 8 };
+    // Operational date before 02:00 MSK is still 1 July → day 1
+    assert.equal(eveningOvernightAppliesToDay(1, settings, at0030), true);
+    assert.equal(eveningOvernightAppliesToDay(2, settings, at0030), false);
+    assert.equal(isEveningOpenForDay(cfg, 1, at0030, { settings }), true);
+    assert.equal(isEveningOpenForDay(cfg, 2, at0030, { settings }), false);
+  });
+
+  it('copyEveningQuestionnaireContent copies steps/time, not source publish flags', () => {
+    const src = {
+      opensAtMsk: '21:15',
+      forcePublished: true,
+      forcePublishedAt: '2026-07-01T17:00:00.000Z',
+      forceUnpublished: true,
+      steps: [{
+        id: 's',
+        title: 'S',
+        fields: [
+          { key: 'e', type: 'program_event' as const, label: 'E', linkedEventIds: [11, 22] },
+          { key: 't', type: 'text' as const, label: 'T' },
+        ],
+      }],
+    };
+    const ontoClosed = copyEveningQuestionnaireContent(src, {
+      preservePublishFrom: { steps: [], forceUnpublished: true },
+    });
+    assert.equal(ontoClosed.opensAtMsk, '21:15');
+    assert.equal(ontoClosed.forcePublished, undefined);
+    assert.equal(ontoClosed.forcePublishedAt, undefined);
+    assert.equal(ontoClosed.forceUnpublished, true);
+    assert.deepEqual(ontoClosed.steps[0].fields[0].linkedEventIds, []);
+    assert.equal(ontoClosed.steps[0].fields[1].key, 't');
+
+    const ontoForced = copyEveningQuestionnaireContent(src, {
+      preservePublishFrom: {
+        steps: [],
+        forcePublished: true,
+        forcePublishedAt: 'keep-me',
+      },
+    });
+    assert.equal(ontoForced.forcePublished, true);
+    assert.equal(ontoForced.forcePublishedAt, 'keep-me');
+    assert.equal(ontoForced.forceUnpublished, undefined);
+
+    const fresh = copyEveningQuestionnaireContent(src);
+    assert.equal(fresh.forcePublished, undefined);
+    assert.equal(fresh.forceUnpublished, undefined);
+    assert.equal(fresh.opensAtMsk, '21:15');
   });
 });

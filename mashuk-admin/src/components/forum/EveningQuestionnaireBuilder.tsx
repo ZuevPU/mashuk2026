@@ -63,6 +63,8 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
   const [forcePublished, setForcePublished] = useState(false);
   const [forceUnpublished, setForceUnpublished] = useState(false);
   const [isOpenNow, setIsOpenNow] = useState(false);
+  const [hasOwnConfig, setHasOwnConfig] = useState(true);
+  const [scheduleDayPublished, setScheduleDayPublished] = useState<boolean | null>(null);
   const [copyFromDay, setCopyFromDay] = useState(1);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewDirectionId, setPreviewDirectionId] = useState<number | null>(null);
@@ -77,12 +79,16 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
     forcePublished?: boolean;
     forceUnpublished?: boolean;
     isOpenNow?: boolean;
+    hasOwnConfig?: boolean;
+    scheduleDayPublished?: boolean | null;
     config?: EveningQuestionnaireConfig;
   }) => {
     setOpensAtMsk(res.opensAtMsk || opensAtMsk);
     setForcePublished(!!res.forcePublished);
     setForceUnpublished(!!res.forceUnpublished);
     setIsOpenNow(!!res.isOpenNow);
+    if (typeof res.hasOwnConfig === 'boolean') setHasOwnConfig(res.hasOwnConfig);
+    if (res.scheduleDayPublished !== undefined) setScheduleDayPublished(res.scheduleDayPublished);
     if (res.config?.steps) setConfig(JSON.parse(JSON.stringify(res.config)));
   };
 
@@ -96,19 +102,17 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
       else if (fallback?.steps?.length) setConfig(JSON.parse(JSON.stringify(fallback)));
       else setConfig(JSON.parse(JSON.stringify(EMPTY_CONFIG)));
       setOpensAtMsk(ev.opensAtMsk || c?.opensAtMsk || '22:00');
-      setForcePublished(!!ev.forcePublished || !!c?.forcePublished);
-      setForceUnpublished(!!ev.forceUnpublished || !!c?.forceUnpublished);
+      setForcePublished(!!ev.forcePublished);
+      setForceUnpublished(!!ev.forceUnpublished);
       setIsOpenNow(!!ev.isOpenNow);
+      setHasOwnConfig(ev.hasOwnConfig !== false);
+      setScheduleDayPublished(
+        ev.scheduleDayPublished === undefined ? null : ev.scheduleDayPublished,
+      );
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    const d = Number(initialDay);
-    if (!Number.isFinite(d) || d < 1 || d > 7) return;
-    setDay(prev => (prev === d ? prev : d));
-  }, [initialDay]);
 
   useEffect(() => {
     loadDay(day).catch(() => {});
@@ -150,10 +154,12 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
   );
 
   // Drop linkedEventIds that belong to another day (typical after «copy day» in admin).
-  // Wait until program events for the day are loaded — otherwise an empty tree would wipe links.
+  // Wait until this day's program tree is non-empty — otherwise an empty tree
+  // would wipe links on a day whose events have not been published yet.
   useEffect(() => {
     if (programEvents.length === 0) return;
     const dayIds = new Set(dayProgramTrees.map(e => e.id));
+    if (dayIds.size === 0) return;
     setConfig(prev => {
       let changed = false;
       const steps = prev.steps.map(step => ({
@@ -320,18 +326,21 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
       }
     }
     act(async () => {
+      const {
+        forcePublished: _fp,
+        forcePublishedAt: _fpa,
+        forceUnpublished: _fu,
+        ...configBody
+      } = config as EveningQuestionnaireConfig & {
+        forcePublished?: boolean;
+        forcePublishedAt?: string;
+        forceUnpublished?: boolean;
+      };
       const res = await adminFetch(`/evening-questionnaire?day=${day}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          config: {
-            ...config,
-            opensAtMsk,
-            forcePublished: forcePublished || undefined,
-            forceUnpublished: forceUnpublished || undefined,
-          },
+          config: { ...configBody, opensAtMsk },
           opensAtMsk,
-          forcePublished,
-          forceUnpublished,
         }),
       });
       applyPublishState(res);
@@ -411,6 +420,11 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
         ))}
       </div>
       {loading && <p className="adm-muted">Загрузка…</p>}
+      {!loading && hasOwnConfig === false && (
+        <p className="adm-forum-hint">
+          Для дня {day} ещё нет своей сохранённой анкеты — показан шаблон. «Сохранить анкету» или публикация запишет копию именно на этот день.
+        </p>
+      )}
 
       <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
         <label className="adm-forum-inline">
@@ -426,11 +440,13 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
         <span className="adm-muted" style={{ fontSize: 12 }}>
           {forceUnpublished
             ? 'Снята с публикации — участники не видят анкету.'
-            : forcePublished
-              ? 'Открыта вручную («Опубликовать сейчас»).'
-              : isOpenNow
-                ? `Сейчас открыта по расписанию (≥ ${opensAtMsk} МСК).`
-                : `Появится автоматически в ${opensAtMsk} МСК.`}
+            : scheduleDayPublished === false
+              ? 'День скрыт в программе — участники не видят анкету, пока день не опубликуют.'
+              : forcePublished
+                ? 'Открыта вручную («Опубликовать сейчас»).'
+                : isOpenNow
+                  ? `Сейчас открыта по расписанию (≥ ${opensAtMsk} МСК).`
+                  : `Появится автоматически в ${opensAtMsk} МСК.`}
         </span>
         <button
           type="button"
@@ -499,13 +515,20 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
         <button
           type="button"
           className="adm-btn adm-btn-secondary adm-btn-sm"
-          onClick={() => act(async () => {
-            await adminFetch('/evening-questionnaire/copy', {
-              method: 'POST',
-              body: JSON.stringify({ fromDay: copyFromDay, toDay: day }),
-            });
-            await loadDay(day);
-          }, 'Скопировано')}
+          disabled={copyFromDay === day}
+          onClick={() => {
+            if (copyFromDay === day) {
+              alert('Выберите другой день — копировать день сам в себя нельзя.');
+              return;
+            }
+            act(async () => {
+              await adminFetch('/evening-questionnaire/copy', {
+                method: 'POST',
+                body: JSON.stringify({ fromDay: copyFromDay, toDay: day }),
+              });
+              await loadDay(day);
+            }, 'Скопировано');
+          }}
         >
           Копировать
         </button>

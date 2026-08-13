@@ -20,6 +20,7 @@ type Props = {
   onViewPracticesResults?: (q: AdminQuestion) => void;
   onCopyToDay: (id: number) => void;
   onHide: (id: number) => void;
+  onUnpublish?: (id: number) => void;
   onDelete: (id: number) => void;
   onOpenModeration?: () => void;
 };
@@ -44,6 +45,7 @@ function QuestionRows({
   onViewPracticesResults,
   onCopyToDay,
   onHide,
+  onUnpublish,
   onDelete,
   onOpenModeration,
 }: Omit<Props, 'onToggleAll' | 'groupByDay'>) {
@@ -119,6 +121,9 @@ function QuestionRows({
                         ? [{ label: 'Результаты голосования', onClick: () => onViewPracticesResults(q) }]
                         : []),
                       { label: 'Скопировать на другой день', onClick: () => onCopyToDay(q.id) },
+                      ...(q.status === 'published' && onUnpublish
+                        ? [{ label: 'Снять с публикации', onClick: () => onUnpublish(q.id) }]
+                        : []),
                       { label: q.isHidden ? 'Показать' : 'Скрыть', onClick: () => onHide(q.id) },
                       { label: 'Удалить', onClick: () => onDelete(q.id), danger: true },
                     ]}
@@ -193,6 +198,7 @@ export function QuestionsListTable({
   onViewPracticesResults,
   onCopyToDay,
   onHide,
+  onUnpublish,
   onDelete,
   onOpenModeration,
 }: Props) {
@@ -242,6 +248,7 @@ export function QuestionsListTable({
     onViewPracticesResults,
     onCopyToDay,
     onHide,
+    onUnpublish,
     onDelete,
     onOpenModeration,
   };

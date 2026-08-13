@@ -13,6 +13,7 @@ type HomeEveningPayload = {
     available: boolean;
     opensAt?: string | null;
     completed: boolean;
+    forceUnpublished?: boolean;
   } & EveningQuestionnaireProps['questionnaire'];
 };
 
@@ -65,7 +66,9 @@ export function EveningDaySummaryFlow({ onClose, onSubmitted }: Props) {
       <Div style={{ padding: 16, fontSize: 13, lineHeight: 1.45 }}>
         {eq?.completed
           ? 'Вы уже заполнили итоговую анкету за сегодня.'
-          : `Итоговая анкета откроется в ${eq?.opensAt || '22:00'} МСК. Это серия вопросов на главной — не одно поле.`}
+          : eq?.forceUnpublished
+            ? 'Итоговая анкета снята с публикации.'
+            : `Итоговая анкета откроется в ${eq?.opensAt || '22:00'} МСК. Это серия вопросов на главной — не одно поле.`}
         <Button size="l" stretched style={{ marginTop: 14 }} onClick={onClose}>
           Закрыть
         </Button>

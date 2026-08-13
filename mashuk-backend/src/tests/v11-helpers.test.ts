@@ -57,9 +57,9 @@ describe('touchpoint access', () => {
     );
   });
 
-  it('marks overdue when closeTime passed on current day', () => {
+  it('locks when closeTime passed on current day', () => {
     const past = new Date(Date.now() - 3600000);
-    assert.equal(getTouchpointAccess(3, 3, past), 'overdue');
+    assert.equal(getTouchpointAccess(3, 3, past), 'locked');
   });
 
   it('marks soon when publishTime in future', () => {
@@ -75,14 +75,14 @@ describe('touchpoint access', () => {
     );
   });
 
-  it('keeps block reflections overdue until Moscow midnight', () => {
+  it('locks at closeTime even for until_midnight catch-up policy', () => {
     // close 12:00 MSK (= 09:00 UTC) on 2026-08-12
     const close = new Date(Date.UTC(2026, 7, 12, 9, 0, 0));
-    const beforeMidnight = new Date(Date.UTC(2026, 7, 12, 20, 30, 0)); // 23:30 MSK
+    const afterClose = new Date(Date.UTC(2026, 7, 12, 10, 0, 0)); // 13:00 MSK
     const afterMidnight = new Date(Date.UTC(2026, 7, 12, 21, 0, 0)); // 00:00 MSK next day
     assert.equal(
-      getTouchpointAccess(3, 3, close, beforeMidnight, null, 'until_midnight'),
-      'overdue',
+      getTouchpointAccess(3, 3, close, afterClose, null, 'until_midnight'),
+      'locked',
     );
     assert.equal(
       getTouchpointAccess(3, 3, close, afterMidnight, null, 'until_midnight'),
@@ -91,12 +91,12 @@ describe('touchpoint access', () => {
     assert.ok(moscowAnswerDeadline(close).getTime() === afterMidnight.getTime());
   });
 
-  it('keeps after_blocks answerable until admin removes (past day + past close)', () => {
+  it('locks after_blocks / practices after closeTime; keeps until_admin only without closeTime', () => {
     const close = new Date(Date.UTC(2026, 7, 12, 9, 0, 0));
     const nextDay = new Date(Date.UTC(2026, 7, 13, 12, 0, 0));
     assert.equal(
       getTouchpointAccess(3, 5, close, nextDay, null, 'until_admin'),
-      'overdue',
+      'locked',
     );
     assert.equal(
       getTouchpointAccess(3, 3, null, nextDay, null, 'until_admin'),

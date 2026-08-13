@@ -42,6 +42,11 @@ describe('questionAutoNotify helpers', () => {
     assert.equal(isQuestionLiveNow({ status: 'draft' }, now), false);
     assert.equal(isQuestionLiveNow({ status: 'published', isHidden: true }, now), false);
     assert.equal(isQuestionLiveNow({ status: 'published', publishTime: null }, now), true);
+    assert.equal(isQuestionLiveNow({
+      status: 'published',
+      publishTime: new Date('2026-08-12T11:00:00+03:00'),
+      closeTime: new Date('2026-08-12T11:30:00+03:00'),
+    }, now), false);
   });
 
   it('builds stable open trigger', () => {

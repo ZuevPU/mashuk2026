@@ -62,13 +62,9 @@ export function questionsAreVisibilityTwins(a: Q, b: Q): boolean {
   return false;
 }
 
-/** Apply isHidden to the question and all non-archived twins on the same shift. */
-export async function setQuestionHiddenCascade(
-  questionId: number,
-  isHidden: boolean,
-): Promise<{ ids: number[]; count: number }> {
+async function twinIdsForQuestion(questionId: number): Promise<number[]> {
   const [target] = await db.select().from(questions).where(eq(questions.id, questionId)).limit(1);
-  if (!target) return { ids: [], count: 0 };
+  if (!target) return [];
 
   const siblings = await db.select().from(questions).where(and(
     target.shiftId != null ? eq(questions.shiftId, target.shiftId) : eq(questions.id, target.id),
@@ -80,11 +76,37 @@ export async function setQuestionHiddenCascade(
       .filter(s => questionsAreVisibilityTwins(target, s))
       .map(s => s.id),
   )];
-
   if (!twinIds.length) twinIds.push(target.id);
+  return twinIds;
+}
+
+/** Apply isHidden to the question and all non-archived twins on the same shift. */
+export async function setQuestionHiddenCascade(
+  questionId: number,
+  isHidden: boolean,
+): Promise<{ ids: number[]; count: number }> {
+  const twinIds = await twinIdsForQuestion(questionId);
+  if (!twinIds.length) return { ids: [], count: 0 };
 
   await db.update(questions)
     .set({ isHidden })
+    .where(inArray(questions.id, twinIds));
+
+  return { ids: twinIds, count: twinIds.length };
+}
+
+/**
+ * Снятие с публикации должно убирать и близнецов (тот же слот/день),
+ * иначе в приложении остаётся другой published id.
+ */
+export async function setQuestionUnpublishedCascade(
+  questionId: number,
+): Promise<{ ids: number[]; count: number }> {
+  const twinIds = await twinIdsForQuestion(questionId);
+  if (!twinIds.length) return { ids: [], count: 0 };
+
+  await db.update(questions)
+    .set({ status: 'draft' })
     .where(inArray(questions.id, twinIds));
 
   return { ids: twinIds, count: twinIds.length };

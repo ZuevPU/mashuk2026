@@ -17,7 +17,7 @@ const FORUM_SETTINGS_NAV: HubNavItem[] = [
   { id: 'forum-cfg-kb', label: 'База знаний' },
   { id: 'forum-cfg-groups', label: 'Группы' },
   { id: 'forum-cfg-focus', label: 'Фокус дня' },
-  { id: 'forum-cfg-evening', label: 'Анкета' },
+  { id: 'forum-cfg-evening', label: 'Итоговая' },
   { id: 'forum-cfg-menu', label: 'Меню' },
   { id: 'forum-cfg-pdf', label: 'Профиль' },
   { id: 'forum-cfg-consents', label: 'Согласия' },
@@ -44,7 +44,13 @@ function plainFocusToHtml(text: string): string {
 
 type ForumSegment = 'settings' | 'org';
 
-export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
+type ForumTabProps = AdminTabProps & {
+  /** Прокрутить к якорю после загрузки (например итоговая анкета вечера). */
+  focusAnchor?: string | null;
+  focusNonce?: number;
+};
+
+export function ForumTab({ adminFetch, act, reloadKey, focusAnchor, focusNonce }: ForumTabProps) {
   const [forumSegment, setForumSegment] = useState<ForumSegment>('settings');
   const [forumSettings, setForumSettings] = useState<any>(null);
   const [recThreshold, setRecThreshold] = useState(1);
@@ -123,6 +129,30 @@ export function ForumTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   useEffect(() => {
     load().catch(() => setLoading(false));
   }, [load, reloadKey]);
+
+  useEffect(() => {
+    if (!focusAnchor) return;
+    setForumSegment('settings');
+  }, [focusAnchor, focusNonce]);
+
+  useEffect(() => {
+    if (!focusAnchor || loading) return;
+    let cancelled = false;
+    const tryScroll = (attempt: number) => {
+      if (cancelled) return;
+      const el = document.getElementById(focusAnchor);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      if (attempt < 16) window.setTimeout(() => tryScroll(attempt + 1), 50);
+    };
+    const t = window.setTimeout(() => tryScroll(0), 40);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [focusAnchor, focusNonce, loading]);
 
   const saveForumSettings = (patch: Record<string, unknown>) =>
     act(async () => {

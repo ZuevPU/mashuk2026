@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { participantDayState } from '../db/schema.js';
 import {
-  isEveningOpenForConfig,
+  isEveningOpenForDay,
   resolveEveningConfigForDay,
   type EveningQuestionnaireConfig,
 } from './eveningQuestionnaireConfig.js';
@@ -54,7 +54,8 @@ export async function resolveEveningSurveyDayForParticipant(
   const prev = effective - 1;
   const prevConfig = resolveEveningConfigForDay(settings as never, prev);
   const prevDayPublished = await getScheduleDayPublished(prev);
-  const previousDayOpen = isEveningOpenForConfig(prevConfig, now, {
+  const previousDayOpen = isEveningOpenForDay(prevConfig, prev, now, {
+    settings,
     scheduleDayPublished: prevDayPublished,
   });
 

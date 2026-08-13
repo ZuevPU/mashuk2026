@@ -56,9 +56,11 @@ export function isQuestionLiveNow(q: {
   status?: string | null;
   isHidden?: boolean | null;
   publishTime?: Date | null;
+  closeTime?: Date | null;
 }, now = new Date()): boolean {
   if (q.status !== 'published' || q.isHidden === true) return false;
   if (q.publishTime && q.publishTime.getTime() > now.getTime()) return false;
+  if (q.closeTime && q.closeTime.getTime() < now.getTime()) return false;
   return true;
 }
 

@@ -10,7 +10,8 @@ import {
   eveningProgramEventFields,
   filterEveningConfigForDirection,
   getEveningOpensAtMsk,
-  isEveningOpenForConfig,
+  isEveningOpenForDay,
+  isForcePublishedActive,
   resolveEveningConfigForDay,
   type EveningQuestionnaireConfig,
 } from '../services/eveningQuestionnaireConfig.js';
@@ -205,7 +206,10 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
     const opensAt = getEveningOpensAtMsk(eveningConfig);
     const scheduleDayPublished = await getScheduleDayPublished(dayNumber);
     if (
-      !isEveningOpenForConfig(eveningConfig, new Date(), { scheduleDayPublished })
+      !isEveningOpenForDay(eveningConfig, dayNumber, new Date(), {
+        settings,
+        scheduleDayPublished,
+      })
       && process.env.NODE_ENV !== 'test'
     ) {
       res.status(400).json({
@@ -364,7 +368,8 @@ export async function loadDayContext(
   const scheduleDayPublished = dayNumber >= 1 && dayNumber <= 7
     ? await getScheduleDayPublished(dayNumber)
     : null;
-  const eveningOpen = dayNumber >= 1 && dayNumber <= 7 && isEveningOpenForConfig(config, now, {
+  const eveningOpen = dayNumber >= 1 && dayNumber <= 7 && isEveningOpenForDay(config, dayNumber, now, {
+    settings,
     scheduleDayPublished,
   });
   const draft = state?.eveningDraft as {
@@ -412,7 +417,7 @@ export async function loadDayContext(
       available: eveningOpen && !eveningDone,
       open: eveningOpen,
       opensAt,
-      forcePublished: !!config.forcePublished,
+      forcePublished: isForcePublishedActive(config),
       forceUnpublished: !!config.forceUnpublished,
       completed: eveningDone,
       askTomorrowRole,

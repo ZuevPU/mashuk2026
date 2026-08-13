@@ -384,6 +384,19 @@ export const crudQuestions = {
       delete patch.isHidden;
     }
 
+    const statusNext = typeof patch.status === 'string' ? patch.status : undefined;
+    const unpublishing = statusNext === 'draft' && before.status === 'published';
+    if (unpublishing) {
+      const { setQuestionUnpublishedCascade } = await import('../services/questionHideCascade.js');
+      await setQuestionUnpublishedCascade(id);
+      delete patch.status;
+    }
+    if (statusNext === 'published') {
+      patch.isHidden = false;
+      const { setQuestionHiddenCascade } = await import('../services/questionHideCascade.js');
+      await setQuestionHiddenCascade(id, false);
+    }
+
     const [updated] = Object.keys(patch).length
       ? await db.update(questions)
         .set(patch as Partial<typeof questions.$inferInsert>)
@@ -683,7 +696,14 @@ export const crudQuestions = {
         await autoNotifyTouchpointIfLive(q);
       }
     } else if (action === 'draft') {
+      const { setQuestionUnpublishedCascade } = await import('../services/questionHideCascade.js');
+      const all = new Set<number>();
+      for (const qid of ids) {
+        const r = await setQuestionUnpublishedCascade(qid);
+        for (const tid of r.ids) all.add(tid);
+      }
       await db.update(questions).set({ status: 'draft' }).where(inArray(questions.id, ids));
+      void all;
     }
 
     const { logAdminAction } = await import('../services/adminActionsLog.js');

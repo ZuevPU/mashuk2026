@@ -6,7 +6,7 @@ import {
 import { matchesAgeCategory, matchesActivity } from '../analytics/cohortFilters.js';
 import {
   DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
-  isEveningOpenForConfig,
+  isEveningOpenForDay,
   resolveEveningConfigForDay,
   type EveningField,
 } from '../eveningQuestionnaireConfig.js';
@@ -253,7 +253,9 @@ export async function collectEveningExportRows(
     : (settings.currentDay ?? 1);
   const eveningCfg = resolveEveningConfigForDay(settings as never, dayForStatus);
   const eveningForceUnpublished = !!eveningCfg.forceUnpublished;
-  const eveningOpenNow = isEveningOpenForConfig(eveningCfg);
+  const eveningOpenNow = isEveningOpenForDay(eveningCfg, dayForStatus, new Date(), {
+    settings: settings as never,
+  });
 
   const notes: string[] = [];
   const diagnostics: EveningExportDiagnostics = {

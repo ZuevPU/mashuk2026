@@ -1,5 +1,5 @@
 import type { forumSettings } from '../db/schema.js';
-import { getMoscowParts } from './timePhase.js';
+import { getCalendarForumDay, getMoscowParts } from './timePhase.js';
 import { EVENING_SCALE_KEYS } from './touchpointTemplates.js';
 
 export type EveningFieldType =
@@ -144,7 +144,7 @@ export type EveningQuestionnaireConfig = {
 
 export const DEFAULT_EVENING_OPENS_AT_MSK = '22:00';
 
-function eveningPublishMeta(
+export function eveningPublishMeta(
   config: EveningQuestionnaireConfig,
 ): Pick<EveningQuestionnaireConfig, 'opensAtMsk' | 'forcePublished' | 'forcePublishedAt' | 'forceUnpublished'> {
   const meta: Pick<
@@ -203,8 +203,30 @@ function opensAtToMinutes(hhmm: string): number {
   return h * 60 + m;
 }
 
+type EveningDaySettings = {
+  startDate?: Date | null;
+  currentDay?: number | null;
+  totalDays?: number | null;
+};
+
+/**
+ * 00:00–01:00 MSK wrap belongs only to the operational forum day
+ * (calendar day still yesterday until 02:00). Other days must not look «open».
+ */
+export function eveningOvernightAppliesToDay(
+  questionnaireDay: number,
+  settings: EveningDaySettings | null | undefined,
+  now = new Date(),
+): boolean {
+  const cal = getCalendarForumDay(settings?.startDate ?? null, now, settings?.totalDays ?? 8);
+  const operational = cal ?? settings?.currentDay ?? questionnaireDay;
+  return questionnaireDay === operational;
+}
+
 /**
  * Evening questionnaire window: from opensAtMsk until 01:00 MSK.
+ * The 00:00–01:00 wrap is opt-in (`allowOvernight`) so yesterday's unfinished
+ * form does not reopen every night, and admin days 2–7 do not all show «open».
  * forcePublished (with forcePublishedAt) opens early until that same 01:00 cutoff.
  * forceUnpublished always wins. Optional scheduleDayPublished=false hides the survey
  * when the forum day was taken off publication («Скрыть» день).
@@ -212,14 +234,31 @@ function opensAtToMinutes(hhmm: string): number {
 export function isEveningOpenForConfig(
   config: EveningQuestionnaireConfig | null | undefined,
   now = new Date(),
-  opts?: { scheduleDayPublished?: boolean | null },
+  opts?: { scheduleDayPublished?: boolean | null; allowOvernight?: boolean },
 ): boolean {
   if (config?.forceUnpublished) return false;
   if (opts?.scheduleDayPublished === false) return false;
   const { totalMinutes } = getMoscowParts(now);
   const openMinutes = opensAtToMinutes(getEveningOpensAtMsk(config));
-  if (totalMinutes >= openMinutes || totalMinutes < 60) return true;
+  if (totalMinutes >= openMinutes) return true;
+  if (totalMinutes < 60 && opts?.allowOvernight === true) return true;
   return isForcePublishedActive(config, now);
+}
+
+/** Open-window check for a specific forum day (overnight wrap only for that operational day). */
+export function isEveningOpenForDay(
+  config: EveningQuestionnaireConfig | null | undefined,
+  dayNumber: number,
+  now: Date,
+  opts?: {
+    settings?: EveningDaySettings | null;
+    scheduleDayPublished?: boolean | null;
+  },
+): boolean {
+  return isEveningOpenForConfig(config, now, {
+    scheduleDayPublished: opts?.scheduleDayPublished,
+    allowOvernight: eveningOvernightAppliesToDay(dayNumber, opts?.settings, now),
+  });
 }
 
 const SCALE_LABELS: Record<string, string> = {
@@ -405,6 +444,32 @@ export function isFieldForDirection(
   if (ids.length === 0) return true;
   if (directionId == null || !Number.isFinite(directionId)) return false;
   return ids.includes(Math.floor(directionId));
+}
+
+/**
+ * Копия анкеты на другой день: шаги/поля и время открытия.
+ * Ссылки на события дня сбрасываются (id принадлежат fromDay).
+ * Флаги «опубликовать сейчас / снять» целевого дня сохраняются — иначе копия
+ * снимала бы уже открытую анкету или наоборот открывала закрытую.
+ */
+export function copyEveningQuestionnaireContent(
+  src: EveningQuestionnaireConfig,
+  opts?: { preservePublishFrom?: EveningQuestionnaireConfig | null },
+): EveningQuestionnaireConfig {
+  const publish = eveningPublishMeta(opts?.preservePublishFrom || {});
+  const opensAt = src.opensAtMsk?.trim() || publish.opensAtMsk;
+  return {
+    ...publish,
+    ...(opensAt ? { opensAtMsk: opensAt } : {}),
+    steps: (src.steps || []).map(step => ({
+      ...step,
+      fields: (step.fields || []).map(field => (
+        field.type === 'program_event'
+          ? { ...field, linkedEventIds: [] }
+          : { ...field }
+      )),
+    })),
+  };
 }
 
 /** Drop fields (and empty steps) not meant for this participant direction. */

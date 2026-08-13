@@ -22,6 +22,8 @@ import {
   bodyFromDraft,
   draftFromQuestion,
   emptyDraft,
+  fromLocalInputMsk,
+  type QuestionPersistMode,
 } from './types';
 import { ROLE_OPTIONS } from '../onboarding/roleOptions';
 
@@ -290,7 +292,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
     }
   };
 
-  const persist = (publish: boolean) => {
+  const persist = (mode: QuestionPersistMode) => {
     if (!draft.title.trim()) {
       alert('Укажите заголовок вопроса.');
       return;
@@ -307,8 +309,19 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
       alert('Выберите направление: вопрос будет виден только участникам этого направления.');
       return;
     }
+    if (mode === 'schedule' && !draft.publishTime) {
+      alert('Укажите время открытия, чтобы опубликовать по расписанию.');
+      return;
+    }
+    if (mode === 'now' || mode === 'schedule') {
+      const closeIso = fromLocalInputMsk(draft.closeTime);
+      if (closeIso && new Date(closeIso).getTime() <= Date.now()) {
+        alert('Время закрытия уже прошло — вопрос сразу исчезнет у участников. Сдвиньте закрытие.');
+        return;
+      }
+    }
     act(async () => {
-      const body = bodyFromDraft(draft, publish);
+      const body = bodyFromDraft(draft, mode);
       let qid = editingId;
       let res: { question?: AdminQuestion; versioned?: boolean; previousAnswerCount?: number };
       if (editingId) {
@@ -330,11 +343,13 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
         if (res.question) setEditingId(res.question.id);
       }
       await loadQuestions();
-      if (publish) {
+      if (mode === 'now' || mode === 'schedule') {
         setView('list');
         setEditingId(null);
+      } else if (res.question) {
+        setDraft(d => ({ ...d, status: res.question?.status || d.status }));
       }
-    }, publish ? 'Опубликовано' : 'Сохранено');
+    }, mode === 'now' ? 'Опубликовано сейчас' : mode === 'schedule' ? 'Опубликовано по времени' : 'Сохранено');
   };
 
   const duplicateQuestion = (id: number) =>
@@ -356,6 +371,17 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
       });
       await loadQuestions();
     }, 'Скопировано на день');
+  };
+
+  const unpublishQuestion = (id: number) => {
+    act(async () => {
+      await adminFetch(`/questions/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'draft' }),
+      });
+      if (editingId === id) setDraft(d => ({ ...d, status: 'draft' }));
+      await loadQuestions();
+    }, 'Снято с публикации');
   };
 
   const hideQuestion = (id: number) => {
@@ -603,18 +629,12 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
           adminFetch={adminFetch}
           onFormTab={setFormTab}
           onChange={patch => setDraft(d => ({ ...d, ...patch }))}
-          onSaveDraft={() => persist(false)}
-          onPublish={() => persist(true)}
+          onSaveDraft={() => persist('draft')}
+          onPublish={() => persist('schedule')}
+          onPublishNow={() => persist('now')}
           onUnpublish={() => {
             if (!editingId) return;
-            act(async () => {
-              await adminFetch(`/questions/${editingId}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ status: 'draft', isHidden: false }),
-              });
-              setDraft(d => ({ ...d, status: 'draft' }));
-              await loadQuestions();
-            }, 'Снято с публикации');
+            unpublishQuestion(editingId);
           }}
           onRevokePoints={() => {
             if (!editingId) return;
@@ -918,6 +938,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
                 }}
                 onCopyToDay={copyToDay}
                 onHide={hideQuestion}
+                onUnpublish={unpublishQuestion}
                 onDelete={deleteQuestion}
                 onOpenModeration={setTab ? () => setTab('moderation') : undefined}
               />

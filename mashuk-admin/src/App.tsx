@@ -36,7 +36,7 @@ import { QuestionsTab } from './components/questions/QuestionsTab';
 import { ShiftsTab } from './components/shifts/ShiftsTab';
 import { TasksTab } from './components/tasks/TasksTab';
 import { LeaderboardScreen, RatingTab } from './components/rating/RatingTab';
-import { TAB_LABELS, TAB_ORDER, groupedAllowedTabs, type Tab } from './tabs';
+import { TAB_LABELS, TAB_ORDER, groupedAllowedTabs, isNavShortcut, type Tab } from './tabs';
 
 type AdminMe = {
   role?: string;
@@ -86,6 +86,8 @@ export const App = () => {
   const [editingShiftId, setEditingShiftId] = useState<number | null>(() => getAdminEditingShiftId());
   const [activeShiftId, setActiveShiftId] = useState<number | null>(null);
   const [navOpen, setNavOpen] = useState(false);
+  /** Якорь внутри вкладки Форум (итоговая анкета вечера). */
+  const [forumFocus, setForumFocus] = useState<{ anchor: string; nonce: number } | null>(null);
   /** Не сбрасывать вкладку на defaultTab после каждого act()/reloadKey */
   const appliedDefaultTabRef = useRef(false);
 
@@ -188,7 +190,12 @@ export const App = () => {
     setLoginPassword('');
   };
 
-  const tabProps = { adminFetch, act, reloadKey, setTab, adminRole };
+  const selectTab = (next: Tab) => {
+    setTab(next);
+    setForumFocus(null);
+  };
+
+  const tabProps = { adminFetch, act, reloadKey, setTab: selectTab, adminRole };
 
   if (isAuthenticated && isLeaderboardHash()) {
     return (
@@ -272,19 +279,39 @@ export const App = () => {
           {navGroups.map(group => (
             <div key={group.id} className="admin-nav-group">
               <div className="admin-nav-group-label">{group.label}</div>
-              {group.tabs.map(t => (
-                <button
-                  key={t}
-                  type="button"
-                  className={tab === t ? 'on' : ''}
-                  onClick={() => {
-                    setTab(t);
-                    setNavOpen(false);
-                  }}
-                >
-                  {TAB_LABELS[t]}
-                </button>
-              ))}
+              {group.items.map(entry => {
+                if (isNavShortcut(entry)) {
+                  const on = tab === entry.tab && forumFocus?.anchor === entry.anchor;
+                  return (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      className={`admin-nav-sub${on ? ' on' : ''}`}
+                      onClick={() => {
+                        setTab(entry.tab);
+                        setForumFocus({ anchor: entry.anchor, nonce: Date.now() });
+                        setNavOpen(false);
+                      }}
+                    >
+                      {entry.label}
+                    </button>
+                  );
+                }
+                const on = tab === entry && (entry !== 'forum' || !forumFocus);
+                return (
+                  <button
+                    key={entry}
+                    type="button"
+                    className={on ? 'on' : ''}
+                    onClick={() => {
+                      selectTab(entry);
+                      setNavOpen(false);
+                    }}
+                  >
+                    {TAB_LABELS[entry]}
+                  </button>
+                );
+              })}
             </div>
           ))}
         </nav>
@@ -310,7 +337,11 @@ export const App = () => {
             <span />
           </button>
           <div className="admin-topbar-title">
-            <h1>{TAB_LABELS[tab]}</h1>
+            <h1>
+              {tab === 'forum' && forumFocus?.anchor === 'forum-cfg-evening'
+                ? 'Итоговая анкета вечера'
+                : TAB_LABELS[tab]}
+            </h1>
           </div>
           {shiftOptions.length > 0 && (
             <label className="admin-shift-select">
@@ -340,9 +371,15 @@ export const App = () => {
           )}
           {tab === 'directions' && <DirectionsTab {...tabProps} />}
           {tab === 'onboarding' && (
-            <OnboardingTab {...tabProps} onOpenProgram={() => setTab('events')} />
+            <OnboardingTab {...tabProps} onOpenProgram={() => selectTab('events')} />
           )}
-          {tab === 'forum' && <ForumTab {...tabProps} />}
+          {tab === 'forum' && (
+            <ForumTab
+              {...tabProps}
+              focusAnchor={forumFocus?.anchor ?? null}
+              focusNonce={forumFocus?.nonce ?? 0}
+            />
+          )}
           {tab === 'shifts' && <ShiftsTab {...tabProps} />}
           {tab === 'events' && <ProgramTab {...tabProps} />}
           {tab === 'speakers' && <SpeakersTab {...tabProps} />}

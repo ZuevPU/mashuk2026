@@ -46,8 +46,10 @@ import { allocateTaskQrCode, generateQrToken } from '../services/qrService.js';
 import { audienceWriteFields } from '../services/eventAudience.js';
 import {
   DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
+  copyEveningQuestionnaireContent,
   getEveningOpensAtMsk,
-  isEveningOpenForConfig,
+  isEveningOpenForDay,
+  isForcePublishedActive,
   normalizeOpensAtMsk,
   resolveEveningConfigForDay,
   stripPointBFromEveningConfig,
@@ -1065,6 +1067,9 @@ export const getAdminEveningQuestionnaire = async (req: AdminRequest, res: Respo
   const shift = await getShiftById(shiftId);
   const settings = shift ? shiftOpsToForumShape(shift) : null;
   const config = resolveEveningConfigForDay(settings as never, day);
+  const byDay = (settings?.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {};
+  const dayEntry = byDay[String(day)];
+  const hasOwnConfig = !!(dayEntry && Array.isArray(dayEntry.steps) && dayEntry.steps.length);
   const opensAtMsk = getEveningOpensAtMsk(config);
   const { getScheduleDayPublished } = await import('../services/eveningScheduleGate.js');
   const scheduleDayPublished = await getScheduleDayPublished(day, shiftId);
@@ -1074,10 +1079,14 @@ export const getAdminEveningQuestionnaire = async (req: AdminRequest, res: Respo
     config,
     defaultConfig: DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
     opensAtMsk,
-    forcePublished: !!config.forcePublished,
+    forcePublished: isForcePublishedActive(config),
     forceUnpublished: !!config.forceUnpublished,
+    hasOwnConfig,
     scheduleDayPublished,
-    isOpenNow: isEveningOpenForConfig(config, new Date(), { scheduleDayPublished }),
+    isOpenNow: isEveningOpenForDay(config, day, new Date(), {
+      settings: settings as never,
+      scheduleDayPublished,
+    }),
   });
 };
 
@@ -1210,21 +1219,30 @@ export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
   const resolved = resolveEveningConfigForDay(shape as never, day);
   const { getScheduleDayPublished } = await import('../services/eveningScheduleGate.js');
   const scheduleDayPublished = await getScheduleDayPublished(day, shiftId);
+  const forcePublishedActive = isForcePublishedActive(resolved);
   res.json({
     ok: true,
     shiftId,
     config: resolved,
     opensAtMsk: getEveningOpensAtMsk(resolved),
-    forcePublished: !!resolved.forcePublished,
+    forcePublished: forcePublishedActive,
     forceUnpublished: !!resolved.forceUnpublished,
+    hasOwnConfig: true,
     scheduleDayPublished,
-    isOpenNow: isEveningOpenForConfig(resolved, new Date(), { scheduleDayPublished }),
+    isOpenNow: isEveningOpenForDay(resolved, day, new Date(), {
+      settings: shape as never,
+      scheduleDayPublished,
+    }),
   });
 };
 
 export const copyAdminEveningQuestionnaire = async (req: AdminRequest, res: Response): Promise<void> => {
   const fromDay = Math.max(1, Math.min(7, Number(req.body.fromDay) || 1));
   const toDay = Math.max(1, Math.min(7, Number(req.body.toDay) || 1));
+  if (fromDay === toDay) {
+    res.status(400).json({ error: 'Выберите другой день — копировать день сам в себя нельзя' });
+    return;
+  }
   const shiftId = await resolveAdminShiftId(req);
   const current = await getShiftById(shiftId);
   if (!current) {
@@ -1233,22 +1251,12 @@ export const copyAdminEveningQuestionnaire = async (req: AdminRequest, res: Resp
   }
   const shape = shiftOpsToForumShape(current);
   const src = resolveEveningConfigForDay(shape as never, fromDay);
-  // Drop program_event links — event ids belong to fromDay and must be re-picked for toDay.
-  const copied: EveningQuestionnaireConfig = {
-    ...src,
-    steps: (src.steps || []).map(step => ({
-      ...step,
-      fields: (step.fields || []).map(field => (
-        field.type === 'program_event'
-          ? { ...field, linkedEventIds: [] }
-          : field
-      )),
-    })),
-  };
   const byDay = {
     ...((current.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {}),
   };
-  byDay[String(toDay)] = copied;
+  byDay[String(toDay)] = copyEveningQuestionnaireContent(src, {
+    preservePublishFrom: byDay[String(toDay)] || null,
+  });
   const updated = await updateShift(shiftId, { eveningQuestionnaireByDay: byDay });
   clearShiftCaches();
   const nextShape = updated ? shiftOpsToForumShape(updated) : shape;
@@ -2038,14 +2046,19 @@ export const copyQuestionsDay = async (req: AdminRequest, res: Response): Promis
       });
     }
   }
-  if (settings && fromDay >= 1 && fromDay <= 7 && toDay >= 1 && toDay <= 7) {
-    const srcEvening = resolveEveningConfigForDay(settings, fromDay);
-    const byDay = (settings.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {};
-    byDay[String(toDay)] = srcEvening;
-    await db.update(forumSettings)
-      .set({ eveningQuestionnaireByDay: byDay, updatedAt: new Date() })
-      .where(eq(forumSettings.id, settings.id));
-    clearCache('forumSettings');
+  if (fromDay >= 1 && fromDay <= 7 && toDay >= 1 && toDay <= 7) {
+    const shift = await getShiftById(shiftId);
+    if (shift) {
+      const shape = shiftOpsToForumShape(shift);
+      const srcEvening = resolveEveningConfigForDay(shape as never, fromDay);
+      const byDay = {
+        ...((shift.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {}),
+      };
+      byDay[String(toDay)] = copyEveningQuestionnaireContent(srcEvening, {
+        preservePublishFrom: byDay[String(toDay)] || null,
+      });
+      await updateShift(shiftId, { eveningQuestionnaireByDay: byDay });
+    }
   }
   res.json({ ok: true, created: created.length, questions: created, eveningQuestionnaireCopied: fromDay <= 7 && toDay <= 7 });
 };

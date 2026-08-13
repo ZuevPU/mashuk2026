@@ -366,7 +366,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         if (!questionMatchesDay(q, currentDay)) return false;
         if (!questionVisibleToParticipant(q, participant, currentDay)) return false;
         const access = getQuestionAccess(q, currentDay, now);
-        return access === 'open' || access === 'overdue';
+        return access === 'open';
       })
       .map(q => ({
         id: q.id,
@@ -382,6 +382,9 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
           || q.type === 'practices_vote';
         if (!isPractices || q.isHidden) return false;
         if (q.publishTime && q.publishTime > now) return false;
+        if (q.closeTime && q.closeTime < now) return false;
+        const access = getQuestionAccess(q, currentDay, now);
+        if (access !== 'open' && access !== 'overdue') return false;
         return questionAudienceAllowsParticipant(q, participant);
       })
       .sort((a, b) => (b.sortOrder ?? 0) - (a.sortOrder ?? 0) || b.id - a.id);

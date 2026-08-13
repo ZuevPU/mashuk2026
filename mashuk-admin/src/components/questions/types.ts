@@ -274,8 +274,26 @@ function toLocalInput(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const get = (t: string) => parts.find(p => p.type === t)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+}
+
+/** datetime-local wall clock is always Europe/Moscow for forum windows. */
+export function fromLocalInputMsk(value: string): string | null {
+  const v = value.trim();
+  if (!v) return null;
+  const withSeconds = v.length === 16 ? `${v}:00` : v;
+  const d = new Date(`${withSeconds}+03:00`);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 export function draftFromQuestion(q: AdminQuestion, options: QuestionOption[] = []): QuestionDraft {
@@ -332,8 +350,14 @@ export function normalizeReflectionKindForApi(
   return REFLECTION_KINDS.has(rk) ? rk : null;
 }
 
-export function bodyFromDraft(draft: QuestionDraft, publish: boolean): Record<string, unknown> {
+export type QuestionPersistMode = 'draft' | 'now' | 'schedule';
+
+export function bodyFromDraft(draft: QuestionDraft, mode: QuestionPersistMode | boolean): Record<string, unknown> {
+  const persistMode: QuestionPersistMode = typeof mode === 'boolean'
+    ? (mode ? 'schedule' : 'draft')
+    : mode;
   const isPractices = draft.questionKind === 'practices_vote' || draft.answerType === 'practices_vote';
+  const publishing = persistMode === 'now' || persistMode === 'schedule';
   const body: Record<string, unknown> = {
     title: draft.title.trim(),
     subtitle: draft.subtitle.trim() || null,
@@ -352,7 +376,7 @@ export function bodyFromDraft(draft: QuestionDraft, publish: boolean): Record<st
     audienceGroupId: draft.audienceGroupId ? Number(draft.audienceGroupId) : null,
     audienceRole: draft.audienceRole.trim() || null,
     isRequired: draft.isRequired,
-    isHidden: draft.isHidden,
+    isHidden: publishing ? false : draft.isHidden,
     points: Number(draft.points),
     sortOrder: Number(draft.sortOrder),
     pushOnPublish: draft.pushOnPublish,
@@ -366,7 +390,7 @@ export function bodyFromDraft(draft: QuestionDraft, publish: boolean): Record<st
         optionValues: draft.showWhenOptionValues,
       }
       : null,
-    status: publish ? 'published' : draft.status === 'published' ? 'published' : 'draft',
+    status: publishing ? 'published' : (draft.status === 'published' ? 'published' : 'draft'),
   };
   if (isPractices) {
     body.practicesConfig = {
@@ -387,11 +411,12 @@ export function bodyFromDraft(draft: QuestionDraft, publish: boolean): Record<st
       })).filter(p => p.title),
     };
   }
-  if (draft.publishTime) body.publishTime = new Date(draft.publishTime).toISOString();
-  else body.publishTime = null;
-  if (draft.closeTime) body.closeTime = new Date(draft.closeTime).toISOString();
-  else body.closeTime = null;
-  if (publish && !draft.publishTime) body.publishTime = new Date().toISOString();
+  if (persistMode === 'now') {
+    body.publishTime = new Date().toISOString();
+  } else {
+    body.publishTime = fromLocalInputMsk(draft.publishTime);
+  }
+  body.closeTime = fromLocalInputMsk(draft.closeTime);
   return body;
 }
 

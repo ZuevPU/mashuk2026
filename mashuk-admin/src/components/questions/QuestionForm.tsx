@@ -28,6 +28,7 @@ type Props = {
   onChange: (patch: Partial<QuestionDraft>) => void;
   onSaveDraft: () => void;
   onPublish: () => void;
+  onPublishNow?: () => void;
   onUnpublish?: () => void;
   onRevokePoints?: () => void;
   onViewPracticesResults?: () => void;
@@ -61,6 +62,7 @@ export function QuestionForm({
   onChange,
   onSaveDraft,
   onPublish,
+  onPublishNow,
   onUnpublish,
   onRevokePoints,
   onViewPracticesResults,
@@ -684,19 +686,19 @@ export function QuestionForm({
 
           <div className="form-row">
             <label className="adm-field">
-              <span className="adm-label">Открытие</span>
+              <span className="adm-label">Открытие (МСК)</span>
               <input type="datetime-local" className="adm-input" value={draft.publishTime} onChange={e => onChange({ publishTime: e.target.value })} />
             </label>
             <label className="adm-field">
-              <span className="adm-label">Закрытие</span>
+              <span className="adm-label">Закрытие (МСК)</span>
               <input type="datetime-local" className="adm-input" value={draft.closeTime} onChange={e => onChange({ closeTime: e.target.value })} />
             </label>
           </div>
-          {(draft.questionKind === 'after_blocks' || draft.questionKind === 'practices_vote') && (
-            <p className="adm-forum-hint" style={{ marginTop: 0 }}>
-              После времени закрытия вопрос не исчезает сам — остаётся у участников, пока вы не снимете его с публикации.
-            </p>
-          )}
+          <p className="adm-forum-hint" style={{ marginTop: 0 }}>
+            После времени закрытия вопрос пропадает у участников (ответить больше нельзя).
+            Если закрытие не задано — вопрос висит, пока не нажмёте «Снять с публикации».
+            «Опубликовать сейчас» открывает сразу, даже если в поле открытия стоит будущее время.
+          </p>
 
           <fieldset className="adm-field">
             <legend className="adm-label">Аудитория</legend>
@@ -778,28 +780,54 @@ export function QuestionForm({
               <input className="adm-input" value={draft.pushTemplate} onChange={e => onChange({ pushTemplate: e.target.value })} placeholder="Новый вопрос: …" />
             </label>
           )}
-
-          <div className="form-row" style={{ marginTop: 16, gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" className="adm-btn adm-btn-secondary" onClick={onSaveDraft}>Сохранить черновик</button>
-            <button type="button" className="adm-btn" onClick={onPublish}>
-              {draft.publishTime ? 'Опубликовать по времени' : 'Опубликовать сейчас'}
-            </button>
-            {onUnpublish && draft.status === 'published' && (
-              <button type="button" className="adm-btn adm-btn-danger" onClick={onUnpublish}>Снять с публикации</button>
-            )}
-            {onRevokePoints && !isNew && currentQuestionId && (
-              <button
-                type="button"
-                className="adm-btn adm-btn-danger"
-                onClick={onRevokePoints}
-                title="Снять у всех начисленные за этот вопрос баллы"
-              >
-                Аннулировать баллы
-              </button>
-            )}
-          </div>
         </>
       )}
+
+      <div className="form-row" style={{ marginTop: 16, gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" className="adm-btn adm-btn-secondary" onClick={onSaveDraft}>Сохранить черновик</button>
+        <button
+          type="button"
+          className="adm-btn"
+          onClick={onPublish}
+          disabled={!draft.publishTime}
+          title={draft.publishTime ? 'Станет виден участникам в указанное время открытия' : 'Сначала укажите время открытия'}
+        >
+          Опубликовать по времени
+        </button>
+        <button
+          type="button"
+          className="adm-btn adm-btn-primary"
+          onClick={onPublishNow || onPublish}
+        >
+          Опубликовать сейчас
+        </button>
+        {onUnpublish && (
+          <button
+            type="button"
+            className="adm-btn adm-btn-danger"
+            onClick={onUnpublish}
+            disabled={isNew || draft.status !== 'published'}
+            title={isNew || draft.status !== 'published' ? 'Сначала опубликуйте вопрос' : 'Скрыть у всех участников, включая копии того же слота'}
+          >
+            Снять с публикации
+          </button>
+        )}
+        {onRevokePoints && !isNew && currentQuestionId && (
+          <button
+            type="button"
+            className="adm-btn adm-btn-danger"
+            onClick={onRevokePoints}
+            title="Снять у всех начисленные за этот вопрос баллы"
+          >
+            Аннулировать баллы
+          </button>
+        )}
+      </div>
+      <p className="adm-muted" style={{ fontSize: 12, margin: '8px 0 0' }}>
+        Сейчас: {draft.status === 'published' ? (draft.isHidden ? 'скрыт' : 'опубликован') : 'черновик'}
+        {draft.publishTime ? ` · открытие ${draft.publishTime.replace('T', ' ')} МСК` : ''}
+        {draft.closeTime ? ` · закрытие ${draft.closeTime.replace('T', ' ')} МСК` : ''}
+      </p>
     </div>
   );
 }

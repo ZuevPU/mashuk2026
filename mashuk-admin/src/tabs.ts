@@ -54,38 +54,64 @@ export const TAB_LABELS: Record<Tab, string> = {
   medals: 'Медали',
 };
 
+/** Якорь на блок внутри вкладки (не отдельное право доступа). */
+export type NavShortcut = {
+  kind: 'anchor';
+  id: string;
+  label: string;
+  tab: Tab;
+  anchor: string;
+};
+
+export type NavEntry = Tab | NavShortcut;
+
+export function isNavShortcut(entry: NavEntry): entry is NavShortcut {
+  return typeof entry === 'object' && entry != null && entry.kind === 'anchor';
+}
+
+export const FORUM_EVENING_NAV: NavShortcut = {
+  kind: 'anchor',
+  id: 'forum-evening',
+  label: 'Итоговая анкета вечера',
+  tab: 'forum',
+  anchor: 'forum-cfg-evening',
+};
+
 /** Группы боковой навигации (Apple Settings–style) */
-export const NAV_GROUPS: { id: string; label: string; tabs: Tab[] }[] = [
+export const NAV_GROUPS: { id: string; label: string; items: NavEntry[] }[] = [
   {
     id: 'people',
     label: 'Участники',
-    tabs: ['participants', 'directions', 'onboarding'],
+    items: ['participants', 'directions', 'onboarding'],
   },
   {
     id: 'program',
     label: 'Программа',
-    tabs: ['forum', 'shifts', 'events', 'speakers', 'knowledge', 'tasks', 'questions'],
+    items: ['forum', FORUM_EVENING_NAV, 'shifts', 'events', 'speakers', 'knowledge', 'tasks', 'questions'],
   },
   {
     id: 'engagement',
     label: 'Вовлечённость',
-    tabs: ['moderation', 'piggybank', 'levels', 'medals', 'rating'],
+    items: ['moderation', 'piggybank', 'levels', 'medals', 'rating'],
   },
   {
     id: 'insights',
     label: 'Аналитика',
-    tabs: ['hub', 'analytics', 'exports', 'data'],
+    items: ['hub', 'analytics', 'exports', 'data'],
   },
   {
     id: 'system',
     label: 'Система',
-    tabs: ['push', 'recommendation-tags', 'admins', 'journal'],
+    items: ['push', 'recommendation-tags', 'admins', 'journal'],
   },
 ];
 
-export function groupedAllowedTabs(allowed: Tab[]): { id: string; label: string; tabs: Tab[] }[] {
+export function groupedAllowedTabs(allowed: Tab[]): { id: string; label: string; items: NavEntry[] }[] {
   const allow = new Set(allowed);
   return NAV_GROUPS
-    .map(g => ({ ...g, tabs: g.tabs.filter(t => allow.has(t)) }))
-    .filter(g => g.tabs.length > 0);
+    .map(g => ({
+      ...g,
+      items: g.items.filter(e => (isNavShortcut(e) ? allow.has(e.tab) : allow.has(e))),
+    }))
+    .filter(g => g.items.length > 0);
 }

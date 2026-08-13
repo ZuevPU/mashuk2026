@@ -20,9 +20,10 @@ import {
   lateAnswerPolicyForQuestion,
 } from '../services/helpers.js';
 import {
-  isEveningOpenForConfig,
+  isEveningOpenForDay,
   resolveEveningConfigForDay,
 } from '../services/eveningQuestionnaireConfig.js';
+import { getScheduleDayPublished } from '../services/eveningScheduleGate.js';
 import { isEveningTouchpointSlot, questionMatchesTouchpointSlot } from '../services/touchpointProgress.js';
 import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
 import { awardPoints, pointsActionForQuestion } from '../services/pointsService.js';
@@ -181,7 +182,11 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
     });
 
     const eveningCfg = resolveEveningConfigForDay(settings as never, currentDay);
-    const eveningOpenNow = isEveningOpenForConfig(eveningCfg, now);
+    const scheduleDayPublished = await getScheduleDayPublished(currentDay);
+    const eveningOpenNow = isEveningOpenForDay(eveningCfg, currentDay, now, {
+      settings: settings as never,
+      scheduleDayPublished,
+    });
 
     const result = visible
       .map(q => {
@@ -227,8 +232,11 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
         // Unanswered evening stub is never listed — real UI is Home/Questions eveningCard at opensAt.
         if (isEveningSummaryStubQuestion(q)) return false;
         if (q.access === 'soon') return false;
-        // Locked = day/window over — do not show «Заморожено» from previous or closed slots.
+        // Locked = окно/день закрыты — не показываем ни «Заморожено», ни просрочку после closeTime.
         if (q.access === 'locked') return false;
+        if (q.access === 'overdue' && q.closeTime && new Date(q.closeTime).getTime() < now.getTime()) {
+          return false;
+        }
         const sw = q.showWhen as { questionId?: number; optionValues?: string[] } | null;
         if (sw?.questionId && Array.isArray(sw.optionValues) && sw.optionValues.length) {
           const parentAns = answerByQuestion.get(sw.questionId);

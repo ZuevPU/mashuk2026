@@ -251,7 +251,8 @@ export function lateAnswerPolicyForQuestion(q: {
     return 'hard_close';
   }
 
-  // Практики — висят, пока админ не скроет / не снимет
+  // Практики без окна закрытия висят, пока админ не снимет.
+  // Если closeTime задан — getTouchpointAccess всё равно залочит по времени.
   if (kind === 'practices_vote') {
     return 'until_admin';
   }
@@ -286,7 +287,7 @@ export function moscowAnswerDeadline(closeTime: Date): Date {
  * - dayNumber < effectiveCurrentDay → locked (день закончился / прошёл)
  * - dayNumber > effectiveCurrentDay → soon
  * - publishTime > now → soon (ещё не открылось)
- * - closeTime < now → overdue или locked в зависимости от LateAnswerPolicy
+ * - closeTime < now → locked (окно закрыто — участник больше не видит вопрос)
  */
 export function getTouchpointAccess(
   questionDay: number | null | undefined,
@@ -298,19 +299,20 @@ export function getTouchpointAccess(
 ): 'open' | 'overdue' | 'locked' | 'soon' {
   const qDay = questionDay ?? currentDay;
 
-  // Админ закрывает вручную — прошлый день и closeTime не лочат ответ
-  if (latePolicy === 'until_admin') {
-    if (publishTime && publishTime > now) return 'soon';
-    if (qDay > currentDay) return 'soon';
-    if (closeTime && closeTime < now) return 'overdue';
-    return 'open';
-  }
+  if (publishTime && publishTime > now) return 'soon';
+  if (qDay > currentDay) return 'soon';
 
-  // Один день льготы для осмыслений (until_midnight / until_day_rollover).
-  // Проверки состояния (hard_close) на D−1 НЕ досдаём — иначе «Дневная проверка»
-  // висит с «Ответить» всю ночь и следующий день.
+  // Заданное окно закрытия — жёсткая граница видимости и ответа.
+  // Иначе «после блоков» / практики висели у участников после closeTime.
+  if (closeTime && closeTime < now) return 'locked';
+
+  // Без closeTime практики и ручные вопросы остаются, пока админ не снимет.
+  if (latePolicy === 'until_admin') return 'open';
+
+  // Один день льготы для осмыслений (until_midnight / until_day_rollover),
+  // только если окно ещё не закрыто (closeTime пустой или в будущем).
+  // Проверки состояния (hard_close) на D−1 НЕ досдаём.
   if (qDay === currentDay - 1) {
-    if (publishTime && publishTime > now) return 'soon';
     if (latePolicy === 'hard_close') return 'locked';
     if (latePolicy === 'until_midnight' && closeTime) {
       return now >= moscowAnswerDeadline(closeTime) ? 'locked' : 'overdue';
@@ -319,15 +321,6 @@ export function getTouchpointAccess(
   }
 
   if (qDay < currentDay) return 'locked';
-  if (qDay > currentDay) return 'soon';
-  if (publishTime && publishTime > now) return 'soon';
-  if (closeTime && closeTime < now) {
-    if (latePolicy === 'hard_close') return 'locked';
-    if (latePolicy === 'until_midnight') {
-      return now >= moscowAnswerDeadline(closeTime) ? 'locked' : 'overdue';
-    }
-    return 'overdue';
-  }
   return 'open';
 }
 
