@@ -10,6 +10,7 @@ import { buildParticipantVolunteerUrl } from '../utils/qrDeepLink';
 import { requestVkPushPermission } from '../utils/pushNotifications';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { ParticipantAvatarCircle } from '../components/ParticipantAvatarCircle';
+import { QrCodeImage } from '../components/QrCodeImage';
 import { PiggybankEntryText } from '../components/PiggybankEntryText';
 
 const TAGS = ['', ...PIGGYBANK_TAGS];
