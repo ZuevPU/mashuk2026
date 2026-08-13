@@ -19,7 +19,7 @@ import { DelayedSurveyPanel } from './panels/DelayedSurvey';
 import { ScanPanel } from './panels/Scan';
 import { OpenInVkScreen } from './components/OpenInVkScreen';
 import { hasUsableLaunchParams, peekPendingTaskQr } from './utils/launchParams';
-import { apiGet, getApiUrl, getHashSearchParams, initAuth } from './api/client';
+import { apiGet, getApiUrl, getHashSearchParams, initAuth, setStoredShiftId } from './api/client';
 
 export const ModalContext = createContext<{ setModal: (modal: ReactNode | null) => void }>({ setModal: () => {} });
 export const useAppModal = () => useContext(ModalContext);
@@ -109,7 +109,11 @@ export const App = () => {
         }
       }
 
-      const auth = await apiGet<{ status: string; blockReason?: string }>('/auth/me');
+      const auth = await apiGet<{
+        status: string;
+        blockReason?: string;
+        user?: { shiftId?: number };
+      }>('/auth/me');
       if (auth.status === 'self_deleted') {
         setSelfDeleted(true);
         setBlockedReason(null);
@@ -126,6 +130,9 @@ export const App = () => {
       } else {
         setBlockedReason(null);
         setIsRegistered(true);
+        if (auth.user?.shiftId) {
+          setStoredShiftId(auth.user.shiftId);
+        }
 
         try {
           const home = await apiGet<{

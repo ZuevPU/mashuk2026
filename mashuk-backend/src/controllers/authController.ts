@@ -18,11 +18,30 @@ import { generateQrToken } from '../services/qrService.js';
 import { awardPoints } from '../services/pointsService.js';
 import { scheduleParticipantAvatarSync } from '../services/participantAvatarSync.js';
 import { getForumSettings } from '../services/helpers.js';
-import { findParticipantByVkInActiveShift, resolveActiveShiftId } from '../services/shiftService.js';
+import {
+  findParticipantForVk,
+  getShiftById,
+  listPublishedShiftsForParticipants,
+  listVkEnrollments,
+  publicShiftCard,
+  requestedShiftIdFromReq,
+} from '../services/shiftService.js';
 
-async function getForumOnboardingConfig() {
-  const settings = await getForumSettings();
+async function getForumOnboardingConfig(shiftId?: number | null) {
+  const settings = await getForumSettings(shiftId);
   return normalizeOnboardingConfig(settings?.roleDiagnosticsConfig);
+}
+
+async function resolvePublishedShiftId(req: VkAuthRequest, explicit?: number | null): Promise<number | null> {
+  const published = await listPublishedShiftsForParticipants();
+  const candidate = explicit
+    || (req.query.shiftId != null ? Number(req.query.shiftId) : null)
+    || requestedShiftIdFromReq(req);
+  if (candidate && Number.isInteger(candidate) && candidate > 0) {
+    return published.some(s => s.id === candidate) ? candidate : null;
+  }
+  if (published.length === 1) return published[0].id;
+  return published.find(s => s.status === 'active')?.id ?? null;
 }
 
 const onboardingBaseSchema = z.object({
@@ -42,6 +61,7 @@ const onboardingBaseSchema = z.object({
   interests: z.array(z.string().min(1).max(100)).min(1).max(30),
   roleAnswers: z.array(z.coerce.number().int().min(0).max(11)).min(1).max(12),
   vkPhotoUrl: z.string().url().max(2000).optional(),
+  shiftId: z.coerce.number().int().positive().optional(),
 });
 
 async function assignGroup(
@@ -87,6 +107,21 @@ async function assignGroup(
   return { groupId: best.id, groupName: best.name };
 }
 
+export const listPublishedShifts = async (req: VkAuthRequest, res: Response): Promise<void> => {
+  try {
+    const vkUserId = req.vkUserId;
+    const published = await listPublishedShiftsForParticipants();
+    const enrollments = vkUserId ? await listVkEnrollments(vkUserId) : [];
+    res.json({
+      shifts: published.map(publicShiftCard),
+      enrollments,
+    });
+  } catch (error) {
+    console.error('listPublishedShifts:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> => {
   try {
     const vkUserId = req.vkUserId;
@@ -95,10 +130,22 @@ export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> =>
       return;
     }
 
-    const user = await findParticipantByVkInActiveShift(vkUserId);
+    const preferredShiftId = requestedShiftIdFromReq(req);
+    const published = await listPublishedShiftsForParticipants();
+    const publishedShifts = published.map(publicShiftCard);
+    const enrollments = await listVkEnrollments(vkUserId);
+    const user = await findParticipantForVk(vkUserId, preferredShiftId, {
+      fallback: preferredShiftId == null,
+    });
 
     if (!user || !user.onboardingCompletedAt) {
-      res.json({ status: 'needs_registration', vkUserId });
+      res.json({
+        status: 'needs_registration',
+        vkUserId,
+        shiftId: preferredShiftId,
+        publishedShifts,
+        enrollments,
+      });
       return;
     }
     if (user.selfDeletedAt) {
@@ -118,7 +165,14 @@ export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> =>
       scheduleParticipantAvatarSync(user.id);
     }
 
-    res.json({ status: 'ok', user });
+    const shift = await getShiftById(user.shiftId);
+    res.json({
+      status: 'ok',
+      user,
+      publishedShifts,
+      enrollments,
+      shiftLive: shift?.status === 'active',
+    });
   } catch (error) {
     console.error('getMe:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -140,7 +194,12 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
     }
 
     const data = parsed.data;
-    const onboardingConfig = await getForumOnboardingConfig();
+    const shiftId = await resolvePublishedShiftId(req, data.shiftId ?? null);
+    if (!shiftId) {
+      res.status(400).json({ error: 'Выберите опубликованную смену' });
+      return;
+    }
+    const onboardingConfig = await getForumOnboardingConfig(shiftId);
     data.goalAnswers = pruneHiddenGoalAnswers(onboardingConfig.goalQuestions, data.goalAnswers);
     const goalErr = validateGoalAnswers(onboardingConfig.goalQuestions, data.goalAnswers);
     if (goalErr) {
@@ -183,8 +242,7 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       return;
     }
 
-    const settings = await getForumSettings();
-    const shiftId = await resolveActiveShiftId();
+    const settings = await getForumSettings(shiftId);
     const diagMatrix = onboardingConfig.optionToRole;
 
     let pedagogicalRole: string;
@@ -195,7 +253,7 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       return;
     }
 
-    const existing = await findParticipantByVkInActiveShift(vkUserId);
+    const existing = await findParticipantForVk(vkUserId, shiftId, { fallback: false });
     if (existing?.selfDeletedAt) {
       res.status(403).json({
         error: 'Вы удалили профиль из программы. Для повторного участия обратитесь к организаторам.',
@@ -271,6 +329,7 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       pedagogicalRole,
       qrToken: generateQrToken(),
       onboardingCompletedAt: new Date(),
+      lastActiveAt: new Date(),
     };
 
     let user;
@@ -312,14 +371,19 @@ export const register = async (req: VkAuthRequest, res: Response): Promise<void>
       return;
     }
 
-    const existing = await findParticipantByVkInActiveShift(vkUserId);
+    const consentVersions = await getActiveConsentVersions();
+    const shiftId = await resolvePublishedShiftId(req, req.body?.shiftId != null ? Number(req.body.shiftId) : null);
+    if (!shiftId) {
+      res.status(400).json({ error: 'Выберите опубликованную смену' });
+      return;
+    }
+
+    const existing = await findParticipantForVk(vkUserId, shiftId, { fallback: false });
     if (existing?.onboardingCompletedAt) {
       res.json({ status: 'ok', user: existing });
       return;
     }
 
-    const consentVersions = await getActiveConsentVersions();
-    const shiftId = await resolveActiveShiftId();
     const values = {
       vkId: vkUserId,
       shiftId,
@@ -340,6 +404,7 @@ export const register = async (req: VkAuthRequest, res: Response): Promise<void>
       position: 'Не указано',
       qrToken: generateQrToken(),
       onboardingCompletedAt: new Date(),
+      lastActiveAt: new Date(),
     };
 
     let user;
@@ -358,11 +423,22 @@ export const register = async (req: VkAuthRequest, res: Response): Promise<void>
   }
 };
 
-export const listOnboardingMeta = async (_req: VkAuthRequest, res: Response): Promise<void> => {
+export const listOnboardingMeta = async (req: VkAuthRequest, res: Response): Promise<void> => {
   try {
+    const shiftId = await resolvePublishedShiftId(req, null);
+    const published = await listPublishedShiftsForParticipants();
+    const publishedShifts = published.map(publicShiftCard);
+    if (!shiftId) {
+      res.json({
+        publishedShifts,
+        groupAssignMode: 'list',
+        groups: [],
+        activeShiftId: null,
+      });
+      return;
+    }
     const roles = await db.select().from(pedagogicalRoles);
-    const settings = await getForumSettings();
-    const shiftId = await resolveActiveShiftId();
+    const settings = await getForumSettings(shiftId);
     const groups = await db.select().from(participantGroups)
       .where(eq(participantGroups.shiftId, shiftId))
       .orderBy(asc(participantGroups.id));
@@ -395,6 +471,7 @@ export const listOnboardingMeta = async (_req: VkAuthRequest, res: Response): Pr
       groupAssignMode: settings?.groupAssignMode || 'list',
       groups: groupsWithFree.filter(g => g.seatsLeft == null || g.seatsLeft > 0),
       activeShiftId: shiftId,
+      publishedShifts,
     });
   } catch (error) {
     console.error('listOnboardingMeta:', error);

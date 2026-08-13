@@ -456,7 +456,7 @@ export function copyEveningQuestionnaireContent(
   src: EveningQuestionnaireConfig,
   opts?: { preservePublishFrom?: EveningQuestionnaireConfig | null },
 ): EveningQuestionnaireConfig {
-  const publish = eveningPublishMeta(opts?.preservePublishFrom || {});
+  const publish = eveningPublishMeta(opts?.preservePublishFrom ?? { steps: [] });
   const opensAt = src.opensAtMsk?.trim() || publish.opensAtMsk;
   return {
     ...publish,

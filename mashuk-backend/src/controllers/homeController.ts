@@ -34,7 +34,7 @@ import { getLevelProgress, totalRatingScore } from '../services/pointsService.js
 import { loadDayContext } from './dayStateController.js';
 import { resolveEveningSurveyDayForParticipant } from '../services/eveningSurveyDay.js';
 import { resolveHomeActiveCard } from '../services/homeActiveCard.js';
-import { resolveActiveShiftId } from '../services/shiftService.js';
+import { getShiftById, isShiftLive } from '../services/shiftService.js';
 import {
   buildSuppressedVisibilityKeys,
   isSuppressedByHiddenTwin,
@@ -43,13 +43,86 @@ import {
 export const getHome = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const participant = req.participant!;
-    const settings = await getForumSettings();
+    const shiftIdForQs = participant.shiftId;
+    const settings = await getForumSettings(shiftIdForQs);
     const now = new Date();
     const totalDays = settings.totalDays ?? 8;
     const timeSlot = getMoscowPhase(now);
     let eveningWrap = isEveningWrapWindow(now);
 
-    const shiftIdForQs = await resolveActiveShiftId();
+    const shift = await getShiftById(shiftIdForQs);
+    if (!isShiftLive(shift)) {
+      const piggyRows = await db.select().from(piggybank)
+        .where(and(eq(piggybank.participantId, participant.id), isNull(piggybank.deletedAt)));
+      const pathProg = await getLevelProgress(participant.pathPoints ?? 0, 'path');
+      const expProg = await getLevelProgress(participant.experiencePoints ?? 0, 'experience');
+      res.json({
+        user: {
+          firstName: participant.firstName,
+          lastName: participant.lastName,
+          direction: participant.direction,
+          pedagogicalRole: participant.pedagogicalRole,
+          groupId: participant.groupId,
+          groupName: participant.groupName,
+        },
+        currentDay: 1,
+        totalDays,
+        timeSlot,
+        eveningWrap: false,
+        currentDate: now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', timeZone: 'Europe/Moscow' }),
+        dayFocus: null,
+        priorityAction: null,
+        activeCard: null,
+        delayedSurvey: null,
+        roleOfDay: null,
+        experiment: null,
+        eveningQuestionnaire: { available: false, completed: false },
+        missedQuestions: [],
+        unansweredAfterBlocks: [],
+        practicesSection: null,
+        counts: { availableQuestions: 0, availableTasks: 0, hasNewTasks: false },
+        points: {
+          path: participant.pathPoints ?? 0,
+          experience: participant.experiencePoints ?? 0,
+          bonus: participant.bonusPoints ?? 0,
+          total: totalRatingScore(
+            participant.pathPoints ?? 0,
+            participant.experiencePoints ?? 0,
+            participant.bonusPoints ?? 0,
+          ),
+          ideas: piggyRows.length,
+          pathLevel: pathProg.level,
+          experienceLevel: expProg.level,
+          pathProgress: pathProg.progress,
+          experienceProgress: expProg.progress,
+        },
+        touchpoints: {
+          completed: 0,
+          total: 0,
+          missed: 0,
+          missedToday: [],
+          missedTodayCount: 0,
+          ctaQuestionId: null,
+          message: 'Программа смены ещё не открыта',
+          items: [],
+        },
+        schedule: [],
+        eveningCard: null,
+        ui: {
+          showTasksBanner: false,
+          showQuickCapture: false,
+          showPiggybankFab: true,
+          showEveningCard: false,
+        },
+        sectionsVisibility: settings.sectionsVisibility ?? {},
+        startDate: settings.startDate ?? null,
+        activePushBanners: [],
+        homeNotice: null,
+        shiftLive: false,
+      });
+      return;
+    }
+
     const publishedDayRows = await db.select({ dayNumber: scheduleDays.dayNumber })
       .from(scheduleDays)
       .where(and(
@@ -551,6 +624,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       startDate: settings.startDate ?? null,
       activePushBanners,
       homeNotice,
+      shiftLive: true,
     });
   } catch (error) {
     console.error('getHome:', error);

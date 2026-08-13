@@ -1,11 +1,24 @@
 import { db } from '../db/index.js';
 import { forumSettings } from '../db/schema.js';
 import { cache } from './cache.js';
-import { resolveActiveShift, shiftOpsToForumShape } from './shiftService.js';
+import { getShiftById, isShiftLive, resolveActiveShift, shiftOpsToForumShape } from './shiftService.js';
 
-export async function getForumSettings() {
-  const cached = cache.get('forumSettings');
+export async function getForumSettings(shiftId?: number | null) {
+  const sid = shiftId != null && Number.isFinite(Number(shiftId)) && Number(shiftId) > 0
+    ? Number(shiftId)
+    : null;
+  const cacheKey = sid != null ? `forumSettings:${sid}` : 'forumSettings';
+  const cached = cache.get(cacheKey);
   if (cached) return cached;
+
+  if (sid != null) {
+    const shift = await getShiftById(sid);
+    if (shift) {
+      const result = shiftOpsToForumShape(shift);
+      cache.set(cacheKey, result);
+      return result;
+    }
+  }
 
   const active = await resolveActiveShift();
   if (active) {
@@ -28,6 +41,12 @@ export async function getForumSettings() {
 
   cache.set('forumSettings', result);
   return result;
+}
+
+export async function forumContextForParticipant(shiftId: number) {
+  const shift = await getShiftById(shiftId);
+  const settings = await getForumSettings(shiftId);
+  return { shiftId, shift, settings, live: isShiftLive(shift) };
 }
 
 export function countWords(text: string): number {

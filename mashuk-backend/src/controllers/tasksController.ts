@@ -97,10 +97,24 @@ function mskTodayStart(now: Date): Date {
 export const listTasks = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const filter = (req.query.filter as string) || 'all';
-    const settings = await getForumSettings();
+    const shiftId = req.participant!.shiftId;
+    const settings = await getForumSettings(shiftId);
     const now = new Date();
-    const { resolveActiveShiftId } = await import('../services/shiftService.js');
-    const shiftId = await resolveActiveShiftId();
+    const { getShiftById, isShiftLive } = await import('../services/shiftService.js');
+    if (!isShiftLive(await getShiftById(shiftId))) {
+      res.json({
+        tasks: [],
+        dayNumber: 1,
+        kbLocked: false,
+        touchpointsCompleted: 0,
+        touchpointsTotal: 0,
+        requiredTouchpoints: 0,
+        pendingTeamInvites: [],
+        progress: { done: 0, total: 0, percent: 0, pointsToday: 0, experienceTotal: 0 },
+        shiftLive: false,
+      });
+      return;
+    }
 
     const allTasksRaw = await db.select().from(tasks).where(eq(tasks.shiftId, shiftId));
     const allTasks = allTasksRaw.filter(t =>

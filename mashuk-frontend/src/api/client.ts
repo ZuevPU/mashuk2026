@@ -105,6 +105,8 @@ function getAuthHeaders(): HeadersInit {
   } else if (!import.meta.env.PROD) {
     headers['X-Test-Vk-Id'] = '1';
   }
+  const shiftId = getStoredShiftId();
+  if (shiftId) headers['X-Shift-Id'] = String(shiftId);
   return headers;
 }
 
@@ -244,4 +246,25 @@ export function getHashSearchParams(): URLSearchParams {
 
 export function getApiUrl(): string {
   return API_URL;
+}
+
+const SHIFT_ID_KEY = 'mashuk-shift-id';
+
+export function getStoredShiftId(): number | null {
+  try {
+    const raw = localStorage.getItem(SHIFT_ID_KEY);
+    const n = Number(raw);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredShiftId(id: number | null): void {
+  try {
+    if (id == null || id <= 0) localStorage.removeItem(SHIFT_ID_KEY);
+    else localStorage.setItem(SHIFT_ID_KEY, String(id));
+  } catch {
+    // ignore quota / private mode
+  }
 }

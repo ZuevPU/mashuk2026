@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { vkAuthMiddleware } from '../middlewares/vkAuth.js';
 import { requireParticipant } from '../middlewares/requireParticipant.js';
 import { adminAuthMiddleware, requireAdminRole } from '../middlewares/adminAuth.js';
-import { getMe, register, completeOnboarding, listOnboardingMeta } from '../controllers/authController.js';
+import { getMe, register, completeOnboarding, listOnboardingMeta, listPublishedShifts } from '../controllers/authController.js';
 import { listDirections } from '../controllers/directionsController.js';
 import { getHome, quickPiggybank } from '../controllers/homeController.js';
 import { updateExperimentStatus, submitEveningQuestionnaire, patchEveningDraft } from '../controllers/dayStateController.js';
@@ -41,6 +41,7 @@ router.get('/directions', listDirections);
 router.get('/consents/active', getActiveConsents);
 
 router.get('/auth/me', authLimiter, vkAuthMiddleware, getMe);
+router.get('/auth/shifts', authLimiter, vkAuthMiddleware, listPublishedShifts);
 router.post('/auth/register', authLimiter, vkAuthMiddleware, register);
 router.post('/auth/onboarding', authLimiter, vkAuthMiddleware, completeOnboarding);
 router.get('/auth/onboarding-meta', authLimiter, vkAuthMiddleware, listOnboardingMeta);

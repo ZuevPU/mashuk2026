@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { participants } from '../db/schema.js';
 import { VkAuthRequest } from './vkAuth.js';
-import { findParticipantByVkInActiveShift } from '../services/shiftService.js';
+import { findParticipantForVk, requestedShiftIdFromReq } from '../services/shiftService.js';
 
 export interface ParticipantRequest extends VkAuthRequest {
   participant?: typeof participants.$inferSelect;
@@ -20,7 +20,10 @@ export const requireParticipant = async (
     return;
   }
 
-  const user = await findParticipantByVkInActiveShift(vkUserId);
+  const preferredShiftId = requestedShiftIdFromReq(req);
+  const user = await findParticipantForVk(vkUserId, preferredShiftId, {
+    fallback: preferredShiftId == null,
+  });
   if (!user || !user.onboardingCompletedAt) {
     res.status(403).json({ error: 'Registration required', status: 'needs_registration' });
     return;

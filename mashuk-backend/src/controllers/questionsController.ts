@@ -139,9 +139,14 @@ async function participantForumDayForShift(
 export const listForumQuestions = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const now = new Date();
-    const settings = await getForumSettings();
-    const { resolveActiveShiftId } = await import('../services/shiftService.js');
-    const shiftId = await resolveActiveShiftId();
+    const me = req.participant!;
+    const shiftId = me.shiftId;
+    const settings = await getForumSettings(shiftId);
+    const { getShiftById, isShiftLive } = await import('../services/shiftService.js');
+    if (!isShiftLive(await getShiftById(shiftId))) {
+      res.json({ questions: [], currentDay: 1, answerConfirm: null, shiftLive: false });
+      return;
+    }
     const currentDay = await participantForumDayForShift(settings, shiftId, now);
     const list = await db.select().from(questions)
       .where(and(
@@ -149,7 +154,6 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
         eq(questions.status, 'published'),
       ));
 
-    const me = req.participant!;
     const [userAnswers, userAttendance] = await Promise.all([
       db.select().from(answers).where(eq(answers.participantId, me.id)),
       db.select({ eventId: eventAttendance.eventId }).from(eventAttendance).where(eq(eventAttendance.participantId, me.id)),
@@ -182,7 +186,12 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
     });
 
     const eveningCfg = resolveEveningConfigForDay(settings as never, currentDay);
-    const scheduleDayPublished = await getScheduleDayPublished(currentDay);
+    const scheduleDayPublished = await getScheduleDayPublished(
+      currentDay,
+      typeof (settings as { shiftId?: number }).shiftId === 'number'
+        ? (settings as { shiftId: number }).shiftId
+        : undefined,
+    );
     const eveningOpenNow = isEveningOpenForDay(eveningCfg, currentDay, now, {
       settings: settings as never,
       scheduleDayPublished,
@@ -256,7 +265,7 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
       .sort((a, b) => (b.sortOrder ?? 0) - (a.sortOrder ?? 0) || a.id - b.id);
 
     const confirm = resolveAnswerConfirmation((settings as { answerConfirmation?: unknown }).answerConfirmation);
-    res.json({ questions: result, currentDay, answerConfirm: confirm });
+    res.json({ questions: result, currentDay, answerConfirm: confirm, shiftLive: true });
   } catch (error) {
     console.error('listForumQuestions:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -310,9 +319,17 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
         return;
       }
     }
-    const settings = await getForumSettings();
-    const { resolveActiveShiftId } = await import('../services/shiftService.js');
-    const shiftId = await resolveActiveShiftId();
+    const settings = await getForumSettings(req.participant!.shiftId);
+    const shiftId = question.shiftId ?? req.participant!.shiftId;
+    if (question.shiftId && question.shiftId !== req.participant!.shiftId) {
+      res.status(403).json({ error: 'Question not available' });
+      return;
+    }
+    const { getShiftById, isShiftLive } = await import('../services/shiftService.js');
+    if (!isShiftLive(await getShiftById(req.participant!.shiftId)) && !hasOwnAnswer) {
+      res.status(403).json({ error: 'Смена ещё не активирована' });
+      return;
+    }
     const currentDay = await participantForumDayForShift(settings, shiftId, new Date());
     const attendedEventIds = new Set(userAttendance.map(a => a.eventId));
 
@@ -359,8 +376,7 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
     const isAfterBlocks = question.questionKind === 'after_blocks' || question.reflectionKind === 'after_blocks';
 
     if ((isLessonRef || hasLinkedEvents || isAfterBlocks) && question.dayNumber) {
-      const { resolveActiveShiftId } = await import('../services/shiftService.js');
-      const shiftId = question.shiftId ?? await resolveActiveShiftId();
+      const shiftId = question.shiftId ?? req.participant!.shiftId;
       const dayEv = await db.select().from(events).where(and(
         eq(events.dayNumber, question.dayNumber),
         eq(events.shiftId, shiftId),
@@ -482,9 +498,17 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
       return;
     }
     const now = new Date();
-    const settings = await getForumSettings();
-    const { resolveActiveShiftId } = await import('../services/shiftService.js');
-    const shiftId = await resolveActiveShiftId();
+    const settings = await getForumSettings(req.participant!.shiftId);
+    const shiftId = question.shiftId ?? req.participant!.shiftId;
+    if (question.shiftId && question.shiftId !== req.participant!.shiftId) {
+      res.status(403).json({ error: 'Question not available' });
+      return;
+    }
+    const { getShiftById, isShiftLive } = await import('../services/shiftService.js');
+    if (!isShiftLive(await getShiftById(req.participant!.shiftId))) {
+      res.status(403).json({ error: 'Смена ещё не активирована' });
+      return;
+    }
     const currentDay = await participantForumDayForShift(settings, shiftId, now);
     const access = getQuestionAccess(question, currentDay, now);
     const latePolicy = lateAnswerPolicyForQuestion(question);
@@ -647,8 +671,7 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
       }
 
       if (question.dayNumber) {
-        const { resolveActiveShiftId } = await import('../services/shiftService.js');
-        const shiftId = question.shiftId ?? await resolveActiveShiftId();
+        const shiftId = question.shiftId ?? req.participant!.shiftId;
         const dayEv = await db.select().from(events).where(and(
           eq(events.dayNumber, question.dayNumber),
           eq(events.shiftId, shiftId),
@@ -1346,7 +1369,7 @@ export const answerExchange = async (req: ParticipantRequest, res: Response): Pr
     let newMedals: Awaited<ReturnType<typeof evaluateMedalsForParticipantDetailed>> = [];
     let confirm = resolveAnswerConfirmation(undefined);
     try {
-      const settings = await getForumSettings();
+      const settings = await getForumSettings(req.participant!.shiftId);
       if (awardAnswerPoints) {
         pointsResult = await awardPoints(
           req.participant!.id,

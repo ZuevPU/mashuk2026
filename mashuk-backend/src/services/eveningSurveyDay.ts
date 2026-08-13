@@ -53,7 +53,12 @@ export async function resolveEveningSurveyDayForParticipant(
 
   const prev = effective - 1;
   const prevConfig = resolveEveningConfigForDay(settings as never, prev);
-  const prevDayPublished = await getScheduleDayPublished(prev);
+  const prevDayPublished = await getScheduleDayPublished(
+    prev,
+    typeof (settings as { shiftId?: number }).shiftId === 'number'
+      ? (settings as { shiftId: number }).shiftId
+      : undefined,
+  );
   const previousDayOpen = isEveningOpenForDay(prevConfig, prev, now, {
     settings,
     scheduleDayPublished: prevDayPublished,

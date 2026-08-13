@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Panel, PanelHeader, Group, Spinner, Select, Button, Snackbar, Checkbox, Input } from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
-import { apiGet, apiPost, apiPatch, apiDownloadBlob, ApiError } from '../api/client';
+import { apiGet, apiPost, apiPatch, apiDownloadBlob, ApiError, getStoredShiftId, setStoredShiftId } from '../api/client';
 import { useAppModal } from '../App';
 import { openQuickCapture } from '../components/QuickCaptureFlow';
 import { EmptyState } from '../components/EmptyState';
@@ -80,6 +80,18 @@ export const ProfilePanel: React.FC<{
   const [pushOptOut, setPushOptOut] = useState<Record<string, boolean>>({});
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [shiftPickerOpen, setShiftPickerOpen] = useState(false);
+  const [publishedShifts, setPublishedShifts] = useState<Array<{
+    id: number;
+    name: string;
+    startDate: string | null;
+    endDate: string | null;
+    totalDays: number;
+  }>>([]);
+  const [shiftEnrollments, setShiftEnrollments] = useState<Array<{
+    shiftId: number;
+    onboardingCompleted: boolean;
+  }>>([]);
   const [medalsCatalog, setMedalsCatalog] = useState<any[]>([]);
   const [lbTrack, setLbTrack] = useState<'total' | 'path' | 'experience'>('total');
   const [lbMode, setLbMode] = useState<'points' | 'nomination'>('points');
@@ -420,6 +432,35 @@ export const ProfilePanel: React.FC<{
               <div style={{ flex: 1 }}>
                 <div className="pf-n">{p.user.firstName} {p.user.lastName}</div>
                 <div className="pf-r">{shiftLine || p.user.direction}</div>
+                <button
+                  type="button"
+                  className="m-link"
+                  style={{
+                    marginTop: 6,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: '#007AFF',
+                    background: 'none',
+                    border: 0,
+                    padding: 0,
+                    cursor: 'pointer',
+                  }}
+                  onClick={async () => {
+                    try {
+                      const data = await apiGet<{
+                        shifts?: typeof publishedShifts;
+                        enrollments?: typeof shiftEnrollments;
+                      }>('/auth/shifts');
+                      setPublishedShifts(data.shifts || []);
+                      setShiftEnrollments(data.enrollments || []);
+                      setShiftPickerOpen(true);
+                    } catch (err) {
+                      setSnackbar(err instanceof ApiError ? err.message : 'Не удалось загрузить смены');
+                    }
+                  }}
+                >
+                  Сменить смену
+                </button>
                 {(p.user.leadingRoleStartName || p.user.pedagogicalRoleName) && (
                   <div style={{ fontSize: 12, color: '#B8621A', marginTop: 4, fontWeight: 700 }}>
                     ◆ Стартовая роль: {p.user.leadingRoleStartName || p.user.pedagogicalRoleName}
@@ -437,6 +478,54 @@ export const ProfilePanel: React.FC<{
                 )}
               </div>
             </div>
+
+            {shiftPickerOpen && (
+              <div className="m-card" style={{ marginTop: 10 }}>
+                <div className="pb-lbl">Сменить смену</div>
+                <p style={{ fontSize: 12, color: '#666', margin: '6px 0 10px', lineHeight: 1.4 }}>
+                  Баллы и ответы каждой смены хранятся отдельно. Если в выбранной смене ещё нет профиля, откроется регистрация.
+                </p>
+                {publishedShifts.map(s => {
+                  const currentId = p.user.shiftId ?? getStoredShiftId();
+                  const current = currentId === s.id;
+                  const enrolled = shiftEnrollments.some(e => e.shiftId === s.id && e.onboardingCompleted);
+                  const start = s.startDate ? new Date(s.startDate).toLocaleDateString('ru-RU') : '—';
+                  const end = s.endDate ? new Date(s.endDate).toLocaleDateString('ru-RU') : start;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className="m-card"
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        marginBottom: 8,
+                        padding: 12,
+                        border: current ? '1.5px solid #007AFF' : '1px solid var(--m-border, #eee)',
+                        background: current ? '#F0F7FF' : '#fff',
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => {
+                        if (current) {
+                          setShiftPickerOpen(false);
+                          return;
+                        }
+                        setStoredShiftId(s.id);
+                        window.location.reload();
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{s.name}{current ? ' · сейчас' : ''}</div>
+                      <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+                        {start} — {end}{enrolled ? ' · профиль есть' : ' · нужна регистрация'}
+                      </div>
+                    </button>
+                  );
+                })}
+                <Button size="s" mode="secondary" onClick={() => setShiftPickerOpen(false)}>
+                  Закрыть
+                </Button>
+              </div>
+            )}
 
             {Array.isArray(p.interests) && p.interests.length > 0 && (
               <div className="m-card">

@@ -5,7 +5,7 @@ import {
 } from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
-import { apiGet, apiPost } from '../api/client';
+import { apiGet, apiPost, getStoredShiftId, setStoredShiftId } from '../api/client';
 import {
   GOAL_QUESTIONS,
   INTEREST_GROUPS,
@@ -48,13 +48,24 @@ interface Direction {
 const DEV_FIRST_NAME = 'Тест';
 const DEV_LAST_NAME = 'Пользователь';
 
-type WizardStep = 1 | 2 | 3 | 4 | 'result' | 'confirm';
+type PublishedShift = {
+  id: number;
+  name: string;
+  startDate: string | null;
+  endDate: string | null;
+  totalDays: number;
+  isLive?: boolean;
+};
+
+type WizardStep = 0 | 1 | 2 | 3 | 4 | 'result' | 'confirm';
 
 export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   id, fetchedUser, isRegistered, onRegistered,
 }) => {
   const routeNavigator = useRouteNavigator();
-  const [step, setStep] = useState<WizardStep>(1);
+  const [step, setStep] = useState<WizardStep>(0);
+  const [publishedShifts, setPublishedShifts] = useState<PublishedShift[]>([]);
+  const [selectedShiftId, setSelectedShiftId] = useState<number | null>(() => getStoredShiftId());
   const [directions, setDirections] = useState<Direction[]>([]);
   const [directionId, setDirectionId] = useState<number | null>(null);
   const [age, setAge] = useState('');
@@ -154,6 +165,20 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         setConsentAnalyticsMeta(data.analytics);
       })
       .catch(() => undefined);
+    apiGet<{ shifts?: PublishedShift[] }>('/auth/shifts')
+      .then(data => {
+        const list = data.shifts || [];
+        setPublishedShifts(list);
+        setSelectedShiftId(prev => {
+          if (prev && list.some(s => s.id === prev)) return prev;
+          return list.length === 1 ? list[0].id : prev;
+        });
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedShiftId) return;
     apiGet<{
       groupAssignMode?: string;
       groups?: { id: number; name: string; seatsLeft: number | null }[];
@@ -166,10 +191,11 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         questions?: Array<{ text: string; options: string[] }>;
         optionToRole?: RoleKey[][];
       };
-    }>('/auth/onboarding-meta')
+    }>(`/auth/onboarding-meta?shiftId=${selectedShiftId}`)
       .then(data => {
         setGroupAssignMode((data.groupAssignMode as 'list' | 'auto') || 'list');
         setGroups(data.groups || []);
+        setGroupId(null);
         if (Array.isArray(data.goalQuestions) && data.goalQuestions.length) {
           const gq = coerceGoalQuestions(data.goalQuestions);
           setGoalQuestions(gq);
@@ -197,9 +223,13 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         if (data.roles?.length) setApiRoles(data.roles);
       })
       .catch(() => undefined);
-  }, []);
+  }, [selectedShiftId]);
 
-  const progressValue = step === 'result' || step === 'confirm' ? 100 : ((step as number) / 4) * 100;
+  const progressValue = step === 'result' || step === 'confirm'
+    ? 100
+    : step === 0
+      ? 0
+      : ((step as number) / 4) * 100;
 
   const canGoStep1 = Boolean(
     directionId && age && Number(age) >= 14 && Number(age) <= 100
@@ -240,6 +270,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         interests,
         roleAnswers,
         vkPhotoUrl: fetchedUser?.photo_200 || fetchedUser?.photo_100 || undefined,
+        shiftId: selectedShiftId,
       });
       void import('../utils/pushNotifications.js').then(m => m.requestVkPushPermission());
       onRegistered?.();
@@ -258,9 +289,57 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         <Div>
           <Progress value={progressValue} />
           <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
-            {step === 'confirm' ? 'Проверка данных' : step === 'result' ? 'Роль определена' : `Шаг ${step} из 4`}
+            {step === 'confirm' ? 'Проверка данных' : step === 'result' ? 'Роль определена' : step === 0 ? 'Выбор смены' : `Шаг ${step} из 4`}
           </div>
         </Div>
+
+        {step === 0 && (
+          <>
+            <Div>
+              <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>Выбирай свою смену</h2>
+              <p style={{ margin: 0, fontSize: 13, color: '#666' }}>
+                От этого зависит программа, задания и вопросы. Позже смену можно сменить в профиле — прогресс каждой смены хранится отдельно.
+              </p>
+            </Div>
+            {publishedShifts.length === 0 && (
+              <Div>
+                <p style={{ margin: 0, fontSize: 14, color: '#888' }}>
+                  Пока нет опубликованных смен. Зайдите позже или обратитесь к организаторам.
+                </p>
+              </Div>
+            )}
+            {publishedShifts.map(s => {
+              const on = selectedShiftId === s.id;
+              const start = s.startDate ? new Date(s.startDate).toLocaleDateString('ru-RU') : '—';
+              const end = s.endDate ? new Date(s.endDate).toLocaleDateString('ru-RU') : start;
+              return (
+                <Cell
+                  key={s.id}
+                  multiline
+                  onClick={() => setSelectedShiftId(s.id)}
+                  after={on ? '✓' : undefined}
+                  subtitle={`${start} — ${end}`}
+                >
+                  {s.name}
+                </Cell>
+              );
+            })}
+            <Div>
+              <Button
+                size="l"
+                stretched
+                disabled={!selectedShiftId}
+                onClick={() => {
+                  if (!selectedShiftId) return;
+                  setStoredShiftId(selectedShiftId);
+                  setStep(1);
+                }}
+              >
+                Далее
+              </Button>
+            </Div>
+          </>
+        )}
 
         {step === 1 && (
           <>
@@ -332,6 +411,9 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
             </Div>
             <Button size="l" stretched disabled={!canGoStep1} onClick={() => setStep(2)}>
               Дальше → Целеполагание
+            </Button>
+            <Button size="l" stretched mode="secondary" style={{ marginTop: 8 }} onClick={() => setStep(0)}>
+              ← Назад к выбору смены
             </Button>
           </>
         )}

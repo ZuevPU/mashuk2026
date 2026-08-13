@@ -120,6 +120,7 @@ interface HomeData {
     showEveningCard?: boolean;
   };
   activePushBanners?: PushBannerItem[];
+  shiftLive?: boolean;
   homeNotice?: HomeNoticeItem | null;
 }
 
@@ -297,6 +298,15 @@ export const HomePanel: React.FC<{
           focusKeyQuestion={d.dayFocus?.keyQuestion}
           progressPercent={(d.currentDay / d.totalDays) * 100}
         />
+
+        {d.shiftLive === false && (
+          <div className="m-card" style={{ padding: 14, marginBottom: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Смена ещё не открыта</div>
+            <div style={{ fontSize: 13, color: '#666', lineHeight: 1.4 }}>
+              Навигация и профиль доступны. Программа, задания и вопросы появятся, когда организаторы активируют смену.
+            </div>
+          </div>
+        )}
 
         {d.homeNotice && (
           <HomeNoticeCard

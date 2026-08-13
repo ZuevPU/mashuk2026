@@ -52,7 +52,7 @@ export const getProfile = async (req: ParticipantRequest, res: Response): Promis
       forumPoints: p.forumPoints,
     });
     const ratingLevel = await getLevel(ratingScore, 'experience');
-    const settings = await getForumSettings();
+    const settings = await getForumSettings(p.shiftId);
     const onboarding = normalizeOnboardingConfig(
       (settings as { roleDiagnosticsConfig?: unknown }).roleDiagnosticsConfig,
     );
@@ -70,6 +70,7 @@ export const getProfile = async (req: ParticipantRequest, res: Response): Promis
         region: p.region,
         groupId: p.groupId,
         groupName: p.groupName,
+        shiftId: p.shiftId,
         shiftLabel: bundle.shiftLabel,
         pedagogicalRole: p.pedagogicalRole,
         pedagogicalRoleName: role?.name ?? null,
@@ -360,7 +361,7 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
     } = await import('../services/leaderboardService.js');
 
     const query = parseLeaderboardQuery(req.query as Record<string, unknown>);
-    const settings = await getForumSettings();
+    const settings = await getForumSettings(req.participant!.shiftId);
     const scopes = normalizeLeaderboardScopes(settings?.leaderboardScopes);
     const me = req.participant!.id;
 

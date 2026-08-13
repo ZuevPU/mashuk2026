@@ -16,11 +16,26 @@ type Shift = {
   code: string;
   name: string;
   status: string;
+  isPublished?: boolean;
   isSandbox: boolean;
   startDate: string | null;
   totalDays: number | null;
   currentDay: number | null;
 };
+
+type CopyModule = 'forum' | 'program' | 'knowledge' | 'tasks' | 'questions' | 'points' | 'medals' | 'groups' | 'pushes';
+
+const COPY_MODULES: { id: CopyModule; label: string }[] = [
+  { id: 'forum', label: 'Форум' },
+  { id: 'program', label: 'Программа' },
+  { id: 'knowledge', label: 'База знаний' },
+  { id: 'tasks', label: 'Задания' },
+  { id: 'questions', label: 'Вопросы' },
+  { id: 'points', label: 'Система баллов' },
+  { id: 'medals', label: 'Медали' },
+  { id: 'groups', label: 'Группы' },
+  { id: 'pushes', label: 'Рассылки' },
+];
 
 type EditDraft = {
   name: string;
@@ -36,7 +51,6 @@ type CopyDraft = {
 };
 
 type CreateDraft = {
-  code: string;
   name: string;
   startDate: string;
   totalDays: number;
@@ -90,8 +104,11 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [copyPreview, setCopyPreview] = useState<string | null>(null);
   const [copyDraft, setCopyDraft] = useState<CopyDraft | null>(null);
   const [copyIntoTargetId, setCopyIntoTargetId] = useState<number | null>(null);
+  const [copyModules, setCopyModules] = useState<CopyModule[]>(COPY_MODULES.map(m => m.id));
+  const [alreadyCopied, setAlreadyCopied] = useState<CopyModule[]>([]);
+  const [targetCounts, setTargetCounts] = useState<Record<string, number> | null>(null);
+  const [confirmReplace, setConfirmReplace] = useState(false);
   const [createDraft, setCreateDraft] = useState<CreateDraft>({
-    code: '',
     name: '',
     startDate: '',
     totalDays: 8,
@@ -142,6 +159,10 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     setCopyPreview(null);
     setCopyDraft(null);
     setCopyIntoTargetId(null);
+    setCopyModules(COPY_MODULES.map(m => m.id));
+    setAlreadyCopied([]);
+    setTargetCounts(null);
+    setConfirmReplace(false);
   }, [selectedId]);
 
   const selected = shifts.find(s => s.id === selectedId) || null;
@@ -166,19 +187,46 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     if (!selected) return;
     const ok = confirm(
       `Активировать смену «${selected.name}»?\n\n` +
-        'Участники мини-приложения сразу увидят программу этой смены и будут регистрироваться в неё. ' +
-        'Текущая активная смена будет снята с публикации для участников.',
+        'Участники этой смены увидят программу, задания и вопросы. Другие активные смены не снимаются.',
     );
     if (!ok) return;
     act(async () => {
       const res = await adminFetch(`/shifts/${selected.id}/activate`, {
         method: 'POST',
-        body: JSON.stringify({ demoteTo: 'archived' }),
+        body: JSON.stringify({}),
       });
       setEditingContext(selected.id);
       await load();
       return res.message || 'Смена активирована';
     }, 'Смена активирована');
+  };
+
+  const publishSelected = () => {
+    if (!selected) return;
+    act(async () => {
+      const res = await adminFetch(`/shifts/${selected.id}/publish`, { method: 'POST', body: '{}' });
+      await load();
+      return res.message || 'Смена опубликована';
+    }, 'Смена опубликована');
+  };
+
+  const unpublishSelected = () => {
+    if (!selected) return;
+    act(async () => {
+      const res = await adminFetch(`/shifts/${selected.id}/unpublish`, { method: 'POST', body: '{}' });
+      await load();
+      return res.message || 'Публикация снята';
+    }, 'Публикация снята');
+  };
+
+  const deactivateSelected = () => {
+    if (!selected) return;
+    if (!confirm(`Снять активность смены «${selected.name}»? Программа для её участников станет пустой.`)) return;
+    act(async () => {
+      const res = await adminFetch(`/shifts/${selected.id}/deactivate`, { method: 'POST', body: '{}' });
+      await load();
+      return res.message || 'Активность снята';
+    }, 'Активность снята');
   };
 
   const archiveSelected = () => {
@@ -190,15 +238,29 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     }, 'Смена в архиве');
   };
 
+  const applyCopyPreview = (res: {
+    summary?: string;
+    alreadyCopied?: CopyModule[];
+    targetCounts?: Record<string, number> | null;
+  }) => {
+    setCopyPreview(res.summary || 'Предпросмотр недоступен');
+    const locked = (res.alreadyCopied || []).filter((m): m is CopyModule =>
+      COPY_MODULES.some(x => x.id === m),
+    );
+    setAlreadyCopied(locked);
+    setTargetCounts(res.targetCounts ?? null);
+    setCopyModules(COPY_MODULES.map(m => m.id).filter(id => !locked.includes(id)));
+    setConfirmReplace(false);
+  };
+
   const startCopy = () => {
     if (!selected) return;
-    // Do not use act(): it reloads the tab and clears the copy form.
     void adminFetch(`/shifts/${selected.id}/copy-preview`)
-      .then((res: { summary?: string }) => {
-        setCopyPreview(res.summary || 'Предпросмотр недоступен');
+      .then((res: { summary?: string; alreadyCopied?: CopyModule[]; targetCounts?: Record<string, number> | null }) => {
+        applyCopyPreview(res);
         setCopyIntoTargetId(null);
         setCopyDraft({
-          code: `${selected.code}-copy`,
+          code: '',
           name: `${selected.name} (копия)`,
           startDate: toDateInput(selected.startDate),
         });
@@ -208,35 +270,52 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
   const startCopyInto = () => {
     if (!selected) return;
-    const firstTarget = shifts.find(s => s.id !== selected.id && s.status !== 'active');
+    const firstTarget = shifts.find(s => s.id !== selected.id);
     if (!firstTarget) {
       alert('Нет доступной целевой смены. Создайте пустую смену-черновик.');
       return;
     }
-    // Do not use act(): reloadKey resets copyIntoTargetId via the shifts effect.
-    void adminFetch(`/shifts/${selected.id}/copy-preview`)
-      .then((res: { summary?: string }) => {
-        setCopyPreview(res.summary || 'Предпросмотр недоступен');
+    void adminFetch(`/shifts/${selected.id}/copy-preview?targetShiftId=${firstTarget.id}`)
+      .then((res: { summary?: string; alreadyCopied?: CopyModule[]; targetCounts?: Record<string, number> | null }) => {
+        applyCopyPreview(res);
         setCopyDraft(null);
         setCopyIntoTargetId(firstTarget.id);
       })
       .catch((e: unknown) => alert(String(e instanceof Error ? e.message : e)));
   };
 
+  const reloadCopyPreviewForTarget = (targetId: number) => {
+    if (!selected) return;
+    void adminFetch(`/shifts/${selected.id}/copy-preview?targetShiftId=${targetId}`)
+      .then((res: { summary?: string; alreadyCopied?: CopyModule[]; targetCounts?: Record<string, number> | null }) => {
+        applyCopyPreview(res);
+        setCopyIntoTargetId(targetId);
+      })
+      .catch((e: unknown) => alert(String(e instanceof Error ? e.message : e)));
+  };
+
+  const occupiedSelected = copyModules.filter(m => (targetCounts?.[m] ?? 0) > 0 && !alreadyCopied.includes(m));
+
   const confirmCopyInto = () => {
     if (!selected || copyIntoTargetId == null) return;
     const target = shifts.find(s => s.id === copyIntoTargetId);
     if (!target) return;
-    const ok = confirm(
-      `${copyPreview || ''}\n\n` +
-      `Скопировать структуру из «${selected.name}» в «${target.name}»?\n` +
-      'Целевая смена должна быть пустой. Участники и их данные не копируются.',
-    );
-    if (!ok) return;
+    if (!copyModules.length) {
+      alert('Выберите хотя бы один блок');
+      return;
+    }
+    if (occupiedSelected.length && !confirmReplace) {
+      alert('Подтвердите замену данных в целевой смене');
+      return;
+    }
     act(async () => {
       const res = await adminFetch(`/shifts/${selected.id}/copy-into`, {
         method: 'POST',
-        body: JSON.stringify({ targetShiftId: target.id }),
+        body: JSON.stringify({
+          targetShiftId: target.id,
+          modules: copyModules,
+          confirmReplace: occupiedSelected.length > 0,
+        }),
       });
       setCopyPreview(null);
       setCopyIntoTargetId(null);
@@ -249,18 +328,22 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
   const confirmCopy = () => {
     if (!selected || !copyDraft) return;
-    if (!copyDraft.code.trim() || !copyDraft.name.trim()) {
-      alert('Укажите код и название новой смены');
+    if (!copyDraft.name.trim()) {
+      alert('Укажите название новой смены');
       return;
     }
-    if (!confirm(`${copyPreview || ''}\n\nСоздать копию смены?`)) return;
+    if (!copyModules.length) {
+      alert('Выберите хотя бы один блок');
+      return;
+    }
     act(async () => {
       const res = await adminFetch(`/shifts/${selected.id}/copy`, {
         method: 'POST',
         body: JSON.stringify({
-          code: copyDraft.code.trim(),
+          code: copyDraft.code.trim() || undefined,
           name: copyDraft.name.trim(),
           startDate: copyDraft.startDate || undefined,
+          modules: copyModules,
         }),
       });
       setCopyPreview(null);
@@ -289,15 +372,14 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   };
 
   const createShift = () => {
-    if (!createDraft.code.trim() || !createDraft.name.trim()) {
-      alert('Укажите код и название');
+    if (!createDraft.name.trim()) {
+      alert('Укажите название');
       return;
     }
     act(async () => {
       const res = await adminFetch('/shifts', {
         method: 'POST',
         body: JSON.stringify({
-          code: createDraft.code.trim(),
           name: createDraft.name.trim(),
           startDate: createDraft.startDate || undefined,
           totalDays: createDraft.totalDays,
@@ -305,7 +387,7 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         }),
       });
       setShowCreate(false);
-      setCreateDraft({ code: '', name: '', startDate: '', totalDays: 8, isSandbox: false });
+      setCreateDraft({ name: '', startDate: '', totalDays: 8, isSandbox: false });
       await load();
       if (res.shift?.id) {
         setSelectedId(res.shift.id);
@@ -318,12 +400,57 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     return <p className="adm-muted">Загрузка смен…</p>;
   }
 
+  const renderCopyModules = () => (
+    <div style={{ marginTop: 12 }}>
+      <p className="adm-label">Блоки для переноса</p>
+      <label className="adm-forum-check" style={{ display: 'block', opacity: 0.55 }}>
+        <input type="checkbox" disabled checked={false} readOnly />
+        Спикеры — общий справочник, уже доступен
+      </label>
+      {COPY_MODULES.map(m => {
+        const locked = alreadyCopied.includes(m.id);
+        const occupied = (targetCounts?.[m.id] ?? 0) > 0;
+        return (
+          <label key={m.id} className="adm-forum-check" style={{ display: 'block', opacity: locked ? 0.55 : 1 }}>
+            <input
+              type="checkbox"
+              disabled={locked}
+              checked={!locked && copyModules.includes(m.id)}
+              onChange={e => {
+                setCopyModules(prev => (e.target.checked
+                  ? [...prev, m.id]
+                  : prev.filter(id => id !== m.id)));
+              }}
+            />
+            {m.label}
+            {locked ? ' — заблокировано, уже перенесено' : occupied ? ' — в цели есть данные' : ''}
+          </label>
+        );
+      })}
+      {occupiedSelected.length > 0 && (
+        <>
+          <p className="adm-forum-hint" style={{ color: '#C62828' }}>
+            Данные смены «{shifts.find(s => s.id === copyIntoTargetId)?.name || 'цели'}» по выбранным блокам будут стёрты и заменены данными из «{selected?.name}».
+          </p>
+          <label className="adm-forum-check" style={{ display: 'block' }}>
+            <input
+              type="checkbox"
+              checked={confirmReplace}
+              onChange={e => setConfirmReplace(e.target.checked)}
+            />
+            Подтверждаю замену
+          </label>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <HubLensLayout className="adm-forum adm-kb" items={SHIFTS_NAV} navLabel="Разделы смен">
       <section id="shifts-hero" className="adm-forum-anchor">
         <AdminPageHero
           title="Смены форума"
-          hint="Активная смена видна участникам. «Редактируем смену» задаёт контекст для вкладок «Программа», «Вопросы» и других."
+          hint="Опубликованная смена доступна для регистрации. Активная смена показывает программу участникам. Несколько смен могут быть активны одновременно."
         >
           <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
             <label className="adm-forum-inline">
@@ -340,7 +467,7 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
               >
                 {shifts.map(s => (
                   <option key={s.id} value={s.id}>
-                    {s.name} ({s.code}){s.id === activeShiftId ? ' · для участников' : ''}
+                    {s.name} ({s.code}){s.status === 'active' ? ' · активна' : s.isPublished ? ' · опубликована' : ''}
                   </option>
                 ))}
               </select>
@@ -357,24 +484,16 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         <div className="card adm-forum-block adm-kb-panel">
           <div className="adm-kb-panel-head">
             <h3>Новая смена</h3>
-            <p className="adm-kb-panel-sub">Код, название, даты и режим песочницы.</p>
+            <p className="adm-kb-panel-sub">Название, дата старта и число дней. Код смены создаётся автоматически.</p>
           </div>
           <div className="adm-forum-grid-2">
-            <label className="adm-field">
-              <span className="adm-label">Код</span>
-              <input
-                className="adm-input"
-                value={createDraft.code}
-                onChange={e => setCreateDraft(d => ({ ...d, code: e.target.value }))}
-                placeholder="shift-2"
-              />
-            </label>
             <label className="adm-field">
               <span className="adm-label">Название</span>
               <input
                 className="adm-input"
                 value={createDraft.name}
                 onChange={e => setCreateDraft(d => ({ ...d, name: e.target.value }))}
+                placeholder="Смена 16 августа"
               />
             </label>
             <label className="adm-field">
@@ -432,6 +551,9 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                     <span className={`adm-program-badge adm-program-badge-${s.status === 'active' ? 'visible' : s.status === 'ready' ? 'waiting_day' : 'draft'}`}>
                       {STATUS_LABELS[s.status] || s.status}
                     </span>
+                    {s.isPublished && s.status !== 'active' && (
+                      <span className="adm-program-badge adm-program-badge-waiting_day">Опубликована</span>
+                    )}
                     {s.isSandbox && (
                       <span className="adm-program-badge adm-shifts-sandbox-badge">
                         Песочница
@@ -447,7 +569,12 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                 </div>
                 {isActive && (
                   <p className="adm-kb-panel-sub" style={{ marginTop: 8, color: '#34C759' }}>
-                    Видна участникам
+                    Программа открыта участникам
+                  </p>
+                )}
+                {s.isPublished && !isActive && (
+                  <p className="adm-kb-panel-sub" style={{ marginTop: 8, color: '#007AFF' }}>
+                    Можно регистрироваться · программа пока пустая
                   </p>
                 )}
                 {isEditingCtx && !isActive && (
@@ -525,9 +652,24 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                 >
                   Редактируем эту смену
                 </button>
-                {selected.status !== 'active' && (
+                {!selected.isPublished && selected.status !== 'archived' && (
+                  <button type="button" className="adm-btn adm-btn-secondary" onClick={publishSelected}>
+                    Опубликовать
+                  </button>
+                )}
+                {selected.isPublished && selected.status !== 'active' && (
+                  <button type="button" className="adm-btn adm-btn-secondary" onClick={unpublishSelected}>
+                    Снять публикацию
+                  </button>
+                )}
+                {selected.status !== 'active' && selected.status !== 'archived' && (
                   <button type="button" className="adm-btn adm-btn-primary" onClick={activateSelected}>
                     Активировать
+                  </button>
+                )}
+                {selected.status === 'active' && (
+                  <button type="button" className="adm-btn adm-btn-secondary" onClick={deactivateSelected}>
+                    Снять активность
                   </button>
                 )}
                 {selected.status !== 'archived' && selected.status !== 'active' && (
@@ -554,14 +696,6 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                   {copyPreview && <p className="adm-forum-hint">{copyPreview}</p>}
                   <div className="adm-forum-grid-2">
                     <label className="adm-field">
-                      <span className="adm-label">Код новой смены</span>
-                      <input
-                        className="adm-input"
-                        value={copyDraft.code}
-                        onChange={e => setCopyDraft(d => (d ? { ...d, code: e.target.value } : d))}
-                      />
-                    </label>
-                    <label className="adm-field">
                       <span className="adm-label">Название</span>
                       <input
                         className="adm-input"
@@ -579,6 +713,7 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                       />
                     </label>
                   </div>
+                  {renderCopyModules()}
                   <div className="adm-forum-toolbar" style={{ marginTop: 12, gap: 8 }}>
                     <button type="button" className="adm-btn adm-btn-primary" onClick={confirmCopy}>
                       Создать копию
@@ -602,17 +737,17 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                   <h4>Копировать в существующую смену</h4>
                   {copyPreview && <p className="adm-forum-hint">{copyPreview}</p>}
                   <p className="adm-forum-hint">
-                    Копирование доступно только в пустую неактивную смену. Участники, ответы, баллы и посещения не переносятся.
+                    Участники, ответы и баллы людей не копируются. Уже перенесённые блоки заблокированы.
                   </p>
                   <label className="adm-field">
                     <span className="adm-label">Целевая смена</span>
                     <select
                       className="adm-input"
                       value={copyIntoTargetId}
-                      onChange={e => setCopyIntoTargetId(Number(e.target.value))}
+                      onChange={e => reloadCopyPreviewForTarget(Number(e.target.value))}
                     >
                       {shifts
-                        .filter(s => s.id !== selected.id && s.status !== 'active')
+                        .filter(s => s.id !== selected.id)
                         .map(s => (
                           <option key={s.id} value={s.id}>
                             {s.name} ({s.code}) · {STATUS_LABELS[s.status] || s.status}
@@ -620,6 +755,7 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                         ))}
                     </select>
                   </label>
+                  {renderCopyModules()}
                   <div className="adm-forum-toolbar" style={{ marginTop: 12, gap: 8 }}>
                     <button type="button" className="adm-btn adm-btn-primary" onClick={confirmCopyInto}>
                       Копировать

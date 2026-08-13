@@ -442,6 +442,13 @@
       "when": 1842000000000,
       "tag": "0063_qr_repeatable_scans",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1843000000000,
+      "tag": "0064_shift_publish_multi",
+      "breakpoints": true
     }
   ]
 }

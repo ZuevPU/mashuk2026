@@ -30,6 +30,19 @@ import { cache, clearCache } from './cache.js';
 export type ShiftRow = typeof shifts.$inferSelect;
 export type ShiftStatus = 'draft' | 'ready' | 'active' | 'archived';
 
+export const SHIFT_COPY_MODULES = [
+  'forum',
+  'program',
+  'knowledge',
+  'tasks',
+  'questions',
+  'points',
+  'medals',
+  'groups',
+  'pushes',
+] as const;
+export type ShiftCopyModule = (typeof SHIFT_COPY_MODULES)[number];
+
 const SHIFT_OP_KEYS = [
   'startDate',
   'totalDays',
@@ -144,7 +157,9 @@ export function shiftOpsToForumShape(shift: ShiftRow) {
     shiftCode: shift.code,
     shiftName: shift.name,
     shiftStatus: shift.status,
+    isPublished: shift.isPublished === true,
     isSandbox: shift.isSandbox,
+    shiftLive: shift.status === 'active',
   };
 }
 
@@ -197,22 +212,127 @@ export async function listShifts(): Promise<ShiftRow[]> {
   return db.select().from(shifts).orderBy(asc(shifts.id));
 }
 
+export function isShiftLive(shift: { status?: string | null } | null | undefined): boolean {
+  return shift?.status === 'active';
+}
+
+export function requestedShiftIdFromReq(req: Request): number | null {
+  const raw = req.headers['x-shift-id'];
+  const val = Array.isArray(raw) ? raw[0] : raw;
+  const n = Number(val);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+export function pickParticipantForVk<T extends {
+  shiftId: number | null;
+  onboardingCompletedAt: Date | null;
+  selfDeletedAt: Date | null;
+  lastActiveAt: Date | null;
+}>(
+  rows: T[],
+  preferredShiftId?: number | null,
+  opts?: { fallback?: boolean },
+): T | null {
+  if (!rows.length) return null;
+  const fallback = opts?.fallback !== false;
+  const completed = rows.filter(r => r.onboardingCompletedAt && !r.selfDeletedAt);
+  if (preferredShiftId) {
+    const inPreferred = completed.find(r => r.shiftId === preferredShiftId)
+      ?? rows.find(r => r.shiftId === preferredShiftId);
+    if (inPreferred) return inPreferred;
+    if (!fallback) return null;
+  }
+  const ranked = (completed.length ? completed : rows).slice().sort((a, b) => {
+    const ta = a.lastActiveAt?.getTime() ?? a.onboardingCompletedAt?.getTime() ?? 0;
+    const tb = b.lastActiveAt?.getTime() ?? b.onboardingCompletedAt?.getTime() ?? 0;
+    return tb - ta;
+  });
+  return ranked[0] ?? null;
+}
+
+export async function findParticipantForVk(
+  vkId: number,
+  preferredShiftId?: number | null,
+  opts?: { fallback?: boolean },
+) {
+  const rows = await db.select().from(participants).where(eq(participants.vkId, vkId));
+  return pickParticipantForVk(rows, preferredShiftId, opts);
+}
+
+export function publicShiftCard(s: ShiftRow) {
+  const days = s.totalDays ?? 8;
+  const start = s.startDate;
+  const endDate = start
+    ? new Date(start.getTime() + Math.max(0, days - 1) * 24 * 60 * 60 * 1000)
+    : null;
+  return {
+    id: s.id,
+    name: s.name,
+    startDate: start,
+    endDate,
+    totalDays: days,
+    isLive: s.status === 'active',
+  };
+}
+
+export async function listVkEnrollments(vkId: number) {
+  const rows = await db.select().from(participants).where(eq(participants.vkId, vkId));
+  const shiftIds = [...new Set(rows.map(r => r.shiftId).filter((id): id is number => id != null && id > 0))];
+  const shiftRows = shiftIds.length
+    ? await db.select().from(shifts).where(inArray(shifts.id, shiftIds))
+    : [];
+  const byId = new Map(shiftRows.map(s => [s.id, s]));
+  return rows.map(r => ({
+    shiftId: r.shiftId,
+    shiftName: byId.get(r.shiftId)?.name ?? `Смена ${r.shiftId}`,
+    onboardingCompleted: !!r.onboardingCompletedAt && !r.selfDeletedAt,
+  }));
+}
+
+export async function listPublishedShiftsForParticipants() {
+  const rows = await db.select().from(shifts).orderBy(asc(shifts.startDate), asc(shifts.id));
+  return rows.filter(s => s.isPublished && !s.isSandbox && s.status !== 'archived');
+}
+
+function slugShiftCode(name: string): string {
+  const ascii = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 32);
+  return ascii || 'shift';
+}
+
+export async function generateUniqueShiftCode(name: string): Promise<string> {
+  const base = slugShiftCode(name);
+  for (let i = 0; i < 12; i += 1) {
+    const suffix = Date.now().toString(36).slice(-4) + (i > 0 ? String(i) : '');
+    const code = `${base}-${suffix}`.slice(0, 64);
+    const [hit] = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.code, code)).limit(1);
+    if (!hit) return code;
+  }
+  return `${base}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export async function getShiftById(id: number): Promise<ShiftRow | null> {
   const [row] = await db.select().from(shifts).where(eq(shifts.id, id)).limit(1);
   return row ?? null;
 }
 
 export async function createShift(input: {
-  code: string;
+  code?: string;
   name: string;
   startDate?: Date | null;
   totalDays?: number;
   isSandbox?: boolean;
 }): Promise<ShiftRow> {
+  const code = (input.code || '').trim() || await generateUniqueShiftCode(input.name);
   const [row] = await db.insert(shifts).values({
-    code: input.code,
+    code,
     name: input.name,
     status: 'draft',
+    isPublished: false,
     isSandbox: input.isSandbox ?? false,
     startDate: input.startDate ?? null,
     totalDays: input.totalDays ?? 8,
@@ -237,27 +357,27 @@ export async function updateShift(id: number, patch: Partial<typeof shifts.$infe
 }
 
 /**
- * Exactly one active shift after first activate.
- * Previous active → archived (default) or ready if demoteTo='ready'.
+ * Activate a shift without demoting other active streams.
+ * Optionally keep previous active (dual live). demoteTo still supported for explicit handoff.
  */
 export async function activateShift(
   id: number,
-  opts?: { demoteTo?: 'archived' | 'ready' },
+  opts?: { demoteTo?: 'archived' | 'ready' | null },
 ): Promise<{ active: ShiftRow; previous: ShiftRow | null }> {
-  const demoteTo = opts?.demoteTo ?? 'archived';
   const target = await getShiftById(id);
   if (!target) throw new Error('Shift not found');
 
   const [previous] = await db.select().from(shifts).where(eq(shifts.status, 'active')).limit(1);
+  const demoteTo = opts?.demoteTo;
 
   await db.transaction(async (tx) => {
-    if (previous && previous.id !== id) {
+    if (demoteTo && previous && previous.id !== id) {
       await tx.update(shifts)
         .set({ status: demoteTo, updatedAt: new Date() })
         .where(eq(shifts.id, previous.id));
     }
     await tx.update(shifts)
-      .set({ status: 'active', updatedAt: new Date() })
+      .set({ status: 'active', isPublished: true, updatedAt: new Date() })
       .where(eq(shifts.id, id));
   });
 
@@ -267,13 +387,42 @@ export async function activateShift(
   return { active, previous: previous && previous.id !== id ? previous : null };
 }
 
+export async function publishShift(id: number): Promise<ShiftRow> {
+  const target = await getShiftById(id);
+  if (!target) throw new Error('Shift not found');
+  if (target.status === 'archived') throw new Error('Нельзя опубликовать архивную смену');
+  const row = await updateShift(id, { isPublished: true });
+  if (!row) throw new Error('Shift not found');
+  return row;
+}
+
+export async function unpublishShift(id: number): Promise<ShiftRow> {
+  const target = await getShiftById(id);
+  if (!target) throw new Error('Shift not found');
+  if (target.status === 'active') {
+    throw new Error('Сначала снимите активность смены, затем публикацию');
+  }
+  const row = await updateShift(id, { isPublished: false });
+  if (!row) throw new Error('Shift not found');
+  return row;
+}
+
+export async function deactivateShift(id: number): Promise<ShiftRow> {
+  const target = await getShiftById(id);
+  if (!target) throw new Error('Shift not found');
+  if (target.status !== 'active') return target;
+  const row = await updateShift(id, { status: 'draft' });
+  if (!row) throw new Error('Shift not found');
+  return row;
+}
+
 export async function archiveShift(id: number): Promise<ShiftRow | null> {
   const row = await getShiftById(id);
   if (!row) return null;
   if (row.status === 'active') {
-    throw new Error('Cannot archive the active shift; activate another first');
+    throw new Error('Cannot archive an active shift; deactivate it first');
   }
-  return updateShift(id, { status: 'archived' });
+  return updateShift(id, { status: 'archived', isPublished: false });
 }
 
 export async function previewCopyShift(sourceId: number) {
@@ -311,232 +460,29 @@ export async function previewCopyShift(sourceId: number) {
   };
 }
 
-function rebaseShiftDate(
-  value: Date | null,
-  sourceStart: Date | null,
-  targetStart: Date | null,
-): Date | null {
-  if (!value || !sourceStart || !targetStart) return null;
-  return new Date(value.getTime() + targetStart.getTime() - sourceStart.getTime());
-}
-
 export async function copyShiftProgram(opts: {
   sourceId: number;
   code?: string;
   name?: string;
   startDate?: Date | null;
   targetId?: number;
-}): Promise<{ shift: ShiftRow; preview: Awaited<ReturnType<typeof previewCopyShift>> }> {
-  const source = await getShiftById(opts.sourceId);
-  if (!source) throw new Error('Source shift not found');
-  const preview = await previewCopyShift(opts.sourceId);
-
-  return db.transaction(async (tx) => {
-    let newShift: ShiftRow;
-    if (opts.targetId != null) {
-      if (opts.targetId === opts.sourceId) throw new Error('Source and target shifts must be different');
-      await tx.execute(sql`select ${shifts.id} from ${shifts} where ${shifts.id} = ${opts.targetId} for update`);
-      const [target] = await tx.select().from(shifts).where(eq(shifts.id, opts.targetId)).limit(1);
-      if (!target) throw new Error('Target shift not found');
-      if (target.status === 'active') throw new Error('Нельзя копировать структуру в активную смену');
-      const targetCounts = await Promise.all([
-        tx.select({ c: count() }).from(events).where(eq(events.shiftId, target.id)),
-        tx.select({ c: count() }).from(questions).where(eq(questions.shiftId, target.id)),
-        tx.select({ c: count() }).from(tasks).where(eq(tasks.shiftId, target.id)),
-        tx.select({ c: count() }).from(materials).where(eq(materials.shiftId, target.id)),
-        tx.select({ c: count() }).from(scheduleDays).where(eq(scheduleDays.shiftId, target.id)),
-        tx.select({ c: count() }).from(dayFocus).where(eq(dayFocus.shiftId, target.id)),
-        tx.select({ c: count() }).from(participantGroups).where(eq(participantGroups.shiftId, target.id)),
-        tx.select({ c: count() }).from(dayExperiments).where(eq(dayExperiments.shiftId, target.id)),
-        tx.select({ c: count() }).from(adminPushNotifications).where(eq(adminPushNotifications.shiftId, target.id)),
-      ]);
-      if (targetCounts.some(([row]) => Number(row.c) > 0)) {
-        throw new Error('Целевая смена не пустая. Копирование разрешено только в пустую смену');
-      }
-      newShift = target;
-    } else {
-      if (!opts.code || !opts.name) throw new Error('code and name required');
-      [newShift] = await tx.insert(shifts).values({
-        code: opts.code,
-        name: opts.name,
-        status: 'draft',
-        isSandbox: false,
-        startDate: opts.startDate ?? null,
-        totalDays: source.totalDays ?? 8,
-        currentDay: 1,
-        shiftLabel: opts.name,
-      }).returning();
-    }
-
-    await tx.update(shifts).set({
-    totalDays: source.totalDays,
-    recommendationThreshold: source.recommendationThreshold,
-    sectionsVisibility: source.sectionsVisibility,
-    groupAssignMode: source.groupAssignMode,
-    kbUnlockThreshold: source.kbUnlockThreshold,
-    kbUnlockDisabled: source.kbUnlockDisabled,
-    kbPastDaysPolicy: source.kbPastDaysPolicy,
-    pushBlockTypes: source.pushBlockTypes,
-    pushNightSlotEnabled: source.pushNightSlotEnabled,
-    teamConfirmHoursDefault: source.teamConfirmHoursDefault,
-    eveningQuestionnaireConfig: source.eveningQuestionnaireConfig,
-    eveningQuestionnaireByDay: source.eveningQuestionnaireByDay,
-    answerConfirmation: source.answerConfirmation,
-    exchangeLimits: source.exchangeLimits,
-    profileProgressWeights: source.profileProgressWeights,
-    shiftLabel: opts.name ?? newShift.name,
-    pdfTemplate: source.pdfTemplate,
-    recommendationTemplates: source.recommendationTemplates,
-    programRecEmptyNoMatchText: source.programRecEmptyNoMatchText,
-    programRecEmptyNoEventsText: source.programRecEmptyNoEventsText,
-    roleDiagnosticsConfig: source.roleDiagnosticsConfig,
-    leaderboardScopes: source.leaderboardScopes,
-    currentDay: 1,
-    updatedAt: new Date(),
-    }).where(eq(shifts.id, newShift.id));
-
-    const srcDays = await tx.select().from(scheduleDays).where(eq(scheduleDays.shiftId, opts.sourceId));
-    for (const d of srcDays) {
-      const { id: _id, ...rest } = d;
-      await tx.insert(scheduleDays).values({
-        ...rest,
-        shiftId: newShift.id,
-        calendarDate: rebaseShiftDate(d.calendarDate, source.startDate, newShift.startDate),
-        isPublished: false,
-        publishedAt: null,
-      });
-    }
-
-    const srcFocus = await tx.select().from(dayFocus).where(eq(dayFocus.shiftId, opts.sourceId));
-    for (const f of srcFocus) {
-      const { id: _id, ...rest } = f;
-      await tx.insert(dayFocus).values({ ...rest, shiftId: newShift.id });
-    }
-
-    const srcExperiments = await tx.select().from(dayExperiments).where(eq(dayExperiments.shiftId, opts.sourceId));
-    for (const e of srcExperiments) {
-      const { id: _id, ...rest } = e;
-      await tx.insert(dayExperiments).values({ ...rest, shiftId: newShift.id });
-    }
-
-    const groupIdMap = new Map<number, number>();
-    const srcGroups = await tx.select().from(participantGroups).where(eq(participantGroups.shiftId, opts.sourceId));
-    for (const g of srcGroups) {
-      const { id: oldId, ...rest } = g;
-      const [created] = await tx.insert(participantGroups).values({ ...rest, shiftId: newShift.id }).returning();
-      groupIdMap.set(oldId, created.id);
-    }
-
-    const eventIdMap = new Map<number, number>();
-    const srcEvents = await tx.select().from(events).where(eq(events.shiftId, opts.sourceId)).orderBy(asc(events.id));
-  // Multi-pass so nested parents exist before children (depth > 1).
-  const pending = [...srcEvents];
-  let guard = 0;
-  while (pending.length && guard < srcEvents.length + 5) {
-    guard += 1;
-    const still: typeof pending = [];
-    for (const e of pending) {
-      if (e.parentEventId && !eventIdMap.has(e.parentEventId)) {
-        still.push(e);
-        continue;
-      }
-      const { id: oldId, qrToken: _q, parentEventId, ...rest } = e;
-      const [created] = await tx.insert(events).values({
-        ...rest,
-        shiftId: newShift.id,
-        eventDate: rebaseShiftDate(e.eventDate, source.startDate, newShift.startDate),
-        startTime: rebaseShiftDate(e.startTime, source.startDate, newShift.startDate),
-        endTime: rebaseShiftDate(e.endTime, source.startDate, newShift.startDate),
-        parentEventId: parentEventId ? (eventIdMap.get(parentEventId) ?? null) : null,
-        qrToken: null,
-      }).returning();
-      eventIdMap.set(oldId, created.id);
-    }
-    if (still.length === pending.length) {
-      // Orphaned parent refs — insert remaining as roots
-      for (const e of still) {
-        const { id: oldId, qrToken: _q, parentEventId: _p, ...rest } = e;
-        const [created] = await tx.insert(events).values({
-          ...rest,
-          shiftId: newShift.id,
-          eventDate: rebaseShiftDate(e.eventDate, source.startDate, newShift.startDate),
-          startTime: rebaseShiftDate(e.startTime, source.startDate, newShift.startDate),
-          endTime: rebaseShiftDate(e.endTime, source.startDate, newShift.startDate),
-          parentEventId: null,
-          qrToken: null,
-        }).returning();
-        eventIdMap.set(oldId, created.id);
-      }
-      break;
-    }
-    pending.length = 0;
-    pending.push(...still);
-  }
-
-  const srcMats = await tx.select().from(materials).where(eq(materials.shiftId, opts.sourceId));
-  for (const m of srcMats) {
-    const { id: _id, ...rest } = m;
-    await tx.insert(materials).values({
-      ...rest,
-      shiftId: newShift.id,
-      eventId: rest.eventId ? (eventIdMap.get(rest.eventId) ?? null) : null,
-    });
-  }
-
-  const questionIdMap = new Map<number, number>();
-  const srcQs = await tx.select().from(questions).where(eq(questions.shiftId, opts.sourceId)).orderBy(asc(questions.id));
-  for (const q of srcQs) {
-    const { id: oldId, ...rest } = q;
-    const mappedGroup = rest.audienceGroupId && groupIdMap.has(rest.audienceGroupId)
-      ? groupIdMap.get(rest.audienceGroupId)!
-      : rest.audienceGroupId;
-    const [created] = await tx.insert(questions).values({
-      ...rest,
-      shiftId: newShift.id,
-      parentQuestionId: null,
-      audienceGroupId: mappedGroup ?? null,
-    }).returning();
-    questionIdMap.set(oldId, created.id);
-    const optsRows = await tx.select().from(questionOptions).where(eq(questionOptions.questionId, oldId));
-    for (const o of optsRows) {
-      const { id: _oid, ...oRest } = o;
-      await tx.insert(questionOptions).values({ ...oRest, questionId: created.id });
-    }
-  }
-  for (const q of srcQs) {
-    if (q.parentQuestionId && questionIdMap.has(q.id) && questionIdMap.has(q.parentQuestionId)) {
-      await tx.update(questions)
-        .set({ parentQuestionId: questionIdMap.get(q.parentQuestionId)! })
-        .where(eq(questions.id, questionIdMap.get(q.id)!));
-    }
-  }
-
-  const srcTasks = await tx.select().from(tasks).where(eq(tasks.shiftId, opts.sourceId));
-  for (const t of srcTasks) {
-    const { id: _id, qrToken: _q, ...rest } = t;
-    await tx.insert(tasks).values({ ...rest, shiftId: newShift.id, qrToken: null });
-  }
-
-  const srcPush = await tx.select().from(adminPushNotifications).where(eq(adminPushNotifications.shiftId, opts.sourceId));
-  for (const p of srcPush) {
-    const { id: _id, sentAt: _s, deliveredCount: _d, openedCount: _o, triggerFiredAt: _t, ...rest } = p;
-    await tx.insert(adminPushNotifications).values({
-      ...rest,
-      shiftId: newShift.id,
-      status: 'draft',
-      programDate: rebaseShiftDate(p.programDate, source.startDate, newShift.startDate),
-      publishAt: rebaseShiftDate(p.publishAt, source.startDate, newShift.startDate),
-      visibleUntil: rebaseShiftDate(p.visibleUntil, source.startDate, newShift.startDate),
-      sentAt: null,
-      deliveredCount: 0,
-      openedCount: 0,
-      triggerFiredAt: null,
-    });
-  }
-
-    const [fresh] = await tx.select().from(shifts).where(eq(shifts.id, newShift.id)).limit(1);
-    return { shift: fresh, preview };
+  modules?: ShiftCopyModule[];
+  confirmReplace?: boolean;
+  adminId?: number | null;
+}): Promise<{ shift: ShiftRow; preview: Awaited<ReturnType<typeof previewCopyShift>>; copied?: ShiftCopyModule[]; skipped?: ShiftCopyModule[]; replaced?: ShiftCopyModule[] }> {
+  const { copyShiftModules } = await import('./shiftCopy.js');
+  const result = await copyShiftModules({
+    sourceId: opts.sourceId,
+    targetId: opts.targetId,
+    code: opts.code,
+    name: opts.name,
+    startDate: opts.startDate,
+    modules: opts.modules?.length ? opts.modules : [...SHIFT_COPY_MODULES],
+    confirmReplace: opts.confirmReplace === true || opts.targetId == null,
+    adminId: opts.adminId,
   });
+  const preview = await previewCopyShift(opts.sourceId);
+  return { shift: result.shift, preview, copied: result.copied, skipped: result.skipped, replaced: result.replaced };
 }
 
 export async function clearSandboxParticipantData(shiftId: number): Promise<{
@@ -628,11 +574,7 @@ export async function copyParticipantsToShift(input: {
 }
 
 export async function findParticipantByVkInActiveShift(vkId: number) {
-  const shiftId = await resolveActiveShiftId();
-  const [user] = await db.select().from(participants)
-    .where(and(eq(participants.vkId, vkId), eq(participants.shiftId, shiftId)))
-    .limit(1);
-  return user ?? null;
+  return findParticipantForVk(vkId, null);
 }
 
 /**

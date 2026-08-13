@@ -103,7 +103,7 @@ export const patchEveningDraft = async (req: ParticipantRequest, res: Response):
       res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
       return;
     }
-    const settings = await getForumSettings();
+    const settings = await getForumSettings(req.participant!.shiftId);
     const dayNumber = parsed.data.dayNumber
       ?? await resolveEveningSurveyDayForParticipant(req.participant!.id, settings);
     const draft = {
@@ -160,7 +160,7 @@ export const updateExperimentStatus = async (req: ParticipantRequest, res: Respo
       return;
     }
 
-    const settings = await getForumSettings();
+    const settings = await getForumSettings(req.participant!.shiftId);
     const dayNumber = parsed.data.dayNumber ?? resolveEffectiveCurrentDay(settings);
     if (dayNumber < 2 || dayNumber > 7) {
       res.status(400).json({ error: 'Experiments are only available on days 2–7' });
@@ -186,7 +186,7 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
       return;
     }
 
-    const settings = await getForumSettings();
+    const settings = await getForumSettings(req.participant!.shiftId);
     // Server picks forum day of the evening being closed (not clock/admin day).
     const dayNumber = await resolveEveningSurveyDayForParticipant(req.participant!.id, settings);
     if (dayNumber < 1 || dayNumber > 7) {
@@ -204,7 +204,12 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
 
     const eveningConfig = resolveEveningConfigForDay(settings, dayNumber);
     const opensAt = getEveningOpensAtMsk(eveningConfig);
-    const scheduleDayPublished = await getScheduleDayPublished(dayNumber);
+    const scheduleDayPublished = await getScheduleDayPublished(
+      dayNumber,
+      typeof (settings as { shiftId?: number }).shiftId === 'number'
+        ? (settings as { shiftId: number }).shiftId
+        : undefined,
+    );
     if (
       !isEveningOpenForDay(eveningConfig, dayNumber, new Date(), {
         settings,
@@ -332,11 +337,15 @@ export async function loadDayContext(
 
   let experiment = null;
   if (dayNumber >= 2 && dayNumber <= 7 && activeRoleKey) {
+    const expShiftId = typeof (settings as { shiftId?: number }).shiftId === 'number'
+      ? (settings as { shiftId: number }).shiftId
+      : null;
     const [exp] = await db.select().from(dayExperiments)
       .where(and(
         eq(dayExperiments.dayNumber, dayNumber),
         eq(dayExperiments.roleKey, activeRoleKey),
         eq(dayExperiments.status, 'published'),
+        ...(expShiftId != null ? [eq(dayExperiments.shiftId, expShiftId)] : []),
       )).limit(1);
     if (exp) {
       experiment = {
@@ -366,7 +375,12 @@ export async function loadDayContext(
   );
   const opensAt = getEveningOpensAtMsk(config);
   const scheduleDayPublished = dayNumber >= 1 && dayNumber <= 7
-    ? await getScheduleDayPublished(dayNumber)
+    ? await getScheduleDayPublished(
+      dayNumber,
+      typeof (settings as { shiftId?: number }).shiftId === 'number'
+        ? (settings as { shiftId: number }).shiftId
+        : undefined,
+    )
     : null;
   const eveningOpen = dayNumber >= 1 && dayNumber <= 7 && isEveningOpenForDay(config, dayNumber, now, {
     settings,

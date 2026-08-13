@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { eq, and, asc, lte, or, isNull, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { events, eventAttendance, materials, materialTypes, questions, answers, scheduleDays, dayFocus, kbDayUnlocks, programSpeakers, participantDayState } from '../db/schema.js';
+import { events, eventAttendance, materials, materialTypes, questions, answers, scheduleDays, dayFocus, kbDayUnlocks, programSpeakers, participantDayState, participants } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
   getForumSettings, formatTime, getForumOperationalDateKey,
@@ -24,14 +24,15 @@ import {
   touchpointCompletionRatio,
 } from '../services/touchpointProgress.js';
 import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
-import { resolveActiveShiftId } from '../services/shiftService.js';
+import { getShiftById, isShiftLive, resolveActiveShiftId } from '../services/shiftService.js';
 import { clusterOverlappingTimedItems, formatSlotLabel } from '../services/programSlots.js';
 import { eventVisibleForParticipantDirection } from '../services/eventAudience.js';
 
 export const getProgramSettings = async (req: ParticipantRequest, res: Response): Promise<void> => {
-  const settings = await getForumSettings();
+  const shiftId = req.participant!.shiftId;
+  const settings = await getForumSettings(shiftId);
   const now = new Date();
-  const shiftId = await resolveActiveShiftId();
+  const live = isShiftLive(await getShiftById(shiftId));
   const publishedRows = await db.select({
     dayNumber: scheduleDays.dayNumber,
   }).from(scheduleDays).where(and(
@@ -39,17 +40,20 @@ export const getProgramSettings = async (req: ParticipantRequest, res: Response)
     eq(scheduleDays.isPublished, true),
   ));
   const currentDay = resolveEffectiveCurrentDay(settings, now);
-  const publishedDays = publishedRows.map(r => r.dayNumber).sort((a, b) => a - b);
-  const liveScheduleDay = resolveLiveProgramDay(settings, publishedDays, now);
+  const publishedDays = live
+    ? publishedRows.map(r => r.dayNumber).sort((a, b) => a - b)
+    : [];
+  const liveScheduleDay = live ? resolveLiveProgramDay(settings, publishedDays, now) : 1;
   res.json({
     // Same “today” as home — published day that drives «Сейчас»
-    currentDay,
+    currentDay: live ? currentDay : 1,
     liveScheduleDay,
     totalDays: settings.totalDays ?? 8,
     recommendationThreshold: settings.recommendationThreshold ?? 1,
     sectionsVisibility: settings.sectionsVisibility ?? {},
     startDate: settings.startDate ?? null,
     publishedDays,
+    shiftLive: live,
   });
 };
 
@@ -58,7 +62,11 @@ export async function countTouchpointsForDay(participantId: number, dayNumber: n
   completed: number;
   total: number;
 }> {
-  const shiftId = await resolveActiveShiftId();
+  const [owner] = await db.select({ shiftId: participants.shiftId })
+    .from(participants)
+    .where(eq(participants.id, participantId))
+    .limit(1);
+  const shiftId = owner?.shiftId || await resolveActiveShiftId();
   // Include all published day questions (even future windows) so answered twins still count
   const published = await db.select().from(questions)
     .where(and(
@@ -223,10 +231,10 @@ export async function evaluateKbDayAccess(
 
 export const getKnowledgeBaseDays = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
-    const settings = await getForumSettings();
+    const shiftId = req.participant!.shiftId;
+    const settings = await getForumSettings(shiftId);
     const totalDays = settings.totalDays ?? 8;
     const now = new Date();
-    const shiftId = await resolveActiveShiftId();
     const days: Record<string, unknown>[] = [];
     for (let day = 1; day <= totalDays; day++) {
       const access = await evaluateKbDayAccess(req.participant!.id, day, settings, now);
@@ -251,9 +259,13 @@ export const getKnowledgeBaseDays = async (req: ParticipantRequest, res: Respons
 
 export const getProgram = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
-    const settings = await getForumSettings();
+    const shiftId = req.participant!.shiftId;
+    const settings = await getForumSettings(shiftId);
     const now = new Date();
-    const shiftId = await resolveActiveShiftId();
+    if (!isShiftLive(await getShiftById(shiftId))) {
+      res.json({ day: 1, dayPublished: false, events: [], slots: [], shiftLive: false });
+      return;
+    }
     const publishedDayRows = await db.select({ dayNumber: scheduleDays.dayNumber })
       .from(scheduleDays)
       .where(and(
@@ -433,8 +445,9 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
 
 export const getRecommendations = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
-    const day = Number(req.query.day) || (await getForumSettings()).currentDay || 1;
-    const settings = await getForumSettings();
+    const shiftId = req.participant!.shiftId;
+    const settings = await getForumSettings(shiftId);
+    const day = Number(req.query.day) || settings.currentDay || 1;
     const interests = Array.isArray(req.participant!.interests)
       ? (req.participant!.interests as string[])
       : [];
@@ -442,7 +455,6 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
     const norm = (s: string) => s.trim().toLowerCase();
     const interestSet = new Set(interests.map(norm));
 
-    const shiftId = await resolveActiveShiftId();
     const [dayMeta] = await db.select().from(scheduleDays).where(and(
       eq(scheduleDays.dayNumber, day),
       eq(scheduleDays.shiftId, shiftId),
@@ -558,9 +570,13 @@ export const markAttendance = async (req: ParticipantRequest, res: Response): Pr
 
 export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
-    const settings = await getForumSettings();
+    const shiftId = req.participant!.shiftId;
+    const settings = await getForumSettings(shiftId);
     const day = Number(req.query.day) || settings.currentDay || 1;
-    const shiftId = await resolveActiveShiftId();
+    if (!isShiftLive(await getShiftById(shiftId))) {
+      res.json({ materials: [], day, shiftLive: false });
+      return;
+    }
     const dayEventRows = await db.select({ id: events.id }).from(events).where(and(
       eq(events.dayNumber, day),
       eq(events.shiftId, shiftId),
@@ -691,7 +707,7 @@ export const saveMaterialToPiggybank = async (req: ParticipantRequest, res: Resp
       res.status(404).json({ error: 'Material not found' });
       return;
     }
-    const settings = await getForumSettings();
+    const settings = await getForumSettings(req.participant!.shiftId);
     const day = mat.dayNumber ?? settings.currentDay ?? 1;
     const now = new Date();
     const access = await evaluateKbDayAccess(req.participant!.id, day, settings, now);

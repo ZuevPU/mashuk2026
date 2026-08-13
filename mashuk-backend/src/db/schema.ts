@@ -39,6 +39,7 @@ export const shifts = pgTable('shifts', {
   code: varchar('code', { length: 64 }).notNull().unique(),
   name: varchar('name', { length: 255 }).notNull(),
   status: varchar('status', { length: 32 }).default('draft').notNull(),
+  isPublished: boolean('is_published').default(false).notNull(),
   isSandbox: boolean('is_sandbox').default(false).notNull(),
   startDate: timestamp('start_date'),
   totalDays: integer('total_days').default(8),
@@ -1014,4 +1015,15 @@ export const exportHistory = pgTable('export_history', {
   index('export_history_admin_created_idx').on(table.adminId, table.createdAt),
   index('export_history_expires_idx').on(table.expiresAt),
   index('export_history_status_created_idx').on(table.status, table.createdAt),
+]);
+
+export const shiftCopyLog = pgTable('shift_copy_log', {
+  id: serial('id').primaryKey(),
+  sourceShiftId: integer('source_shift_id').notNull(),
+  targetShiftId: integer('target_shift_id').notNull(),
+  module: varchar('module', { length: 64 }).notNull(),
+  copiedAt: timestamp('copied_at').defaultNow(),
+  copiedByAdminId: integer('copied_by_admin_id'),
+}, (table) => [
+  uniqueIndex('shift_copy_log_pair_module_unique').on(table.sourceShiftId, table.targetShiftId, table.module),
 ]);
