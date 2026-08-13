@@ -1599,12 +1599,15 @@ body {
 
 .kb-courses-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  left: 0;
+  bottom: var(--m-tabbar-clearance);
   z-index: 240;
   background: rgba(0, 0, 0, 0.4);
   display: flex;
   flex-direction: column;
-  padding-top: max(8px, env(safe-area-inset-top, 0px));
+  padding: max(8px, env(safe-area-inset-top, 0px)) 10px 12px;
   box-sizing: border-box;
 }
 .kb-courses-sheet {
@@ -1618,8 +1621,8 @@ body {
   flex-direction: column;
   overflow: hidden;
   background: #F2F2F7;
-  border-radius: 14px 14px 0 0;
-  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
+  border-radius: 14px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.18);
 }
 .kb-courses-x {
   position: absolute;
@@ -1653,7 +1656,7 @@ body {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   touch-action: pan-y;
-  padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  padding: 14px 16px 20px;
 }
 .kb-courses-head {
   padding-right: 44px;

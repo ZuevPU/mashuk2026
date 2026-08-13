@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { openExternalUrl } from '../../utils/openUrl';
 import mentorshipCover from '../../assets/courses/mentorship.png';
 import pedagogyCover from '../../assets/courses/pedagogy.png';
@@ -47,8 +48,8 @@ export function MashukCoursesSheet({
       document.body.style.overflow = prev;
     };
   }, [open]);
-  if (!open) return null;
-  return (
+  if (!open || typeof document === 'undefined') return null;
+  return createPortal(
     <div className="kb-courses-overlay" onClick={onClose} role="presentation">
       <div
         className="kb-courses-sheet"
@@ -99,7 +100,8 @@ export function MashukCoursesSheet({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
