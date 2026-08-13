@@ -15,7 +15,7 @@ export const MASHUK_COURSES = [
   {
     id: 'pedagogy',
     title: 'Педагогика будущего: внедрение современных технологий в образовательный процесс',
-    description: 'Образовательное мероприятие Центра знаний «Машук»: ИИ, современные технологии и практика внедрения в учебный процесс.',
+    description: 'Онлайн образовательное мероприятие Центра знаний «Машук»: ИИ, современные технологии и практика внедрения в учебный процесс.',
     tags: ['ИИ', 'технологии', 'практика'],
     image: pedagogyCover,
     registerUrl: 'https://lms.mashuk.online/education/listener/course_sessions/pedagogika-buduschego-vnedrenie-sovremennyh-tehnologii-v-obrazovatelnyi-protsess-07-20/register',
