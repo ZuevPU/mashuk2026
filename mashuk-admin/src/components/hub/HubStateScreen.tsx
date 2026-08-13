@@ -25,6 +25,8 @@ const ZONE_COLORS: Record<string, string> = {
   'Риск': '#e2685e',
 };
 
+const QUOTE_ZONE_ORDER = ['Подъём', 'Включение', 'Нейтраль', 'Усталость', 'Риск'] as const;
+
 type StateData = {
   meta: {
     day: number;
@@ -68,6 +70,7 @@ type StateData = {
     phase?: string;
     phaseKey?: 'morning' | 'day' | 'evening';
     zone?: string;
+    zoneKey?: string | null;
     dir?: string;
     polarity?: 'pos' | 'neg' | 'neu';
   }>;
@@ -108,8 +111,15 @@ function negCellStyle(neg: number | null, _n: number): CSSProperties {
 }
 
 type QuotePhase = 'all' | 'morning' | 'day' | 'evening';
-type QuoteTone = 'all' | 'pos' | 'neg';
 type StateQuote = StateData['quotes'][number];
+
+const ZONE_FROM_KEY: Record<string, string> = {
+  lift: 'Подъём',
+  engagement: 'Включение',
+  neutral: 'Нейтраль',
+  fatigue: 'Усталость',
+  risk: 'Риск',
+};
 
 function quotePhaseKey(q: StateQuote): QuotePhase | 'other' {
   if (q.phaseKey === 'morning' || q.phaseKey === 'day' || q.phaseKey === 'evening') return q.phaseKey;
@@ -120,9 +130,16 @@ function quotePhaseKey(q: StateQuote): QuotePhase | 'other' {
   return 'other';
 }
 
+function quoteZoneLabel(q: StateQuote): string {
+  if (q.zone && q.zone !== '—') return q.zone;
+  if (q.zoneKey && ZONE_FROM_KEY[q.zoneKey]) return ZONE_FROM_KEY[q.zoneKey];
+  const fromMeta = (q.meta.split(' · ')[1] || '').trim();
+  return fromMeta || '—';
+}
+
 function quoteTone(q: StateQuote): 'pos' | 'neg' | 'neu' {
   if (q.polarity === 'pos' || q.polarity === 'neg' || q.polarity === 'neu') return q.polarity;
-  const zone = (q.zone || q.meta.split(' · ')[1] || '').trim();
+  const zone = quoteZoneLabel(q);
   if (zone === 'Риск' || zone === 'Усталость') return 'neg';
   if (zone === 'Подъём' || zone === 'Включение') return 'pos';
   return 'neu';
@@ -162,7 +179,7 @@ export function HubStateScreen() {
   const [err, setErr] = useState<string | null>(null);
   const [quoteLimit, setQuoteLimit] = useState(24);
   const [quotePhase, setQuotePhase] = useState<QuotePhase>('all');
-  const [quoteToneFilter, setQuoteToneFilter] = useState<QuoteTone>('all');
+  const [quoteZones, setQuoteZones] = useState<string[]>([]);
   const [quoteDirFilter, setQuoteDirFilter] = useState('');
   const [quoteSort, setQuoteSort] = useState<'neg' | 'pos'>('neg');
 
@@ -187,7 +204,7 @@ export function HubStateScreen() {
 
   useEffect(() => {
     setQuoteLimit(24);
-  }, [quotePhase, quoteToneFilter, quoteDirFilter, quoteSort, forumDay, direction, group]);
+  }, [quotePhase, quoteZones, quoteDirFilter, quoteSort, forumDay, direction, group]);
 
   const allForum = isAllForumDay(forumDay);
   const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);
@@ -216,9 +233,10 @@ export function HubStateScreen() {
 
   const filteredQuotes = useMemo(() => {
     if (!data) return [];
+    const zoneSet = new Set(quoteZones);
     const list = data.quotes.filter(q => {
       if (quotePhase !== 'all' && quotePhaseKey(q) !== quotePhase) return false;
-      if (quoteToneFilter !== 'all' && quoteTone(q) !== quoteToneFilter) return false;
+      if (zoneSet.size > 0 && !zoneSet.has(quoteZoneLabel(q))) return false;
       if (quoteDirFilter && quoteDir(q) !== quoteDirFilter) return false;
       return true;
     });
@@ -228,18 +246,21 @@ export function HubStateScreen() {
       return t === 'pos' ? 0 : t === 'neu' ? 1 : 2;
     };
     return [...list].sort((a, b) => rank(a) - rank(b));
-  }, [data, quotePhase, quoteToneFilter, quoteDirFilter, quoteSort]);
+  }, [data, quotePhase, quoteZones, quoteDirFilter, quoteSort]);
 
   const quoteCounts = useMemo(() => {
     const phases = { morning: 0, day: 0, evening: 0 };
-    const tones = { pos: 0, neg: 0, neu: 0 };
-    if (!data) return { phases, tones };
+    const zones: Record<string, number> = {
+      'Подъём': 0, 'Включение': 0, 'Нейтраль': 0, 'Усталость': 0, 'Риск': 0, '—': 0,
+    };
+    if (!data) return { phases, zones };
     for (const q of data.quotes) {
       const p = quotePhaseKey(q);
       if (p !== 'other') phases[p] += 1;
-      tones[quoteTone(q)] += 1;
+      const z = quoteZoneLabel(q);
+      zones[z] = (zones[z] || 0) + 1;
     }
-    return { phases, tones };
+    return { phases, zones };
   }, [data]);
 
   return (
@@ -445,7 +466,7 @@ export function HubStateScreen() {
           <DayResultsSection
             id="hub-state-reasons"
             title="Причины"
-            note="Все текстовые комментарии из проверок состояния: утро, день и вечер, плюс и минус. Имена скрыты."
+            note="Фильтры только для этой ленты: часть дня и вид состояния (подъём, включение, нейтраль, усталость, риск). Имена скрыты."
           >
             <div className="adm-dash-grid adm-dash-grid-2">
             <DashCard title={`Темы негативных причин · ${data.negCount}`}>
@@ -505,79 +526,105 @@ export function HubStateScreen() {
               className="adm-hub-quotes-card"
             >
               <div className="adm-state-quote-filters">
-                <div className="adm-forum-seg" role="group" aria-label="Часть дня">
-                  {([
-                    ['all', 'Все'],
-                    ['morning', `Утро · ${quoteCounts.phases.morning}`],
-                    ['day', `День · ${quoteCounts.phases.day}`],
-                    ['evening', `Вечер · ${quoteCounts.phases.evening}`],
-                  ] as const).map(([key, label]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={quotePhase === key ? 'on' : ''}
-                      onClick={() => setQuotePhase(key)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="adm-forum-seg" role="group" aria-label="Тональность">
-                  {([
-                    ['all', 'Все'],
-                    ['pos', `Положительные · ${quoteCounts.tones.pos}`],
-                    ['neg', `Отрицательные · ${quoteCounts.tones.neg}`],
-                  ] as const).map(([key, label]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={quoteToneFilter === key ? 'on' : ''}
-                      onClick={() => setQuoteToneFilter(key)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="adm-forum-seg" role="group" aria-label="Сортировка">
-                  <button
-                    type="button"
-                    className={quoteSort === 'neg' ? 'on' : ''}
-                    onClick={() => setQuoteSort('neg')}
-                  >
-                    Сначала минус
-                  </button>
-                  <button
-                    type="button"
-                    className={quoteSort === 'pos' ? 'on' : ''}
-                    onClick={() => setQuoteSort('pos')}
-                  >
-                    Сначала плюс
-                  </button>
-                </div>
-                <label className="adm-insights-filter">
-                  Направление
-                  <select
-                    className="adm-input"
-                    value={quoteDirFilter}
-                    onChange={e => setQuoteDirFilter(e.target.value)}
-                  >
-                    <option value="">Все направления</option>
-                    {quoteDirs.map(d => (
-                      <option key={d} value={d}>{d}</option>
+                <div className="adm-state-quote-filter-row">
+                  <span className="adm-state-quote-filter-label">Часть дня</span>
+                  <div className="adm-forum-seg" role="group" aria-label="Часть дня">
+                    {([
+                      ['all', 'Все'],
+                      ['morning', `Утро · ${quoteCounts.phases.morning}`],
+                      ['day', `День · ${quoteCounts.phases.day}`],
+                      ['evening', `Вечер · ${quoteCounts.phases.evening}`],
+                    ] as const).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={quotePhase === key ? 'on' : ''}
+                        onClick={() => setQuotePhase(key)}
+                      >
+                        {label}
+                      </button>
                     ))}
-                  </select>
-                </label>
+                  </div>
+                </div>
+                <div className="adm-state-quote-filter-row">
+                  <span className="adm-state-quote-filter-label">Состояние</span>
+                  <div className="adm-forum-seg" role="group" aria-label="Вид состояния">
+                    <button
+                      type="button"
+                      className={quoteZones.length === 0 ? 'on' : ''}
+                      onClick={() => setQuoteZones([])}
+                    >
+                      Все
+                    </button>
+                    {QUOTE_ZONE_ORDER.map(zone => (
+                      <button
+                        key={zone}
+                        type="button"
+                        className={quoteZones.includes(zone) ? 'on' : ''}
+                        onClick={() => setQuoteZones(prev => (
+                          prev.includes(zone) ? prev.filter(z => z !== zone) : [...prev, zone]
+                        ))}
+                      >
+                        <i
+                          className="adm-state-quote-zone-dot"
+                          style={{ background: ZONE_COLORS[zone] }}
+                          aria-hidden
+                        />
+                        {zone} · {quoteCounts.zones[zone] || 0}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="adm-state-quote-filter-row">
+                  <span className="adm-state-quote-filter-label">Сортировка</span>
+                  <div className="adm-forum-seg" role="group" aria-label="Сортировка">
+                    <button
+                      type="button"
+                      className={quoteSort === 'neg' ? 'on' : ''}
+                      onClick={() => setQuoteSort('neg')}
+                    >
+                      Сначала минус
+                    </button>
+                    <button
+                      type="button"
+                      className={quoteSort === 'pos' ? 'on' : ''}
+                      onClick={() => setQuoteSort('pos')}
+                    >
+                      Сначала плюс
+                    </button>
+                  </div>
+                  <label className="adm-insights-filter">
+                    Направление
+                    <select
+                      className="adm-input"
+                      value={quoteDirFilter}
+                      onChange={e => setQuoteDirFilter(e.target.value)}
+                    >
+                      <option value="">Все направления</option>
+                      {quoteDirs.map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </div>
               {filteredQuotes.length === 0 ? (
                 <p className="adm-muted">Нет комментариев по выбранным фильтрам.</p>
               ) : (
                 <>
-                  {filteredQuotes.slice(0, quoteLimit).map((q, i) => (
-                    <div key={i} className={`adm-state-quote is-${quoteTone(q)}`}>
-                      {q.text}
-                      <span className="adm-state-quote-m">{q.meta}</span>
-                    </div>
-                  ))}
+                  {filteredQuotes.slice(0, quoteLimit).map((q, i) => {
+                    const zone = quoteZoneLabel(q);
+                    return (
+                      <div
+                        key={i}
+                        className={`adm-state-quote is-${quoteTone(q)}`}
+                        style={{ borderLeftColor: ZONE_COLORS[zone] || '#6f7d95' }}
+                      >
+                        {q.text}
+                        <span className="adm-state-quote-m">{q.meta}</span>
+                      </div>
+                    );
+                  })}
                   {filteredQuotes.length > quoteLimit && (
                     <button
                       type="button"

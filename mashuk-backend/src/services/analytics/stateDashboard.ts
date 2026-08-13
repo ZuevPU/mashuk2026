@@ -275,6 +275,7 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
         phase: PHASE_RU[phase],
         phaseKey: phase,
         zone: zone ? ZONE_RU[zone] : '—',
+        zoneKey: zone,
         dir: (r.direction || '—').trim() || '—',
         polarity: quotePolarity(zone),
         psycho: isPsychoReason(text),
@@ -289,6 +290,7 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
     phase: r.phase,
     phaseKey: r.phaseKey,
     zone: r.zone,
+    zoneKey: r.zoneKey,
     dir: r.dir,
     polarity: r.polarity,
   }));
