@@ -6,6 +6,7 @@ import {
 import { UserInfo } from '@vkontakte/vk-bridge';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { apiGet, apiPost, getStoredShiftId, setStoredShiftId } from '../api/client';
+import { requestVkPushPermission } from '../utils/pushNotifications';
 import {
   GOAL_QUESTIONS,
   INTEREST_GROUPS,
@@ -272,7 +273,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         vkPhotoUrl: fetchedUser?.photo_200 || fetchedUser?.photo_100 || undefined,
         shiftId: selectedShiftId,
       });
-      void import('../utils/pushNotifications.js').then(m => m.requestVkPushPermission());
+      void requestVkPushPermission();
       onRegistered?.();
       routeNavigator.replace('/');
     } catch (e) {

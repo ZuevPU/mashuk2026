@@ -1,6 +1,7 @@
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
+import { adminDownloadBinary } from '../../admin/client';
 import type { AnalyticsTabProps } from './AnalyticsTab';
 import { roleName } from '../onboarding/roleOptions';
 import { LeaderboardTable } from '../rating/LeaderboardTable';
@@ -112,7 +113,6 @@ export function PulseView({
   })();
 
   const downloadStateChecks = async () => {
-    const { adminDownloadBinary } = await import('../../admin/client');
     const dayMatch = exportPath.match(/[?&]day=(\d+)/);
     const dayPart = dayMatch ? `d${dayMatch[1]}` : 'shift';
     await adminDownloadBinary(exportPath, `state_checks_${dayPart}.xlsx`);
@@ -1449,7 +1449,6 @@ export function EveningView({
     : `/exports/evening-summary?mode=day&day=${forumDay}`;
 
   const downloadFull = async () => {
-    const { adminDownloadBinary } = await import('../../admin/client');
     const dayMatch = exportPath.match(/[?&]day=(\d+)/);
     const dayPart = dayMatch ? `d${dayMatch[1]}` : 'shift';
     await adminDownloadBinary(exportPath, `evening_summary_${dayPart}.xlsx`);
@@ -1752,7 +1751,6 @@ export function AfterBlocksView({
   })();
 
   const downloadFull = async () => {
-    const { adminDownloadBinary } = await import('../../admin/client');
     const dayMatch = exportPath.match(/[?&]day=(\d+)/);
     const dayPart = dayMatch ? `d${dayMatch[1]}` : 'shift';
     await adminDownloadBinary(exportPath, `after_blocks_${dayPart}.xlsx`);
@@ -1968,7 +1966,6 @@ export function DirectionView({
     : `/exports/direction-pack?mode=day&day=${forumDay}&direction=${encodeURIComponent(direction)}${group ? `&group=${encodeURIComponent(group)}` : ''}`;
 
   const download = async (path: string, file: string) => {
-    const { adminDownloadBinary } = await import('../../admin/client');
     await adminDownloadBinary(path, file);
   };
 
