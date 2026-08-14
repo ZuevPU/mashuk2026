@@ -55,41 +55,10 @@ import {
   buildSuppressedVisibilityKeys,
   isSuppressedByHiddenTwin,
 } from '../services/questionVisibilityKeys.js';
-
-function exchangeQuestionAnswerable(status: string | null | undefined): boolean {
-  return (status || '').trim().toLowerCase() === 'approved';
-}
-
-function participantCanViewExchangeQuestion(
-  q: { participantId: number; audience?: string | null; moderationStatus?: string | null },
-  me: { id: number; direction?: string | null },
-  authorDirection?: string | null,
-): boolean {
-  if (q.participantId === me.id) return true;
-  if (!exchangeQuestionAnswerable(q.moderationStatus)) return false;
-  const aud = (q.audience || 'all').toLowerCase();
-  if (aud === 'direction' || aud === 'my_direction' || aud === 'своему направлению') {
-    return !!me.direction && authorDirection === me.direction;
-  }
-  return true;
-}
-
-function participantCanAnswerExchangeQuestion(
-  question: typeof exchangeQuestions.$inferSelect,
-  me: { id: number; direction?: string | null },
-  authorDirection?: string | null,
-): string | null {
-  if (!exchangeQuestionAnswerable(question.moderationStatus)) {
-    return 'Вопрос ещё не одобрен модератором или снят с публикации';
-  }
-  const aud = (question.audience || 'all').toLowerCase();
-  if (aud === 'direction' || aud === 'my_direction' || aud === 'своему направлению') {
-    if (!me.direction || authorDirection !== me.direction) {
-      return 'Этот вопрос только для участников вашего направления';
-    }
-  }
-  return null;
-}
+import {
+  participantCanAnswerExchangeQuestion,
+  participantCanViewExchangeQuestion,
+} from '../services/exchangeVisibility.js';
 
 async function answerSubmitExtras(participantId: number, settings: Awaited<ReturnType<typeof getForumSettings>>) {
   const newMedals = await evaluateMedalsForParticipantDetailed(participantId);
@@ -1036,13 +1005,19 @@ export const listExchange = async (req: ParticipantRequest, res: Response): Prom
     }).from(exchangeQuestions)
       .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
       .leftJoin(exchangeCategories, eq(exchangeQuestions.categoryId, exchangeCategories.id))
-      .where(or(
-        eq(exchangeQuestions.moderationStatus, 'approved'),
-        eq(exchangeQuestions.participantId, me.id),
+      .where(and(
+        or(
+          eq(exchangeQuestions.moderationStatus, 'approved'),
+          eq(exchangeQuestions.participantId, me.id),
+        ),
+        or(
+          eq(exchangeQuestions.participantId, me.id),
+          eq(participants.shiftId, me.shiftId),
+        ),
       ));
 
     let visible = list.filter(row =>
-      participantCanViewExchangeQuestion(row.q, me, row.author?.direction ?? null));
+      participantCanViewExchangeQuestion(row.q, me, row.author));
 
     if (feed === 'smalltalk') {
       visible = visible.filter(row => row.category?.slug === 'smalltalk');
@@ -1212,7 +1187,7 @@ export const getExchangeQuestion = async (req: ParticipantRequest, res: Response
       return;
     }
 
-    if (!participantCanViewExchangeQuestion(row.q, me, row.author?.direction ?? null)) {
+    if (!participantCanViewExchangeQuestion(row.q, me, row.author)) {
       res.status(403).json({ error: 'Этот вопрос недоступен' });
       return;
     }
@@ -1355,12 +1330,15 @@ export const answerExchange = async (req: ParticipantRequest, res: Response): Pr
       return;
     }
 
-    const [author] = await db.select({ direction: participants.direction }).from(participants)
+    const [author] = await db.select({
+      direction: participants.direction,
+      shiftId: participants.shiftId,
+    }).from(participants)
       .where(eq(participants.id, question.participantId)).limit(1);
     const blockReason = participantCanAnswerExchangeQuestion(
       question,
       req.participant!,
-      author?.direction ?? null,
+      author,
     );
     if (blockReason) {
       res.status(403).json({ error: blockReason });
@@ -1457,6 +1435,21 @@ export const reactExchangeAnswer = async (req: ParticipantRequest, res: Response
       res.status(404).json({ error: 'Answer not found' });
       return;
     }
+    const [question] = await db.select().from(exchangeQuestions)
+      .where(eq(exchangeQuestions.id, existing.questionId)).limit(1);
+    if (!question) {
+      res.status(404).json({ error: 'Question not found' });
+      return;
+    }
+    const [author] = await db.select({
+      direction: participants.direction,
+      shiftId: participants.shiftId,
+    }).from(participants)
+      .where(eq(participants.id, question.participantId)).limit(1);
+    if (!participantCanViewExchangeQuestion(question, req.participant!, author)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
 
     const { reactions, removed } = toggleExchangeReaction(existing.reactions, req.participant!.id, kind);
     const [updated] = await db.update(exchangeAnswers)
@@ -1486,9 +1479,12 @@ export const reactExchangeQuestion = async (req: ParticipantRequest, res: Respon
       return;
     }
 
-    const [author] = await db.select({ direction: participants.direction }).from(participants)
+    const [author] = await db.select({
+      direction: participants.direction,
+      shiftId: participants.shiftId,
+    }).from(participants)
       .where(eq(participants.id, existing.participantId)).limit(1);
-    if (!participantCanViewExchangeQuestion(existing, req.participant!, author?.direction ?? null)) {
+    if (!participantCanViewExchangeQuestion(existing, req.participant!, author)) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }

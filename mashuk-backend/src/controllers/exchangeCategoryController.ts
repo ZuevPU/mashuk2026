@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   exchangeCategories,
@@ -141,17 +141,33 @@ export const adminBulkExchangeCategory = async (req: AdminRequest, res: Response
     res.status(404).json({ error: 'Category not found' });
     return;
   }
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
+  const owned = await db.select({ id: exchangeQuestions.id })
+    .from(exchangeQuestions)
+    .innerJoin(participants, eq(exchangeQuestions.participantId, participants.id))
+    .where(and(
+      inArray(exchangeQuestions.id, ids),
+      eq(participants.shiftId, shiftId),
+    ));
+  const ownedIds = owned.map(r => r.id);
+  if (!ownedIds.length) {
+    res.json({ ok: true, updated: 0, categoryId });
+    return;
+  }
   await db.update(exchangeQuestions)
     .set({
       categoryId,
       classifiedBy: 'moderator',
       categoryConfirmed: true,
     })
-    .where(inArray(exchangeQuestions.id, ids));
-  res.json({ ok: true, updated: ids.length, categoryId });
+    .where(inArray(exchangeQuestions.id, ownedIds));
+  res.json({ ok: true, updated: ownedIds.length, categoryId });
 };
 
 export const adminModerationQueueExchange = async (req: AdminRequest, res: Response): Promise<void> => {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
   const preset = String(req.query.preset || 'needs_category');
   // MVP (review decision B): other OR classified_by = auto
   const rows = await db.select({
@@ -161,11 +177,12 @@ export const adminModerationQueueExchange = async (req: AdminRequest, res: Respo
   }).from(exchangeQuestions)
     .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
     .leftJoin(exchangeCategories, eq(exchangeQuestions.categoryId, exchangeCategories.id))
-    .where(
+    .where(and(
+      eq(participants.shiftId, shiftId),
       preset === 'needs_category'
         ? sql`(${exchangeCategories.slug} = 'other' OR ${exchangeQuestions.classifiedBy} = 'auto')`
         : eq(exchangeQuestions.moderationStatus, 'pending'),
-    )
+    ))
     .orderBy(
       sql`CASE WHEN ${exchangeCategories.slug} = 'other' THEN 0 WHEN ${exchangeQuestions.classifiedBy} = 'auto' THEN 1 ELSE 2 END`,
       sql`${exchangeQuestions.createdAt} DESC NULLS LAST`,

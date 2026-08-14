@@ -1,7 +1,7 @@
-import { count, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { db } from '../../db/index.js';
-import { exchangeQuestions, orgThreads } from '../../db/schema.js';
+import { exchangeQuestions, orgThreads, participants } from '../../db/schema.js';
 import { getForumSettings } from '../helpers.js';
 import { resolveAnalyticsFilters } from './analyticsQuery.js';
 import { listFilterOptions } from './cohort.js';
@@ -19,14 +19,22 @@ import { buildStateCheckDashboard } from './stateCheckDashboard.js';
 import { DASHBOARD_CATALOG, forumDayCalendarDate } from './dashboardCatalog.js';
 import { resolveAdminShiftId } from '../shiftService.js';
 
-async function loadCommunityQueueCounts() {
+async function loadCommunityQueueCounts(shiftId: number | null) {
+  const exchangeScope = (status: 'pending' | 'approved') => {
+    const statusEq = eq(exchangeQuestions.moderationStatus, status);
+    return shiftId != null
+      ? and(statusEq, eq(participants.shiftId, shiftId))
+      : statusEq;
+  };
   const [[pendingExchange], [orgWaiting], [activeExchange]] = await Promise.all([
     db.select({ count: count() }).from(exchangeQuestions)
-      .where(eq(exchangeQuestions.moderationStatus, 'pending')),
+      .innerJoin(participants, eq(exchangeQuestions.participantId, participants.id))
+      .where(exchangeScope('pending')),
     db.select({ count: count() }).from(orgThreads)
       .where(eq(orgThreads.status, 'waiting')),
     db.select({ count: count() }).from(exchangeQuestions)
-      .where(eq(exchangeQuestions.moderationStatus, 'approved')),
+      .innerJoin(participants, eq(exchangeQuestions.participantId, participants.id))
+      .where(exchangeScope('approved')),
   ]);
   return {
     pendingExchange: Number(pendingExchange?.count ?? 0),
@@ -71,7 +79,7 @@ export async function composeLegacyDashboards(req: AdminRequest) {
     buildActivityDashboard(filters, req),
     buildPiggybankDashboard(filters, req),
     buildSemanticDashboard(filters, req),
-    loadCommunityQueueCounts(),
+    loadCommunityQueueCounts(filters.shiftId),
     buildExchangeAnalytics(filters, req),
     buildEveningDashboard(filters, req),
     buildStateCheckDashboard(filters, req),

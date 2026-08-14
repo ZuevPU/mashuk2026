@@ -2424,9 +2424,14 @@ export const bulkModerateTasks = async (req: AdminRequest, res: Response): Promi
   res.json({ results, okCount: results.filter(r => r.ok).length });
 };
 
-export const getModerationSummary = async (_req: AdminRequest, res: Response): Promise<void> => {
+export const getModerationSummary = async (req: AdminRequest, res: Response): Promise<void> => {
+  const shiftId = await resolveAdminShiftId(req);
   const [exchangeRow] = await db.select({ count: count() }).from(exchangeQuestions)
-    .where(eq(exchangeQuestions.moderationStatus, 'pending'));
+    .innerJoin(participants, eq(exchangeQuestions.participantId, participants.id))
+    .where(and(
+      eq(exchangeQuestions.moderationStatus, 'pending'),
+      eq(participants.shiftId, shiftId),
+    ));
   const [tasksRow] = await db.select({ count: count() }).from(taskSubmissions)
     .where(or(
       eq(taskSubmissions.status, 'pending'),
@@ -2452,6 +2457,13 @@ export const moderateExchange = async (req: AdminRequest, res: Response): Promis
 
   const [before] = await db.select().from(exchangeQuestions).where(eq(exchangeQuestions.id, id)).limit(1);
   if (!before) {
+    res.status(404).json({ error: 'Question not found' });
+    return;
+  }
+  const shiftId = await resolveAdminShiftId(req);
+  const [author] = await db.select({ shiftId: participants.shiftId }).from(participants)
+    .where(eq(participants.id, before.participantId)).limit(1);
+  if (!author || author.shiftId !== shiftId) {
     res.status(404).json({ error: 'Question not found' });
     return;
   }
@@ -2558,6 +2570,13 @@ export const deleteExchangeQuestion = async (req: AdminRequest, res: Response): 
     res.status(404).json({ error: 'Question not found' });
     return;
   }
+  const shiftId = await resolveAdminShiftId(req);
+  const [author] = await db.select({ shiftId: participants.shiftId }).from(participants)
+    .where(eq(participants.id, before.participantId)).limit(1);
+  if (!author || author.shiftId !== shiftId) {
+    res.status(404).json({ error: 'Question not found' });
+    return;
+  }
 
   await db.delete(exchangeAnswers).where(eq(exchangeAnswers.questionId, id));
   try {
@@ -2592,6 +2611,19 @@ export const deleteExchangeAnswer = async (req: AdminRequest, res: Response): Pr
 
   const [before] = await db.select().from(exchangeAnswers).where(eq(exchangeAnswers.id, id)).limit(1);
   if (!before) {
+    res.status(404).json({ error: 'Answer not found' });
+    return;
+  }
+  const shiftId = await resolveAdminShiftId(req);
+  const [question] = await db.select({ participantId: exchangeQuestions.participantId })
+    .from(exchangeQuestions).where(eq(exchangeQuestions.id, before.questionId)).limit(1);
+  if (!question) {
+    res.status(404).json({ error: 'Answer not found' });
+    return;
+  }
+  const [author] = await db.select({ shiftId: participants.shiftId }).from(participants)
+    .where(eq(participants.id, question.participantId)).limit(1);
+  if (!author || author.shiftId !== shiftId) {
     res.status(404).json({ error: 'Answer not found' });
     return;
   }
@@ -2678,7 +2710,8 @@ async function mapExchangeAdminRows(
   });
 }
 
-export const listPendingExchange = async (_req: AdminRequest, res: Response): Promise<void> => {
+export const listPendingExchange = async (req: AdminRequest, res: Response): Promise<void> => {
+  const shiftId = await resolveAdminShiftId(req);
   const rows = await db.select({
     q: exchangeQuestions,
     p: participants,
@@ -2686,7 +2719,10 @@ export const listPendingExchange = async (_req: AdminRequest, res: Response): Pr
   }).from(exchangeQuestions)
     .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
     .leftJoin(exchangeCategories, eq(exchangeQuestions.categoryId, exchangeCategories.id))
-    .where(eq(exchangeQuestions.moderationStatus, 'pending'))
+    .where(and(
+      eq(exchangeQuestions.moderationStatus, 'pending'),
+      eq(participants.shiftId, shiftId),
+    ))
     .orderBy(
       sql`CASE WHEN ${exchangeCategories.slug} = 'other' THEN 0 WHEN ${exchangeQuestions.classifiedBy} = 'auto' THEN 1 ELSE 2 END`,
       desc(exchangeQuestions.createdAt),
@@ -2696,25 +2732,28 @@ export const listPendingExchange = async (_req: AdminRequest, res: Response): Pr
 };
 
 export const listAllExchange = async (req: AdminRequest, res: Response): Promise<void> => {
+  const shiftId = await resolveAdminShiftId(req);
   const status = req.query.status as string | undefined;
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
   const offset = (page - 1) * limit;
+  const shiftScope = eq(participants.shiftId, shiftId);
+  const scoped = status
+    ? and(shiftScope, eq(exchangeQuestions.moderationStatus, status))
+    : shiftScope;
 
-  let baseQuery = db.select({
+  const baseQuery = db.select({
     q: exchangeQuestions,
     p: participants,
     c: exchangeCategories,
   }).from(exchangeQuestions)
     .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
-    .leftJoin(exchangeCategories, eq(exchangeQuestions.categoryId, exchangeCategories.id));
+    .leftJoin(exchangeCategories, eq(exchangeQuestions.categoryId, exchangeCategories.id))
+    .where(scoped);
 
-  let countQuery = db.select({ count: count() }).from(exchangeQuestions);
-
-  if (status) {
-    baseQuery = baseQuery.where(eq(exchangeQuestions.moderationStatus, status)) as any;
-    countQuery = countQuery.where(eq(exchangeQuestions.moderationStatus, status)) as any;
-  }
+  const countQuery = db.select({ count: count() }).from(exchangeQuestions)
+    .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
+    .where(scoped);
 
   const [total] = await countQuery;
   const rows = await baseQuery.orderBy(desc(exchangeQuestions.createdAt)).limit(limit).offset(offset);
@@ -2725,7 +2764,15 @@ export const listAllExchange = async (req: AdminRequest, res: Response): Promise
   });
 };
 
-export const listExchangeAnswers = async (_req: AdminRequest, res: Response): Promise<void> => {
+export const listExchangeAnswers = async (req: AdminRequest, res: Response): Promise<void> => {
+  const shiftId = await resolveAdminShiftId(req);
+  const shiftAuthors = await db.select({ id: participants.id }).from(participants)
+    .where(eq(participants.shiftId, shiftId));
+  const authorIds = shiftAuthors.map(a => a.id);
+  if (!authorIds.length) {
+    res.json({ answers: [] });
+    return;
+  }
   const rows = await db.select({
     a: exchangeAnswers,
     q: exchangeQuestions,
@@ -2733,6 +2780,7 @@ export const listExchangeAnswers = async (_req: AdminRequest, res: Response): Pr
   }).from(exchangeAnswers)
     .leftJoin(exchangeQuestions, eq(exchangeAnswers.questionId, exchangeQuestions.id))
     .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
+    .where(inArray(exchangeQuestions.participantId, authorIds))
     .orderBy(desc(exchangeAnswers.createdAt));
 
   res.json({
@@ -3272,14 +3320,20 @@ export const exportTaskSubmissions = async (_req: AdminRequest, res: Response): 
   res.send('\uFEFF' + header + csv);
 };
 
-export const exportExchange = async (_req: AdminRequest, res: Response): Promise<void> => {
+export const exportExchange = async (req: AdminRequest, res: Response): Promise<void> => {
+  const shiftId = await resolveAdminShiftId(req);
   const qs = await db.select({ q: exchangeQuestions, p: participants })
     .from(exchangeQuestions)
-    .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id));
-  const ans = await db.select({ a: exchangeAnswers, p: participants, q: exchangeQuestions })
-    .from(exchangeAnswers)
-    .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
-    .leftJoin(exchangeQuestions, eq(exchangeAnswers.questionId, exchangeQuestions.id));
+    .leftJoin(participants, eq(exchangeQuestions.participantId, participants.id))
+    .where(eq(participants.shiftId, shiftId));
+  const qIds = qs.map(r => r.q.id);
+  const ans = qIds.length
+    ? await db.select({ a: exchangeAnswers, p: participants, q: exchangeQuestions })
+      .from(exchangeAnswers)
+      .leftJoin(participants, eq(exchangeAnswers.participantId, participants.id))
+      .leftJoin(exchangeQuestions, eq(exchangeAnswers.questionId, exchangeQuestions.id))
+      .where(inArray(exchangeAnswers.questionId, qIds))
+    : [];
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename=exchange.csv');
   let csv = 'type,id,participant_name,direction,question_text,answer_text,status,reactions,created_at\n';

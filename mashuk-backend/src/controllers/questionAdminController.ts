@@ -91,9 +91,11 @@ function buildQuestionValues(raw: Record<string, unknown>, textFallback: string)
 }
 
 async function listExchangeRows(req: AdminRequest, res: Response) {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
   const q = (req.query.q as string | undefined)?.trim();
   const status = req.query.status as string | undefined;
-  const conditions = [];
+  const conditions = [eq(participants.shiftId, shiftId)];
   if (status) conditions.push(eq(exchangeQuestions.moderationStatus, status));
   if (q) conditions.push(ilike(exchangeQuestions.text, `%${q}%`));
   const rows = await db.select({
