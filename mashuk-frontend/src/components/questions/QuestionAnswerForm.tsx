@@ -59,6 +59,9 @@ interface QuestionAnswerFormProps {
     allowRetry?: boolean;
     allowOther?: boolean;
     practicesConfig?: PracticesVoteConfig | null;
+    afterBlocksConfig?: {
+      prompts?: Array<{ id?: string; text: string; answerType?: string; options?: string[] }>;
+    } | null;
   };
   options: { id: number; label: string; value: string; parentOptionId?: number | null }[];
   dayEvents?: LessonPickEvent[];
@@ -84,7 +87,13 @@ function formatStoredAnswer(
         if (!raw || typeof raw !== 'object') return '';
         const r = raw as Record<string, unknown>;
         const topic = typeof r.eventTitle === 'string' ? r.eventTitle.trim() : '';
-        const text = typeof r.text === 'string' ? r.text.trim() : '';
+        let text = typeof r.text === 'string' ? r.text.trim() : '';
+        if (!text && r.answers && typeof r.answers === 'object' && !Array.isArray(r.answers)) {
+          text = Object.values(r.answers as Record<string, unknown>)
+            .map((v) => (Array.isArray(v) ? v.map(String).filter(Boolean).join(', ') : String(v ?? '').trim()))
+            .filter(Boolean)
+            .join('\n');
+        }
         if (!text) return '';
         const where = parent && topic && parent !== topic
           ? `${parent} · ${topic}`
@@ -254,6 +263,133 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
 const MIN_LESSON_REFLECTION_CHARS = 20;
 const MIN_STATE_REASON_CHARS = 15;
 
+type AfterBlocksPrompt = {
+  id: string;
+  text: string;
+  answerType: string;
+  options: string[];
+};
+
+function resolveAfterBlocksPrompts(question: QuestionAnswerFormProps['question']): AfterBlocksPrompt[] {
+  const prompts = (question.afterBlocksConfig?.prompts || [])
+    .filter(p => (p.text || '').trim())
+    .map((p, i) => ({
+      id: p.id || `prompt_${i}`,
+      text: p.text.trim(),
+      answerType: p.answerType || 'text',
+      options: Array.isArray(p.options) ? p.options.map(o => String(o || '').trim()).filter(Boolean) : [],
+    }));
+  if (prompts.length) return prompts;
+  return [{
+    id: 'legacy',
+    text: (question.text || '').trim() || 'Что вынесли из этого блока?',
+    answerType: 'text',
+    options: [],
+  }];
+}
+
+function afterBlocksPromptOk(prompt: AfterBlocksPrompt, value: unknown): boolean {
+  if (prompt.answerType === 'text') {
+    return String(value || '').trim().length >= MIN_LESSON_REFLECTION_CHARS;
+  }
+  if (prompt.answerType === 'scale_5' || prompt.answerType === 'scale_10') {
+    const n = typeof value === 'number' ? value : Number(value);
+    const max = prompt.answerType === 'scale_10' ? 10 : 5;
+    return Number.isFinite(n) && n >= 1 && n <= max;
+  }
+  if (prompt.answerType === 'choice') return String(value || '').trim().length > 0;
+  if (prompt.answerType === 'multi') {
+    return Array.isArray(value) && value.some(v => String(v).trim());
+  }
+  return String(value || '').trim().length > 0;
+}
+
+function formatAfterBlocksPromptValue(prompt: AfterBlocksPrompt, value: unknown): string {
+  if (prompt.answerType === 'multi' && Array.isArray(value)) {
+    return value.map(v => String(v).trim()).filter(Boolean).join(', ');
+  }
+  if (value == null) return '';
+  return String(value).trim();
+}
+
+function composeAfterBlocksText(prompts: AfterBlocksPrompt[], answers: Record<string, unknown>): string {
+  return prompts.map(p => {
+    const formatted = formatAfterBlocksPromptValue(p, answers[p.id]);
+    if (!formatted) return '';
+    return prompts.length > 1 ? `${p.text}: ${formatted}` : formatted;
+  }).filter(Boolean).join('\n');
+}
+
+function afterBlocksAnswerKey(topicId: number, promptId: string): string {
+  return `${topicId}:${promptId}`;
+}
+
+const AfterBlocksPromptFields: React.FC<{
+  prompt: AfterBlocksPrompt;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}> = ({ prompt, value, onChange }) => {
+  if (prompt.answerType === 'scale_5' || prompt.answerType === 'scale_10') {
+    const max = prompt.answerType === 'scale_10' ? 10 : 5;
+    const n = typeof value === 'number' ? value : Number(value);
+    return (
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {Array.from({ length: max }, (_, i) => i + 1).map(num => (
+          <div
+            key={num}
+            onClick={() => onChange(num)}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 700,
+              fontSize: 13,
+              border: n === num ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
+              background: n === num ? '#D8F3DC' : '#fff',
+            }}
+          >
+            {num}
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (prompt.answerType === 'choice') {
+    const selected = String(value || '');
+    return (
+      <>
+        {prompt.options.map(opt => (
+          <Radio key={opt} checked={selected === opt} onChange={() => onChange(opt)}>{opt}</Radio>
+        ))}
+      </>
+    );
+  }
+  if (prompt.answerType === 'multi') {
+    const selected = Array.isArray(value) ? value.map(String) : [];
+    const toggle = (opt: string) => {
+      onChange(selected.includes(opt) ? selected.filter(x => x !== opt) : [...selected, opt]);
+    };
+    return (
+      <>
+        {prompt.options.map(opt => (
+          <Checkbox key={opt} checked={selected.includes(opt)} onChange={() => toggle(opt)}>{opt}</Checkbox>
+        ))}
+      </>
+    );
+  }
+  return (
+    <Textarea
+      value={String(value || '')}
+      onChange={e => onChange(e.target.value)}
+      placeholder="Своими словами: какая мысль запомнилась, что попробуете на практике…"
+    />
+  );
+};
+
 function formatLessonTime(ev: { startTime?: string | null }) {
   if (!ev.startTime) return null;
   return new Date(ev.startTime).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -278,17 +414,18 @@ const PickCard: React.FC<{
   </div>
 );
 
-/** После блоков: событие → (мульти)подтемы → текст по каждой выбранной */
+/** После блоков: событие → (мульти)подтемы → вопросы по каждой выбранной */
 const AfterBlocksForm: React.FC<{
   question: QuestionAnswerFormProps['question'];
   events: AfterBlocksEventNode[];
   lessonPickMeta?: LessonPickMeta | null;
   onSubmit: (data: unknown) => Promise<void>;
 }> = ({ question, events, lessonPickMeta, onSubmit }) => {
+  const prompts = resolveAfterBlocksPrompts(question);
   const [parentId, setParentId] = useState<number | null>(null);
   const [topicIds, setTopicIds] = useState<number[]>([]);
-  const [texts, setTexts] = useState<Record<number, string>>({});
-  const [textIndex, setTextIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [pairIndex, setPairIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState<'event' | 'topic' | 'text'>('event');
 
@@ -302,40 +439,45 @@ const AfterBlocksForm: React.FC<{
       .map(id => children.find(c => c.id === id))
       .filter((c): c is LessonPickEvent => Boolean(c));
   })();
-  const currentTopic = selectedTopics[textIndex] || null;
-  const currentText = currentTopic ? (texts[currentTopic.id] || '') : '';
-  const textOk = currentText.trim().length >= MIN_LESSON_REFLECTION_CHARS;
-  const isLastText = textIndex >= selectedTopics.length - 1;
+  const pairs = selectedTopics.flatMap(topic => prompts.map(prompt => ({ topic, prompt })));
+  const current = pairs[pairIndex] || null;
+  const currentValue = current
+    ? answers[afterBlocksAnswerKey(current.topic.id, current.prompt.id)]
+    : undefined;
+  const currentOk = current ? afterBlocksPromptOk(current.prompt, currentValue) : false;
+  const isLastPair = pairIndex >= pairs.length - 1;
   const emptyReason = lessonPickMeta?.emptyReason;
   const waiting = events.length === 0 && emptyReason === 'none_conducted_yet';
 
   const topicStepsCount = topicPickNeeded ? 1 : 0;
-  const textStepsCount = Math.max(selectedTopics.length, 1);
-  const totalSteps = 1 + topicStepsCount + textStepsCount;
+  const promptStepsCount = Math.max(pairs.length, 1);
+  const totalSteps = 1 + topicStepsCount + promptStepsCount;
   const stepIndex = step === 'event'
     ? 1
     : step === 'topic'
       ? 2
-      : (1 + topicStepsCount + textIndex + 1);
+      : (1 + topicStepsCount + pairIndex + 1);
+
+  const resetAnswers = () => {
+    setAnswers({});
+    setPairIndex(0);
+  };
 
   const goAfterEventPick = (ev: AfterBlocksEventNode) => {
     if (ev.children.length === 0) {
       setTopicIds([ev.id]);
-      setTexts({});
-      setTextIndex(0);
+      resetAnswers();
       setStep('text');
       return;
     }
     if (ev.children.length === 1) {
       setTopicIds([ev.children[0].id]);
-      setTexts({});
-      setTextIndex(0);
+      resetAnswers();
       setStep('text');
       return;
     }
     setTopicIds([]);
-    setTexts({});
-    setTextIndex(0);
+    resetAnswers();
     setStep('topic');
   };
 
@@ -347,12 +489,19 @@ const AfterBlocksForm: React.FC<{
 
   const handleSubmit = async () => {
     if (!parent || selectedTopics.length === 0) return;
-    const reflections = selectedTopics.map(t => ({
-      eventId: t.id,
-      eventTitle: t.title,
-      text: (texts[t.id] || '').trim(),
-    }));
-    if (reflections.some(r => r.text.length < MIN_LESSON_REFLECTION_CHARS)) return;
+    const reflections = selectedTopics.map(t => {
+      const map: Record<string, unknown> = {};
+      for (const p of prompts) {
+        map[p.id] = answers[afterBlocksAnswerKey(t.id, p.id)];
+      }
+      return {
+        eventId: t.id,
+        eventTitle: t.title,
+        text: composeAfterBlocksText(prompts, map),
+        answers: map,
+      };
+    });
+    if (reflections.some(r => prompts.some(p => !afterBlocksPromptOk(p, r.answers[p.id])))) return;
     setSaving(true);
     try {
       const first = reflections[0];
@@ -373,10 +522,13 @@ const AfterBlocksForm: React.FC<{
     [ev.place, formatLessonTime(ev)].filter(Boolean).join(' · ') || null
   );
 
+  const currentTextLen = current?.prompt.answerType === 'text'
+    ? String(currentValue || '').trim().length
+    : 0;
+
   return (
     <Div>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{question.title}</div>
-      {question.text && <div style={{ fontSize: 11, color: '#666', marginBottom: 12 }}>{question.text}</div>}
       <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
         Шаг {stepIndex} из {totalSteps}
       </div>
@@ -408,8 +560,7 @@ const AfterBlocksForm: React.FC<{
               onClick={() => {
                 setParentId(ev.id);
                 setTopicIds([]);
-                setTexts({});
-                setTextIndex(0);
+                resetAnswers();
               }}
             />
           ))}
@@ -460,8 +611,7 @@ const AfterBlocksForm: React.FC<{
               disabled={topicIds.length === 0}
               onClick={() => {
                 if (topicIds.length === 0) return;
-                setTexts({});
-                setTextIndex(0);
+                resetAnswers();
                 setStep('text');
               }}
             >
@@ -471,42 +621,45 @@ const AfterBlocksForm: React.FC<{
         </>
       )}
 
-      {step === 'text' && currentTopic && (
+      {step === 'text' && current && (
         <>
-          {(parent || currentTopic) && (
-            <div style={{ fontSize: 12, marginBottom: 8, color: '#2D6A4F', lineHeight: 1.4 }}>
-              {parent && parent.id !== currentTopic.id
-                ? <>Событие: <b>{parent.title}</b><br />Подтема: <b>{currentTopic.title}</b></>
-                : <>Событие: <b>{currentTopic.title}</b></>}
-              {selectedTopics.length > 1 && (
-                <div style={{ marginTop: 4, color: '#666' }}>
-                  Ответ {textIndex + 1} из {selectedTopics.length}
-                </div>
-              )}
-            </div>
-          )}
-          <FormItem top="Что вынесли из этого блока?">
-            <Textarea
-              value={currentText}
-              onChange={e => {
-                const value = e.target.value;
-                setTexts(prev => ({ ...prev, [currentTopic.id]: value }));
+          <div style={{ fontSize: 12, marginBottom: 8, color: '#2D6A4F', lineHeight: 1.4 }}>
+            {parent && parent.id !== current.topic.id
+              ? <>Событие: <b>{parent.title}</b><br />Подтема: <b>{current.topic.title}</b></>
+              : <>Событие: <b>{current.topic.title}</b></>}
+            {pairs.length > 1 && (
+              <div style={{ marginTop: 4, color: '#666' }}>
+                Ответ {pairIndex + 1} из {pairs.length}
+                {prompts.length > 1 ? ` · вопрос ${prompts.findIndex(p => p.id === current.prompt.id) + 1} из ${prompts.length}` : ''}
+              </div>
+            )}
+          </div>
+          <FormItem top={current.prompt.text}>
+            <AfterBlocksPromptFields
+              prompt={current.prompt}
+              value={currentValue}
+              onChange={value => {
+                setAnswers(prev => ({
+                  ...prev,
+                  [afterBlocksAnswerKey(current.topic.id, current.prompt.id)]: value,
+                }));
               }}
-              placeholder="Своими словами: какая мысль запомнилась, что попробуете на практике…"
             />
           </FormItem>
-          <div style={{ fontSize: 11, color: textOk ? '#888' : '#B8621A', marginBottom: 4 }}>
-            {currentText.trim().length < MIN_LESSON_REFLECTION_CHARS
-              ? `Ещё минимум ${MIN_LESSON_REFLECTION_CHARS - currentText.trim().length} символов`
-              : (isLastText ? 'Можно отправлять' : 'Можно перейти дальше')}
-          </div>
+          {current.prompt.answerType === 'text' && (
+            <div style={{ fontSize: 11, color: currentOk ? '#888' : '#B8621A', marginBottom: 4 }}>
+              {currentTextLen < MIN_LESSON_REFLECTION_CHARS
+                ? `Ещё минимум ${MIN_LESSON_REFLECTION_CHARS - currentTextLen} символов`
+                : (isLastPair ? 'Можно отправлять' : 'Можно перейти дальше')}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <Button
               size="l"
               mode="secondary"
               onClick={() => {
-                if (textIndex > 0) {
-                  setTextIndex(i => i - 1);
+                if (pairIndex > 0) {
+                  setPairIndex(i => i - 1);
                   return;
                 }
                 setStep(topicPickNeeded ? 'topic' : 'event');
@@ -514,11 +667,11 @@ const AfterBlocksForm: React.FC<{
             >
               Назад
             </Button>
-            {isLastText ? (
+            {isLastPair ? (
               <Button
                 size="l"
                 stretched
-                disabled={saving || !textOk || !parent || selectedTopics.length === 0}
+                disabled={saving || !currentOk || !parent || selectedTopics.length === 0}
                 onClick={handleSubmit}
               >
                 Отправить
@@ -527,8 +680,8 @@ const AfterBlocksForm: React.FC<{
               <Button
                 size="l"
                 stretched
-                disabled={!textOk}
-                onClick={() => setTextIndex(i => i + 1)}
+                disabled={!currentOk}
+                onClick={() => setPairIndex(i => i + 1)}
               >
                 Далее
               </Button>
@@ -747,7 +900,7 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
   const isAfterBlocks = question.questionKind === 'after_blocks'
     || question.reflectionKind === 'after_blocks';
 
-  if (isAfterBlocks && question.type === 'open') {
+  if (isAfterBlocks) {
     const tree = afterBlocksEvents.length > 0
       ? afterBlocksEvents
       : dayEvents.map(e => ({ ...e, children: [] as LessonPickEvent[] }));

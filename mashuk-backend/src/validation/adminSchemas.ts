@@ -99,6 +99,17 @@ export const practicesConfigSchema = z.object({
   practices: z.array(practiceItemSchema).optional().default([]),
 }).optional().nullable();
 
+export const afterBlocksPromptSchema = z.object({
+  id: z.string().min(1).optional(),
+  text: z.string().max(2000),
+  answerType: z.enum(['text', 'scale_5', 'scale_10', 'choice', 'multi']).optional().default('text'),
+  options: z.array(z.string().max(255)).optional().default([]),
+});
+
+export const afterBlocksConfigSchema = z.object({
+  prompts: z.array(afterBlocksPromptSchema).max(20).optional().default([]),
+}).optional().nullable();
+
 export const questionCreateSchema = z.object({
   title: z.string().min(1, 'title required'),
   text: z.union([z.string(), z.null()]).optional().transform(v => (v == null || v === '' ? undefined : v)),
@@ -138,6 +149,7 @@ export const questionCreateSchema = z.object({
   pushTemplate: optionalString,
   linkedEventIds: z.array(z.coerce.number().int().positive()).optional().default([]),
   practicesConfig: practicesConfigSchema,
+  afterBlocksConfig: afterBlocksConfigSchema,
   publishTime: z.coerce.date().optional().nullable(),
   closeTime: z.coerce.date().optional().nullable(),
 }).strict();

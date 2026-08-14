@@ -18,6 +18,51 @@ const EMOTIONS = [
 
 const MIN_REFLECTION_CHARS = 20;
 
+type AfterBlocksPreviewPrompt = {
+  id: string;
+  text: string;
+  answerType: string;
+  options: string[];
+};
+
+function resolvePreviewPrompts(draft: QuestionDraft): AfterBlocksPreviewPrompt[] {
+  const prompts = (draft.afterBlocksConfig?.prompts || [])
+    .filter(p => p.text.trim())
+    .map((p, i) => ({
+      id: p.id || `prompt_${i}`,
+      text: p.text.trim(),
+      answerType: p.answerType || 'text',
+      options: Array.isArray(p.options) ? p.options.map(o => o.trim()).filter(Boolean) : [],
+    }));
+  if (prompts.length) return prompts;
+  return [{
+    id: 'legacy',
+    text: draft.text.trim() || 'Что вынесли из этого блока?',
+    answerType: 'text',
+    options: [],
+  }];
+}
+
+function previewPromptOk(prompt: AfterBlocksPreviewPrompt, value: unknown): boolean {
+  if (prompt.answerType === 'text') {
+    return String(value || '').trim().length >= MIN_REFLECTION_CHARS;
+  }
+  if (prompt.answerType === 'scale_5' || prompt.answerType === 'scale_10') {
+    const n = typeof value === 'number' ? value : Number(value);
+    const max = prompt.answerType === 'scale_10' ? 10 : 5;
+    return Number.isFinite(n) && n >= 1 && n <= max;
+  }
+  if (prompt.answerType === 'choice') return String(value || '').trim().length > 0;
+  if (prompt.answerType === 'multi') {
+    return Array.isArray(value) && value.some(v => String(v).trim());
+  }
+  return String(value || '').trim().length > 0;
+}
+
+function previewAnswerKey(topicId: number, promptId: string): string {
+  return `${topicId}:${promptId}`;
+}
+
 type Props = {
   draft: QuestionDraft;
   programEvents?: ProgramEventRow[];
@@ -94,19 +139,25 @@ function AfterBlocksPreview({
   draft: QuestionDraft;
   nodes: ProgramPickNode[];
 }) {
+  const prompts = resolvePreviewPrompts(draft);
   const [parentId, setParentId] = useState<number | null>(null);
   const [topicIds, setTopicIds] = useState<number[]>([]);
-  const [texts, setTexts] = useState<Record<number, string>>({});
-  const [textIndex, setTextIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [pairIndex, setPairIndex] = useState(0);
   const [step, setStep] = useState<'event' | 'topic' | 'text'>('event');
 
-  const resetKey = `${draft.dayNumbers.join(',')}|${draft.linkedEventIds.join(',')}|${nodes.map(n => n.id).join(',')}`;
+  const resetKey = [
+    draft.dayNumbers.join(','),
+    draft.linkedEventIds.join(','),
+    nodes.map(n => n.id).join(','),
+    prompts.map(p => `${p.id}:${p.text}:${p.answerType}`).join('|'),
+  ].join('::');
 
   useEffect(() => {
     setParentId(null);
     setTopicIds([]);
-    setTexts({});
-    setTextIndex(0);
+    setAnswers({});
+    setPairIndex(0);
     setStep('event');
   }, [resetKey]);
 
@@ -120,48 +171,54 @@ function AfterBlocksPreview({
       .map(id => children.find(c => c.id === id))
       .filter((c): c is ProgramPickNode => Boolean(c));
   })();
-  const currentTopic = selectedTopics[textIndex] || null;
-  const currentText = currentTopic ? (texts[currentTopic.id] || '') : '';
-  const textOk = currentText.trim().length >= MIN_REFLECTION_CHARS;
-  const isLastText = textIndex >= selectedTopics.length - 1;
+  const pairs = selectedTopics.flatMap(topic => prompts.map(prompt => ({ topic, prompt })));
+  const current = pairs[pairIndex] || null;
+  const currentValue = current
+    ? answers[previewAnswerKey(current.topic.id, current.prompt.id)]
+    : undefined;
+  const currentOk = current ? previewPromptOk(current.prompt, currentValue) : false;
+  const isLastPair = pairIndex >= pairs.length - 1;
 
   const topicStepsCount = topicPickNeeded ? 1 : 0;
-  const textStepsCount = Math.max(selectedTopics.length, 1);
-  const totalSteps = 1 + topicStepsCount + textStepsCount;
+  const promptStepsCount = Math.max(pairs.length, 1);
+  const totalSteps = 1 + topicStepsCount + promptStepsCount;
   const stepIndex = step === 'event'
     ? 1
     : step === 'topic'
       ? 2
-      : (1 + topicStepsCount + textIndex + 1);
+      : (1 + topicStepsCount + pairIndex + 1);
+
+  const resetAnswers = () => {
+    setAnswers({});
+    setPairIndex(0);
+  };
 
   const goAfterEventPick = (ev: ProgramPickNode) => {
     if (ev.children.length === 0) {
       setTopicIds([ev.id]);
-      setTexts({});
-      setTextIndex(0);
+      resetAnswers();
       setStep('text');
       return;
     }
     if (ev.children.length === 1) {
       setTopicIds([ev.children[0].id]);
-      setTexts({});
-      setTextIndex(0);
+      resetAnswers();
       setStep('text');
       return;
     }
     setTopicIds([]);
-    setTexts({});
-    setTextIndex(0);
+    resetAnswers();
     setStep('topic');
   };
 
   const title = draft.title.trim() || 'После блоков';
-  const hint = draft.text.trim();
+  const currentTextLen = current?.prompt.answerType === 'text'
+    ? String(currentValue || '').trim().length
+    : 0;
 
   return (
     <PreviewShell label={`Как у участника · ${kindLabel(draft.questionKind)}`}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{title}</div>
-      {hint && <div style={{ fontSize: 11, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>{hint}</div>}
       <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
         Шаг {stepIndex} из {totalSteps}
       </div>
@@ -200,8 +257,7 @@ function AfterBlocksPreview({
               onClick={() => {
                 setParentId(ev.id);
                 setTopicIds([]);
-                setTexts({});
-                setTextIndex(0);
+                resetAnswers();
               }}
             />
           ))}
@@ -256,8 +312,7 @@ function AfterBlocksPreview({
               style={{ flex: 1 }}
               disabled={topicIds.length === 0}
               onClick={() => {
-                setTexts({});
-                setTextIndex(0);
+                resetAnswers();
                 setStep('text');
               }}
             >
@@ -267,45 +322,141 @@ function AfterBlocksPreview({
         </>
       )}
 
-      {step === 'text' && currentTopic && (
+      {step === 'text' && current && (
         <>
           <div style={{ fontSize: 12, marginBottom: 8, color: '#2D6A4F', lineHeight: 1.4 }}>
-            {parent && parent.id !== currentTopic.id
-              ? <>Событие: <b>{parent.title}</b><br />Подтема: <b>{currentTopic.title}</b></>
-              : <>Событие: <b>{currentTopic.title}</b></>}
-            {selectedTopics.length > 1 && (
+            {parent && parent.id !== current.topic.id
+              ? <>Событие: <b>{parent.title}</b><br />Подтема: <b>{current.topic.title}</b></>
+              : <>Событие: <b>{current.topic.title}</b></>}
+            {pairs.length > 1 && (
               <div style={{ marginTop: 4, color: '#666' }}>
-                Ответ {textIndex + 1} из {selectedTopics.length}
+                Ответ {pairIndex + 1} из {pairs.length}
+                {prompts.length > 1 ? ` · вопрос ${prompts.findIndex(p => p.id === current.prompt.id) + 1} из ${prompts.length}` : ''}
               </div>
             )}
           </div>
-          <div className="adm-evening-preview-label">Что вынесли из этого блока?</div>
-          <textarea
-            value={currentText}
-            onChange={e => setTexts(prev => ({ ...prev, [currentTopic.id]: e.target.value }))}
-            placeholder="Своими словами: какая мысль запомнилась…"
-            style={{
-              width: '100%',
-              minHeight: 88,
-              borderRadius: 10,
-              border: '1px solid #ddd',
-              padding: 10,
-              fontFamily: 'inherit',
-              boxSizing: 'border-box',
-            }}
-          />
-          <div style={{ fontSize: 11, color: textOk ? '#888' : '#B8621A', margin: '6px 0 4px' }}>
-            {currentText.trim().length < MIN_REFLECTION_CHARS
-              ? `Ещё минимум ${MIN_REFLECTION_CHARS - currentText.trim().length} символов`
-              : (isLastText ? 'Можно отправлять' : 'Можно перейти дальше')}
-          </div>
+          <div className="adm-evening-preview-label">{current.prompt.text}</div>
+          {(current.prompt.answerType === 'scale_5' || current.prompt.answerType === 'scale_10') ? (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {Array.from(
+                { length: current.prompt.answerType === 'scale_10' ? 10 : 5 },
+                (_, i) => i + 1,
+              ).map(n => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setAnswers(prev => ({
+                    ...prev,
+                    [previewAnswerKey(current.topic.id, current.prompt.id)]: n,
+                  }))}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    border: currentValue === n ? '2px solid #2D6A4F' : '1px solid #ddd',
+                    background: currentValue === n ? '#D8F3DC' : '#fff',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          ) : current.prompt.answerType === 'choice' ? (
+            <div>
+              {(current.prompt.options.length ? current.prompt.options : ['Вариант']).map(opt => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setAnswers(prev => ({
+                    ...prev,
+                    [previewAnswerKey(current.topic.id, current.prompt.id)]: opt,
+                  }))}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    marginBottom: 6,
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    border: currentValue === opt ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
+                    background: currentValue === opt ? '#D8F3DC' : '#fff',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          ) : current.prompt.answerType === 'multi' ? (
+            <div>
+              {(current.prompt.options.length ? current.prompt.options : ['Вариант']).map(opt => {
+                const selected = Array.isArray(currentValue) ? currentValue.map(String) : [];
+                const on = selected.includes(opt);
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => {
+                      const next = on ? selected.filter(x => x !== opt) : [...selected, opt];
+                      setAnswers(prev => ({
+                        ...prev,
+                        [previewAnswerKey(current.topic.id, current.prompt.id)]: next,
+                      }));
+                    }}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      textAlign: 'left',
+                      marginBottom: 6,
+                      padding: '8px 10px',
+                      borderRadius: 10,
+                      border: on ? '2px solid #2D6A4F' : '1px solid #E0DAD0',
+                      background: on ? '#D8F3DC' : '#fff',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    {on ? '☑ ' : '☐ '}{opt}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <textarea
+              value={String(currentValue || '')}
+              onChange={e => setAnswers(prev => ({
+                ...prev,
+                [previewAnswerKey(current.topic.id, current.prompt.id)]: e.target.value,
+              }))}
+              placeholder="Своими словами: какая мысль запомнилась…"
+              style={{
+                width: '100%',
+                minHeight: 88,
+                borderRadius: 10,
+                border: '1px solid #ddd',
+                padding: 10,
+                fontFamily: 'inherit',
+                boxSizing: 'border-box',
+              }}
+            />
+          )}
+          {current.prompt.answerType === 'text' && (
+            <div style={{ fontSize: 11, color: currentOk ? '#888' : '#B8621A', margin: '6px 0 4px' }}>
+              {currentTextLen < MIN_REFLECTION_CHARS
+                ? `Ещё минимум ${MIN_REFLECTION_CHARS - currentTextLen} символов`
+                : (isLastPair ? 'Можно отправлять' : 'Можно перейти дальше')}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <button
               type="button"
               className="adm-evening-preview-btn secondary"
               onClick={() => {
-                if (textIndex > 0) {
-                  setTextIndex(i => i - 1);
+                if (pairIndex > 0) {
+                  setPairIndex(i => i - 1);
                   return;
                 }
                 setStep(topicPickNeeded ? 'topic' : 'event');
@@ -313,12 +464,12 @@ function AfterBlocksPreview({
             >
               Назад
             </button>
-            {isLastText ? (
+            {isLastPair ? (
               <button
                 type="button"
                 className="adm-evening-preview-btn primary"
                 style={{ flex: 1 }}
-                disabled={!textOk}
+                disabled={!currentOk}
                 onClick={() => alert('В превью сохранение не отправляется')}
               >
                 Отправить
@@ -328,8 +479,8 @@ function AfterBlocksPreview({
                 type="button"
                 className="adm-evening-preview-btn primary"
                 style={{ flex: 1 }}
-                disabled={!textOk}
-                onClick={() => setTextIndex(i => i + 1)}
+                disabled={!currentOk}
+                onClick={() => setPairIndex(i => i + 1)}
               >
                 Далее
               </button>

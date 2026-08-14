@@ -1,4 +1,5 @@
 import { normalizePracticesConfig } from './practicesVoteConfig.js';
+import { normalizeAfterBlocksConfig } from './afterBlocksConfig.js';
 
 /** Admin question kinds (reflective touchpoints). */
 export const QUESTION_KINDS = [
@@ -151,6 +152,16 @@ export function enrichQuestionWritePayload(
     out.allowRetry = false;
     if (out.practicesConfig !== undefined) {
       out.practicesConfig = normalizePracticesConfig(out.practicesConfig);
+    }
+  }
+
+  if (out.questionKind === 'after_blocks') {
+    out.type = 'open';
+    if (out.afterBlocksConfig !== undefined) {
+      out.afterBlocksConfig = normalizeAfterBlocksConfig(
+        out.afterBlocksConfig,
+        typeof out.text === 'string' ? out.text : null,
+      );
     }
   }
   return out;

@@ -34,6 +34,11 @@ import {
   lessonSlotIndexForQuestion,
 } from '../services/lessonSlotEvents.js';
 import { collectAfterBlocksTree } from '../services/afterBlocksEvents.js';
+import {
+  afterBlocksPromptAnswerOk,
+  composeAfterBlocksReflectionText,
+  normalizeAfterBlocksConfig,
+} from '../services/afterBlocksConfig.js';
 import { formatQuestionTimeWindow, getReflectionTypeLabel } from '../services/reflectionTypeLabel.js';
 import { resolveAnswerConfirmation } from '../services/answerConfirmation.js';
 import {
@@ -466,6 +471,9 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
         // Practices vote is one-shot — never expose retry to the client.
         allowRetry: isPracticesVote ? false : (question.allowRetry ?? false),
         practicesConfig: practicesVote,
+        ...(isAfterBlocks ? {
+          afterBlocksConfig: normalizeAfterBlocksConfig(question.afterBlocksConfig, question.text),
+        } : {}),
       },
       options,
       dayEvents,
@@ -643,10 +651,20 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
       };
 
       const reflectionsRaw = Array.isArray(payload.reflections) ? payload.reflections : null;
+      const afterBlocksCfg = isAfterBlocks
+        ? normalizeAfterBlocksConfig(question.afterBlocksConfig, question.text)
+        : null;
       const reflectionTextsFromMulti = reflectionsRaw
         ? reflectionsRaw.map((raw) => {
           if (!raw || typeof raw !== 'object') return '';
-          const t = (raw as { text?: unknown }).text;
+          const row = raw as { text?: unknown; answers?: unknown };
+          if (afterBlocksCfg && row.answers && typeof row.answers === 'object' && !Array.isArray(row.answers)) {
+            return composeAfterBlocksReflectionText(
+              afterBlocksCfg.prompts,
+              row.answers as Record<string, unknown>,
+            );
+          }
+          const t = row.text;
           return typeof t === 'string' ? t.trim() : '';
         })
         : [];
@@ -654,7 +672,22 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
         ? payload.text.trim()
         : (reflectionTextsFromMulti[0] || '');
 
-      if (isAfterBlocks && reflectionsRaw && reflectionsRaw.length > 0) {
+      if (isAfterBlocks && afterBlocksCfg && reflectionsRaw && reflectionsRaw.length > 0) {
+        const invalid = reflectionsRaw.some((raw) => {
+          if (!raw || typeof raw !== 'object') return true;
+          const answersMap = (raw as { answers?: unknown }).answers;
+          const map = answersMap && typeof answersMap === 'object' && !Array.isArray(answersMap)
+            ? answersMap as Record<string, unknown>
+            : { [afterBlocksCfg.prompts[0].id]: (raw as { text?: unknown }).text };
+          return afterBlocksCfg.prompts.some(p => !afterBlocksPromptAnswerOk(p, map[p.id]));
+        });
+        if (invalid) {
+          res.status(400).json({
+            error: 'Ответьте на каждый вопрос по выбранной подтеме',
+          });
+          return;
+        }
+      } else if (isAfterBlocks && reflectionsRaw && reflectionsRaw.length > 0) {
         if (reflectionTextsFromMulti.some(t => t.length < 20)) {
           res.status(400).json({
             error: 'Напишите осмысленный ответ по каждой выбранной подтеме (хотя бы пару предложений)',

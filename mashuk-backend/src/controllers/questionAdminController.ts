@@ -347,6 +347,7 @@ export const crudQuestions = {
         pushTemplate: enriched.pushTemplate !== undefined ? (enriched.pushTemplate as string | null) : before.pushTemplate,
         linkedEventIds: (enriched.linkedEventIds as number[] | undefined) ?? before.linkedEventIds,
         practicesConfig: enriched.practicesConfig !== undefined ? enriched.practicesConfig : before.practicesConfig,
+        afterBlocksConfig: enriched.afterBlocksConfig !== undefined ? enriched.afterBlocksConfig : before.afterBlocksConfig,
         showWhen: (enriched.showWhen !== undefined
           ? enriched.showWhen
           : before.showWhen) as { questionId: number; optionValues: string[] } | null,

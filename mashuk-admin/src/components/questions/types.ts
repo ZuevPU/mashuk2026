@@ -90,6 +90,43 @@ export function emptyPracticesConfig(): PracticesConfigDraft {
   };
 }
 
+export const AFTER_BLOCKS_PROMPT_TYPES = [
+  { value: 'text', label: 'Свободный текст' },
+  { value: 'scale_5', label: 'Шкала 1–5' },
+  { value: 'scale_10', label: 'Шкала 1–10' },
+  { value: 'choice', label: 'Выбор' },
+  { value: 'multi', label: 'Мультивыбор' },
+] as const;
+
+export type AfterBlocksPromptType = typeof AFTER_BLOCKS_PROMPT_TYPES[number]['value'];
+
+export type AfterBlocksPromptDraft = {
+  id: string;
+  text: string;
+  answerType: AfterBlocksPromptType;
+  options: string[];
+};
+
+export type AfterBlocksConfigDraft = {
+  prompts: AfterBlocksPromptDraft[];
+};
+
+export function emptyAfterBlocksPrompt(patch?: Partial<AfterBlocksPromptDraft>): AfterBlocksPromptDraft {
+  return {
+    id: crypto.randomUUID(),
+    text: '',
+    answerType: 'text',
+    options: [],
+    ...patch,
+  };
+}
+
+export function emptyAfterBlocksConfig(text = 'Что вынесли из этого блока?'): AfterBlocksConfigDraft {
+  return {
+    prompts: [emptyAfterBlocksPrompt({ text })],
+  };
+}
+
 export type AdminQuestion = {
   id: number;
   title: string;
@@ -123,6 +160,7 @@ export type AdminQuestion = {
   allowOther?: boolean;
   linkedEventIds?: number[];
   practicesConfig?: PracticesConfigDraft | null;
+  afterBlocksConfig?: AfterBlocksConfigDraft | null;
   showWhen?: { questionId: number; optionValues: string[] } | null;
   answerCount?: number;
   readOnly?: boolean;
@@ -158,6 +196,7 @@ export type QuestionDraft = {
   allowOther: boolean;
   linkedEventIds: number[];
   practicesConfig: PracticesConfigDraft;
+  afterBlocksConfig: AfterBlocksConfigDraft;
   showWhenQuestionId: string;
   showWhenOptionValues: string[];
   status: string;
@@ -234,6 +273,7 @@ export function emptyDraft(day: number): QuestionDraft {
     allowOther: false,
     linkedEventIds: [],
     practicesConfig: emptyPracticesConfig(),
+    afterBlocksConfig: emptyAfterBlocksConfig(),
     showWhenQuestionId: '',
     showWhenOptionValues: [],
     status: 'draft',
@@ -268,6 +308,27 @@ function practicesFromQuestion(raw: unknown): PracticesConfigDraft {
       })
       : base.practices,
   };
+}
+
+function afterBlocksFromQuestion(q: AdminQuestion): AfterBlocksConfigDraft {
+  const promptsRaw = Array.isArray(q.afterBlocksConfig?.prompts) ? q.afterBlocksConfig!.prompts : [];
+  if (promptsRaw.length) {
+    return {
+      prompts: promptsRaw.map(p => ({
+        id: p.id || crypto.randomUUID(),
+        text: p.text || '',
+        answerType: (AFTER_BLOCKS_PROMPT_TYPES.some(t => t.value === p.answerType)
+          ? p.answerType
+          : 'text') as AfterBlocksPromptType,
+        options: Array.isArray(p.options) ? p.options.map(o => String(o || '')).filter(Boolean) : [],
+      })),
+    };
+  }
+  const seed = (q.text || '').trim() || 'Что вынесли из этого блока?';
+  const answerType = AFTER_BLOCKS_PROMPT_TYPES.some(t => t.value === q.answerType)
+    ? q.answerType as AfterBlocksPromptType
+    : 'text';
+  return { prompts: [emptyAfterBlocksPrompt({ text: seed, answerType })] };
 }
 
 function toLocalInput(iso: string | null | undefined): string {
@@ -326,6 +387,7 @@ export function draftFromQuestion(q: AdminQuestion, options: QuestionOption[] = 
     allowOther: !!q.allowOther,
     linkedEventIds: q.linkedEventIds ?? [],
     practicesConfig: practicesFromQuestion(q.practicesConfig),
+    afterBlocksConfig: afterBlocksFromQuestion(q),
     showWhenQuestionId: q.showWhen?.questionId != null ? String(q.showWhen.questionId) : '',
     showWhenOptionValues: q.showWhen?.optionValues ?? [],
     status: q.status || 'draft',
@@ -357,16 +419,34 @@ export function bodyFromDraft(draft: QuestionDraft, mode: QuestionPersistMode | 
     ? (mode ? 'schedule' : 'draft')
     : mode;
   const isPractices = draft.questionKind === 'practices_vote' || draft.answerType === 'practices_vote';
+  const isAfterBlocks = draft.questionKind === 'after_blocks';
+  const afterPrompts = isAfterBlocks
+    ? draft.afterBlocksConfig.prompts
+      .map((p, i) => ({
+        id: p.id || crypto.randomUUID(),
+        text: p.text.trim(),
+        answerType: p.answerType || 'text',
+        options: ['choice', 'multi'].includes(p.answerType)
+          ? p.options.map(o => o.trim()).filter(Boolean)
+          : [],
+        sortOrder: i,
+      }))
+      .filter(p => p.text)
+    : [];
   const publishing = persistMode === 'now' || persistMode === 'schedule';
   const body: Record<string, unknown> = {
     title: draft.title.trim(),
     subtitle: draft.subtitle.trim() || null,
     text: isPractices
       ? (draft.practicesConfig.preamble.trim() || draft.text.trim() || draft.title.trim())
-      : (draft.text.trim() || draft.title.trim()),
+      : isAfterBlocks
+        ? (afterPrompts[0]?.text || draft.text.trim() || draft.title.trim())
+        : (draft.text.trim() || draft.title.trim()),
     questionKind: draft.questionKind,
-    answerType: isPractices ? 'practices_vote' : draft.answerType,
-    type: isPractices ? 'practices_vote' : undefined,
+    answerType: isPractices
+      ? 'practices_vote'
+      : (isAfterBlocks ? (afterPrompts[0]?.answerType || 'text') : draft.answerType),
+    type: isPractices ? 'practices_vote' : (isAfterBlocks ? 'open' : undefined),
     reflectionKind: normalizeReflectionKindForApi(draft.questionKind, draft.reflectionKind),
     timePoint: draft.timePoint || null,
     block: draft.block || null,
@@ -409,6 +489,13 @@ export function bodyFromDraft(draft: QuestionDraft, mode: QuestionPersistMode | 
         resultTime: p.resultTime.trim() || null,
         sortOrder: i,
       })).filter(p => p.title),
+    };
+  }
+  if (isAfterBlocks) {
+    body.afterBlocksConfig = {
+      prompts: afterPrompts.length
+        ? afterPrompts
+        : emptyAfterBlocksConfig(draft.text.trim() || draft.title.trim()).prompts,
     };
   }
   if (persistMode === 'now') {

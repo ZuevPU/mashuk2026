@@ -234,6 +234,21 @@ async function ensureForumWrapQuestionnaireSchema(pool: ReturnType<typeof create
   await pool.query(sql);
 }
 
+/** Apply after_blocks_config on questions if missing (0066). */
+async function ensureAfterBlocksConfigSchema(pool: ReturnType<typeof createPool>): Promise<void> {
+  const { rows } = await pool.query<{ ok: number }>(
+    `SELECT 1 AS ok FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'questions' AND column_name = 'after_blocks_config'
+     LIMIT 1`,
+  );
+  if (rows.length > 0) return;
+
+  const sqlPath = path.join(__dirname, '../../drizzle/0066_after_blocks_config.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  console.warn('Repair: applying 0066_after_blocks_config.sql');
+  await pool.query(sql);
+}
+
 export async function runMigrations(): Promise<void> {
   const pool = createPool(process.env.DATABASE_URL!);
   const db = drizzle(pool);
@@ -255,6 +270,7 @@ export async function runMigrations(): Promise<void> {
     await ensureExchangeCategoriesSchema(pool);
     await ensureQrRepeatableScansSchema(pool);
     await ensureForumWrapQuestionnaireSchema(pool);
+    await ensureAfterBlocksConfigSchema(pool);
     await pool.end();
   }
 }

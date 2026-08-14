@@ -86,6 +86,27 @@ function pickFromListItem(raw: unknown, outerParentTitle: string | null, outerPa
       : (typeof r.comment === 'string'
         ? r.comment.trim()
         : (typeof r.value === 'string' ? r.value.trim() : extractText(r))));
+  let composed = text;
+  if (Array.isArray(r.answers)) {
+    const extra = r.answers.map((item) => {
+      if (!item || typeof item !== 'object') return '';
+      const a = item as Record<string, unknown>;
+      const label = typeof a.promptText === 'string' ? a.promptText.trim() : '';
+      const val = typeof a.value === 'string'
+        ? a.value.trim()
+        : (typeof a.text === 'string'
+          ? a.text.trim()
+          : (Array.isArray(a.value) ? a.value.map(v => String(v).trim()).filter(Boolean).join(', ') : ''));
+      if (!val) return '';
+      return label ? `${label}: ${val}` : val;
+    }).filter(Boolean);
+    if (extra.length) composed = extra.join('\n');
+  } else if (r.answers && typeof r.answers === 'object') {
+    const extra = Object.values(r.answers as Record<string, unknown>)
+      .map(v => (typeof v === 'string' ? v.trim() : (typeof v === 'number' ? String(v) : '')))
+      .filter(Boolean);
+    if (extra.length && !composed) composed = extra.join('\n');
+  }
   const eventTitle = typeof r.eventTitle === 'string'
     ? r.eventTitle
     : (typeof r.title === 'string'
@@ -95,9 +116,9 @@ function pickFromListItem(raw: unknown, outerParentTitle: string | null, outerPa
     ? r.parentEventTitle
     : outerParentTitle;
   const parentEventId = asNum(r.parentEventId) ?? outerParentId;
-  if (!text && !eventTitle && !parentEventTitle) return null;
+  if (!text && !eventTitle && !parentEventTitle && !composed) return null;
   return {
-    text: text || '',
+    text: composed || text || '',
     eventTitle,
     eventId: asNum(r.eventId ?? r.id),
     parentEventTitle,

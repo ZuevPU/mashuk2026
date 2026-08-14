@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { QuestionDraft } from './types';
-import { ANSWER_TYPES, REFLECTIVE_KINDS, emptyPracticeRow } from './types';
+import { ANSWER_TYPES, AFTER_BLOCKS_PROMPT_TYPES, REFLECTIVE_KINDS, emptyPracticeRow, emptyAfterBlocksPrompt } from './types';
 import { QuestionTagCloudConstructor } from './QuestionTagCloudConstructor';
 
 type ParticipantOption = {
@@ -184,6 +184,16 @@ export function QuestionForm({
                             reflectionKind: draft.reflectionKind && draft.reflectionKind !== 'after_blocks'
                               ? draft.reflectionKind
                               : 'after_event',
+                            afterBlocksConfig: draft.afterBlocksConfig.prompts.some(p => p.text.trim())
+                              ? draft.afterBlocksConfig
+                              : {
+                                prompts: [emptyAfterBlocksPrompt({
+                                  text: draft.text.trim() || 'Что вынесли из этого блока?',
+                                  answerType: ['text', 'scale_5', 'scale_10', 'choice', 'multi'].includes(draft.answerType)
+                                    ? draft.answerType as 'text'
+                                    : 'text',
+                                })],
+                              },
                           }
                           : { questionKind: k },
                     )}
@@ -558,14 +568,14 @@ export function QuestionForm({
             </p>
           )}
 
-          {draft.questionKind !== 'practices_vote' && (
+          {draft.questionKind !== 'practices_vote' && draft.questionKind !== 'after_blocks' && (
             <label className="adm-field">
               <span className="adm-label">Текст вопроса участнику</span>
               <textarea className="adm-input" rows={3} value={draft.text} onChange={e => onChange({ text: e.target.value })} />
             </label>
           )}
 
-          {draft.questionKind !== 'practices_vote' && (
+          {draft.questionKind !== 'practices_vote' && draft.questionKind !== 'after_blocks' && (
             <label className="adm-field">
               <span className="adm-label">Тип ответа</span>
               <select className="adm-input" value={draft.answerType} onChange={e => onChange({ answerType: e.target.value })}>
@@ -576,7 +586,137 @@ export function QuestionForm({
             </label>
           )}
 
-          {needsOptions && (
+          {draft.questionKind === 'after_blocks' && (
+            <div className="adm-field">
+              <span className="adm-label">Вопросы участнику</span>
+              <p className="adm-muted" style={{ fontSize: 12, marginTop: 0 }}>
+                После выбора блока участник отвечает на эти вопросы по каждой выбранной подтеме.
+              </p>
+              {draft.afterBlocksConfig.prompts.map((prompt, idx) => (
+                <div
+                  key={prompt.id}
+                  className="adm-forum-step-card"
+                  style={{ marginBottom: 10, padding: 12 }}
+                >
+                  <div className="adm-forum-toolbar" style={{ marginBottom: 8, gap: 8 }}>
+                    <strong style={{ fontSize: 13 }}>Вопрос {idx + 1}</strong>
+                    {draft.afterBlocksConfig.prompts.length > 1 && (
+                      <button
+                        type="button"
+                        className="adm-btn adm-btn-sm btn-danger"
+                        style={{ marginLeft: 'auto' }}
+                        onClick={() => onChange({
+                          afterBlocksConfig: {
+                            prompts: draft.afterBlocksConfig.prompts.filter((_, i) => i !== idx),
+                          },
+                        })}
+                      >
+                        Удалить
+                      </button>
+                    )}
+                  </div>
+                  <label className="adm-field">
+                    <span className="adm-label">Текст вопроса участнику</span>
+                    <textarea
+                      className="adm-input"
+                      rows={2}
+                      value={prompt.text}
+                      onChange={e => {
+                        const prompts = draft.afterBlocksConfig.prompts.map((p, i) => (
+                          i === idx ? { ...p, text: e.target.value } : p
+                        ));
+                        onChange({
+                          afterBlocksConfig: { prompts },
+                          text: idx === 0 ? e.target.value : draft.text,
+                        });
+                      }}
+                    />
+                  </label>
+                  <label className="adm-field">
+                    <span className="adm-label">Тип ответа</span>
+                    <select
+                      className="adm-input"
+                      value={prompt.answerType}
+                      onChange={e => {
+                        const answerType = e.target.value as typeof prompt.answerType;
+                        const prompts = draft.afterBlocksConfig.prompts.map((p, i) => (
+                          i === idx ? { ...p, answerType } : p
+                        ));
+                        onChange({
+                          afterBlocksConfig: { prompts },
+                          answerType: idx === 0 ? answerType : draft.answerType,
+                        });
+                      }}
+                    >
+                      {AFTER_BLOCKS_PROMPT_TYPES.map(a => (
+                        <option key={a.value} value={a.value}>{a.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {(prompt.answerType === 'choice' || prompt.answerType === 'multi') && (
+                    <div className="adm-field">
+                      <span className="adm-label">Варианты ответа</span>
+                      {prompt.options.map((opt, oi) => (
+                        <div key={oi} className="form-row" style={{ marginBottom: 6 }}>
+                          <input
+                            className="adm-input"
+                            value={opt}
+                            onChange={e => {
+                              const options = [...prompt.options];
+                              options[oi] = e.target.value;
+                              const prompts = draft.afterBlocksConfig.prompts.map((p, i) => (
+                                i === idx ? { ...p, options } : p
+                              ));
+                              onChange({ afterBlocksConfig: { prompts } });
+                            }}
+                            placeholder="Подпись"
+                          />
+                          <button
+                            type="button"
+                            className="adm-btn adm-btn-sm btn-danger"
+                            onClick={() => {
+                              const options = prompt.options.filter((_, i) => i !== oi);
+                              const prompts = draft.afterBlocksConfig.prompts.map((p, i) => (
+                                i === idx ? { ...p, options } : p
+                              ));
+                              onChange({ afterBlocksConfig: { prompts } });
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        className="adm-btn adm-btn-sm"
+                        onClick={() => {
+                          const prompts = draft.afterBlocksConfig.prompts.map((p, i) => (
+                            i === idx ? { ...p, options: [...p.options, ''] } : p
+                          ));
+                          onChange({ afterBlocksConfig: { prompts } });
+                        }}
+                      >
+                        + Вариант
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                className="adm-btn adm-btn-primary adm-btn-sm"
+                onClick={() => onChange({
+                  afterBlocksConfig: {
+                    prompts: [...draft.afterBlocksConfig.prompts, emptyAfterBlocksPrompt()],
+                  },
+                })}
+              >
+                Добавить вопрос
+              </button>
+            </div>
+          )}
+
+          {needsOptions && draft.questionKind !== 'after_blocks' && (
             <div className="adm-field">
               <span className="adm-label">Варианты ответа</span>
               {draft.options.map((opt, i) => (
