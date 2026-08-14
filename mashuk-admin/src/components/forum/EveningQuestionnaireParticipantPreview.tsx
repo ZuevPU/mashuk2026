@@ -79,16 +79,18 @@ function fieldVisible(field: EveningField, form: Record<string, unknown>, allFie
   return expectedList.some((expected) => {
     if (expected === '__set__') return isValueSet(v);
     if (expected === '__other__') {
-      const opts = parent?.options ?? [];
-      return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v);
+      const opts = (parent?.options ?? []).map(o => String(o).trim());
+      return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v.trim());
     }
-    if (v === expected) return true;
-    if (typeof expected === 'boolean') {
-      if (expected) return v === 'true' || v === 'yes' || v === 1 || v === '1';
-      return v === 'false' || v === 'no' || v === 0 || v === '0';
+    const left = typeof v === 'string' ? v.trim() : v;
+    const right = typeof expected === 'string' ? expected.trim() : expected;
+    if (left === right) return true;
+    if (typeof right === 'boolean') {
+      if (right) return left === 'true' || left === 'yes' || left === 1 || left === '1';
+      return left === 'false' || left === 'no' || left === 0 || left === '0';
     }
-    if (typeof expected === 'number') return v === String(expected) || Number(v) === expected;
-    if (typeof expected === 'string' && typeof v === 'number') return String(v) === expected;
+    if (typeof right === 'number') return left === String(right) || Number(left) === right;
+    if (typeof right === 'string' && typeof left === 'number') return String(left) === right;
     return false;
   });
 }

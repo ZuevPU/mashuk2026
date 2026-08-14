@@ -221,6 +221,25 @@ describe('eveningQuestionnaireConfig', () => {
     assert.equal(isFieldVisible(follow, {}, fields), false);
   });
 
+  it('isFieldVisible matches the first choice option even with extra spaces', () => {
+    const parent = {
+      key: 'pick',
+      type: 'choice' as const,
+      label: 'Pick',
+      options: [' Вариант 1', 'Вариант 2'],
+    };
+    const follow = {
+      key: 'qa',
+      type: 'text' as const,
+      label: 'A',
+      visibleWhen: { field: 'pick', equals: ' Вариант 1' },
+    };
+    const fields = [parent, follow];
+    assert.equal(isFieldVisible(follow, { pick: 'Вариант 1' }, fields), true);
+    assert.equal(isFieldVisible(follow, { pick: ' Вариант 1 ' }, fields), true);
+    assert.equal(isFieldVisible(follow, { pick: 'Вариант 2' }, fields), false);
+  });
+
   it('isFieldVisible hides a nested follow-up when the parent branch is closed', () => {
     const pick = { key: 'pick', type: 'choice' as const, label: 'Pick', options: ['1', '2'] };
     const mid = {

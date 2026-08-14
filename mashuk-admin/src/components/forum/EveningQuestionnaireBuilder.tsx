@@ -3,6 +3,7 @@ import { adminDownloadBinary } from '../../admin/client';
 import {
   collectFieldKeys,
   eveningQuestionNumbers,
+  defaultVisibleEquals,
   eveningVisibleEqualsIncludes,
   eveningVisibleEqualsList,
   EVENING_FIELD_TYPE_OPTIONS,
@@ -519,10 +520,21 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
     }, msg);
   };
 
-  const conditionParentsInStep = (step: EveningStep, fieldKey: string) =>
-    step.fields.filter(f =>
-      f.key !== fieldKey && (f.type === 'yes_no' || f.type === 'choice' || f.type === 'program_event'),
-    );
+  const isConditionParentType = (f: EveningField) =>
+    f.type === 'yes_no' || f.type === 'choice' || f.type === 'program_event';
+
+  /** Eligible parents above this field — condition must look at an already answered question. */
+  const conditionParentsBefore = (step: EveningStep, fieldIndex: number) =>
+    step.fields.slice(0, fieldIndex).filter(isConditionParentType);
+
+  const conditionParentsForField = (step: EveningStep, fieldIndex: number, field: EveningField) => {
+    const before = conditionParentsBefore(step, fieldIndex);
+    const current = field.visibleWhen
+      ? step.fields.find(f => f.key === field.visibleWhen!.field && isConditionParentType(f))
+      : undefined;
+    if (current && !before.some(f => f.key === current.key)) return [...before, current];
+    return before;
+  };
 
   const fieldTypeOptions = EVENING_FIELD_TYPE_OPTIONS.filter(o => o.value !== 'point_b_cta');
   const typeLabel = (type: EveningFieldType) =>
@@ -926,7 +938,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                 Итоговый вопрос форума
               </label>
               )}
-              {conditionParentsInStep(step, field.key).length > 0 && (
+              {conditionParentsBefore(step, fieldIndex).length > 0 && (
                 <label className="adm-forum-check">
                   <input
                     type="checkbox"
@@ -936,22 +948,20 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                         updateField(stepIndex, fieldIndex, { visibleWhen: undefined });
                         return;
                       }
-                      const dep = conditionParentsInStep(step, field.key)[0];
+                      const before = conditionParentsBefore(step, fieldIndex);
+                      const dep = before[before.length - 1];
                       if (!dep) return;
-                      const equals = dep.type === 'yes_no'
-                        ? true
-                        : dep.type === 'program_event'
-                          ? '__set__'
-                          : (dep.options?.filter(Boolean)[0] || '');
-                      updateField(stepIndex, fieldIndex, { visibleWhen: { field: dep.key, equals } });
+                      updateField(stepIndex, fieldIndex, {
+                        visibleWhen: { field: dep.key, equals: defaultVisibleEquals(dep) },
+                      });
                     }}
                   />
                   Показывать только если…
                 </label>
               )}
               {field.visibleWhen && (() => {
-                const parents = conditionParentsInStep(step, field.key);
-                const parent = parents.find(f => f.key === field.visibleWhen!.field) || parents[0];
+                const parents = conditionParentsForField(step, fieldIndex, field);
+                const parent = parents.find(f => f.key === field.visibleWhen!.field) || parents[parents.length - 1];
                 const selected = eveningVisibleEqualsList(field.visibleWhen.equals);
                 const setEquals = (next: EveningVisibleEquals[]) => {
                   if (!next.length) return;
@@ -964,8 +974,8 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                 };
                 const toggleEquals = (value: EveningVisibleEquals, on: boolean) => {
                   const next = on
-                    ? (selected.includes(value) ? selected : [...selected, value])
-                    : selected.filter(e => e !== value);
+                    ? (eveningVisibleEqualsIncludes(selected, value) ? selected : [...selected, value])
+                    : selected.filter(e => !eveningVisibleEqualsIncludes([e], value));
                   setEquals(next);
                 };
                 return (
@@ -975,13 +985,11 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                       value={field.visibleWhen.field}
                       onChange={e => {
                         const dep = parents.find(f => f.key === e.target.value);
-                        const equals = dep?.type === 'yes_no'
-                          ? true
-                          : dep?.type === 'program_event'
-                            ? '__set__'
-                            : (dep?.options?.filter(Boolean)[0] || '');
                         updateField(stepIndex, fieldIndex, {
-                          visibleWhen: { field: e.target.value, equals },
+                          visibleWhen: {
+                            field: e.target.value,
+                            equals: dep ? defaultVisibleEquals(dep) : '',
+                          },
                         });
                       }}
                     >
@@ -995,7 +1003,8 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                       <div style={{ gridColumn: '1 / -1' }}>
                         <div className="adm-label">Показать, если ответ — любой из отмеченных</div>
                         <p className="adm-muted" style={{ fontSize: 12, margin: '2px 0 8px' }}>
-                          Можно отметить несколько пунктов: вопрос появится, если участник выбрал 1 или 2 или 3.
+                          По умолчанию условие берёт ближайший вопрос выше в этом шаге.
+                          Если в шаге уже есть «Да/Нет», в списке выберите именно свой вопрос со списком ответов.
                         </p>
                         <div className="adm-eq-cond-options">
                           {parent?.type === 'yes_no' ? (
@@ -1019,11 +1028,11 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                             </>
                           ) : (
                             <>
-                              {(parent?.options || []).filter(Boolean).map(opt => (
+                              {(parent?.options || []).map(o => String(o).trim()).filter(Boolean).map(opt => (
                                 <label key={opt} className="adm-forum-check">
                                   <input
                                     type="checkbox"
-                                    checked={selected.includes(opt)}
+                                    checked={eveningVisibleEqualsIncludes(selected, opt)}
                                     onChange={e => toggleEquals(opt, e.target.checked)}
                                   />
                                   {opt}
@@ -1178,8 +1187,8 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                           onClick={() => addFollowUpQuestion(
                             stepIndex,
                             fieldIndex,
-                            opt,
-                            `Уточните, если выбрали «${opt.slice(0, 40)}»`,
+                            opt.trim(),
+                            `Уточните, если выбрали «${opt.trim().slice(0, 40)}»`,
                           )}
                         >
                           + Вопрос если выбран

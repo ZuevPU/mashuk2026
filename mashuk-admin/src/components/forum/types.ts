@@ -157,11 +157,25 @@ export function packEveningVisibleEquals(
   return list.length <= 1 ? (list[0] ?? '') : list;
 }
 
+export function eveningEqualsMatch(a: EveningVisibleEquals, b: EveningVisibleEquals): boolean {
+  if (a === b) return true;
+  if (typeof a === 'string' && typeof b === 'string') return a.trim() === b.trim();
+  if (typeof a === 'number' && typeof b === 'string' && b.trim() === String(a)) return true;
+  if (typeof b === 'number' && typeof a === 'string' && a.trim() === String(b)) return true;
+  return false;
+}
+
 export function eveningVisibleEqualsIncludes(
   equals: EveningVisibleEquals | EveningVisibleEquals[] | undefined,
   value: EveningVisibleEquals,
 ): boolean {
-  return eveningVisibleEqualsList(equals).some(e => e === value);
+  return eveningVisibleEqualsList(equals).some(e => eveningEqualsMatch(e, value));
+}
+
+export function defaultVisibleEquals(parent: EveningField): EveningVisibleEquals {
+  if (parent.type === 'yes_no') return true;
+  if (parent.type === 'program_event') return '__set__';
+  return (parent.options || []).map(o => String(o).trim()).find(Boolean) || '';
 }
 
 export function formatEveningVisibleEquals(
