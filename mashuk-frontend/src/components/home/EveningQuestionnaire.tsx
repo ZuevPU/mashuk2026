@@ -197,10 +197,14 @@ function fieldVisible(
   field: EveningField,
   form: Record<string, unknown>,
   allFields: EveningField[] = [],
+  visiting: Set<string> = new Set(),
 ): boolean {
   if (!field.visibleWhen) return true;
-  const v = form[field.visibleWhen.field];
+  if (visiting.has(field.key)) return false;
+  visiting.add(field.key);
   const parent = allFields.find(f => f.key === field.visibleWhen!.field);
+  if (parent && !fieldVisible(parent, form, allFields, visiting)) return false;
+  const v = form[field.visibleWhen.field];
   const expectedList = Array.isArray(field.visibleWhen.equals)
     ? field.visibleWhen.equals
     : [field.visibleWhen.equals];
@@ -211,7 +215,14 @@ function fieldVisible(
       const opts = parent?.options ?? [];
       return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v);
     }
-    return v === expected;
+    if (v === expected) return true;
+    if (typeof expected === 'boolean') {
+      if (expected) return v === 'true' || v === 'yes' || v === 1 || v === '1';
+      return v === 'false' || v === 'no' || v === 0 || v === '0';
+    }
+    if (typeof expected === 'number') return v === String(expected) || Number(v) === expected;
+    if (typeof expected === 'string' && typeof v === 'number') return String(v) === expected;
+    return false;
   });
 }
 
@@ -514,9 +525,10 @@ function stepHasVisibleFields(
   experiment: EveningExperimentContext,
   questionnaire: EveningQuestionnaireProps['questionnaire'],
   currentDay: number,
+  allFields: EveningField[],
 ): boolean {
   return step.fields.some(f => {
-    if (!fieldVisible(f, form, step.fields)) return false;
+    if (!fieldVisible(f, form, allFields)) return false;
     if (f.type === 'experiment_text' && !experiment) return false;
     if (f.type === 'role_select') {
       if (!questionnaire.askTomorrowRole || currentDay > 6) return false;
@@ -545,9 +557,6 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     : [{ id: 'legacy', title: 'Анкета', fields: [] }];
   const draft = questionnaire.savedDraft;
   const [form, setForm] = useState<Record<string, unknown>>(() => ({
-    tripYes: false,
-    practiceYes: false,
-    recommendYes: false,
     ...(draft?.form || {}),
   }));
   const [tomorrowRole, setTomorrowRole] = useState(
@@ -557,9 +566,14 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
   /** Forum day of this evening survey (not necessarily clock/admin currentDay). */
   const surveyDay = questionnaire.dayNumber ?? currentDay;
 
+  const allConfigFields = useMemo(
+    () => rawSteps.flatMap(s => s.fields),
+    [rawSteps],
+  );
+
   const steps = useMemo(
-    () => rawSteps.filter(s => stepHasVisibleFields(s, form, experiment ?? null, questionnaire, surveyDay)),
-    [rawSteps, form, experiment, questionnaire, surveyDay],
+    () => rawSteps.filter(s => stepHasVisibleFields(s, form, experiment ?? null, questionnaire, surveyDay, allConfigFields)),
+    [rawSteps, form, experiment, questionnaire, surveyDay, allConfigFields],
   );
 
   const [step, setStep] = useState(() => Math.min(draft?.step ?? 0, Math.max(steps.length - 1, 0)));
@@ -593,8 +607,8 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
 
   const currentStep = steps[Math.min(step, Math.max(steps.length - 1, 0))] ?? steps[0];
   const visibleFields = useMemo(
-    () => (currentStep?.fields ?? []).filter(f => fieldVisible(f, form, currentStep?.fields ?? [])),
-    [currentStep, form],
+    () => (currentStep?.fields ?? []).filter(f => fieldVisible(f, form, allConfigFields)),
+    [currentStep, form, allConfigFields],
   );
   const questionNumbers = useMemo(() => {
     const map = new Map<string, number>();
@@ -602,7 +616,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     for (const s of steps) {
       for (const f of s.fields) {
         if (f.type === 'info_text') continue;
-        if (!fieldVisible(f, form, s.fields)) continue;
+        if (!fieldVisible(f, form, allConfigFields)) continue;
         if (f.type === 'experiment_text' && !experiment) continue;
         if (f.type === 'role_select' && (!questionnaire.askTomorrowRole || surveyDay > 6)) continue;
         n += 1;
@@ -610,7 +624,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
       }
     }
     return map;
-  }, [steps, form, experiment, questionnaire.askTomorrowRole, surveyDay]);
+  }, [steps, form, experiment, questionnaire.askTomorrowRole, surveyDay, allConfigFields]);
   const showExperimentBlock = currentStep && isExperimentStep(currentStep) && !!experiment;
 
   const stepReady = useMemo(() => {
@@ -673,12 +687,12 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
       );
     }
     if (field.type === 'yes_no') {
-      const val = !!form[field.key];
+      const raw = form[field.key];
       return (
         <FormItem key={field.key} top={fieldTop(field)}>
           <div style={{ display: 'flex', gap: 8 }}>
-            <Button mode={val ? 'primary' : 'secondary'} onClick={() => setField(field.key, true)}>Да</Button>
-            <Button mode={!val ? 'primary' : 'secondary'} onClick={() => setField(field.key, false)}>Нет</Button>
+            <Button mode={raw === true ? 'primary' : 'secondary'} onClick={() => setField(field.key, true)}>Да</Button>
+            <Button mode={raw === false ? 'primary' : 'secondary'} onClick={() => setField(field.key, false)}>Нет</Button>
           </div>
         </FormItem>
       );
@@ -798,11 +812,11 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
 
   const handleSubmit = async () => {
     const askRole = questionnaire.askTomorrowRole !== false && surveyDay <= 6;
-    const ratings = { ...form };
+    const ratings: Record<string, unknown> = { ...form };
     delete (ratings as Record<string, unknown>).tomorrowRoleKey;
-    for (const s of rawSteps) {
-      for (const f of s.fields) {
-        if (f.type === 'info_text') delete (ratings as Record<string, unknown>)[f.key];
+    for (const f of allConfigFields) {
+      if (f.type === 'info_text' || !fieldVisible(f, form, allConfigFields)) {
+        delete (ratings as Record<string, unknown>)[f.key];
       }
     }
     const isWrap = submitPath.includes('forum-wrap');

@@ -12,6 +12,7 @@ import {
   isFieldVisible,
   isEveningDisplayField,
   resolveEveningConfigForDay,
+  stripHiddenEveningFieldValues,
   stripPointBFromEveningConfig,
   normalizeExperimentStep,
   collectForumFinalEveningFields,
@@ -218,6 +219,60 @@ describe('eveningQuestionnaireConfig', () => {
     assert.equal(isFieldVisible(follow, { pick: '3' }, fields), true);
     assert.equal(isFieldVisible(follow, { pick: '5' }, fields), false);
     assert.equal(isFieldVisible(follow, {}, fields), false);
+  });
+
+  it('isFieldVisible hides a nested follow-up when the parent branch is closed', () => {
+    const pick = { key: 'pick', type: 'choice' as const, label: 'Pick', options: ['1', '2'] };
+    const mid = {
+      key: 'mid',
+      type: 'yes_no' as const,
+      label: 'Mid',
+      visibleWhen: { field: 'pick', equals: '1' },
+    };
+    const nested = {
+      key: 'nested',
+      type: 'text' as const,
+      label: 'Nested',
+      visibleWhen: { field: 'mid', equals: true },
+    };
+    const fields = [pick, mid, nested];
+    assert.equal(isFieldVisible(nested, { pick: '1', mid: true }, fields), true);
+    assert.equal(isFieldVisible(nested, { pick: '2', mid: true }, fields), false);
+  });
+
+  it('isFieldVisible matches number/string and boolean aliases', () => {
+    const scaleFollow = {
+      key: 'why',
+      type: 'text' as const,
+      label: 'Why',
+      visibleWhen: { field: 'score', equals: '3' },
+    };
+    assert.equal(isFieldVisible(scaleFollow, { score: 3 }), true);
+    const ynFollow = {
+      key: 'whyNo',
+      type: 'text' as const,
+      label: 'Why no',
+      visibleWhen: { field: 'trip', equals: false },
+    };
+    assert.equal(isFieldVisible(ynFollow, { trip: false }), true);
+    assert.equal(isFieldVisible(ynFollow, { trip: 'false' }), true);
+    assert.equal(isFieldVisible(ynFollow, { trip: true }), false);
+  });
+
+  it('stripHiddenEveningFieldValues drops closed-branch answers', () => {
+    const pick = { key: 'pick', type: 'choice' as const, label: 'Pick', options: ['1', '2'] };
+    const follow = {
+      key: 'qa',
+      type: 'text' as const,
+      label: 'A',
+      visibleWhen: { field: 'pick', equals: '1' },
+    };
+    const stripped = stripHiddenEveningFieldValues(
+      { pick: '2', qa: 'leftover from option 1' },
+      [pick, follow],
+    );
+    assert.equal(stripped.pick, '2');
+    assert.equal(stripped.qa, undefined);
   });
 
   it('filters fields by audienceDirectionIds (empty = all)', () => {

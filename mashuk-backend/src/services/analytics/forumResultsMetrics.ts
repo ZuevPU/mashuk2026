@@ -195,6 +195,12 @@ export function buildChoiceDist(
 ): ForumChoiceDist {
   const values: string[] = [];
   for (const r of rows) {
+    if (field.type === 'yes_no') {
+      const yn = yesNoValue(r.ratings[field.key]);
+      if (yn === true) values.push('Да');
+      else if (yn === false) values.push('Нет');
+      continue;
+    }
     const t = textValue(r.ratings[field.key]);
     if (t) values.push(t);
   }

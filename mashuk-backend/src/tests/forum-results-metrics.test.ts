@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildChoiceDist,
   buildForumNps,
   classifyForumField,
   clusterSimilarTexts,
@@ -29,6 +30,29 @@ describe('forumResultsMetrics', () => {
     assert.equal(classifyForumField({
       key: 'psych', type: 'yes_no', label: 'Были на консультации психолога?',
     }), 'psych');
+    assert.equal(classifyForumField({
+      key: 'customYn', type: 'yes_no', label: 'Был ли ты на выезде?',
+    }), 'yesno');
+    assert.equal(classifyForumField({
+      key: 'customChoice', type: 'choice', label: 'Какой формат удобнее?', options: ['A', 'B'],
+    }), 'choice');
+  });
+
+  it('buildChoiceDist maps yes_no answers to Да/Нет', () => {
+    const dist = buildChoiceDist(
+      [
+        { ratings: { trip: true } },
+        { ratings: { trip: false } },
+        { ratings: { trip: true } },
+      ],
+      { key: 'trip', type: 'yes_no', label: 'Выезд?' },
+      'yesno',
+    );
+    assert.equal(dist.n, 3);
+    assert.deepEqual(
+      dist.items.map(i => [i.name, i.n]),
+      [['Да', 2], ['Нет', 1]],
+    );
   });
 
   it('builds NPS as promoters minus critics', () => {

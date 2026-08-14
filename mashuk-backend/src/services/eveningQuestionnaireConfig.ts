@@ -442,15 +442,33 @@ export function isFieldVisible(
   field: EveningField,
   form: Record<string, unknown>,
   allFields: EveningField[] = [],
+  visiting: Set<string> = new Set(),
 ): boolean {
   if (!field.visibleWhen) return true;
-  const v = form[field.visibleWhen.field];
+  if (visiting.has(field.key)) return false;
+  visiting.add(field.key);
   const parent = allFields.find(f => f.key === field.visibleWhen!.field);
+  if (parent && !isFieldVisible(parent, form, allFields, visiting)) return false;
+  const v = form[field.visibleWhen.field];
   const expectedList = Array.isArray(field.visibleWhen.equals)
     ? field.visibleWhen.equals
     : [field.visibleWhen.equals];
   if (expectedList.length === 0) return false;
   return expectedList.some(expected => matchEveningVisibleEquals(v, expected, parent));
+}
+
+/** Drop answers for fields that are currently hidden (or info blocks). */
+export function stripHiddenEveningFieldValues(
+  form: Record<string, unknown>,
+  allFields: EveningField[],
+): Record<string, unknown> {
+  const next = { ...form };
+  for (const field of allFields) {
+    if (field.type === 'info_text' || !isFieldVisible(field, form, allFields)) {
+      delete next[field.key];
+    }
+  }
+  return next;
 }
 
 function matchEveningVisibleEquals(
@@ -465,7 +483,18 @@ function matchEveningVisibleEquals(
     const opts = parent?.options ?? [];
     return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v);
   }
-  return v === expected;
+  if (v === expected) return true;
+  if (typeof expected === 'boolean') {
+    if (expected) return v === 'true' || v === 'yes' || v === 1 || v === '1';
+    return v === 'false' || v === 'no' || v === 0 || v === '0';
+  }
+  if (typeof expected === 'number') {
+    return v === String(expected) || Number(v) === expected;
+  }
+  if (typeof expected === 'string' && typeof v === 'number') {
+    return String(v) === expected;
+  }
+  return false;
 }
 
 export function normalizeAudienceDirectionIds(raw: unknown): number[] {

@@ -218,7 +218,7 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
 
   const choices: ForumChoiceDist[] = [];
   for (const { f, kind } of classified) {
-    if (kind === 'point_b' || kind === 'role' || kind === 'plan_when' || kind === 'choice') {
+    if (kind === 'point_b' || kind === 'role' || kind === 'plan_when' || kind === 'choice' || kind === 'yesno') {
       const dist = buildChoiceDist(primarySubmitted, f, kind);
       if (dist.n) choices.push(dist);
     }

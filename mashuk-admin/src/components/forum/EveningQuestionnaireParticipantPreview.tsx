@@ -65,10 +65,13 @@ function isValueSet(value: unknown): boolean {
   return false;
 }
 
-function fieldVisible(field: EveningField, form: Record<string, unknown>, allFields: EveningField[]): boolean {
+function fieldVisible(field: EveningField, form: Record<string, unknown>, allFields: EveningField[], visiting: Set<string> = new Set()): boolean {
   if (!field.visibleWhen) return true;
-  const v = form[field.visibleWhen.field];
+  if (visiting.has(field.key)) return false;
+  visiting.add(field.key);
   const parent = allFields.find(f => f.key === field.visibleWhen!.field);
+  if (parent && !fieldVisible(parent, form, allFields, visiting)) return false;
+  const v = form[field.visibleWhen.field];
   const expectedList = Array.isArray(field.visibleWhen.equals)
     ? field.visibleWhen.equals
     : [field.visibleWhen.equals];
@@ -79,13 +82,20 @@ function fieldVisible(field: EveningField, form: Record<string, unknown>, allFie
       const opts = parent?.options ?? [];
       return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v);
     }
-    return v === expected;
+    if (v === expected) return true;
+    if (typeof expected === 'boolean') {
+      if (expected) return v === 'true' || v === 'yes' || v === 1 || v === '1';
+      return v === 'false' || v === 'no' || v === 0 || v === '0';
+    }
+    if (typeof expected === 'number') return v === String(expected) || Number(v) === expected;
+    if (typeof expected === 'string' && typeof v === 'number') return String(v) === expected;
+    return false;
   });
 }
 
-function stepHasVisibleFields(step: EveningStep, form: Record<string, unknown>, day: number | null): boolean {
+function stepHasVisibleFields(step: EveningStep, form: Record<string, unknown>, day: number | null, allFields: EveningField[]): boolean {
   return step.fields.some(f => {
-    if (!fieldVisible(f, form, step.fields)) return false;
+    if (!fieldVisible(f, form, allFields)) return false;
     if (f.type === 'role_select' && day != null && day > 6) return false;
     return true;
   });
@@ -312,9 +322,14 @@ export function EveningQuestionnaireParticipantPreview({
     setTomorrowRole(roles[0]?.roleKey || '');
   }, [day, config, roles]);
 
+  const allConfigFields = useMemo(
+    () => (config.steps || []).flatMap(s => s.fields),
+    [config.steps],
+  );
+
   const steps = useMemo(
-    () => (config.steps || []).filter(s => stepHasVisibleFields(s, form, day)),
-    [config.steps, form, day],
+    () => (config.steps || []).filter(s => stepHasVisibleFields(s, form, day, allConfigFields)),
+    [config.steps, form, day, allConfigFields],
   );
 
   useEffect(() => {
@@ -322,21 +337,21 @@ export function EveningQuestionnaireParticipantPreview({
   }, [step, steps.length]);
 
   const currentStep = steps[Math.min(step, Math.max(steps.length - 1, 0))] ?? null;
-  const visibleFields = (currentStep?.fields || []).filter(f => fieldVisible(f, form, currentStep?.fields || []));
+  const visibleFields = (currentStep?.fields || []).filter(f => fieldVisible(f, form, allConfigFields));
   const questionNumbers = useMemo(() => {
     const map = new Map<string, number>();
     let n = 0;
     for (const s of steps) {
       for (const f of s.fields) {
         if (f.type === 'info_text') continue;
-        if (!fieldVisible(f, form, s.fields)) continue;
+        if (!fieldVisible(f, form, allConfigFields)) continue;
         if (f.type === 'role_select' && day != null && day > 6) continue;
         n += 1;
         map.set(f.key, n);
       }
     }
     return map;
-  }, [steps, form, day]);
+  }, [steps, form, day, allConfigFields]);
   const showExperiment = !!currentStep && (
     currentStep.id === 'experiment' || currentStep.fields.some(f => f.type === 'experiment_text')
   );

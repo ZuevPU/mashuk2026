@@ -194,12 +194,12 @@ export function HubForumResultsScreen() {
     if (item.id === 'hub-forum-improve') return !!improve;
     if (item.id === 'hub-forum-nps') return !!data?.nps;
     if (item.id === 'hub-forum-pointb') return !!pointB;
-    if (item.id === 'hub-forum-role') return !!roleChoice || !!selfway;
+    if (item.id === 'hub-forum-role') return !!roleChoice || !!selfway || otherChoices.length > 0;
     if (item.id === 'hub-forum-plans') return !!planWhen || !!nextstep;
     if (item.id === 'hub-forum-extra') return !!data?.compact.length;
     if (item.id === 'hub-forum-final') return finals.length > 0;
     return true;
-  }), [data, improve, pointB, roleChoice, selfway, planWhen, nextstep, finals.length]);
+  }), [data, improve, pointB, roleChoice, selfway, planWhen, nextstep, finals.length, otherChoices.length]);
 
   return (
     <HubLensLayout className="adm-day-results" items={nav} navLabel="Разделы итогов форума">
@@ -505,11 +505,11 @@ export function HubForumResultsScreen() {
             </DayResultsSection>
           )}
 
-          {(roleChoice || selfway) && (
+          {(roleChoice || selfway || otherChoices.length > 0) && (
             <DayResultsSection
               id="hub-forum-role"
               title="Способы действия — роль на финише смены"
-              note={roleChoice?.label || selfway?.label}
+              note={roleChoice?.label || selfway?.label || otherChoices[0]?.label}
             >
               {roleChoice && (
                 <DashCard>

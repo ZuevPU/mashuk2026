@@ -13,6 +13,7 @@ import {
   isEveningOpenForDay,
   isForcePublishedActive,
   resolveEveningConfigForDay,
+  stripHiddenEveningFieldValues,
   type EveningQuestionnaireConfig,
 } from '../services/eveningQuestionnaireConfig.js';
 import { getScheduleDayPublished } from '../services/eveningScheduleGate.js';
@@ -225,8 +226,9 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
       return;
     }
 
+    const allFields = (eveningConfig.steps || []).flatMap(s => s.fields);
     const ratings: Record<string, unknown> = {
-      ...(parsed.data.ratings as Record<string, unknown>),
+      ...stripHiddenEveningFieldValues(parsed.data.ratings as Record<string, unknown>, allFields),
       // Stamp for exports: day-state.updatedAt is polluted by later role/experiment patches.
       _submittedAt: new Date().toISOString(),
     };

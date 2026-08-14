@@ -11,6 +11,7 @@ import {
   getEveningOpensAtMsk,
   isForcePublishedActive,
   normalizeOpensAtMsk,
+  stripHiddenEveningFieldValues,
   stripPointBFromEveningConfig,
   type EveningQuestionnaireConfig,
 } from '../services/eveningQuestionnaireConfig.js';
@@ -325,8 +326,9 @@ export async function submitForumWrapQuestionnaire(req: ParticipantRequest, res:
       });
       return;
     }
+    const allFields = (config.steps || []).flatMap(s => s.fields);
     const ratings: Record<string, unknown> = {
-      ...(parsed.data.ratings as Record<string, unknown>),
+      ...stripHiddenEveningFieldValues(parsed.data.ratings as Record<string, unknown>, allFields),
       _submittedAt: new Date().toISOString(),
     };
     await db.update(participants)
