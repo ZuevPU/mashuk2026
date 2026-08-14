@@ -47,10 +47,10 @@ import { audienceWriteFields } from '../services/eventAudience.js';
 import {
   DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
   copyEveningQuestionnaireContent,
-  getEveningOpensAtMsk,
+  eveningScheduleApiFields,
   isEveningOpenForDay,
   isForcePublishedActive,
-  normalizeOpensAtMsk,
+  mergeEveningScheduleFromRequest,
   resolveEveningConfigForDay,
   stripPointBFromEveningConfig,
   type EveningQuestionnaireConfig,
@@ -135,7 +135,10 @@ export const listParticipantGroups = async (req: AdminRequest, res: Response): P
 export const updateParticipantDirection = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
   const { directionId } = req.body;
-  const [dir] = await db.select().from(directions).where(eq(directions.id, directionId)).limit(1);
+  const [person] = await db.select({ shiftId: participants.shiftId }).from(participants).where(eq(participants.id, id)).limit(1);
+  const shiftId = person?.shiftId ?? await resolveAdminShiftId(req);
+  const { getDirectionInShift } = await import('../services/shiftCatalogs.js');
+  const dir = await getDirectionInShift(Number(directionId), shiftId);
   if (!dir) { res.status(400).json({ error: 'Invalid direction' }); return; }
   const [updated] = await db.update(participants)
     .set({ directionId: dir.id, direction: dir.name })
@@ -624,12 +627,14 @@ export const createParticipant = async (req: AdminRequest, res: Response): Promi
     res.status(400).json({ error: 'vkId required' });
     return;
   }
+  const shiftId = await resolveAdminShiftId(req);
   let directionName: string | undefined;
   if (directionId) {
-    const [dir] = await db.select().from(directions).where(eq(directions.id, directionId)).limit(1);
-    directionName = dir?.name;
+    const { getDirectionInShift } = await import('../services/shiftCatalogs.js');
+    const dir = await getDirectionInShift(Number(directionId), shiftId);
+    if (!dir) { res.status(400).json({ error: 'Invalid direction' }); return; }
+    directionName = dir.name;
   }
-  const shiftId = await resolveAdminShiftId(req);
   const [created] = await db.insert(participants).values({
     vkId: Number(vkId),
     shiftId,
@@ -645,26 +650,69 @@ export const createParticipant = async (req: AdminRequest, res: Response): Promi
 };
 
 export const crudDirections = {
-  list: async (_req: AdminRequest, res: Response) => {
-    res.json({ directions: await db.select().from(directions) });
+  list: async (req: AdminRequest, res: Response) => {
+    const shiftId = await resolveAdminShiftId(req);
+    res.json({
+      directions: await db.select().from(directions).where(eq(directions.shiftId, shiftId)),
+    });
   },
   create: async (req: AdminRequest, res: Response) => {
-    const [d] = await db.insert(directions).values({ name: req.body.name }).returning();
+    const name = String(req.body.name || '').trim();
+    if (!name) { res.status(400).json({ error: 'name required' }); return; }
+    const shiftId = await resolveAdminShiftId(req);
+    const [d] = await db.insert(directions).values({ name, shiftId }).returning();
     res.json({ direction: d });
   },
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
+    const shiftId = await resolveAdminShiftId(req);
     const [updated] = await db.update(directions)
       .set({ name: req.body.name, isHidden: req.body.isHidden })
-      .where(eq(directions.id, id)).returning();
+      .where(and(eq(directions.id, id), eq(directions.shiftId, shiftId)))
+      .returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
-    // Keep denormalized participants.direction in sync with directions.name
     if (typeof req.body.name === 'string' && req.body.name.trim()) {
       await db.update(participants)
         .set({ direction: updated.name })
         .where(eq(participants.directionId, id));
     }
     res.json({ direction: updated });
+  },
+  delete: async (req: AdminRequest, res: Response) => {
+    const id = Number(req.params.id);
+    const shiftId = await resolveAdminShiftId(req);
+    const [existing] = await db.select().from(directions).where(and(
+      eq(directions.id, id),
+      eq(directions.shiftId, shiftId),
+    )).limit(1);
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+
+    await db.update(participants)
+      .set({ directionId: null })
+      .where(eq(participants.directionId, id));
+    await db.update(participantGroups)
+      .set({ directionId: null })
+      .where(eq(participantGroups.directionId, id));
+
+    const evs = await db.select({
+      id: events.id,
+      audienceDirectionId: events.audienceDirectionId,
+      audienceDirectionIds: events.audienceDirectionIds,
+    }).from(events).where(eq(events.shiftId, shiftId));
+    for (const e of evs) {
+      const raw = Array.isArray(e.audienceDirectionIds) ? e.audienceDirectionIds : [];
+      const nextIds = raw.map(Number).filter(n => Number.isFinite(n) && n > 0 && n !== id);
+      const nextAudienceId = e.audienceDirectionId === id ? null : e.audienceDirectionId;
+      const changed = nextAudienceId !== e.audienceDirectionId || nextIds.length !== raw.length;
+      if (!changed) continue;
+      await db.update(events).set({
+        audienceDirectionId: nextAudienceId,
+        audienceDirectionIds: nextIds,
+      }).where(eq(events.id, e.id));
+    }
+
+    await db.delete(directions).where(and(eq(directions.id, id), eq(directions.shiftId, shiftId)));
+    res.json({ ok: true, id });
   },
 };
 
@@ -676,10 +724,10 @@ function slugifyTagName(name: string): string {
   return s || `tag-${Date.now()}`;
 }
 
-async function tagUsageCounts(tag: { id: number; name: string }) {
-  const allEvents = await db.select({ tags: events.tags }).from(events);
-  const allMats = await db.select({ tags: materials.tags }).from(materials);
-  const allP = await db.select({ interests: participants.interests }).from(participants);
+async function tagUsageCounts(tag: { id: number; name: string }, shiftId: number) {
+  const allEvents = await db.select({ tags: events.tags }).from(events).where(eq(events.shiftId, shiftId));
+  const allMats = await db.select({ tags: materials.tags }).from(materials).where(eq(materials.shiftId, shiftId));
+  const allP = await db.select({ interests: participants.interests }).from(participants).where(eq(participants.shiftId, shiftId));
   const qCount = [{ count: 0 }];
 
   let eventsN = 0;
@@ -705,10 +753,10 @@ async function tagUsageCounts(tag: { id: number; name: string }) {
   };
 }
 
-async function countTagNameLinks(tagName: string) {
-  const allEvents = await db.select({ tags: events.tags }).from(events);
-  const allMats = await db.select({ tags: materials.tags }).from(materials);
-  const allP = await db.select({ interests: participants.interests }).from(participants);
+async function countTagNameLinks(tagName: string, shiftId: number) {
+  const allEvents = await db.select({ tags: events.tags }).from(events).where(eq(events.shiftId, shiftId));
+  const allMats = await db.select({ tags: materials.tags }).from(materials).where(eq(materials.shiftId, shiftId));
+  const allP = await db.select({ interests: participants.interests }).from(participants).where(eq(participants.shiftId, shiftId));
   let eventsUpdated = 0;
   for (const ev of allEvents) {
     const tags = Array.isArray(ev.tags) ? (ev.tags as string[]) : [];
@@ -727,8 +775,8 @@ async function countTagNameLinks(tagName: string) {
   return { eventsUpdated, materialsUpdated, participantsUpdated };
 }
 
-async function rebindTagName(fromName: string, toName: string) {
-  const allEvents = await db.select().from(events);
+async function rebindTagName(fromName: string, toName: string, shiftId: number) {
+  const allEvents = await db.select().from(events).where(eq(events.shiftId, shiftId));
   let eventsUpdated = 0;
   for (const ev of allEvents) {
     const tags = Array.isArray(ev.tags) ? (ev.tags as string[]) : [];
@@ -737,7 +785,7 @@ async function rebindTagName(fromName: string, toName: string) {
     await db.update(events).set({ tags: next }).where(eq(events.id, ev.id));
     eventsUpdated++;
   }
-  const allMats = await db.select().from(materials);
+  const allMats = await db.select().from(materials).where(eq(materials.shiftId, shiftId));
   let matsUpdated = 0;
   for (const m of allMats) {
     const tags = Array.isArray(m.tags) ? (m.tags as string[]) : [];
@@ -746,7 +794,7 @@ async function rebindTagName(fromName: string, toName: string) {
     await db.update(materials).set({ tags: next }).where(eq(materials.id, m.id));
     matsUpdated++;
   }
-  const allP = await db.select().from(participants);
+  const allP = await db.select().from(participants).where(eq(participants.shiftId, shiftId));
   let participantsUpdated = 0;
   for (const p of allP) {
     const ints = Array.isArray(p.interests) ? (p.interests as string[]) : [];
@@ -759,15 +807,18 @@ async function rebindTagName(fromName: string, toName: string) {
 }
 
 /** Убрать тег из событий / материалов / интересов участников. */
-async function unlinkTagName(tagName: string) {
-  return rebindTagName(tagName, '');
+async function unlinkTagName(tagName: string, shiftId: number) {
+  return rebindTagName(tagName, '', shiftId);
 }
 
 export const crudThematicTags = {
   list: async (req: AdminRequest, res: Response) => {
+    const shiftId = await resolveAdminShiftId(req);
     const search = typeof req.query.search === 'string' ? req.query.search.trim().toLowerCase() : '';
     const applicationType = typeof req.query.applicationType === 'string' ? req.query.applicationType : '';
-    let tags = await db.select().from(thematicTags).orderBy(asc(thematicTags.sortOrder), asc(thematicTags.name));
+    let tags = await db.select().from(thematicTags)
+      .where(eq(thematicTags.shiftId, shiftId))
+      .orderBy(asc(thematicTags.sortOrder), asc(thematicTags.name));
     if (search) tags = tags.filter(t => t.name.toLowerCase().includes(search) || (t.slug ?? '').includes(search));
     if (applicationType) {
       tags = tags.filter(t => {
@@ -777,15 +828,17 @@ export const crudThematicTags = {
     }
     const withUsage = await Promise.all(tags.map(async t => ({
       ...t,
-      usage: await tagUsageCounts(t),
+      usage: await tagUsageCounts(t, shiftId),
     })));
     res.json({ tags: withUsage, total: withUsage.length });
   },
   create: async (req: AdminRequest, res: Response) => {
     const name = String(req.body.name || '').trim();
     if (!name) { res.status(400).json({ error: 'name required' }); return; }
+    const shiftId = await resolveAdminShiftId(req);
     const slug = String(req.body.slug || slugifyTagName(name)).trim();
     const [t] = await db.insert(thematicTags).values({
+      shiftId,
       name,
       slug,
       description: req.body.description ?? null,
@@ -800,14 +853,18 @@ export const crudThematicTags = {
   },
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
-    const [before] = await db.select().from(thematicTags).where(eq(thematicTags.id, id)).limit(1);
+    const shiftId = await resolveAdminShiftId(req);
+    const [before] = await db.select().from(thematicTags).where(and(
+      eq(thematicTags.id, id),
+      eq(thematicTags.shiftId, shiftId),
+    )).limit(1);
     if (!before) { res.status(404).json({ error: 'Not found' }); return; }
     const patch: Partial<typeof thematicTags.$inferInsert> = {};
     const newName = req.body.name != null ? String(req.body.name).trim() : null;
     if (newName != null) {
       if (!newName) { res.status(400).json({ error: 'name required' }); return; }
       const dup = await db.select({ id: thematicTags.id }).from(thematicTags)
-        .where(and(eq(thematicTags.name, newName), sql`${thematicTags.id} <> ${id}`)).limit(1);
+        .where(and(eq(thematicTags.shiftId, shiftId), eq(thematicTags.name, newName), sql`${thematicTags.id} <> ${id}`)).limit(1);
       if (dup.length) {
         res.status(400).json({ error: 'Тег с таким названием уже есть' });
         return;
@@ -816,7 +873,7 @@ export const crudThematicTags = {
       if (req.body.slug == null && newName !== before.name) {
         const nextSlug = slugifyTagName(newName);
         const slugTaken = await db.select({ id: thematicTags.id }).from(thematicTags)
-          .where(and(eq(thematicTags.slug, nextSlug), sql`${thematicTags.id} <> ${id}`)).limit(1);
+          .where(and(eq(thematicTags.shiftId, shiftId), eq(thematicTags.slug, nextSlug), sql`${thematicTags.id} <> ${id}`)).limit(1);
         if (!slugTaken.length) patch.slug = nextSlug;
       }
     }
@@ -830,10 +887,13 @@ export const crudThematicTags = {
       res.status(400).json({ error: 'No fields to update' });
       return;
     }
-    const [updated] = await db.update(thematicTags).set(patch).where(eq(thematicTags.id, id)).returning();
+    const [updated] = await db.update(thematicTags).set(patch).where(and(
+      eq(thematicTags.id, id),
+      eq(thematicTags.shiftId, shiftId),
+    )).returning();
     let rebind: Awaited<ReturnType<typeof rebindTagName>> | undefined;
     if (newName && newName !== before.name) {
-      rebind = await rebindTagName(before.name, newName);
+      rebind = await rebindTagName(before.name, newName, shiftId);
     }
     const { logAdminAction } = await import('../services/adminActionsLog.js');
     await logAdminAction({
@@ -844,9 +904,13 @@ export const crudThematicTags = {
   },
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
-    const [tag] = await db.select().from(thematicTags).where(eq(thematicTags.id, id)).limit(1);
+    const shiftId = await resolveAdminShiftId(req);
+    const [tag] = await db.select().from(thematicTags).where(and(
+      eq(thematicTags.id, id),
+      eq(thematicTags.shiftId, shiftId),
+    )).limit(1);
     if (!tag) { res.status(404).json({ error: 'Not found' }); return; }
-    const usage = await tagUsageCounts(tag);
+    const usage = await tagUsageCounts(tag, shiftId);
     const totalLinks = usage.events + usage.materials + usage.participants + Number(usage.questions);
     const force = req.query.force === '1' || req.query.force === 'true'
       || req.body?.force === true || req.body?.force === 1 || req.body?.force === '1';
@@ -859,9 +923,12 @@ export const crudThematicTags = {
       return;
     }
     if (totalLinks > 0) {
-      await unlinkTagName(tag.name);
+      await unlinkTagName(tag.name, shiftId);
     }
-    const [deleted] = await db.delete(thematicTags).where(eq(thematicTags.id, id)).returning();
+    const [deleted] = await db.delete(thematicTags).where(and(
+      eq(thematicTags.id, id),
+      eq(thematicTags.shiftId, shiftId),
+    )).returning();
     const { logAdminAction } = await import('../services/adminActionsLog.js');
     await logAdminAction({
       req, actionType: 'tag_delete', section: 'recommendation-tags', objectId: id,
@@ -870,34 +937,40 @@ export const crudThematicTags = {
     res.json({ ok: true, unlinked: totalLinks > 0, usage });
   },
   reorder: async (req: AdminRequest, res: Response) => {
+    const shiftId = await resolveAdminShiftId(req);
     const order = Array.isArray(req.body.order) ? req.body.order as Array<{ id: number; sortOrder: number }> : [];
     for (const item of order) {
-      await db.update(thematicTags).set({ sortOrder: item.sortOrder }).where(eq(thematicTags.id, item.id));
+      await db.update(thematicTags).set({ sortOrder: item.sortOrder }).where(and(
+        eq(thematicTags.id, item.id),
+        eq(thematicTags.shiftId, shiftId),
+      ));
     }
     res.json({ ok: true });
   },
   mergePreview: async (req: AdminRequest, res: Response) => {
+    const shiftId = await resolveAdminShiftId(req);
     const fromId = Number(req.body.fromId);
     const toId = Number(req.body.toId);
-    const [from] = await db.select().from(thematicTags).where(eq(thematicTags.id, fromId)).limit(1);
-    const [to] = await db.select().from(thematicTags).where(eq(thematicTags.id, toId)).limit(1);
+    const [from] = await db.select().from(thematicTags).where(and(eq(thematicTags.id, fromId), eq(thematicTags.shiftId, shiftId))).limit(1);
+    const [to] = await db.select().from(thematicTags).where(and(eq(thematicTags.id, toId), eq(thematicTags.shiftId, shiftId))).limit(1);
     if (!from || !to) { res.status(404).json({ error: 'Tag not found' }); return; }
-    const preview = await countTagNameLinks(from.name);
+    const preview = await countTagNameLinks(from.name, shiftId);
     res.json({ from, to, preview });
   },
   merge: async (req: AdminRequest, res: Response) => {
+    const shiftId = await resolveAdminShiftId(req);
     const fromId = Number(req.body.fromId);
     const toId = Number(req.body.toId);
     if (!fromId || !toId || fromId === toId) {
       res.status(400).json({ error: 'fromId and toId required and must differ' });
       return;
     }
-    const [from] = await db.select().from(thematicTags).where(eq(thematicTags.id, fromId)).limit(1);
-    const [to] = await db.select().from(thematicTags).where(eq(thematicTags.id, toId)).limit(1);
+    const [from] = await db.select().from(thematicTags).where(and(eq(thematicTags.id, fromId), eq(thematicTags.shiftId, shiftId))).limit(1);
+    const [to] = await db.select().from(thematicTags).where(and(eq(thematicTags.id, toId), eq(thematicTags.shiftId, shiftId))).limit(1);
     if (!from || !to) { res.status(404).json({ error: 'Tag not found' }); return; }
 
-    const preview = await rebindTagName(from.name, to.name);
-    await db.delete(thematicTags).where(eq(thematicTags.id, fromId));
+    const preview = await rebindTagName(from.name, to.name, shiftId);
+    await db.delete(thematicTags).where(and(eq(thematicTags.id, fromId), eq(thematicTags.shiftId, shiftId)));
     const { logAdminAction } = await import('../services/adminActionsLog.js');
     await logAdminAction({
       req, actionType: 'tag_merge', section: 'recommendation-tags', objectId: fromId,
@@ -908,8 +981,11 @@ export const crudThematicTags = {
 };
 
 export const crudProgramPlaces = {
-  list: async (_req: AdminRequest, res: Response) => {
-    const places = await db.select().from(programPlaces).orderBy(asc(programPlaces.name));
+  list: async (req: AdminRequest, res: Response) => {
+    const shiftId = await resolveAdminShiftId(req);
+    const places = await db.select().from(programPlaces)
+      .where(eq(programPlaces.shiftId, shiftId))
+      .orderBy(asc(programPlaces.name));
     res.json({ places });
   },
   create: async (req: AdminRequest, res: Response) => {
@@ -918,7 +994,8 @@ export const crudProgramPlaces = {
       res.status(400).json({ error: 'name required' });
       return;
     }
-    const [place] = await db.insert(programPlaces).values({ name }).returning();
+    const shiftId = await resolveAdminShiftId(req);
+    const [place] = await db.insert(programPlaces).values({ name, shiftId }).returning();
     res.json({ place });
   },
   update: async (req: AdminRequest, res: Response) => {
@@ -928,73 +1005,108 @@ export const crudProgramPlaces = {
       res.status(400).json({ error: 'name required' });
       return;
     }
-    const [prev] = await db.select().from(programPlaces).where(eq(programPlaces.id, id)).limit(1);
+    const shiftId = await resolveAdminShiftId(req);
+    const [prev] = await db.select().from(programPlaces).where(and(
+      eq(programPlaces.id, id),
+      eq(programPlaces.shiftId, shiftId),
+    )).limit(1);
     if (!prev) {
       res.status(404).json({ error: 'Not found' });
       return;
     }
     const [updated] = await db.update(programPlaces)
       .set({ name })
-      .where(eq(programPlaces.id, id))
+      .where(and(eq(programPlaces.id, id), eq(programPlaces.shiftId, shiftId)))
       .returning();
     if (prev.name !== name) {
-      await db.update(events).set({ place: name }).where(eq(events.place, prev.name));
+      await db.update(events).set({ place: name }).where(and(
+        eq(events.shiftId, shiftId),
+        eq(events.place, prev.name),
+      ));
     }
     res.json({ place: updated });
   },
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
-    const [deleted] = await db.delete(programPlaces).where(eq(programPlaces.id, id)).returning();
+    const shiftId = await resolveAdminShiftId(req);
+    const [deleted] = await db.delete(programPlaces).where(and(
+      eq(programPlaces.id, id),
+      eq(programPlaces.shiftId, shiftId),
+    )).returning();
     if (!deleted) {
       res.status(404).json({ error: 'Not found' });
       return;
     }
-    await db.update(events).set({ place: null }).where(eq(events.place, deleted.name));
+    await db.update(events).set({ place: null }).where(and(
+      eq(events.shiftId, shiftId),
+      eq(events.place, deleted.name),
+    ));
     res.json({ ok: true });
   },
 };
 
 export const crudProgramBlockTypes = {
-  list: async (_req: AdminRequest, res: Response) => {
-    res.json({ blockTypes: await db.select().from(programBlockTypes).orderBy(asc(programBlockTypes.sortOrder)) });
+  list: async (req: AdminRequest, res: Response) => {
+    const shiftId = await resolveAdminShiftId(req);
+    res.json({
+      blockTypes: await db.select().from(programBlockTypes)
+        .where(eq(programBlockTypes.shiftId, shiftId))
+        .orderBy(asc(programBlockTypes.sortOrder)),
+    });
   },
   create: async (req: AdminRequest, res: Response) => {
     const key = String(req.body.key || '').trim();
     const name = String(req.body.name || '').trim();
     if (!key || !name) { res.status(400).json({ error: 'key and name required' }); return; }
+    const shiftId = await resolveAdminShiftId(req);
     const [row] = await db.insert(programBlockTypes).values({
-      key, name, sortOrder: Number(req.body.sortOrder) || 0,
+      shiftId, key, name, sortOrder: Number(req.body.sortOrder) || 0,
     }).returning();
     res.json({ blockType: row });
   },
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
+    const shiftId = await resolveAdminShiftId(req);
     const patch: Partial<typeof programBlockTypes.$inferInsert> = {};
     if (req.body.name != null) patch.name = String(req.body.name).trim();
     if (req.body.sortOrder != null) patch.sortOrder = Number(req.body.sortOrder);
-    const [updated] = await db.update(programBlockTypes).set(patch).where(eq(programBlockTypes.id, id)).returning();
+    const [updated] = await db.update(programBlockTypes).set(patch).where(and(
+      eq(programBlockTypes.id, id),
+      eq(programBlockTypes.shiftId, shiftId),
+    )).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ blockType: updated });
   },
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
-    const [deleted] = await db.delete(programBlockTypes).where(eq(programBlockTypes.id, id)).returning();
+    const shiftId = await resolveAdminShiftId(req);
+    const [deleted] = await db.delete(programBlockTypes).where(and(
+      eq(programBlockTypes.id, id),
+      eq(programBlockTypes.shiftId, shiftId),
+    )).returning();
     if (!deleted) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ ok: true });
   },
 };
 
 export const crudProgramSpeakers = {
-  list: async (_req: AdminRequest, res: Response) => {
-    res.json({ speakers: await db.select().from(programSpeakers).orderBy(asc(programSpeakers.name)) });
+  list: async (req: AdminRequest, res: Response) => {
+    const shiftId = await resolveAdminShiftId(req);
+    res.json({
+      speakers: await db.select().from(programSpeakers)
+        .where(eq(programSpeakers.shiftId, shiftId))
+        .orderBy(asc(programSpeakers.name)),
+    });
   },
   create: async (req: AdminRequest, res: Response) => {
     const name = String(req.body.name || '').trim();
     if (!name) { res.status(400).json({ error: 'name required' }); return; }
+    const shiftId = await resolveAdminShiftId(req);
     const credentials = req.body.credentials != null ? String(req.body.credentials).trim() || null : null;
     const initialsRaw = req.body.initials ? String(req.body.initials).slice(0, 10) : null;
     const initials = initialsRaw || name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 3).toUpperCase() || null;
     const [row] = await db.insert(programSpeakers).values({
+      shiftId,
       name,
       credentials,
       initials,
@@ -1003,6 +1115,7 @@ export const crudProgramSpeakers = {
   },
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
+    const shiftId = await resolveAdminShiftId(req);
     const patch: { name?: string; credentials?: string | null; initials?: string | null } = {};
     if (req.body.name != null) patch.name = String(req.body.name).trim();
     if (req.body.credentials !== undefined) {
@@ -1011,13 +1124,20 @@ export const crudProgramSpeakers = {
     if (req.body.initials !== undefined) {
       patch.initials = req.body.initials ? String(req.body.initials).slice(0, 10) : null;
     }
-    const [updated] = await db.update(programSpeakers).set(patch).where(eq(programSpeakers.id, id)).returning();
+    const [updated] = await db.update(programSpeakers).set(patch).where(and(
+      eq(programSpeakers.id, id),
+      eq(programSpeakers.shiftId, shiftId),
+    )).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ speaker: updated });
   },
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
-    const [deleted] = await db.delete(programSpeakers).where(eq(programSpeakers.id, id)).returning();
+    const shiftId = await resolveAdminShiftId(req);
+    const [deleted] = await db.delete(programSpeakers).where(and(
+      eq(programSpeakers.id, id),
+      eq(programSpeakers.shiftId, shiftId),
+    )).returning();
     if (!deleted) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ ok: true });
   },
@@ -1070,7 +1190,6 @@ export const getAdminEveningQuestionnaire = async (req: AdminRequest, res: Respo
   const byDay = (settings?.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {};
   const dayEntry = byDay[String(day)];
   const hasOwnConfig = !!(dayEntry && Array.isArray(dayEntry.steps) && dayEntry.steps.length);
-  const opensAtMsk = getEveningOpensAtMsk(config);
   const { getScheduleDayPublished } = await import('../services/eveningScheduleGate.js');
   const scheduleDayPublished = await getScheduleDayPublished(day, shiftId);
   res.json({
@@ -1078,7 +1197,7 @@ export const getAdminEveningQuestionnaire = async (req: AdminRequest, res: Respo
     shiftId,
     config,
     defaultConfig: DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
-    opensAtMsk,
+    ...eveningScheduleApiFields(config, day),
     forcePublished: isForcePublishedActive(config),
     forceUnpublished: !!config.forceUnpublished,
     hasOwnConfig,
@@ -1102,7 +1221,6 @@ export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
   const bodyConfig = req.body.config as EveningQuestionnaireConfig | undefined;
   const forcePublishedRaw = req.body.forcePublished;
   const forceUnpublishedRaw = req.body.forceUnpublished;
-  const opensAtRaw = req.body.opensAtMsk;
 
   const byDay = {
     ...((current.eveningQuestionnaireByDay as Record<string, EveningQuestionnaireConfig> | null) || {}),
@@ -1113,23 +1231,12 @@ export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
     ? (day >= 1 && day <= 7 ? stripPointBFromEveningConfig(bodyConfig) : bodyConfig)
     : { ...existing };
 
-  if (opensAtRaw !== undefined) {
-    const normalized = normalizeOpensAtMsk(opensAtRaw === null || opensAtRaw === '' ? null : String(opensAtRaw));
-    if (opensAtRaw && !normalized) {
-      res.status(400).json({ error: 'opensAtMsk must be HH:MM' });
-      return;
-    }
-    if (normalized) next = { ...next, opensAtMsk: normalized };
-    else {
-      const { opensAtMsk: _drop, ...rest } = next;
-      next = rest;
-    }
-  } else if (bodyConfig && 'opensAtMsk' in bodyConfig) {
-    const normalized = normalizeOpensAtMsk(bodyConfig.opensAtMsk);
-    if (normalized) next = { ...next, opensAtMsk: normalized };
-  } else if (existing.opensAtMsk) {
-    next = { ...next, opensAtMsk: existing.opensAtMsk };
+  const schedule = mergeEveningScheduleFromRequest(next, req.body, existing);
+  if (schedule.error) {
+    res.status(400).json({ error: schedule.error });
+    return;
   }
+  next = schedule.config;
 
   const hasForcePub = forcePublishedRaw === true || forcePublishedRaw === false;
   const hasForceUnpub = forceUnpublishedRaw === true || forceUnpublishedRaw === false;
@@ -1224,7 +1331,7 @@ export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
     ok: true,
     shiftId,
     config: resolved,
-    opensAtMsk: getEveningOpensAtMsk(resolved),
+    ...eveningScheduleApiFields(resolved, day),
     forcePublished: forcePublishedActive,
     forceUnpublished: !!resolved.forceUnpublished,
     hasOwnConfig: true,
@@ -1398,7 +1505,7 @@ export const crudEvents = {
     if (day && !Number.isNaN(day)) {
       rows = rows.filter(e => e.dayNumber === day);
     }
-    const speakers = await db.select().from(programSpeakers);
+    const speakers = await db.select().from(programSpeakers).where(eq(programSpeakers.shiftId, shiftId));
     const speakerMap = new Map(speakers.map(s => [s.id, s]));
     const withSpeakers = rows.map(e => {
       const ids = Array.isArray(e.speakerIds) ? (e.speakerIds as number[]) : [];
@@ -1535,7 +1642,7 @@ export const crudEvents = {
     let tagValues = values;
     if (parsed.data.tags && Array.isArray(parsed.data.tags)) {
       const { ensureThematicTagRegistry } = await import('../services/thematicTagRegistry.js');
-      tagValues = { ...values, tags: await ensureThematicTagRegistry(parsed.data.tags as string[]) };
+      tagValues = { ...values, tags: await ensureThematicTagRegistry(parsed.data.tags as string[], existing.shiftId) };
     }
     const [updated] = await db.update(events).set({
       ...tagValues,
@@ -2886,7 +2993,7 @@ export const crudMaterials = {
     let tags = body.tags;
     if (Array.isArray(tags)) {
       const { ensureThematicTagRegistry } = await import('../services/thematicTagRegistry.js');
-      tags = await ensureThematicTagRegistry(tags as string[]);
+      tags = await ensureThematicTagRegistry(tags as string[], shiftId);
     }
     const statusRaw = String(body.status ?? 'draft');
     const status = statusRaw === 'published' || statusRaw === 'archived' ? statusRaw : 'draft';
@@ -2958,7 +3065,7 @@ export const crudMaterials = {
     if (body.tags !== undefined) {
       if (Array.isArray(body.tags)) {
         const { ensureThematicTagRegistry } = await import('../services/thematicTagRegistry.js');
-        patch.tags = await ensureThematicTagRegistry(body.tags as string[]);
+        patch.tags = await ensureThematicTagRegistry(body.tags as string[], shiftId);
       } else {
         patch.tags = [];
       }

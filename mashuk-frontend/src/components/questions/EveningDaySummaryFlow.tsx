@@ -12,12 +12,14 @@ type HomeEveningPayload = {
   eveningQuestionnaire: {
     available: boolean;
     opensAt?: string | null;
+    scheduleHint?: string | null;
     completed: boolean;
     forceUnpublished?: boolean;
   } & EveningQuestionnaireProps['questionnaire'];
   forumWrapQuestionnaire?: {
     available: boolean;
     opensAt?: string | null;
+    scheduleHint?: string | null;
     completed: boolean;
     forceUnpublished?: boolean;
   } & EveningQuestionnaireProps['questionnaire'];
@@ -81,8 +83,8 @@ export function EveningDaySummaryFlow({ onClose, onSubmitted, variant = 'evening
               ? 'Итоговая анкета форума снята с публикации.'
               : 'Итоговая анкета снята с публикации.')
             : isWrap
-              ? `Итоговая анкета форума откроется в ${eq?.opensAt || '10:00'} МСК.`
-              : `Итоговая анкета откроется в ${eq?.opensAt || '22:00'} МСК. Это серия вопросов на главной — не одно поле.`}
+              ? `Итоговая анкета форума доступна ${eq?.scheduleHint || `с ${eq?.opensAt || '10:00'} МСК`}.`
+              : `Итоговая анкета доступна ${eq?.scheduleHint || `с ${eq?.opensAt || '22:00'} МСК`}. Это серия вопросов на главной — не одно поле.`}
         <Button size="l" stretched style={{ marginTop: 14 }} onClick={onClose}>
           Закрыть
         </Button>

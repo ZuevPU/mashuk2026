@@ -312,7 +312,7 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
       .where(eq(eventAttendance.participantId, req.participant!.id));
     const attendedIds = new Set(attendance.map(a => a.eventId));
 
-    const speakerRows = await db.select().from(programSpeakers);
+    const speakerRows = await db.select().from(programSpeakers).where(eq(programSpeakers.shiftId, shiftId));
     const speakerMap = new Map(speakerRows.map(s => [s.id, s]));
     const mapSpeakers = (rawIds: unknown) => {
       const ids = Array.isArray(rawIds) ? (rawIds as number[]) : [];

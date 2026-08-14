@@ -400,7 +400,9 @@ export const getPublicLeaderboard = async (req: ParticipantRequest, res: Respons
       .where(eq(participants.shiftId, shiftId));
 
     const { isOrganizerDirection } = await import('../services/leaderboardQuery.js');
-    const allDirections = await db.select({ id: directions.id, name: directions.name }).from(directions);
+    const allDirections = await db.select({ id: directions.id, name: directions.name })
+      .from(directions)
+      .where(eq(directions.shiftId, shiftId));
     const organizerDirectionIds = new Set(
       allDirections.filter(d => isOrganizerDirection(d.name)).map(d => d.id),
     );

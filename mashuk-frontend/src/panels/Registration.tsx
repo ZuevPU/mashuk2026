@@ -154,9 +154,6 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   }, [isRegistered, routeNavigator]);
 
   useEffect(() => {
-    apiGet<{ directions: Direction[] }>('/directions')
-      .then(data => setDirections(data.directions))
-      .catch(() => setError('Не удалось загрузить направления'));
     apiGet<{
       pd: { version: number; title: string; body: string };
       analytics: { version: number; title: string; body: string };
@@ -177,6 +174,17 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!selectedShiftId) return;
+    apiGet<{ directions: Direction[] }>(`/directions?shiftId=${selectedShiftId}`)
+      .then(data => {
+        const list = data.directions || [];
+        setDirections(list);
+        setDirectionId(prev => (prev && list.some(d => d.id === prev) ? prev : null));
+      })
+      .catch(() => setError('Не удалось загрузить направления'));
+  }, [selectedShiftId]);
 
   useEffect(() => {
     if (!selectedShiftId) return;

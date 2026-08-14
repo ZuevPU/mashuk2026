@@ -1,6 +1,7 @@
 import {
   DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
   isEveningOpenForConfig,
+  isEveningOpenForDay,
   type EveningQuestionnaireConfig,
 } from './eveningQuestionnaireConfig.js';
 
@@ -9,6 +10,7 @@ export function defaultForumWrapConfig(): EveningQuestionnaireConfig {
   return {
     ...base,
     opensAtMsk: '10:00',
+    closesAtMsk: '02:00',
     steps: (base.steps || [])
       .map(step => {
         if (step.id === 'open') {
@@ -44,6 +46,10 @@ export function resolveForumWrapConfig(
 export function isForumWrapOpen(
   config: EveningQuestionnaireConfig | null | undefined,
   now = new Date(),
+  settings?: { startDate?: Date | null; currentDay?: number | null; totalDays?: number | null } | null,
 ): boolean {
+  if ((config?.opensOnDay != null || config?.closesOnDay != null) && settings?.startDate) {
+    return isEveningOpenForDay(config, config.opensOnDay ?? 1, now, { settings });
+  }
   return isEveningOpenForConfig(config, now);
 }

@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { and, eq, asc, count } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db/index.js';
-import { participants, directions, pedagogicalRoles, participantGroups } from '../db/schema.js';
+import { participants, pedagogicalRoles, participantGroups } from '../db/schema.js';
 import { VkAuthRequest } from '../middlewares/vkAuth.js';
 import {
   scorePedagogicalRole,
@@ -236,7 +236,8 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       }
     }
 
-    const [dir] = await db.select().from(directions).where(eq(directions.id, data.directionId)).limit(1);
+    const { getDirectionInShift } = await import('../services/shiftCatalogs.js');
+    const dir = await getDirectionInShift(data.directionId, shiftId);
     if (!dir) {
       res.status(400).json({ error: 'Invalid direction' });
       return;
@@ -365,16 +366,17 @@ export const register = async (req: VkAuthRequest, res: Response): Promise<void>
       return;
     }
 
-    const [dir] = await db.select().from(directions).where(eq(directions.id, Number(directionId))).limit(1);
-    if (!dir) {
-      res.status(400).json({ error: 'Invalid direction' });
-      return;
-    }
-
     const consentVersions = await getActiveConsentVersions();
     const shiftId = await resolvePublishedShiftId(req, req.body?.shiftId != null ? Number(req.body.shiftId) : null);
     if (!shiftId) {
       res.status(400).json({ error: 'Выберите опубликованную смену' });
+      return;
+    }
+
+    const { getDirectionInShift } = await import('../services/shiftCatalogs.js');
+    const dir = await getDirectionInShift(Number(directionId), shiftId);
+    if (!dir) {
+      res.status(400).json({ error: 'Invalid direction' });
       return;
     }
 

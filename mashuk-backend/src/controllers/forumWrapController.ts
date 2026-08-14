@@ -7,10 +7,11 @@ import type { AdminRequest } from '../middlewares/adminAuth.js';
 import type { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
   eveningProgramEventFields,
+  eveningScheduleApiFields,
   filterEveningConfigForDirection,
-  getEveningOpensAtMsk,
+  formatEveningScheduleHint,
   isForcePublishedActive,
-  normalizeOpensAtMsk,
+  mergeEveningScheduleFromRequest,
   stripHiddenEveningFieldValues,
   stripPointBFromEveningConfig,
   type EveningQuestionnaireConfig,
@@ -113,11 +114,11 @@ export async function getAdminForumWrapQuestionnaire(req: AdminRequest, res: Res
     shiftId,
     config,
     defaultConfig: defaultForumWrapConfig(),
-    opensAtMsk: getEveningOpensAtMsk(config),
+    ...eveningScheduleApiFields(config, 1),
     forcePublished: isForcePublishedActive(config),
     forceUnpublished: !!config.forceUnpublished,
     hasOwnConfig,
-    isOpenNow: isForumWrapOpen(config),
+    isOpenNow: isForumWrapOpen(config, new Date(), settings as never),
   });
 }
 
@@ -134,21 +135,12 @@ export async function patchAdminForumWrapQuestionnaire(req: AdminRequest, res: R
     ? stripPointBFromEveningConfig(bodyConfig)
     : { ...existing };
 
-  const opensAtRaw = req.body.opensAtMsk;
-  if (opensAtRaw !== undefined) {
-    const normalized = normalizeOpensAtMsk(opensAtRaw === null || opensAtRaw === '' ? null : String(opensAtRaw));
-    if (opensAtRaw && !normalized) {
-      res.status(400).json({ error: 'opensAtMsk must be HH:MM' });
-      return;
-    }
-    if (normalized) next = { ...next, opensAtMsk: normalized };
-    else {
-      const { opensAtMsk: _drop, ...rest } = next;
-      next = rest;
-    }
-  } else if (existing.opensAtMsk) {
-    next = { ...next, opensAtMsk: existing.opensAtMsk };
+  const schedule = mergeEveningScheduleFromRequest(next, req.body, existing);
+  if (schedule.error) {
+    res.status(400).json({ error: schedule.error });
+    return;
   }
+  next = schedule.config;
 
   next = applyPublishFlags(next, existing, req.body.forcePublished, req.body.forceUnpublished);
   if (!next.steps?.length) {
@@ -164,11 +156,11 @@ export async function patchAdminForumWrapQuestionnaire(req: AdminRequest, res: R
     ok: true,
     shiftId,
     config: resolved,
-    opensAtMsk: getEveningOpensAtMsk(resolved),
+    ...eveningScheduleApiFields(resolved, 1),
     forcePublished: isForcePublishedActive(resolved),
     forceUnpublished: !!resolved.forceUnpublished,
     hasOwnConfig: true,
-    isOpenNow: isForumWrapOpen(resolved),
+    isOpenNow: isForumWrapOpen(resolved, new Date(), shape as never),
   });
 }
 
@@ -223,7 +215,8 @@ export async function loadForumWrapPayload(
 ) {
   const rawConfig = resolveForumWrapConfig(settings as never);
   const config = filterEveningConfigForDirection(rawConfig, participant.directionId ?? null);
-  const open = isForumWrapOpen(config);
+  const schedule = eveningScheduleApiFields(config, 1);
+  const open = isForumWrapOpen(config, new Date(), settings as never);
   const completed = !!(participant.forumWrapRatings && typeof participant.forumWrapRatings === 'object');
   const programEventFieldDefs = eveningProgramEventFields(config);
   let programEventOptions: Record<string, {
@@ -250,7 +243,11 @@ export async function loadForumWrapPayload(
   return {
     available: open && !completed,
     open,
-    opensAt: getEveningOpensAtMsk(config),
+    opensAt: schedule.opensAtMsk,
+    closesAt: schedule.closesAtMsk,
+    opensOnDay: schedule.opensOnDay,
+    closesOnDay: schedule.closesOnDay,
+    scheduleHint: schedule.scheduleHint,
     forcePublished: isForcePublishedActive(config),
     forceUnpublished: !!config.forceUnpublished,
     completed,
@@ -318,11 +315,11 @@ export async function submitForumWrapQuestionnaire(req: ParticipantRequest, res:
     }
     const settings = await getForumSettings(p.shiftId);
     const config = resolveForumWrapConfig(settings as never);
-    if (!isForumWrapOpen(config) && process.env.NODE_ENV !== 'test') {
+    if (!isForumWrapOpen(config, new Date(), settings as never) && process.env.NODE_ENV !== 'test') {
       res.status(400).json({
         error: config.forceUnpublished
           ? 'Итоговая анкета форума снята с публикации'
-          : `Итоговая анкета форума доступна с ${getEveningOpensAtMsk(config)} МСК (или после публикации организатором)`,
+          : `Итоговая анкета форума доступна ${formatEveningScheduleHint(config, 1)} (или после публикации организатором)`,
       });
       return;
     }

@@ -234,6 +234,35 @@ async function ensureForumWrapQuestionnaireSchema(pool: ReturnType<typeof create
   await pool.query(sql);
 }
 
+/** Isolate directions/places/speakers/tags per shift (0067). */
+async function ensureShiftScopedCatalogsSchema(pool: ReturnType<typeof createPool>): Promise<void> {
+  const { rows } = await pool.query<{ ok: number }>(
+    `SELECT 1 AS ok FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'directions' AND column_name = 'shift_id'
+     LIMIT 1`,
+  );
+  if (rows.length === 0) {
+    const sqlPath = path.join(__dirname, '../../drizzle/0067_shift_scoped_catalogs.sql');
+    const sql = fs.readFileSync(sqlPath, 'utf8');
+    console.warn('Repair: applying 0067_shift_scoped_catalogs.sql');
+    await pool.query(sql);
+  }
+
+  const { isolateSharedCatalogs } = await import('../services/shiftCatalogs.js');
+  await isolateSharedCatalogs();
+
+  await pool.query(`
+    ALTER TABLE directions ALTER COLUMN shift_id SET NOT NULL;
+    ALTER TABLE program_places ALTER COLUMN shift_id SET NOT NULL;
+    ALTER TABLE thematic_tags ALTER COLUMN shift_id SET NOT NULL;
+    ALTER TABLE program_block_types ALTER COLUMN shift_id SET NOT NULL;
+    ALTER TABLE program_speakers ALTER COLUMN shift_id SET NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS thematic_tags_shift_name_unique ON thematic_tags (shift_id, name);
+    CREATE UNIQUE INDEX IF NOT EXISTS program_places_shift_name_unique ON program_places (shift_id, name);
+    CREATE UNIQUE INDEX IF NOT EXISTS program_block_types_shift_key_unique ON program_block_types (shift_id, key);
+  `);
+}
+
 /** Apply after_blocks_config on questions if missing (0066). */
 async function ensureAfterBlocksConfigSchema(pool: ReturnType<typeof createPool>): Promise<void> {
   const { rows } = await pool.query<{ ok: number }>(
@@ -271,6 +300,7 @@ export async function runMigrations(): Promise<void> {
     await ensureQrRepeatableScansSchema(pool);
     await ensureForumWrapQuestionnaireSchema(pool);
     await ensureAfterBlocksConfigSchema(pool);
+    await ensureShiftScopedCatalogsSchema(pool);
     await pool.end();
   }
 }

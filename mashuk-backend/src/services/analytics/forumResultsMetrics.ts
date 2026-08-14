@@ -57,8 +57,6 @@ export function classifyForumField(f: EveningField): ForumFieldKind {
 
   if (f.type === 'program_event') return 'program_event';
   if (f.type === 'scale_1_10' && /рекоменд|nps|коллег|друзьям/.test(blob)) return 'nps';
-  if (f.type === 'scale_1_5' && /рейтинг/.test(blob)) return 'rating_sys';
-  if (f.type === 'scale_1_5' && /бот/.test(blob)) return 'bot';
   if (f.type === 'scale_1_5' || f.type === 'scale_1_10') return 'scale_block';
 
   if (f.type === 'role_select') return 'role';
@@ -157,7 +155,7 @@ export function collectQuotes(
     if (seen.has(id)) continue;
     seen.add(id);
     pool.push({
-      text: t.slice(0, 400),
+      text: t.slice(0, 4000),
       meta: [opts?.label, r.direction].filter(Boolean).join(' · '),
       len: t.length,
     });
@@ -245,6 +243,7 @@ export function buildChoiceDist(
 
 export type ForumScaleBlock = {
   key: string;
+  ratingKey?: string;
   label: string;
   n: number;
   mean: number;

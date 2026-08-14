@@ -9,6 +9,8 @@ import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
   eveningProgramEventFields,
   filterEveningConfigForDirection,
+  eveningScheduleApiFields,
+  formatEveningScheduleHint,
   getEveningOpensAtMsk,
   isEveningOpenForDay,
   isForcePublishedActive,
@@ -204,7 +206,6 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
     }
 
     const eveningConfig = resolveEveningConfigForDay(settings, dayNumber);
-    const opensAt = getEveningOpensAtMsk(eveningConfig);
     const scheduleDayPublished = await getScheduleDayPublished(
       dayNumber,
       typeof (settings as { shiftId?: number }).shiftId === 'number'
@@ -221,7 +222,7 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
       res.status(400).json({
         error: eveningConfig.forceUnpublished || scheduleDayPublished === false
           ? 'Итоговая анкета снята с публикации'
-          : `Итоговая анкета доступна с ${opensAt} МСК (или после публикации организатором)`,
+          : `Итоговая анкета доступна ${formatEveningScheduleHint(eveningConfig, dayNumber)} (или после публикации организатором)`,
       });
       return;
     }
@@ -376,6 +377,7 @@ export async function loadDayContext(
     opts?.directionId ?? null,
   );
   const opensAt = getEveningOpensAtMsk(config);
+  const eveningSchedule = eveningScheduleApiFields(config, dayNumber);
   const scheduleDayPublished = dayNumber >= 1 && dayNumber <= 7
     ? await getScheduleDayPublished(
       dayNumber,
@@ -433,6 +435,10 @@ export async function loadDayContext(
       available: eveningOpen && !eveningDone,
       open: eveningOpen,
       opensAt,
+      closesAt: eveningSchedule.closesAtMsk,
+      opensOnDay: eveningSchedule.opensOnDay,
+      closesOnDay: eveningSchedule.closesOnDay,
+      scheduleHint: eveningSchedule.scheduleHint,
       forcePublished: isForcePublishedActive(config),
       forceUnpublished: !!config.forceUnpublished,
       completed: eveningDone,

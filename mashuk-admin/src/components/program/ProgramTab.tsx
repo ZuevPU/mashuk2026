@@ -9,6 +9,7 @@ import { PlaceSelect, ProgramPlacesBlock } from './ProgramPlacesBlock';
 import { ProgramBlockTypesBlock } from './ProgramCatalogs';
 import { ProgramCalendarGrid } from './ProgramCalendarGrid';
 import { EventEditorDrawer, type DrawerState } from './EventEditorDrawer';
+import { ProgramParticipantPreview } from './ProgramParticipantPreview';
 import { countShiftStats } from './programCalendar';
 import {
   type ProgramBlockType,
@@ -80,6 +81,8 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
   const [mergeTo, setMergeTo] = useState('');
   const [copyFromDay, setCopyFromDay] = useState(1);
   const [drawer, setDrawer] = useState<DrawerState>({ open: false });
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewDirectionId, setPreviewDirectionId] = useState<number | null>(null);
 
   const reloadAllEvents = useCallback(async () => {
     const res = await adminFetch('/events');
@@ -305,6 +308,13 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
             <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={publishDay} disabled={dayEvents.length === 0}>
               Опубликовать день {selectedDay}
             </button>
+            <button
+              type="button"
+              className="adm-btn adm-btn-secondary adm-btn-sm"
+              onClick={() => setPreviewOpen(v => !v)}
+            >
+              {previewOpen ? 'Скрыть программу' : 'Посмотреть программу'}
+            </button>
             {dayEvents.length === 0 && (
               <>
                 <label className="adm-forum-inline">
@@ -320,6 +330,39 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
             )}
           </div>
         </AdminPageHero>
+        {previewOpen && (
+          <>
+            {directions.length > 0 && (
+              <label className="adm-forum-check" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                Превью как направление
+                <select
+                  className="adm-input adm-input-narrow"
+                  style={{ width: 'auto', minWidth: 160 }}
+                  value={previewDirectionId ?? ''}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setPreviewDirectionId(v ? Number(v) : null);
+                  }}
+                >
+                  <option value="">Для всех (полный конфиг)</option>
+                  {directions.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <ProgramParticipantPreview
+              day={selectedDay}
+              totalDays={totalDays}
+              liveDay={forumCurrentDay}
+              events={allEvents}
+              scheduleDays={dayTabs}
+              directions={directions}
+              directionId={previewDirectionId}
+              onDayChange={setSelectedDay}
+            />
+          </>
+        )}
       </section>
 
       <section id="prog-calendar" className="adm-forum-anchor">

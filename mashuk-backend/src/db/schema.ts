@@ -3,14 +3,18 @@ import { relations } from 'drizzle-orm';
 
 export const directions = pgTable('directions', {
   id: serial('id').primaryKey(),
+  shiftId: integer('shift_id').notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   isHidden: boolean('is_hidden').default(false),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('directions_shift_id_idx').on(table.shiftId),
+]);
 
 export const thematicTags = pgTable('thematic_tags', {
   id: serial('id').primaryKey(),
-  name: varchar('name', { length: 255 }).notNull().unique(),
+  shiftId: integer('shift_id').notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
   slug: varchar('slug', { length: 255 }),
   description: text('description'),
   color: varchar('color', { length: 32 }),
@@ -18,13 +22,20 @@ export const thematicTags = pgTable('thematic_tags', {
   sortOrder: integer('sort_order').default(0),
   applicationTypes: jsonb('application_types').default(['events', 'interests']),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('thematic_tags_shift_id_idx').on(table.shiftId),
+  uniqueIndex('thematic_tags_shift_name_unique').on(table.shiftId, table.name),
+]);
 
 export const programPlaces = pgTable('program_places', {
   id: serial('id').primaryKey(),
-  name: varchar('name', { length: 255 }).notNull().unique(),
+  shiftId: integer('shift_id').notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('program_places_shift_id_idx').on(table.shiftId),
+  uniqueIndex('program_places_shift_name_unique').on(table.shiftId, table.name),
+]);
 
 export const taskCategories = pgTable('task_categories', {
   id: serial('id').primaryKey(),
@@ -171,11 +182,15 @@ export const scheduleDays = pgTable('schedule_days', {
 
 export const programBlockTypes = pgTable('program_block_types', {
   id: serial('id').primaryKey(),
-  key: varchar('key', { length: 64 }).notNull().unique(),
+  shiftId: integer('shift_id').notNull(),
+  key: varchar('key', { length: 64 }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   sortOrder: integer('sort_order').default(0),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('program_block_types_shift_id_idx').on(table.shiftId),
+  uniqueIndex('program_block_types_shift_key_unique').on(table.shiftId, table.key),
+]);
 
 export const materialTypes = pgTable('material_types', {
   id: serial('id').primaryKey(),
@@ -186,11 +201,14 @@ export const materialTypes = pgTable('material_types', {
 
 export const programSpeakers = pgTable('program_speakers', {
   id: serial('id').primaryKey(),
+  shiftId: integer('shift_id').notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   credentials: text('credentials'),
   initials: varchar('initials', { length: 10 }),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('program_speakers_shift_id_idx').on(table.shiftId),
+]);
 
 export const kbDayUnlocks = pgTable('kb_day_unlocks', {
   id: serial('id').primaryKey(),

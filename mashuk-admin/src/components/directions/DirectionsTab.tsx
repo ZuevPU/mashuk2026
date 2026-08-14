@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { confirmDelete } from '../../admin/confirmDelete';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import type { AdminTabProps } from '../admin/types';
 import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
@@ -18,24 +19,22 @@ export function DirectionsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   const [drafts, setDrafts] = useState<Record<number, DirectionDraft>>({});
   const [newDirection, setNewDirection] = useState('');
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<number | 'new' | null>(null);
 
-  const syncDrafts = (list: Direction[]) => {
-    setDrafts(
-      Object.fromEntries(
-        list.map(d => [d.id, { name: d.name ?? '', visible: !d.isHidden }]),
-      ),
-    );
+  const applyList = (list: Direction[]) => {
+    setDirections(list);
+    setDrafts(Object.fromEntries(
+      list.map(d => [d.id, { name: d.name ?? '', visible: !d.isHidden }]),
+    ));
   };
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const res = await adminFetch('/directions');
-      const list: Direction[] = res.directions || [];
-      setDirections(list);
-      syncDrafts(list);
+      applyList(res.directions || []);
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [adminFetch]);
 
@@ -47,27 +46,78 @@ export function DirectionsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     setDrafts(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
   };
 
-  const createDirection = () =>
+  const createDirection = () => {
+    const name = newDirection.trim();
+    if (!name || busyId) return;
+    setBusyId('new');
     act(async () => {
-      if (!newDirection.trim()) return;
-      await adminFetch('/directions', {
-        method: 'POST',
-        body: JSON.stringify({ name: newDirection.trim() }),
-      });
-      setNewDirection('');
-      await load();
-    }, 'Направление добавлено');
+      try {
+        const res = await adminFetch('/directions', {
+          method: 'POST',
+          body: JSON.stringify({ name }),
+        });
+        const created = res.direction as Direction | undefined;
+        if (created?.id) {
+          setDirections(prev => [...prev, created]);
+          setDrafts(prev => ({
+            ...prev,
+            [created.id]: { name: created.name ?? name, visible: !created.isHidden },
+          }));
+        } else {
+          await load({ silent: true });
+        }
+        setNewDirection('');
+      } finally {
+        setBusyId(null);
+      }
+    }, 'Направление добавлено', { reload: false });
+  };
 
   const saveDirection = (id: number) => {
     const draft = drafts[id];
-    if (!draft) return;
+    if (!draft || busyId) return;
+    const name = draft.name.trim();
+    if (!name) return;
+    setBusyId(id);
     act(async () => {
-      await adminFetch(`/directions/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ name: draft.name, isHidden: !draft.visible }),
-      });
-      await load();
-    }, 'Сохранено');
+      try {
+        const res = await adminFetch(`/directions/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name, isHidden: !draft.visible }),
+        });
+        const updated = res.direction as Direction | undefined;
+        const next = updated ?? { id, name, isHidden: !draft.visible };
+        setDirections(prev => prev.map(d => (d.id === id ? { ...d, ...next } : d)));
+        setDrafts(prev => ({
+          ...prev,
+          [id]: { name: next.name ?? name, visible: !next.isHidden },
+        }));
+      } finally {
+        setBusyId(null);
+      }
+    }, 'Сохранено', { reload: false });
+  };
+
+  const deleteDirection = (d: Direction) => {
+    if (busyId) return;
+    if (!confirmDelete(
+      `Удалить направление «${d.name}»?\n\n`
+      + 'У участников и групп этой смены направление снимется. Действие необратимо.',
+    )) return;
+    setBusyId(d.id);
+    act(async () => {
+      try {
+        await adminFetch(`/directions/${d.id}`, { method: 'DELETE' });
+        setDirections(prev => prev.filter(x => x.id !== d.id));
+        setDrafts(prev => {
+          const next = { ...prev };
+          delete next[d.id];
+          return next;
+        });
+      } finally {
+        setBusyId(null);
+      }
+    }, 'Удалено', { reload: false });
   };
 
   if (loading) {
@@ -79,7 +129,7 @@ export function DirectionsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       <section id="directions-hero" className="adm-forum-anchor">
         <AdminPageHero
           title="Направления"
-          hint="Направления участников форума. Скрытое не показывается в выборе при регистрации."
+          hint="Список этой смены. Скрытое не показывается при регистрации. Сохранение не перезагружает страницу."
         />
       </section>
 
@@ -87,17 +137,28 @@ export function DirectionsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         <div className="card adm-forum-block adm-kb-panel">
           <div className="adm-kb-panel-head">
             <h3>Добавить</h3>
-            <p className="adm-kb-panel-sub">Новое направление появится в регистрации и фильтрах.</p>
+            <p className="adm-kb-panel-sub">Новое направление появится в регистрации и фильтрах этой смены.</p>
           </div>
           <div className="adm-kb-toolbar" style={{ marginBottom: 0 }}>
             <input
               className="adm-input adm-kb-search"
               value={newDirection}
               onChange={e => setNewDirection(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  createDirection();
+                }
+              }}
               placeholder="Новое направление"
             />
-            <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={createDirection}>
-              Добавить
+            <button
+              type="button"
+              className="adm-btn adm-btn-primary adm-btn-sm"
+              onClick={createDirection}
+              disabled={!newDirection.trim() || busyId === 'new'}
+            >
+              {busyId === 'new' ? 'Добавляем…' : 'Добавить'}
             </button>
           </div>
         </div>
@@ -107,12 +168,13 @@ export function DirectionsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         <div className="card adm-forum-block adm-kb-panel">
           <div className="adm-kb-panel-head">
             <h3>Список · {directions.length}</h3>
-            <p className="adm-kb-panel-sub">Название и видимость для участников.</p>
+            <p className="adm-kb-panel-sub">Название и видимость. Сохранить или удалить — без обновления страницы.</p>
           </div>
           {directions.length === 0 && <p className="adm-muted">Нет направлений</p>}
           <div className="adm-mod-list">
             {directions.map(d => {
               const draft = drafts[d.id] ?? { name: d.name ?? '', visible: !d.isHidden };
+              const rowBusy = busyId === d.id;
               return (
                 <article key={d.id} className="adm-mod-item">
                   <div className="adm-mod-item-actions" style={{ marginTop: 0, width: '100%' }}>
@@ -120,18 +182,57 @@ export function DirectionsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                       className="adm-input"
                       value={draft.name}
                       onChange={e => updateDraft(d.id, { name: e.target.value })}
+                      onBlur={() => {
+                        const current = drafts[d.id];
+                        if (!current) return;
+                        if (current.name.trim() === (d.name ?? '') && current.visible === !d.isHidden) return;
+                        saveDirection(d.id);
+                      }}
                       style={{ flex: '1 1 200px', minWidth: 160 }}
                     />
                     <label className="adm-tasks-check">
                       <input
                         type="checkbox"
                         checked={draft.visible}
-                        onChange={e => updateDraft(d.id, { visible: e.target.checked })}
+                        onChange={e => {
+                          const visible = e.target.checked;
+                          updateDraft(d.id, { visible });
+                          const name = (drafts[d.id]?.name ?? d.name ?? '').trim();
+                          if (!name) return;
+                          setBusyId(d.id);
+                          act(async () => {
+                            try {
+                              const res = await adminFetch(`/directions/${d.id}`, {
+                                method: 'PATCH',
+                                body: JSON.stringify({ name, isHidden: !visible }),
+                              });
+                              const updated = res.direction as Direction | undefined;
+                              if (updated) {
+                                setDirections(prev => prev.map(x => (x.id === d.id ? { ...x, ...updated } : x)));
+                              }
+                            } finally {
+                              setBusyId(null);
+                            }
+                          }, 'Сохранено', { reload: false });
+                        }}
                       />
                       <span>Видимо</span>
                     </label>
-                    <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => saveDirection(d.id)}>
-                      Сохранить
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-secondary adm-btn-sm"
+                      onClick={() => saveDirection(d.id)}
+                      disabled={rowBusy}
+                    >
+                      {rowBusy ? 'Сохраняем…' : 'Сохранить'}
+                    </button>
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-danger adm-btn-sm"
+                      onClick={() => deleteDirection(d)}
+                      disabled={rowBusy}
+                    >
+                      Удалить
                     </button>
                   </div>
                 </article>

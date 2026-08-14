@@ -92,9 +92,16 @@ export const crudGroups = {
     if (!name?.trim()) { res.status(400).json({ error: 'name required' }); return; }
     const { resolveAdminShiftId } = await import('../services/shiftService.js');
     const shiftId = await resolveAdminShiftId(req);
+    let nextDirectionId = directionId ? Number(directionId) : null;
+    if (nextDirectionId) {
+      const { getDirectionInShift } = await import('../services/shiftCatalogs.js');
+      const dir = await getDirectionInShift(nextDirectionId, shiftId);
+      if (!dir) { res.status(400).json({ error: 'Направление не найдено на этой смене' }); return; }
+      nextDirectionId = dir.id;
+    }
     const [g] = await db.insert(participantGroups).values({
       name: name.trim(),
-      directionId: directionId ? Number(directionId) : null,
+      directionId: nextDirectionId,
       capacity: capacity != null ? Number(capacity) : 30,
       shiftId,
     }).returning();
@@ -115,6 +122,13 @@ export const crudGroups = {
       if (patch.directionId != null && (!Number.isFinite(patch.directionId) || patch.directionId <= 0)) {
         res.status(400).json({ error: 'Invalid directionId' });
         return;
+      }
+      if (patch.directionId != null) {
+        const { resolveAdminShiftId } = await import('../services/shiftService.js');
+        const { getDirectionInShift } = await import('../services/shiftCatalogs.js');
+        const shiftId = await resolveAdminShiftId(req);
+        const dir = await getDirectionInShift(patch.directionId, shiftId);
+        if (!dir) { res.status(400).json({ error: 'Направление не найдено на этой смене' }); return; }
       }
     }
     if (Object.keys(patch).length === 0) {

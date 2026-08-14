@@ -344,10 +344,25 @@ export function isSameMoscowCalendarDay(a: Date, b = new Date()): boolean {
 const MSK_DAY_MS = 86_400_000;
 const MSK_ROLLOVER_MS = FORUM_DAY_ROLLOVER_HOUR_MSK * 60 * 60 * 1000;
 
-/**
- * Окно дня форума в МСК: день 1 с 00:00 даты старта, далее с 02:00
- * операционной даты до 02:00 следующего календарного дня.
- */
+/** Часы:минуты МСК на календарной дате дня форума (день 1 = дата старта). */
+export function forumDayClockMsk(
+  startDate: Date,
+  dayNumber: number,
+  hhmm: string,
+): Date | null {
+  const m = String(hhmm || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const hours = Number(m[1]);
+  const minutes = Number(m[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  const startParts = getMoscowParts(startDate);
+  const startMidnight = Date.parse(`${startParts.dateKey}T00:00:00+03:00`);
+  if (Number.isNaN(startMidnight)) return null;
+  const dayMidnight = startMidnight + Math.max(0, dayNumber - 1) * MSK_DAY_MS;
+  return new Date(dayMidnight + hours * 3_600_000 + minutes * 60_000);
+}
+
+/** Окно дня форума в МСК: день 1 с 00:00 даты старта, далее с 02:00 до 02:00. */
 export function forumDayWindowMsk(
   startDate: Date,
   day: number,

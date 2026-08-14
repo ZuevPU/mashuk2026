@@ -6,6 +6,7 @@ import {
 import { matchesAgeCategory, matchesActivity } from '../analytics/cohortFilters.js';
 import {
   DEFAULT_EVENING_QUESTIONNAIRE_CONFIG,
+  formatEveningScheduleHint,
   isEveningOpenForDay,
   resolveEveningConfigForDay,
   type EveningField,
@@ -282,7 +283,7 @@ export async function collectEveningExportRows(
     );
   } else if (!eveningOpenNow) {
     notes.push(
-      `Итоговая анкета на день ${dayForStatus} сейчас закрыта по расписанию (откроется с ${eveningCfg.opensAtMsk || '21:00'} МСК, либо опубликуйте вручную).`,
+      `Итоговая анкета на день ${dayForStatus} сейчас закрыта по расписанию (${formatEveningScheduleHint(eveningCfg, dayForStatus)}, либо опубликуйте вручную).`,
     );
   }
 

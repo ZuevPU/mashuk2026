@@ -72,6 +72,9 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
   });
   const [config, setConfig] = useState<EveningQuestionnaireConfig>(EMPTY_CONFIG);
   const [opensAtMsk, setOpensAtMsk] = useState('22:00');
+  const [closesAtMsk, setClosesAtMsk] = useState('02:00');
+  const [opensOnDay, setOpensOnDay] = useState(1);
+  const [closesOnDay, setClosesOnDay] = useState(2);
   const [forcePublished, setForcePublished] = useState(false);
   const [forceUnpublished, setForceUnpublished] = useState(false);
   const [isOpenNow, setIsOpenNow] = useState(false);
@@ -95,6 +98,9 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
 
   const applyPublishState = (res: {
     opensAtMsk?: string;
+    closesAtMsk?: string;
+    opensOnDay?: number;
+    closesOnDay?: number;
     forcePublished?: boolean;
     forceUnpublished?: boolean;
     isOpenNow?: boolean;
@@ -103,6 +109,9 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
     config?: EveningQuestionnaireConfig;
   }) => {
     setOpensAtMsk(res.opensAtMsk || opensAtMsk);
+    setClosesAtMsk(res.closesAtMsk || closesAtMsk);
+    if (res.opensOnDay) setOpensOnDay(res.opensOnDay);
+    if (res.closesOnDay) setClosesOnDay(res.closesOnDay);
     setForcePublished(!!res.forcePublished);
     setForceUnpublished(!!res.forceUnpublished);
     setIsOpenNow(!!res.isOpenNow);
@@ -124,6 +133,9 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
       else if (fallback?.steps?.length) setConfig(JSON.parse(JSON.stringify(fallback)));
       else setConfig(JSON.parse(JSON.stringify(EMPTY_CONFIG)));
       setOpensAtMsk(ev.opensAtMsk || c?.opensAtMsk || (isForum ? '10:00' : '22:00'));
+      setClosesAtMsk(ev.closesAtMsk || c?.closesAtMsk || '02:00');
+      setOpensOnDay(ev.opensOnDay || c?.opensOnDay || (isForum ? 1 : d));
+      setClosesOnDay(ev.closesOnDay || c?.closesOnDay || Math.min(8, (isForum ? 1 : d) + 1));
       setForcePublished(!!ev.forcePublished);
       setForceUnpublished(!!ev.forceUnpublished);
       setIsOpenNow(!!ev.isOpenNow);
@@ -481,8 +493,11 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
       const res = await adminFetch(configPath(), {
         method: 'PATCH',
         body: JSON.stringify({
-          config: { ...configBody, opensAtMsk },
+          config: { ...configBody, opensAtMsk, closesAtMsk, opensOnDay, closesOnDay },
           opensAtMsk,
+          closesAtMsk,
+          opensOnDay,
+          closesOnDay,
         }),
       });
       applyPublishState(res);
@@ -499,8 +514,8 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
         : mode === 'unpublish'
           ? (isForum ? 'Итоговая анкета форума снята с публикации' : `Анкета дня ${day} снята с публикации`)
           : (isForum
-            ? `Итоговая анкета форума: публикация по времени ${opensAtMsk} МСК`
-            : `Анкета дня ${day}: публикация по времени ${opensAtMsk} МСК`);
+            ? `Итоговая анкета форума: видно с дня ${opensOnDay} ${opensAtMsk} до дня ${closesOnDay} ${closesAtMsk} МСК`
+            : `Анкета дня ${day}: видно с дня ${opensOnDay} ${opensAtMsk} до дня ${closesOnDay} ${closesAtMsk} МСК`);
     act(async () => {
       const res = await adminFetch(configPath(), {
         method: 'PATCH',
@@ -508,10 +523,16 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
           config: {
             ...config,
             opensAtMsk,
+            closesAtMsk,
+            opensOnDay,
+            closesOnDay,
             forcePublished: forcePublishedNext || undefined,
             forceUnpublished: forceUnpublishedNext || undefined,
           },
           opensAtMsk,
+          closesAtMsk,
+          opensOnDay,
+          closesOnDay,
           forcePublished: forcePublishedNext,
           forceUnpublished: forceUnpublishedNext,
         }),
@@ -603,9 +624,19 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
         </p>
       )}
 
-      <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+      <div className="adm-forum-window">
         <label className="adm-forum-inline">
-          Открыть с (МСК)
+          Видно с
+          <select
+            className="adm-input"
+            style={{ width: 92 }}
+            value={opensOnDay}
+            onChange={e => setOpensOnDay(Number(e.target.value))}
+          >
+            {Array.from({ length: isForum ? 8 : 7 }, (_, i) => i + 1).map(d => (
+              <option key={`open-${d}`} value={d}>День {d}</option>
+            ))}
+          </select>
           <input
             type="time"
             className="adm-input"
@@ -613,7 +644,34 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
             value={opensAtMsk}
             onChange={e => setOpensAtMsk(e.target.value)}
           />
+          <span className="adm-muted">МСК</span>
         </label>
+        <label className="adm-forum-inline">
+          Активна до
+          <select
+            className="adm-input"
+            style={{ width: 92 }}
+            value={closesOnDay}
+            onChange={e => setClosesOnDay(Number(e.target.value))}
+          >
+            {Array.from({ length: 8 }, (_, i) => i + 1).map(d => (
+              <option key={`close-${d}`} value={d}>День {d}</option>
+            ))}
+          </select>
+          <input
+            type="time"
+            className="adm-input"
+            style={{ width: 120 }}
+            value={closesAtMsk}
+            onChange={e => setClosesAtMsk(e.target.value)}
+          />
+          <span className="adm-muted">МСК</span>
+        </label>
+      </div>
+      <p className="adm-muted" style={{ fontSize: 12, margin: '6px 0 0' }}>
+        Форумный день сменяется в 02:00 МСК. Пример: день {isForum ? 7 : day} с 22:00 до дня {Math.min(8, (isForum ? 7 : day) + 1)} в 02:00.
+      </p>
+      <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
         <span className="adm-muted" style={{ fontSize: 12 }}>
           {forceUnpublished
             ? 'Снята с публикации — участники не видят анкету.'
@@ -622,8 +680,8 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
               : forcePublished
                 ? 'Открыта вручную («Опубликовать сейчас»).'
                 : isOpenNow
-                  ? `Сейчас открыта по расписанию (≥ ${opensAtMsk} МСК).`
-                  : `Появится автоматически в ${opensAtMsk} МСК.`}
+                  ? `Сейчас открыта по расписанию (день ${opensOnDay} ${opensAtMsk} → день ${closesOnDay} ${closesAtMsk} МСК).`
+                  : `Появится автоматически: день ${opensOnDay} ${opensAtMsk} → день ${closesOnDay} ${closesAtMsk} МСК.`}
         </span>
         <button
           type="button"

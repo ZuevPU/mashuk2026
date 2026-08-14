@@ -18,6 +18,7 @@ import {
   shifts,
   tasks,
 } from '../db/schema.js';
+import { unpublishClonedQuestionnaire } from './eveningQuestionnaireConfig.js';
 import {
   generateUniqueShiftCode,
   getShiftById,
@@ -25,6 +26,12 @@ import {
   type ShiftCopyModule,
   type ShiftRow,
 } from './shiftService.js';
+import {
+  ensureShiftCatalogs,
+  remapShiftDirectionRefs,
+  remapShiftPlaceRefs,
+  remapShiftSpeakerRefs,
+} from './shiftCatalogs.js';
 
 export { SHIFT_COPY_MODULES, type ShiftCopyModule };
 
@@ -204,6 +211,13 @@ export async function copyShiftModules(opts: {
       );
     }
 
+    const catalogsNeeded = toCopy.some(m =>
+      m === 'program' || m === 'groups' || m === 'questions' || m === 'forum' || m === 'tasks' || m === 'knowledge',
+    );
+    const catalogs = catalogsNeeded
+      ? await ensureShiftCatalogs(tx, opts.sourceId, target.id)
+      : { directionMap: new Map<number, number>(), speakerMap: new Map<number, number>(), placeMap: new Map<number, number>() };
+
     const eventIdMap = new Map<number, number>();
     const groupIdMap = new Map<number, number>();
     const questionIdMap = new Map<number, number>();
@@ -241,7 +255,13 @@ export async function copyShiftModules(opts: {
       const srcGroups = await tx.select().from(participantGroups).where(eq(participantGroups.shiftId, opts.sourceId));
       for (const g of srcGroups) {
         const { id: oldId, ...rest } = g;
-        const [created] = await tx.insert(participantGroups).values({ ...rest, shiftId: target.id }).returning();
+        const [created] = await tx.insert(participantGroups).values({
+          ...rest,
+          shiftId: target.id,
+          directionId: rest.directionId
+            ? (catalogs.directionMap.get(rest.directionId) ?? null)
+            : null,
+        }).returning();
         groupIdMap.set(oldId, created.id);
       }
     }
@@ -284,6 +304,11 @@ export async function copyShiftModules(opts: {
             startTime: rebaseShiftDate(e.startTime, source.startDate, target.startDate),
             endTime: rebaseShiftDate(e.endTime, source.startDate, target.startDate),
             parentEventId: parentEventId ? (eventIdMap.get(parentEventId) ?? null) : null,
+            audienceDirectionId: rest.audienceDirectionId
+              ? (catalogs.directionMap.get(rest.audienceDirectionId) ?? null)
+              : null,
+            audienceDirectionIds: remapLinkedIds(rest.audienceDirectionIds, catalogs.directionMap),
+            speakerIds: remapLinkedIds(rest.speakerIds, catalogs.speakerMap),
             qrToken: null,
           }).returning();
           eventIdMap.set(oldId, created.id);
@@ -300,6 +325,11 @@ export async function copyShiftModules(opts: {
               startTime: rebaseShiftDate(e.startTime, source.startDate, target.startDate),
               endTime: rebaseShiftDate(e.endTime, source.startDate, target.startDate),
               parentEventId: null,
+              audienceDirectionId: rest.audienceDirectionId
+                ? (catalogs.directionMap.get(rest.audienceDirectionId) ?? null)
+                : null,
+              audienceDirectionIds: remapLinkedIds(rest.audienceDirectionIds, catalogs.directionMap),
+              speakerIds: remapLinkedIds(rest.speakerIds, catalogs.speakerMap),
               qrToken: null,
             }).returning();
             eventIdMap.set(oldId, created.id);
@@ -319,9 +349,15 @@ export async function copyShiftModules(opts: {
         await tx.delete(dayExperiments).where(eq(dayExperiments.shiftId, target.id));
         await tx.delete(homeNotices).where(eq(homeNotices.shiftId, target.id));
       }
-      const eveningByDay = remapEveningLinkedEvents(source.eveningQuestionnaireByDay, eventIdMap);
-      const eveningCfg = remapEveningLinkedEvents(source.eveningQuestionnaireConfig, eventIdMap);
-      const forumWrapCfg = remapEveningLinkedEvents(source.forumWrapQuestionnaireConfig, eventIdMap);
+      const eveningByDay = unpublishClonedQuestionnaire(
+        remapEveningLinkedEvents(source.eveningQuestionnaireByDay, eventIdMap),
+      );
+      const eveningCfg = unpublishClonedQuestionnaire(
+        remapEveningLinkedEvents(source.eveningQuestionnaireConfig, eventIdMap),
+      );
+      const forumWrapCfg = unpublishClonedQuestionnaire(
+        remapEveningLinkedEvents(source.forumWrapQuestionnaireConfig, eventIdMap),
+      );
       await tx.update(shifts).set({
         recommendationThreshold: source.recommendationThreshold,
         sectionsVisibility: source.sectionsVisibility,
@@ -382,6 +418,7 @@ export async function copyShiftModules(opts: {
           ...rest,
           shiftId: target.id,
           eventId: rest.eventId ? (eventIdMap.get(rest.eventId) ?? null) : null,
+          speakerIds: remapLinkedIds(rest.speakerIds, catalogs.speakerMap),
         });
       }
     }
@@ -423,8 +460,12 @@ export async function copyShiftModules(opts: {
           ...rest,
           shiftId: target.id,
           status: 'draft',
+          isHidden: false,
           parentQuestionId: null,
           audienceGroupId: mappedGroup,
+          audienceDirectionId: rest.audienceDirectionId
+            ? (catalogs.directionMap.get(rest.audienceDirectionId) ?? null)
+            : null,
           linkedEventIds: remapLinkedIds(rest.linkedEventIds, eventIdMap),
           showWhen,
         }).returning();
@@ -471,7 +512,11 @@ export async function copyShiftModules(opts: {
           shiftId: target.id,
           qrToken: null,
           status: 'draft',
+          isHidden: false,
           medalId: rest.medalId ? (medalIdMap.get(rest.medalId) ?? rest.medalId) : null,
+          programPlaceId: rest.programPlaceId
+            ? (catalogs.placeMap.get(rest.programPlaceId) ?? null)
+            : null,
           eventTime: rebaseShiftDate(t.eventTime, source.startDate, target.startDate),
           deadline: rebaseShiftDate(t.deadline, source.startDate, target.startDate),
           publishTime: rebaseShiftDate(t.publishTime, source.startDate, target.startDate),
@@ -513,6 +558,12 @@ export async function copyShiftModules(opts: {
           triggerFiredAt: null,
         });
       }
+    }
+
+    if (catalogsNeeded) {
+      await remapShiftDirectionRefs(tx, target.id, catalogs.directionMap);
+      await remapShiftSpeakerRefs(tx, target.id, catalogs.speakerMap);
+      await remapShiftPlaceRefs(tx, target.id, catalogs.placeMap);
     }
 
     for (const module of toCopy) {

@@ -41,6 +41,18 @@ describe('forumResultsMetrics', () => {
       key: 'mood10', type: 'scale_1_10', label: 'Насколько день был насыщенным?',
     }), 'scale_block');
     assert.equal(classifyForumField({
+      key: 'rating', type: 'scale_1_5', label: 'Оцените рейтинговую систему',
+    }), 'scale_block');
+    assert.equal(classifyForumField({
+      key: 'bot', type: 'scale_1_5', label: 'Насколько полезен бот форума',
+    }), 'scale_block');
+    assert.equal(classifyForumField({
+      key: 'rating', type: 'scale_1_5', label: 'Оцените рейтинговую систему',
+    }), 'scale_block');
+    assert.equal(classifyForumField({
+      key: 'bot', type: 'scale_1_5', label: 'Насколько полезен бот форума',
+    }), 'scale_block');
+    assert.equal(classifyForumField({
       key: 'practice', type: 'program_event', label: 'Какие практики посетили?',
     }), 'program_event');
   });

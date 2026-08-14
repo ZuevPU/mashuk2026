@@ -65,6 +65,7 @@ router.delete('/day-experiments/:id', requireAdminRole('delete'), wrap(admin.cru
 router.get('/directions', wrap(admin.crudDirections.list));
 router.post('/directions', requireAdminRole('settings'), wrap(admin.crudDirections.create));
 router.patch('/directions/:id', requireAdminRole('settings'), wrap(admin.crudDirections.update));
+router.delete('/directions/:id', requireAdminRole('settings'), wrap(admin.crudDirections.delete));
 
 router.get('/thematic-tags', P('recommendation-tags', 'read'), wrap(admin.crudThematicTags.list));
 router.post('/thematic-tags', P('recommendation-tags', 'create'), wrap(admin.crudThematicTags.create));

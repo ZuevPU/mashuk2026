@@ -48,9 +48,12 @@ async function applyAudienceDirectionName(
   if (!Number.isFinite(dirId) || dirId <= 0) {
     return { ...values, audienceDirectionId: null, direction: null };
   }
+  const shiftId = Number(values.shiftId);
   const [d] = await db.select({ id: directions.id, name: directions.name })
     .from(directions)
-    .where(eq(directions.id, dirId))
+    .where(shiftId
+      ? and(eq(directions.id, dirId), eq(directions.shiftId, shiftId))
+      : eq(directions.id, dirId))
     .limit(1);
   return {
     ...values,
@@ -260,9 +263,10 @@ export const crudQuestions = {
     }
     const { resolveAdminShiftId } = await import('../services/shiftService.js');
     const shiftId = await resolveAdminShiftId(req);
-    const values = await applyAudienceDirectionName(
-      buildQuestionValues(parsed.data as Record<string, unknown>, parsed.data.title.trim()) as Record<string, unknown>,
-    );
+    const values = await applyAudienceDirectionName({
+      ...buildQuestionValues(parsed.data as Record<string, unknown>, parsed.data.title.trim()) as Record<string, unknown>,
+      shiftId,
+    });
     if (!values.type) values.type = 'open';
     if (!values.status) values.status = 'draft';
     const [q] = await db.insert(questions).values({ ...values, shiftId } as typeof questions.$inferInsert).returning();
@@ -298,9 +302,10 @@ export const crudQuestions = {
       return;
     }
 
-    const enriched = await applyAudienceDirectionName(
-      enrichQuestionWritePayload(parsed.data as Record<string, unknown>, before),
-    );
+    const enriched = await applyAudienceDirectionName({
+      ...enrichQuestionWritePayload(parsed.data as Record<string, unknown>, before),
+      shiftId: before.shiftId,
+    });
     const [{ count: answerCount }] = await db.select({ count: count() }).from(answers).where(eq(answers.questionId, id));
     const newTitle = enriched.title != null ? String(enriched.title) : before.title;
     const newText = enriched.text != null ? String(enriched.text) : before.text;

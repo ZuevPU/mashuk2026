@@ -1,5 +1,5 @@
 import type { forumSettings } from '../db/schema.js';
-import { getCalendarForumDay, getMoscowParts } from './timePhase.js';
+import { forumDayClockMsk, getCalendarForumDay, getMoscowParts } from './timePhase.js';
 import { EVENING_SCALE_KEYS } from './touchpointTemplates.js';
 
 export type EveningFieldType =
@@ -144,24 +144,50 @@ export type EveningQuestionnaireConfig = {
   steps: EveningStep[];
   /** HH:MM Europe/Moscow — auto-open after this time (default 22:00). */
   opensAtMsk?: string;
+  /** HH:MM Europe/Moscow — auto-close after this time (default 02:00). */
+  closesAtMsk?: string;
+  /** Forum day when the window starts (default = questionnaire day). */
+  opensOnDay?: number;
+  /** Forum day when the window ends. 02:00 after 22:00 is usually the next day. */
+  closesOnDay?: number;
   /** Admin forced the questionnaire open for this day (before opensAtMsk). */
   forcePublished?: boolean;
-  /** ISO timestamp when forcePublished was set — expires at next 01:00 MSK. */
+  /** ISO timestamp when forcePublished was set — expires at the configured close. */
   forcePublishedAt?: string;
   /** Admin hid the questionnaire — overrides schedule and forcePublished. */
   forceUnpublished?: boolean;
 };
 
 export const DEFAULT_EVENING_OPENS_AT_MSK = '22:00';
+export const DEFAULT_EVENING_CLOSES_AT_MSK = '02:00';
+export const EVENING_SCHEDULE_MAX_DAY = 8;
 
 export function eveningPublishMeta(
   config: EveningQuestionnaireConfig,
-): Pick<EveningQuestionnaireConfig, 'opensAtMsk' | 'forcePublished' | 'forcePublishedAt' | 'forceUnpublished'> {
+): Pick<
+  EveningQuestionnaireConfig,
+  | 'opensAtMsk'
+  | 'closesAtMsk'
+  | 'opensOnDay'
+  | 'closesOnDay'
+  | 'forcePublished'
+  | 'forcePublishedAt'
+  | 'forceUnpublished'
+> {
   const meta: Pick<
     EveningQuestionnaireConfig,
-    'opensAtMsk' | 'forcePublished' | 'forcePublishedAt' | 'forceUnpublished'
+    | 'opensAtMsk'
+    | 'closesAtMsk'
+    | 'opensOnDay'
+    | 'closesOnDay'
+    | 'forcePublished'
+    | 'forcePublishedAt'
+    | 'forceUnpublished'
   > = {};
   if (config.opensAtMsk?.trim()) meta.opensAtMsk = config.opensAtMsk.trim();
+  if (config.closesAtMsk?.trim()) meta.closesAtMsk = config.closesAtMsk.trim();
+  if (config.opensOnDay != null) meta.opensOnDay = config.opensOnDay;
+  if (config.closesOnDay != null) meta.closesOnDay = config.closesOnDay;
   if (config.forcePublished) meta.forcePublished = true;
   if (config.forcePublishedAt?.trim()) meta.forcePublishedAt = config.forcePublishedAt.trim();
   if (config.forceUnpublished) meta.forceUnpublished = true;
@@ -170,14 +196,29 @@ export function eveningPublishMeta(
 
 const MSK_OFFSET_MS = 3 * 60 * 60 * 1000;
 
-/** «Опубликовать сейчас» действует до 01:00 МСК после московского дня установки. */
-export function forcePublishedExpiresAt(forcedAt: Date): Date {
+export function normalizeForumDay(raw: unknown, max = EVENING_SCHEDULE_MAX_DAY): number | null {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > max) return null;
+  return n;
+}
+
+function clockToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/** «Опубликовать сейчас» действует до ближайшего closesAtMsk (по умолчанию 02:00 МСК). */
+export function forcePublishedExpiresAt(
+  forcedAt: Date,
+  closesAtMsk = DEFAULT_EVENING_CLOSES_AT_MSK,
+): Date {
+  const closeMinutes = clockToMinutes(normalizeOpensAtMsk(closesAtMsk) || DEFAULT_EVENING_CLOSES_AT_MSK);
   const parts = getMoscowParts(forcedAt);
   const mskWall = new Date(forcedAt.getTime() + MSK_OFFSET_MS);
-  if (parts.totalMinutes >= 60) {
+  if (parts.totalMinutes >= closeMinutes) {
     mskWall.setUTCDate(mskWall.getUTCDate() + 1);
   }
-  mskWall.setUTCHours(1, 0, 0, 0);
+  mskWall.setUTCHours(Math.floor(closeMinutes / 60), closeMinutes % 60, 0, 0);
   return new Date(mskWall.getTime() - MSK_OFFSET_MS);
 }
 
@@ -190,7 +231,7 @@ export function isForcePublishedActive(
   if (!config.forcePublishedAt) return false;
   const forcedAt = new Date(config.forcePublishedAt);
   if (Number.isNaN(forcedAt.getTime())) return false;
-  return now.getTime() < forcePublishedExpiresAt(forcedAt).getTime();
+  return now.getTime() < forcePublishedExpiresAt(forcedAt, getEveningClosesAtMsk(config)).getTime();
 }
 
 /** Normalize "21:00" / "9:30" → "HH:MM", or null if invalid. */
@@ -208,9 +249,152 @@ export function getEveningOpensAtMsk(config: EveningQuestionnaireConfig | null |
   return normalizeOpensAtMsk(config?.opensAtMsk) || DEFAULT_EVENING_OPENS_AT_MSK;
 }
 
-function opensAtToMinutes(hhmm: string): number {
-  const [h, m] = hhmm.split(':').map(Number);
-  return h * 60 + m;
+export function getEveningClosesAtMsk(config: EveningQuestionnaireConfig | null | undefined): string {
+  return normalizeOpensAtMsk(config?.closesAtMsk) || DEFAULT_EVENING_CLOSES_AT_MSK;
+}
+
+export function getEveningOpensOnDay(
+  config: EveningQuestionnaireConfig | null | undefined,
+  questionnaireDay: number,
+): number {
+  return normalizeForumDay(config?.opensOnDay) ?? normalizeForumDay(questionnaireDay) ?? 1;
+}
+
+export function getEveningClosesOnDay(
+  config: EveningQuestionnaireConfig | null | undefined,
+  questionnaireDay: number,
+): number {
+  const explicit = normalizeForumDay(config?.closesOnDay);
+  if (explicit != null) return explicit;
+  const openDay = getEveningOpensOnDay(config, questionnaireDay);
+  const openMinutes = clockToMinutes(getEveningOpensAtMsk(config));
+  const closeMinutes = clockToMinutes(getEveningClosesAtMsk(config));
+  if (closeMinutes <= openMinutes) {
+    return Math.min(EVENING_SCHEDULE_MAX_DAY, openDay + 1);
+  }
+  return openDay;
+}
+
+export type EveningScheduleWindow = {
+  opensAtMsk: string;
+  closesAtMsk: string;
+  opensOnDay: number;
+  closesOnDay: number;
+  start: Date | null;
+  end: Date | null;
+};
+
+export function resolveEveningScheduleWindow(
+  config: EveningQuestionnaireConfig | null | undefined,
+  questionnaireDay: number,
+  settings?: EveningDaySettings | null,
+): EveningScheduleWindow {
+  const opensAtMsk = getEveningOpensAtMsk(config);
+  const closesAtMsk = getEveningClosesAtMsk(config);
+  const opensOnDay = getEveningOpensOnDay(config, questionnaireDay);
+  const closesOnDay = getEveningClosesOnDay(config, questionnaireDay);
+  const startDate = settings?.startDate ?? null;
+  const start = startDate ? forumDayClockMsk(startDate, opensOnDay, opensAtMsk) : null;
+  const end = startDate ? forumDayClockMsk(startDate, closesOnDay, closesAtMsk) : null;
+  return { opensAtMsk, closesAtMsk, opensOnDay, closesOnDay, start, end };
+}
+
+export function eveningScheduleApiFields(
+  config: EveningQuestionnaireConfig | null | undefined,
+  questionnaireDay: number,
+) {
+  return {
+    opensAtMsk: getEveningOpensAtMsk(config),
+    closesAtMsk: getEveningClosesAtMsk(config),
+    opensOnDay: getEveningOpensOnDay(config, questionnaireDay),
+    closesOnDay: getEveningClosesOnDay(config, questionnaireDay),
+    scheduleHint: formatEveningScheduleHint(config, questionnaireDay),
+  };
+}
+
+function applyClockField(
+  next: EveningQuestionnaireConfig,
+  raw: unknown,
+  key: 'opensAtMsk' | 'closesAtMsk',
+  existing?: string,
+): { config: EveningQuestionnaireConfig; error?: string } {
+  if (raw === undefined) {
+    if (existing) return { config: { ...next, [key]: existing } };
+    return { config: next };
+  }
+  const normalized = normalizeOpensAtMsk(raw === null || raw === '' ? null : String(raw));
+  if (raw && !normalized) return { config: next, error: `${key} must be HH:MM` };
+  if (normalized) return { config: { ...next, [key]: normalized } };
+  const { [key]: _drop, ...rest } = next;
+  return { config: rest };
+}
+
+function applyDayField(
+  next: EveningQuestionnaireConfig,
+  raw: unknown,
+  key: 'opensOnDay' | 'closesOnDay',
+  existing?: number,
+): { config: EveningQuestionnaireConfig; error?: string } {
+  if (raw === undefined) {
+    if (existing != null) return { config: { ...next, [key]: existing } };
+    return { config: next };
+  }
+  if (raw === null || raw === '') {
+    const { [key]: _drop, ...rest } = next;
+    return { config: rest };
+  }
+  const day = normalizeForumDay(raw);
+  if (day == null) return { config: next, error: `${key} must be a forum day 1–${EVENING_SCHEDULE_MAX_DAY}` };
+  return { config: { ...next, [key]: day } };
+}
+
+/** Apply schedule fields from an admin PATCH (top-level or nested in config). */
+export function mergeEveningScheduleFromRequest(
+  next: EveningQuestionnaireConfig,
+  body: {
+    opensAtMsk?: unknown;
+    closesAtMsk?: unknown;
+    opensOnDay?: unknown;
+    closesOnDay?: unknown;
+    config?: Partial<EveningQuestionnaireConfig> | null;
+  },
+  existing: EveningQuestionnaireConfig,
+): { config: EveningQuestionnaireConfig; error?: string } {
+  const cfg = body.config ?? {};
+  let current = next;
+  const clocks: Array<['opensAtMsk' | 'closesAtMsk', unknown, string | undefined]> = [
+    ['opensAtMsk', body.opensAtMsk !== undefined ? body.opensAtMsk : cfg.opensAtMsk, existing.opensAtMsk],
+    ['closesAtMsk', body.closesAtMsk !== undefined ? body.closesAtMsk : cfg.closesAtMsk, existing.closesAtMsk],
+  ];
+  for (const [key, raw, prev] of clocks) {
+    const applied = applyClockField(current, raw, key, prev);
+    if (applied.error) return applied;
+    current = applied.config;
+  }
+  const days: Array<['opensOnDay' | 'closesOnDay', unknown, number | undefined]> = [
+    ['opensOnDay', body.opensOnDay !== undefined ? body.opensOnDay : cfg.opensOnDay, existing.opensOnDay],
+    ['closesOnDay', body.closesOnDay !== undefined ? body.closesOnDay : cfg.closesOnDay, existing.closesOnDay],
+  ];
+  for (const [key, raw, prev] of days) {
+    const applied = applyDayField(current, raw, key, prev);
+    if (applied.error) return applied;
+    current = applied.config;
+  }
+  return { config: current };
+}
+
+export function formatEveningScheduleHint(
+  config: EveningQuestionnaireConfig | null | undefined,
+  questionnaireDay: number,
+): string {
+  const opensAt = getEveningOpensAtMsk(config);
+  const closesAt = getEveningClosesAtMsk(config);
+  const opensOnDay = getEveningOpensOnDay(config, questionnaireDay);
+  const closesOnDay = getEveningClosesOnDay(config, questionnaireDay);
+  if (opensOnDay === closesOnDay) {
+    return `с ${opensAt} до ${closesAt} МСК дня ${opensOnDay}`;
+  }
+  return `с ${opensAt} дня ${opensOnDay} до ${closesAt} дня ${closesOnDay} МСК`;
 }
 
 type EveningDaySettings = {
@@ -220,7 +404,7 @@ type EveningDaySettings = {
 };
 
 /**
- * 00:00–01:00 MSK wrap belongs only to the operational forum day
+ * 00:00–02:00 MSK wrap belongs only to the operational forum day
  * (calendar day still yesterday until 02:00). Other days must not look «open».
  */
 export function eveningOvernightAppliesToDay(
@@ -233,13 +417,26 @@ export function eveningOvernightAppliesToDay(
   return questionnaireDay === operational;
 }
 
+function isWithinClockWindow(
+  config: EveningQuestionnaireConfig | null | undefined,
+  now: Date,
+  allowOvernight: boolean,
+): boolean {
+  const { totalMinutes } = getMoscowParts(now);
+  const openMinutes = clockToMinutes(getEveningOpensAtMsk(config));
+  const closeMinutes = clockToMinutes(getEveningClosesAtMsk(config));
+  if (closeMinutes > openMinutes) {
+    return totalMinutes >= openMinutes && totalMinutes < closeMinutes;
+  }
+  if (totalMinutes >= openMinutes) return true;
+  return allowOvernight && totalMinutes < closeMinutes;
+}
+
 /**
- * Evening questionnaire window: from opensAtMsk until 01:00 MSK.
- * The 00:00–01:00 wrap is opt-in (`allowOvernight`) so yesterday's unfinished
- * form does not reopen every night, and admin days 2–7 do not all show «open».
- * forcePublished (with forcePublishedAt) opens early until that same 01:00 cutoff.
- * forceUnpublished always wins. Optional scheduleDayPublished=false hides the survey
- * when the forum day was taken off publication («Скрыть» день).
+ * Evening questionnaire window: from opensAtMsk until closesAtMsk (default 22:00→02:00).
+ * Overnight wrap is opt-in (`allowOvernight`) so yesterday's form does not reopen
+ * every night, and admin days 2–7 do not all show «open».
+ * forcePublished opens early until the same close. forceUnpublished always wins.
  */
 export function isEveningOpenForConfig(
   config: EveningQuestionnaireConfig | null | undefined,
@@ -248,10 +445,7 @@ export function isEveningOpenForConfig(
 ): boolean {
   if (config?.forceUnpublished) return false;
   if (opts?.scheduleDayPublished === false) return false;
-  const { totalMinutes } = getMoscowParts(now);
-  const openMinutes = opensAtToMinutes(getEveningOpensAtMsk(config));
-  if (totalMinutes >= openMinutes) return true;
-  if (totalMinutes < 60 && opts?.allowOvernight === true) return true;
+  if (isWithinClockWindow(config, now, opts?.allowOvernight === true)) return true;
   return isForcePublishedActive(config, now);
 }
 
@@ -265,6 +459,14 @@ export function isEveningOpenForDay(
     scheduleDayPublished?: boolean | null;
   },
 ): boolean {
+  if (config?.forceUnpublished) return false;
+  if (opts?.scheduleDayPublished === false) return false;
+  const window = resolveEveningScheduleWindow(config, dayNumber, opts?.settings);
+  if (window.start && window.end && window.end.getTime() > window.start.getTime()) {
+    const t = now.getTime();
+    if (t >= window.start.getTime() && t < window.end.getTime()) return true;
+    return isForcePublishedActive(config, now) && t < window.end.getTime();
+  }
   return isEveningOpenForConfig(config, now, {
     scheduleDayPublished: opts?.scheduleDayPublished,
     allowOvernight: eveningOvernightAppliesToDay(dayNumber, opts?.settings, now),
@@ -395,32 +597,81 @@ export function isForumFinalEveningField(field: EveningField): boolean {
   return field.forumFinal === true && field.type !== 'info_text';
 }
 
+export type ForumFinalQuestion = {
+  /** Уникальный id среза (совпадает с key, если вопрос один на все дни). */
+  id: string;
+  /** Дни, где стоит галочка «Итоговый вопрос форума». */
+  days: number[];
+  field: EveningField;
+};
+
+function forumFinalSignature(field: EveningField): string {
+  return field.type;
+}
+
+function slugForumFinalPart(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0400-\u04ff]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'q';
+}
+
 /** Поля вечерней анкеты, отмеченные как итоговые вопросы форума (по всем дням смены). */
 export function collectForumFinalEveningFields(
   settings: typeof forumSettings.$inferSelect | null,
-  days: number[] = [1, 2, 3, 4, 5, 6, 7],
+  days: number[] = [1, 2, 3, 4, 5, 6, 7, 8],
 ): EveningField[] {
-  return [...collectForumFinalEveningFieldDays(settings, days).fields];
+  return collectForumFinalEveningFieldDays(settings, days).questions.map(q => q.field);
 }
 
 /** Те же поля + дни, на которых стоит галочка «Итоговый вопрос форума». */
 export function collectForumFinalEveningFieldDays(
   settings: typeof forumSettings.$inferSelect | null,
-  days: number[] = [1, 2, 3, 4, 5, 6, 7],
-): { fields: EveningField[]; daysByKey: Map<string, number[]> } {
-  const map = new Map<string, EveningField>();
-  const daysByKey = new Map<string, number[]>();
+  days: number[] = [1, 2, 3, 4, 5, 6, 7, 8],
+): { fields: EveningField[]; daysByKey: Map<string, number[]>; questions: ForumFinalQuestion[] } {
+  const hits: Array<{ day: number; field: EveningField }> = [];
   for (const day of days) {
     const cfg = resolveEveningConfigForDay(settings, day);
     for (const field of (cfg.steps || []).flatMap(s => s.fields)) {
       if (!isForumFinalEveningField(field)) continue;
-      if (!map.has(field.key)) map.set(field.key, field);
-      const list = daysByKey.get(field.key) ?? [];
-      if (!list.includes(day)) list.push(day);
-      daysByKey.set(field.key, list);
+      hits.push({ day, field });
     }
   }
-  return { fields: [...map.values()], daysByKey };
+
+  const byKey = new Map<string, Array<{ day: number; field: EveningField }>>();
+  for (const hit of hits) {
+    const list = byKey.get(hit.field.key) ?? [];
+    list.push(hit);
+    byKey.set(hit.field.key, list);
+  }
+
+  const questions: ForumFinalQuestion[] = [];
+  for (const [key, group] of byKey) {
+    const bySig = new Map<string, Array<{ day: number; field: EveningField }>>();
+    for (const hit of group) {
+      const sig = forumFinalSignature(hit.field);
+      const list = bySig.get(sig) ?? [];
+      list.push(hit);
+      bySig.set(sig, list);
+    }
+    const split = bySig.size > 1;
+    for (const list of bySig.values()) {
+      const daysFor = [...new Set(list.map(h => h.day))].sort((a, b) => a - b);
+      const field = list[list.length - 1].field;
+      const id = split
+        ? `${key}__${field.type}__${slugForumFinalPart(field.label)}__d${daysFor.join('-')}`
+        : key;
+      questions.push({ id, days: daysFor, field });
+    }
+  }
+
+  const daysByKey = new Map<string, number[]>();
+  for (const q of questions) {
+    daysByKey.set(q.id, q.days);
+    if (q.id === q.field.key) daysByKey.set(q.field.key, q.days);
+  }
+  return { fields: questions.map(q => q.field), daysByKey, questions };
 }
 
 export function resolveEveningConfigForDay(
@@ -534,6 +785,31 @@ export function isFieldForDirection(
   return ids.includes(Math.floor(directionId));
 }
 
+/** Clone for another shift: keep questions/schedule, but start unpublished. Only admin can publish. */
+export function unpublishClonedQuestionnaire(config: unknown): unknown {
+  if (Array.isArray(config)) return config.map(item => unpublishClonedQuestionnaire(item));
+  if (!config || typeof config !== 'object') return config;
+  const src = config as Record<string, unknown>;
+  const looksLikeQuestionnaire = Array.isArray(src.steps)
+    || 'forcePublished' in src
+    || 'forceUnpublished' in src
+    || 'opensAtMsk' in src;
+  if (!looksLikeQuestionnaire) {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(src)) {
+      out[key] = unpublishClonedQuestionnaire(value);
+    }
+    return out;
+  }
+  const {
+    forcePublished: _fp,
+    forcePublishedAt: _fpa,
+    forceUnpublished: _fu,
+    ...rest
+  } = src;
+  return { ...rest, forceUnpublished: true };
+}
+
 /**
  * Копия анкеты на другой день: шаги/поля и время открытия.
  * Ссылки на события дня сбрасываются (id принадлежат fromDay).
@@ -545,10 +821,19 @@ export function copyEveningQuestionnaireContent(
   opts?: { preservePublishFrom?: EveningQuestionnaireConfig | null },
 ): EveningQuestionnaireConfig {
   const publish = eveningPublishMeta(opts?.preservePublishFrom ?? { steps: [] });
+  const {
+    opensAtMsk: _oa,
+    closesAtMsk: _ca,
+    opensOnDay: _od,
+    closesOnDay: _cd,
+    ...publishFlags
+  } = publish;
   const opensAt = src.opensAtMsk?.trim() || publish.opensAtMsk;
+  const closesAt = src.closesAtMsk?.trim() || publish.closesAtMsk;
   return {
-    ...publish,
+    ...publishFlags,
     ...(opensAt ? { opensAtMsk: opensAt } : {}),
+    ...(closesAt ? { closesAtMsk: closesAt } : {}),
     steps: (src.steps || []).map(step => ({
       ...step,
       fields: (step.fields || []).map(field => (

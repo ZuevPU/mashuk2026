@@ -11,6 +11,7 @@ describe('forumWrapQuestionnaire', () => {
     const cfg = defaultForumWrapConfig();
     assert.ok(cfg.steps.length > 0);
     assert.equal(cfg.opensAtMsk, '10:00');
+    assert.equal(cfg.closesAtMsk, '02:00');
     assert.ok(!cfg.steps.some(s => s.fields.some(f => f.type === 'role_select')));
     const thesis = cfg.steps.flatMap(s => s.fields).find(f => f.key === 'mainThesis');
     assert.match(thesis?.label || '', /форума/i);

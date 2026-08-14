@@ -5,6 +5,9 @@ import {
   copyEveningQuestionnaireContent,
   eveningOvernightAppliesToDay,
   filterEveningConfigForDirection,
+  formatEveningScheduleHint,
+  getEveningClosesAtMsk,
+  getEveningClosesOnDay,
   getEveningOpensAtMsk,
   isEveningOpenForConfig,
   isEveningOpenForDay,
@@ -14,6 +17,7 @@ import {
   resolveEveningConfigForDay,
   stripHiddenEveningFieldValues,
   stripPointBFromEveningConfig,
+  unpublishClonedQuestionnaire,
   normalizeExperimentStep,
   collectForumFinalEveningFields,
   collectForumFinalEveningFieldDays,
@@ -330,12 +334,16 @@ describe('eveningQuestionnaireConfig', () => {
     assert.deepEqual(filtered.steps[1].fields.map(f => f.key), ['c']);
   });
 
-  it('overnight 00:00–01:00 MSK is opt-in and only for the operational day', () => {
+  it('overnight 00:00–02:00 MSK is opt-in and only for the operational day', () => {
     const at0030 = new Date('2026-07-01T21:30:00.000Z'); // 00:30 MSK 2 July
+    const at0130 = new Date('2026-07-01T22:30:00.000Z'); // 01:30 MSK 2 July
+    const at0200 = new Date('2026-07-01T23:00:00.000Z'); // 02:00 MSK 2 July
     const cfg = { steps: [] as never[], opensAtMsk: '22:00' };
     assert.equal(isEveningOpenForConfig(cfg, at0030), false);
     assert.equal(isEveningOpenForConfig(cfg, at0030, { allowOvernight: true }), true);
     assert.equal(isEveningOpenForConfig(cfg, at0030, { allowOvernight: false }), false);
+    assert.equal(isEveningOpenForConfig(cfg, at0130, { allowOvernight: true }), true);
+    assert.equal(isEveningOpenForConfig(cfg, at0200, { allowOvernight: true }), false);
 
     const start = new Date('2026-07-01T00:00:00+03:00');
     const settings = { startDate: start, currentDay: 1, totalDays: 8 };
@@ -344,11 +352,53 @@ describe('eveningQuestionnaireConfig', () => {
     assert.equal(eveningOvernightAppliesToDay(2, settings, at0030), false);
     assert.equal(isEveningOpenForDay(cfg, 1, at0030, { settings }), true);
     assert.equal(isEveningOpenForDay(cfg, 2, at0030, { settings }), false);
+    assert.equal(isEveningOpenForDay(cfg, 1, at0130, { settings }), true);
+    assert.equal(isEveningOpenForDay(cfg, 1, at0200, { settings }), false);
+  });
+
+  it('uses forum day + clock for 22:00 → next day 02:00', () => {
+    const start = new Date('2026-07-01T00:00:00+03:00');
+    const settings = { startDate: start, currentDay: 3, totalDays: 8 };
+    const cfg = {
+      steps: [] as never[],
+      opensAtMsk: '22:00',
+      closesAtMsk: '02:00',
+      opensOnDay: 3,
+      closesOnDay: 4,
+    };
+    assert.equal(getEveningClosesAtMsk(cfg), '02:00');
+    assert.equal(getEveningClosesOnDay(cfg, 3), 4);
+    assert.equal(formatEveningScheduleHint(cfg, 3), 'с 22:00 дня 3 до 02:00 дня 4 МСК');
+    assert.equal(isEveningOpenForDay(cfg, 3, new Date('2026-07-03T18:30:00.000Z'), { settings }), false); // 21:30
+    assert.equal(isEveningOpenForDay(cfg, 3, new Date('2026-07-03T19:00:00.000Z'), { settings }), true); // 22:00
+    assert.equal(isEveningOpenForDay(cfg, 3, new Date('2026-07-03T22:30:00.000Z'), { settings }), true); // 01:30 day 4
+    assert.equal(isEveningOpenForDay(cfg, 3, new Date('2026-07-03T23:00:00.000Z'), { settings }), false); // 02:00 day 4
+    assert.equal(isEveningOpenForDay(
+      { steps: [] as never[], opensAtMsk: '22:00' },
+      4,
+      new Date('2026-07-03T19:00:00.000Z'),
+      { settings },
+    ), false);
+  });
+
+  it('same-day close stays on that forum day', () => {
+    const start = new Date('2026-07-01T00:00:00+03:00');
+    const settings = { startDate: start, currentDay: 2, totalDays: 8 };
+    const cfg = {
+      steps: [] as never[],
+      opensAtMsk: '18:00',
+      closesAtMsk: '23:30',
+      opensOnDay: 2,
+      closesOnDay: 2,
+    };
+    assert.equal(isEveningOpenForDay(cfg, 2, new Date('2026-07-02T15:00:00.000Z'), { settings }), true); // 18:00
+    assert.equal(isEveningOpenForDay(cfg, 2, new Date('2026-07-02T20:40:00.000Z'), { settings }), false); // 23:40
   });
 
   it('copyEveningQuestionnaireContent copies steps/time, not source publish flags', () => {
     const src = {
       opensAtMsk: '21:15',
+      closesAtMsk: '02:00',
       forcePublished: true,
       forcePublishedAt: '2026-07-01T17:00:00.000Z',
       forceUnpublished: true,
@@ -365,6 +415,7 @@ describe('eveningQuestionnaireConfig', () => {
       preservePublishFrom: { steps: [], forceUnpublished: true },
     });
     assert.equal(ontoClosed.opensAtMsk, '21:15');
+    assert.equal(ontoClosed.closesAtMsk, '02:00');
     assert.equal(ontoClosed.forcePublished, undefined);
     assert.equal(ontoClosed.forcePublishedAt, undefined);
     assert.equal(ontoClosed.forceUnpublished, true);
@@ -386,6 +437,30 @@ describe('eveningQuestionnaireConfig', () => {
     assert.equal(fresh.forcePublished, undefined);
     assert.equal(fresh.forceUnpublished, undefined);
     assert.equal(fresh.opensAtMsk, '21:15');
+    assert.equal(fresh.closesAtMsk, '02:00');
+  });
+
+  it('unpublishClonedQuestionnaire strips publish flags on config and by-day map', () => {
+    const cfg = {
+      opensAtMsk: '22:00',
+      forcePublished: true,
+      forcePublishedAt: '2026-07-01T17:00:00.000Z',
+      steps: [{ id: 'open', title: 'Open', fields: [] }],
+    };
+    const unpublished = unpublishClonedQuestionnaire(cfg) as typeof cfg & { forceUnpublished?: boolean };
+    assert.equal(unpublished.forcePublished, undefined);
+    assert.equal(unpublished.forcePublishedAt, undefined);
+    assert.equal(unpublished.forceUnpublished, true);
+    assert.equal(unpublished.opensAtMsk, '22:00');
+    assert.equal(unpublished.steps[0].id, 'open');
+
+    const byDay = unpublishClonedQuestionnaire({
+      '1': cfg,
+      '2': { ...cfg, forcePublished: false },
+    }) as Record<string, typeof unpublished>;
+    assert.equal(byDay['1'].forceUnpublished, true);
+    assert.equal(byDay['1'].forcePublished, undefined);
+    assert.equal(byDay['2'].forceUnpublished, true);
   });
 
   it('keeps formatted info_text blocks as display-only fields', () => {
@@ -431,8 +506,7 @@ describe('eveningQuestionnaireConfig', () => {
       },
     } as never);
     assert.equal(fields.length, 2);
-    assert.equal(fields[0].key, 'housing');
-    assert.equal(fields[1].key, 'nps');
+    assert.deepEqual(fields.map(f => f.key).sort(), ['housing', 'nps']);
   });
 
   it('collectForumFinalEveningFields ignores unmarked evening questions', () => {
@@ -481,5 +555,36 @@ describe('eveningQuestionnaireConfig', () => {
     assert.deepEqual(daysByKey.get('housing'), [1]);
     assert.deepEqual(daysByKey.get('nps'), [2]);
     assert.equal(daysByKey.has('mood'), false);
+  });
+
+  it('keeps same-key forum-final questions separate when labels differ', () => {
+    const { questions } = collectForumFinalEveningFieldDays({
+      eveningQuestionnaireByDay: {
+        '1': {
+          steps: [{
+            id: 's',
+            title: 'S',
+            fields: [
+              { key: 'new_field', type: 'scale_1_5', label: 'Организация питания', forumFinal: true },
+            ],
+          }],
+        },
+        '7': {
+          steps: [{
+            id: 's',
+            title: 'S',
+            fields: [
+              { key: 'new_field', type: 'text', label: 'Что сделать, чтобы оценка стала выше', forumFinal: true },
+            ],
+          }],
+        },
+      },
+    } as never);
+    assert.equal(questions.length, 2);
+    assert.equal(questions[0].field.label, 'Организация питания');
+    assert.deepEqual(questions[0].days, [1]);
+    assert.equal(questions[1].field.label, 'Что сделать, чтобы оценка стала выше');
+    assert.deepEqual(questions[1].days, [7]);
+    assert.notEqual(questions[0].id, questions[1].id);
   });
 });

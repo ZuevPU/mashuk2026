@@ -46,6 +46,12 @@ export type EveningQuestionnaireConfig = {
   steps: EveningStep[];
   /** HH:MM МСК — автооткрытие после этого времени */
   opensAtMsk?: string;
+  /** HH:MM МСК — автозакрытие после этого времени (по умолчанию 02:00) */
+  closesAtMsk?: string;
+  /** День форума, с которого анкета видна */
+  opensOnDay?: number;
+  /** День форума, до которого анкета активна (02:00 обычно следующий день) */
+  closesOnDay?: number;
   /** Организатор открыл анкету вручную раньше времени */
   forcePublished?: boolean;
   /** Организатор снял анкету с публикации (скрыта даже после opensAtMsk) */

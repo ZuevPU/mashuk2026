@@ -51,25 +51,25 @@ export async function runSeed() {
   const existingSettings = await db.select().from(forumSettings).limit(1);
   if (existingSettings.length === 0) {
     await db.insert(directions).values([
-      { name: 'Учителя' },
-      { name: 'Управление' },
-      { name: 'Команда' },
-      { name: 'Аналитика' },
-      { name: 'Творчество' },
+      { shiftId, name: 'Учителя' },
+      { shiftId, name: 'Управление' },
+      { shiftId, name: 'Команда' },
+      { shiftId, name: 'Аналитика' },
+      { shiftId, name: 'Творчество' },
     ]);
 
     await db.insert(thematicTags).values([
-      { name: 'управление' }, { name: 'команда' }, { name: 'коммуникация' },
-      { name: 'аналитика' }, { name: 'технологии' }, { name: 'творчество' },
+      { shiftId, name: 'управление' }, { shiftId, name: 'команда' }, { shiftId, name: 'коммуникация' },
+      { shiftId, name: 'аналитика' }, { shiftId, name: 'технологии' }, { shiftId, name: 'творчество' },
     ]);
 
     await db.insert(programPlaces).values([
-      { name: 'Конференц-зал' },
-      { name: 'Шатёр «Учителя»' },
-      { name: 'Площадка у озера' },
-      { name: 'Аудитория Пушкин' },
-      { name: 'Аудитория Гоголь' },
-    ]).onConflictDoNothing({ target: programPlaces.name });
+      { shiftId, name: 'Конференц-зал' },
+      { shiftId, name: 'Шатёр «Учителя»' },
+      { shiftId, name: 'Площадка у озера' },
+      { shiftId, name: 'Аудитория Пушкин' },
+      { shiftId, name: 'Аудитория Гоголь' },
+    ]).onConflictDoNothing();
 
     const startDate = new Date('2026-08-12T00:00:00');
     await db.insert(forumSettings).values({

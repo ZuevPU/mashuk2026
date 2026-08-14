@@ -111,7 +111,9 @@ const NAV: HubNavItem[] = [
   { id: 'hub-forum-practices', label: 'Практики' },
   { id: 'hub-forum-pointb', label: 'Точка Б' },
   { id: 'hub-forum-role', label: 'Роль' },
+  { id: 'hub-forum-selfway', label: 'Способ действовать' },
   { id: 'hub-forum-plans', label: 'Планы' },
+  { id: 'hub-forum-choices', label: 'Другие вопросы' },
   { id: 'hub-forum-extra', label: 'Сервисы' },
   { id: 'hub-forum-final', label: 'Впечатления' },
 ];
@@ -207,10 +209,14 @@ export function HubForumResultsScreen() {
     if (item.id === 'hub-forum-heatmap') return !!data?.heat.length;
     if (item.id === 'hub-forum-improve') return !!improve;
     if (item.id === 'hub-forum-nps') return !!data?.nps;
-    if (item.id === 'hub-forum-practices') return !!(data?.practiceRecommendNps?.byPractice?.length);
+    if (item.id === 'hub-forum-practices') {
+      return !!(data?.practiceRecommendNps?.byPractice?.length || data?.practiceRecommendNps?.available);
+    }
     if (item.id === 'hub-forum-pointb') return !!pointB;
-    if (item.id === 'hub-forum-role') return !!roleChoice || !!selfway || otherChoices.length > 0;
+    if (item.id === 'hub-forum-role') return !!roleChoice;
+    if (item.id === 'hub-forum-selfway') return !!selfway;
     if (item.id === 'hub-forum-plans') return !!planWhen || !!nextstep;
+    if (item.id === 'hub-forum-choices') return otherChoices.length > 0;
     if (item.id === 'hub-forum-extra') return !!data?.compact.length;
     if (item.id === 'hub-forum-final') return finals.length > 0;
     return true;
@@ -266,6 +272,32 @@ export function HubForumResultsScreen() {
                 },
               ]}
             />
+            <HubKpiRow
+              cols={4}
+              items={[
+                {
+                  value: m.index == null ? '—' : m.index.toFixed(2),
+                  label: 'Индекс форума — среднее по блокам',
+                  sub: `шкала 1–5 · n=${m.scaleN}`,
+                },
+                {
+                  value: `${m.fillRatePct}%`,
+                  label: 'Сдали анкету',
+                  sub: `${m.submittedPeople ?? m.submitted} из ${m.total} · черновиков ${m.drafts}`,
+                },
+                {
+                  value: `${m.attentionBlocks} из ${data.blocks.length}`,
+                  label: 'Блока в зоне внимания',
+                  sub: 'где ≥10% оценок ниже 4',
+                  accent: m.attentionBlocks > 0 ? '#B7791F' : undefined,
+                },
+                {
+                  value: `${m.formalPct}%`,
+                  label: 'Формальных ответов в тексте',
+                  sub: '«.» · «-» · «всё ок» — качество рефлексии',
+                },
+              ]}
+            />
           </DayResultsSection>
 
           {data.blocks.length > 0 && (
@@ -276,14 +308,20 @@ export function HubForumResultsScreen() {
             >
               <DashCard>
                 <SpineLegend />
-                {[...data.blocks].sort((a, b) => b.low - a.low).map(b => (
+                {[...data.blocks].sort((a, b) => b.low - a.low || a.label.localeCompare(b.label, 'ru')).map(b => (
                   <div key={b.key} className="adm-day-results-spine">
                     <div className="adm-day-results-spine-nm">{b.label}</div>
-                    <SpineBar dist={b.dist} />
+                    {b.n > 0 ? <SpineBar dist={b.dist} /> : <div className="adm-muted" style={{ flex: 1 }}>Нет оценок</div>}
                     <div className="adm-day-results-spine-val">
-                      <b>{b.mean.toFixed(2)}</b>
-                      {' · '}
-                      <Flag tone={lowTone(b.low)}>{b.low}%</Flag>
+                      {b.n > 0 ? (
+                        <>
+                          <b>{b.mean.toFixed(2)}</b>
+                          {' · '}
+                          <Flag tone={lowTone(b.low)}>{b.low}%</Flag>
+                        </>
+                      ) : (
+                        <span className="adm-muted">—</span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -295,7 +333,7 @@ export function HubForumResultsScreen() {
             <DayResultsSection
               id="hub-forum-days"
               title="Заполняемость и оценка по дням — один блок за раз"
-              note="Направления × дни смены. «Заполнили» — сколько ответили на этот вопрос, «Оценка» — среднее 1–5. Не зависит от фильтра направления сверху."
+              note="Все шкалы с галочкой «Итоговый вопрос форума». Направления × дни, где стоит галочка. «Заполнили» — сколько ответили, «Оценка» — среднее."
             >
               <DashCard className="adm-day-results-scroll">
                 <label className="adm-forum-block-picker">
@@ -360,7 +398,7 @@ export function HubForumResultsScreen() {
             </DayResultsSection>
           )}
 
-          {data.heat.length > 0 && data.blocks.length > 0 && (
+          {data.heat.length > 0 && data.blocks.some(b => b.n > 0) && (
             <DayResultsSection
               id="hub-forum-heatmap"
               title="Направление × блок — где отклонение от среднего"
@@ -447,12 +485,12 @@ export function HubForumResultsScreen() {
                 <p className="adm-muted" style={{ fontSize: 12, margin: '12px 0 8px' }}>
                   Все ответы, без кластеризации · листай, не скачивая
                 </p>
-                <QuoteBrowser quotes={improve.quotes} total={improve.n} />
+                <QuoteBrowser quotes={improve.quotes} total={improve.n} title={improve.label} />
               </DashCard>
             </DayResultsSection>
           )}
 
-          {(data.practiceRecommendNps?.byPractice?.length ?? 0) > 0 && (
+          {(data.practiceRecommendNps?.byPractice?.length || data.practiceRecommendNps?.available) && (
             <DayResultsSection
               id="hub-forum-practices"
               title="Практики и темы программы"
@@ -518,7 +556,7 @@ export function HubForumResultsScreen() {
                     {data.pointBBranches.map(b => (
                       <div key={b.title} className="adm-forum-branchcard">
                         <div className="adm-forum-branchname">{b.title}</div>
-                        <QuoteBrowser quotes={b.quotes} total={b.n} compact />
+                        <QuoteBrowser quotes={b.quotes} total={b.n} compact title={b.title} />
                       </div>
                     ))}
                   </div>
@@ -527,33 +565,51 @@ export function HubForumResultsScreen() {
             </DayResultsSection>
           )}
 
-          {(roleChoice || selfway || otherChoices.length > 0) && (
+          {roleChoice && (
             <DayResultsSection
               id="hub-forum-role"
               title="Способы действия — роль на финише смены"
-              note={roleChoice?.label || selfway?.label || otherChoices[0]?.label}
+              note={roleChoice.label}
             >
-              {roleChoice && (
-                <DashCard>
-                  {roleChoice.items.map((item, i) => (
-                    <div key={item.name} className="adm-day-results-row">
-                      <div>
-                        <div className="adm-day-results-lb">{item.name}</div>
-                        <HBar widthPct={item.pct} color={barColor('role', i, item.pct)} />
-                      </div>
-                      <div className="adm-day-results-nb">{item.pct}%</div>
+              <DashCard>
+                {roleChoice.items.length === 0 ? (
+                  <p className="adm-muted">Пока нет ответов на этот вопрос.</p>
+                ) : roleChoice.items.map((item, i) => (
+                  <div key={item.name} className="adm-day-results-row">
+                    <div>
+                      <div className="adm-day-results-lb">{item.name}</div>
+                      <HBar widthPct={item.pct} color={barColor('role', i, item.pct)} />
                     </div>
-                  ))}
-                </DashCard>
-              )}
-              {selfway && (
-                <DashCard title={selfway.label}>
-                  <QuoteBrowser quotes={selfway.quotes} total={selfway.n} />
-                </DashCard>
-              )}
+                    <div className="adm-day-results-nb">{item.pct}%</div>
+                  </div>
+                ))}
+              </DashCard>
+            </DayResultsSection>
+          )}
+
+          {selfway && (
+            <DayResultsSection
+              id="hub-forum-selfway"
+              title="Что поняли о своём способе действовать"
+              note={`${selfway.label} · ${selfway.n} ответов · листай, не скачивая`}
+            >
+              <DashCard>
+                <QuoteBrowser quotes={selfway.quotes} total={selfway.n} title={selfway.label} />
+              </DashCard>
+            </DayResultsSection>
+          )}
+
+          {otherChoices.length > 0 && (
+            <DayResultsSection
+              id="hub-forum-choices"
+              title="Другие итоговые вопросы с выбором"
+              note="Все отмеченные вопросы типа «выбор» и «да/нет», которые не попали в Точку Б, роль и планы"
+            >
               {otherChoices.map(ch => (
                 <DashCard key={ch.key} title={ch.label}>
-                  {ch.items.map((item, i) => (
+                  {ch.items.length === 0 ? (
+                    <p className="adm-muted">Пока нет ответов на этот вопрос.</p>
+                  ) : ch.items.map((item, i) => (
                     <div key={item.name} className="adm-day-results-row">
                       <div>
                         <div className="adm-day-results-lb">{item.name}</div>
@@ -567,7 +623,7 @@ export function HubForumResultsScreen() {
                       {data.choiceFollowUps![ch.key].map(b => (
                         <div key={b.title} className="adm-forum-branchcard">
                           <div className="adm-forum-branchname">{b.title}</div>
-                          <QuoteBrowser quotes={b.quotes} total={b.n} compact />
+                          <QuoteBrowser quotes={b.quotes} total={b.n} compact title={b.title} />
                         </div>
                       ))}
                     </div>
@@ -598,7 +654,7 @@ export function HubForumResultsScreen() {
                 )}
                 {nextstep && (
                   <DashCard title={nextstep.label}>
-                    <QuoteBrowser quotes={nextstep.quotes} total={nextstep.n} />
+                    <QuoteBrowser quotes={nextstep.quotes} total={nextstep.n} title={nextstep.label} />
                   </DashCard>
                 )}
               </div>
@@ -621,7 +677,7 @@ export function HubForumResultsScreen() {
                     </div>
                     {card.quotes.length > 0 && (
                       <div style={{ marginTop: 8 }}>
-                        <QuoteBrowser quotes={card.quotes} compact />
+                        <QuoteBrowser quotes={card.quotes} compact title={card.label} />
                       </div>
                     )}
                   </DashCard>
@@ -647,7 +703,7 @@ export function HubForumResultsScreen() {
                 {finals.map(t => (
                   <div key={t.key} style={{ marginTop: 12 }}>
                     {finals.length > 1 && <h4 style={{ margin: '0 0 8px', fontSize: 13 }}>{t.label}</h4>}
-                    <QuoteBrowser quotes={t.quotes} total={t.n} />
+                    <QuoteBrowser quotes={t.quotes} total={t.n} title={t.label} />
                   </div>
                 ))}
               </DashCard>
