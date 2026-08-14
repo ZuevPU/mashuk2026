@@ -277,23 +277,15 @@ function ProgramEventPreviewField({
                   {selected && item && (
                     <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #E5E5E5' }}>
                       <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Оценка 1–10</div>
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      <div className="adm-evening-preview-scale">
                         {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
                           <button
                             key={n}
                             type="button"
+                            className={item.score === n ? 'is-on' : undefined}
                             onClick={() => emit(items.map(i => (
                               i.eventId === leaf.id ? { ...i, score: n } : i
                             )))}
-                            style={{
-                              width: 28,
-                              height: 28,
-                              borderRadius: 8,
-                              border: item.score === n ? '2px solid #2D6A4F' : '1px solid #ddd',
-                              background: item.score === n ? '#D8F3DC' : '#fff',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                            }}
                           >
                             {n}
                           </button>
@@ -363,25 +355,22 @@ export function EveningQuestionnaireParticipantPreview({
   };
 
   const renderField = (field: EveningField) => {
-    if (field.type === 'scale_1_5') {
+    if (field.type === 'scale_1_5' || field.type === 'scale_1_10') {
+      const max = field.type === 'scale_1_10' ? 10 : 5;
+      const selected = Number(form[field.key]);
       return (
         <div key={field.key} className="adm-evening-preview-field">
           <div className="adm-evening-preview-label">{field.label}</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {[1, 2, 3, 4, 5].map(n => (
-              <ChipBtn key={n} active={form[field.key] === n} onClick={() => setField(field.key, n)}>{n}</ChipBtn>
-            ))}
-          </div>
-        </div>
-      );
-    }
-    if (field.type === 'scale_1_10') {
-      return (
-        <div key={field.key} className="adm-evening-preview-field">
-          <div className="adm-evening-preview-label">{field.label}</div>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
-              <ChipBtn key={n} active={form[field.key] === n} onClick={() => setField(field.key, n)}>{n}</ChipBtn>
+          <div className="adm-evening-preview-scale">
+            {Array.from({ length: max }, (_, i) => i + 1).map(n => (
+              <button
+                key={n}
+                type="button"
+                className={selected === n ? 'is-on' : undefined}
+                onClick={() => setField(field.key, n)}
+              >
+                {n}
+              </button>
             ))}
           </div>
         </div>

@@ -234,6 +234,42 @@ function flattenSelectableLeaves(node: EveningProgramEventNode): EveningProgramE
   return node.children.flatMap(ch => flattenSelectableLeaves(ch));
 }
 
+function scaleValue(raw: unknown): number | null {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function ScaleButtons({
+  max,
+  value,
+  onChange,
+}: {
+  max: 5 | 10;
+  value: unknown;
+  onChange: (n: number) => void;
+}) {
+  const selected = scaleValue(value);
+  return (
+    <div className="evening-q__scale" role="group">
+      {Array.from({ length: max }, (_, i) => i + 1).map(n => (
+        <button
+          key={n}
+          type="button"
+          className={`evening-q__scale-btn${selected === n ? ' is-on' : ''}`}
+          aria-pressed={selected === n}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onChange(n);
+          }}
+        >
+          {n}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ScoreRow({
   value,
   onChange,
@@ -242,25 +278,8 @@ function ScoreRow({
   onChange: (n: number) => void;
 }) {
   return (
-    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
-      {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
-        <button
-          key={n}
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onChange(n); }}
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 8,
-            border: value === n ? '2px solid #2D6A4F' : '1px solid #ddd',
-            background: value === n ? '#D8F3DC' : '#fff',
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
-        >
-          {n}
-        </button>
-      ))}
+    <div style={{ marginTop: 8 }}>
+      <ScaleButtons max={10} value={value} onChange={onChange} />
     </div>
   );
 }
@@ -653,38 +672,11 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
   );
 
   const renderField = (field: EveningField) => {
-    if (field.type === 'scale_1_5') {
+    if (field.type === 'scale_1_5' || field.type === 'scale_1_10') {
+      const max = field.type === 'scale_1_10' ? 10 : 5;
       return (
         <FormItem key={field.key} top={fieldTop(field)}>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {[1, 2, 3, 4, 5].map(n => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setField(field.key, n)}
-                style={{
-                  width: 36, height: 36, borderRadius: 8,
-                  border: form[field.key] === n ? '2px solid #2D6A4F' : '1px solid #ddd',
-                  background: form[field.key] === n ? '#D8F3DC' : '#fff',
-                  fontWeight: 700, cursor: 'pointer',
-                }}
-              >{n}</button>
-            ))}
-          </div>
-        </FormItem>
-      );
-    }
-    if (field.type === 'scale_1_10') {
-      return (
-        <FormItem key={field.key} top={fieldTop(field)}>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
-              <button key={n} type="button" onClick={() => setField(field.key, n)}
-                style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #ddd', fontWeight: 700 }}>
-                {n}
-              </button>
-            ))}
-          </div>
+          <ScaleButtons max={max} value={form[field.key]} onChange={n => setField(field.key, n)} />
         </FormItem>
       );
     }

@@ -739,6 +739,28 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   min-height: 420px;
 }
 .adm-evening-preview-field { margin-bottom: 14px; }
+.adm-evening-preview-scale {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  width: 100%;
+}
+.adm-evening-preview-scale button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 36px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  background: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.adm-evening-preview-scale button.is-on {
+  border: 2px solid #2D6A4F;
+  background: #D8F3DC;
+}
 .adm-evening-preview-label {
   font-size: 13px;
   font-weight: 700;
