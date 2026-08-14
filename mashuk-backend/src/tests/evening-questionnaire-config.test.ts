@@ -193,6 +193,33 @@ describe('eveningQuestionnaireConfig', () => {
     }), true);
   });
 
+  it('isFieldVisible shows a follow-up only for the matching choice option', () => {
+    const parent = { key: 'pick', type: 'choice' as const, label: 'Pick', options: ['А', 'Б'] };
+    const followA = { key: 'qa', type: 'text' as const, label: 'A', visibleWhen: { field: 'pick', equals: 'А' } };
+    const followB = { key: 'qb', type: 'text' as const, label: 'B', visibleWhen: { field: 'pick', equals: 'Б' } };
+    const fields = [parent, followA, followB];
+    assert.equal(isFieldVisible(followA, { pick: 'А' }, fields), true);
+    assert.equal(isFieldVisible(followB, { pick: 'А' }, fields), false);
+    assert.equal(isFieldVisible(followA, { pick: 'Б' }, fields), false);
+    assert.equal(isFieldVisible(followB, { pick: 'Б' }, fields), true);
+    assert.equal(isFieldVisible(followA, {}, fields), false);
+  });
+
+  it('isFieldVisible ORs several choice options on one follow-up', () => {
+    const parent = { key: 'pick', type: 'choice' as const, label: 'Pick', options: ['1', '2', '3', '4', '5', '6'] };
+    const follow = {
+      key: 'qa',
+      type: 'text' as const,
+      label: 'A',
+      visibleWhen: { field: 'pick', equals: ['1', '2', '3'] },
+    };
+    const fields = [parent, follow];
+    assert.equal(isFieldVisible(follow, { pick: '1' }, fields), true);
+    assert.equal(isFieldVisible(follow, { pick: '3' }, fields), true);
+    assert.equal(isFieldVisible(follow, { pick: '5' }, fields), false);
+    assert.equal(isFieldVisible(follow, {}, fields), false);
+  });
+
   it('filters fields by audienceDirectionIds (empty = all)', () => {
     const forAll = { key: 'a', type: 'text' as const, label: 'All' };
     const forOne = {

@@ -1397,6 +1397,104 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   .adm-forum-field-row { grid-template-columns: 1fr; }
 }
 .adm-forum-field-actions { display: flex; gap: 2px; }
+.adm-eq-card {
+  margin-bottom: 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  overflow: hidden;
+}
+.adm-eq-card--question {
+  background: #E7F3EC;
+  border-color: #B7D8C4;
+  box-shadow: inset 4px 0 0 #2D6A4F;
+}
+.adm-eq-card--info {
+  background: #F7F5F0;
+  border-color: #E4D9C4;
+  box-shadow: inset 4px 0 0 #C4A35A;
+}
+.adm-eq-card--branch {
+  background: #EEF0FA;
+  border-color: #C9D0EE;
+  box-shadow: inset 4px 0 0 #4C5BD4;
+  margin-left: 16px;
+}
+.adm-eq-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+}
+.adm-eq-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.adm-eq-card--question .adm-eq-badge { background: #2D6A4F; color: #fff; }
+.adm-eq-card--info .adm-eq-badge { background: #C4A35A; color: #fff; }
+.adm-eq-card--branch .adm-eq-badge { background: #4C5BD4; color: #fff; }
+.adm-eq-head-title {
+  flex: 1;
+  min-width: 140px;
+  font-size: 13px;
+  font-weight: 650;
+  color: #1d1d1f;
+}
+.adm-eq-head-meta {
+  font-size: 12px;
+  color: #5a5a5a;
+}
+.adm-eq-cond-chip {
+  font-size: 11px;
+  font-weight: 650;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #fff;
+  color: #4C5BD4;
+  border: 1px solid #C9D0EE;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adm-eq-card-body {
+  padding: 0 12px 12px;
+  display: grid;
+  grid-template-columns: 1fr 180px auto;
+  gap: 8px;
+  align-items: center;
+}
+@media (max-width: 900px) {
+  .adm-eq-card-body { grid-template-columns: 1fr; }
+  .adm-eq-card--branch { margin-left: 8px; }
+}
+.adm-eq-step-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.adm-eq-option-follow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
+}
+.adm-eq-cond-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #C9D0EE;
+  border-radius: 10px;
+}
 .adm-input-narrow { width: 72px; max-width: 100%; }
 .adm-forum-weights { margin: 16px 0; }
 .adm-forum-weight-row {

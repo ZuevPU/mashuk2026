@@ -26,9 +26,15 @@ export type EveningField = {
   audienceDirectionIds?: number[];
   /** Вопрос относится к итоговой анкете форума (дашборд «Итоги форума»). */
   forumFinal?: boolean;
-  /** Special equals: `__set__` = parent filled; `__other__` = choice other. */
-  visibleWhen?: { field: string; equals: boolean | string | number };
+  /**
+   * Show when parent matches. `equals` is one value or several (OR):
+   * `{ field: 'pick', equals: ['1', '2', '3'] }` → show if answer is 1 or 2 or 3.
+   * Special: `__set__` parent filled; `__other__` choice «свой вариант».
+   */
+  visibleWhen?: { field: string; equals: EveningVisibleEquals | EveningVisibleEquals[] };
 };
+
+export type EveningVisibleEquals = boolean | string | number;
 
 export type EveningStep = {
   id: string;
@@ -108,4 +114,63 @@ export function collectFieldKeys(config: EveningQuestionnaireConfig): Set<string
     for (const f of step.fields) keys.add(f.key);
   }
   return keys;
+}
+
+/** Sequential numbers for answerable questions (info blocks skipped). */
+export function eveningQuestionNumbers(
+  steps: EveningStep[],
+  include?: (field: EveningField) => boolean,
+): Map<string, number> {
+  const map = new Map<string, number>();
+  let n = 0;
+  for (const step of steps) {
+    for (const field of step.fields) {
+      if (field.type === 'info_text') continue;
+      if (include && !include(field)) continue;
+      n += 1;
+      map.set(field.key, n);
+    }
+  }
+  return map;
+}
+
+export function withEveningQuestionNumber(
+  field: EveningField,
+  numbers: Map<string, number>,
+): EveningField {
+  if (field.type === 'info_text') return field;
+  const n = numbers.get(field.key);
+  if (n == null) return field;
+  return { ...field, label: `${n}. ${field.label}` };
+}
+
+export function eveningVisibleEqualsList(
+  equals: EveningVisibleEquals | EveningVisibleEquals[] | undefined,
+): EveningVisibleEquals[] {
+  if (equals == null) return [];
+  return Array.isArray(equals) ? equals : [equals];
+}
+
+export function packEveningVisibleEquals(
+  list: EveningVisibleEquals[],
+): EveningVisibleEquals | EveningVisibleEquals[] {
+  return list.length <= 1 ? (list[0] ?? '') : list;
+}
+
+export function eveningVisibleEqualsIncludes(
+  equals: EveningVisibleEquals | EveningVisibleEquals[] | undefined,
+  value: EveningVisibleEquals,
+): boolean {
+  return eveningVisibleEqualsList(equals).some(e => e === value);
+}
+
+export function formatEveningVisibleEquals(
+  equals: EveningVisibleEquals,
+  parent?: EveningField,
+): string {
+  if (equals === true) return 'Да';
+  if (equals === false) return 'Нет';
+  if (equals === '__set__') return 'событие выбрано';
+  if (equals === '__other__') return parent?.otherLabel || 'Свой вариант';
+  return String(equals);
 }

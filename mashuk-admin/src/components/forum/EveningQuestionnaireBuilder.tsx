@@ -2,12 +2,18 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { adminDownloadBinary } from '../../admin/client';
 import {
   collectFieldKeys,
+  eveningQuestionNumbers,
+  eveningVisibleEqualsIncludes,
+  eveningVisibleEqualsList,
   EVENING_FIELD_TYPE_OPTIONS,
+  formatEveningVisibleEquals,
+  packEveningVisibleEquals,
   slugKey,
   type EveningField,
   type EveningFieldType,
   type EveningQuestionnaireConfig,
   type EveningStep,
+  type EveningVisibleEquals,
 } from './types';
 import { EveningQuestionnaireParticipantPreview } from './EveningQuestionnaireParticipantPreview';
 import { RichHtmlEditor } from '../admin/RichHtmlEditor';
@@ -78,7 +84,13 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
   const [roles, setRoles] = useState<{ roleKey: string; name: string }[]>([]);
   const [directionsLocal, setDirectionsLocal] = useState<DirectionOpt[]>([]);
   const [defaultConfig, setDefaultConfig] = useState<EveningQuestionnaireConfig | null>(null);
+  const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
   const directions = directionsProp?.length ? directionsProp : directionsLocal;
+
+  const expandField = (key: string, open = true) => {
+    setExpandedKeys(prev => ({ ...prev, [key]: open }));
+  };
+  const isFieldOpen = (key: string) => expandedKeys[key] === true;
 
   const applyPublishState = (res: {
     opensAtMsk?: string;
@@ -124,6 +136,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
   };
 
   useEffect(() => {
+    setExpandedKeys({});
     loadDay(day).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when day changes; forum mode loads once
   }, [isForum ? 0 : day]);
@@ -161,6 +174,11 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
   const dayProgramTrees = useMemo(
     () => buildEveningProgramPickNodes(programEvents, isForum ? null : day, null),
     [programEvents, day, isForum],
+  );
+
+  const questionNumbers = useMemo(
+    () => eveningQuestionNumbers(config.steps),
+    [config.steps],
   );
 
   // Drop linkedEventIds that belong to another day (typical after «copy day» in admin).
@@ -266,6 +284,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
       );
       return { ...prev, steps };
     });
+    expandField(key, true);
   };
 
   const addInfoBlock = (stepIndex: number) => {
@@ -284,6 +303,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
       );
       return { ...prev, steps };
     });
+    expandField(key, true);
   };
 
   /** Ready-made chain: Да/Нет → события/подтемы с оценкой 1–10 под каждой */
@@ -313,13 +333,96 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
       );
       return { ...prev, steps };
     });
+    expandField(yesKey, true);
+    expandField(eventKey, true);
+  };
+
+  const insertFieldAfterParent = (
+    stepIndex: number,
+    parentIndex: number,
+    field: EveningField,
+  ) => {
+    setConfig(prev => {
+      const steps = prev.steps.map((s, si) => {
+        if (si !== stepIndex) return s;
+        const parentKey = s.fields[parentIndex]?.key;
+        let insertAt = parentIndex + 1;
+        while (insertAt < s.fields.length && s.fields[insertAt].visibleWhen?.field === parentKey) {
+          insertAt += 1;
+        }
+        const fields = [...s.fields];
+        fields.splice(insertAt, 0, field);
+        return { ...s, fields };
+      });
+      return { ...prev, steps };
+    });
+    expandField(field.key, true);
+  };
+
+  const addFollowUpQuestion = (
+    stepIndex: number,
+    parentIndex: number,
+    equals: boolean | string,
+    hint: string,
+  ) => {
+    const parent = config.steps[stepIndex]?.fields[parentIndex];
+    if (!parent) return;
+    const keys = collectFieldKeys(config);
+    const key = slugKey('followup', keys);
+    insertFieldAfterParent(stepIndex, parentIndex, {
+      key,
+      type: 'text',
+      label: hint,
+      required: false,
+      visibleWhen: { field: parent.key, equals },
+      audienceDirectionIds: parent.audienceDirectionIds,
+    });
+  };
+
+  const renameChoiceOption = (
+    stepIndex: number,
+    fieldIndex: number,
+    optionIndex: number,
+    nextValue: string,
+  ) => {
+    setConfig(prev => {
+      const steps = prev.steps.map((s, si) => {
+        if (si !== stepIndex) return s;
+        const parent = s.fields[fieldIndex];
+        if (!parent) return s;
+        const prevOpt = (parent.options || [])[optionIndex];
+        const options = [...(parent.options || [])];
+        options[optionIndex] = nextValue;
+        const fields = s.fields.map((f, fi) => {
+          if (fi === fieldIndex) return { ...f, options };
+          if (f.visibleWhen?.field === parent.key) {
+            const list = eveningVisibleEqualsList(f.visibleWhen.equals);
+            if (!list.includes(prevOpt)) return f;
+            const next = list.map(e => (e === prevOpt ? nextValue : e));
+            return { ...f, visibleWhen: { ...f.visibleWhen, equals: packEveningVisibleEquals(next) } };
+          }
+          return f;
+        });
+        return { ...s, fields };
+      });
+      return { ...prev, steps };
+    });
   };
 
   const removeField = (stepIndex: number, fieldIndex: number) => {
     setConfig(prev => {
-      const steps = prev.steps.map((s, si) =>
-        si === stepIndex ? { ...s, fields: s.fields.filter((_, fi) => fi !== fieldIndex) } : s,
-      );
+      const steps = prev.steps.map((s, si) => {
+        if (si !== stepIndex) return s;
+        const removedKey = s.fields[fieldIndex]?.key;
+        const fields = s.fields
+          .filter((_, fi) => fi !== fieldIndex)
+          .map(f => (
+            removedKey && f.visibleWhen?.field === removedKey
+              ? { ...f, visibleWhen: undefined }
+              : f
+          ));
+        return { ...s, fields };
+      });
       return { ...prev, steps };
     });
   };
@@ -422,6 +525,22 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
     );
 
   const fieldTypeOptions = EVENING_FIELD_TYPE_OPTIONS.filter(o => o.value !== 'point_b_cta');
+  const typeLabel = (type: EveningFieldType) =>
+    EVENING_FIELD_TYPE_OPTIONS.find(o => o.value === type)?.label || type;
+  const conditionSummary = (step: EveningStep, field: EveningField): string | null => {
+    if (!field.visibleWhen) return null;
+    const parent = step.fields.find(f => f.key === field.visibleWhen!.field);
+    const parentTitle = (parent?.label || field.visibleWhen.field).trim().slice(0, 40) || 'вопрос';
+    const eq = field.visibleWhen.equals;
+    const labels = eveningVisibleEqualsList(eq)
+      .map(v => formatEveningVisibleEquals(v, parent))
+      .join(' / ');
+    return `если «${parentTitle}» = ${labels}`;
+  };
+  const followUpsFor = (step: EveningStep, parentKey: string, equals: boolean | string) =>
+    step.fields.filter(f =>
+      f.visibleWhen?.field === parentKey && eveningVisibleEqualsIncludes(f.visibleWhen.equals, equals),
+    );
 
   const renderSubtopicLines = (nodes: ProgramPickNode[], depth = 0): ReactNode => (
     nodes.map(n => (
@@ -680,8 +799,60 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
               <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={() => removeStep(stepIndex)}>Удалить шаг</button>
             </div>
           </div>
-          {step.fields.map((field, fieldIndex) => (
-            <div key={field.key} className="adm-forum-field-row">
+          {step.fields.length > 0 && (
+            <div className="adm-eq-step-tools">
+              <button
+                type="button"
+                className="adm-btn adm-btn-ghost adm-btn-sm"
+                onClick={() => setExpandedKeys(prev => {
+                  const next = { ...prev };
+                  for (const f of step.fields) next[f.key] = true;
+                  return next;
+                })}
+              >
+                Открыть все
+              </button>
+              <button
+                type="button"
+                className="adm-btn adm-btn-ghost adm-btn-sm"
+                onClick={() => setExpandedKeys(prev => {
+                  const next = { ...prev };
+                  for (const f of step.fields) next[f.key] = false;
+                  return next;
+                })}
+              >
+                Скрыть все
+              </button>
+            </div>
+          )}
+          {step.fields.map((field, fieldIndex) => {
+            const kind = field.type === 'info_text' ? 'info' : field.visibleWhen ? 'branch' : 'question';
+            const open = isFieldOpen(field.key);
+            const qn = questionNumbers.get(field.key);
+            const headTitle = field.type === 'info_text'
+              ? (htmlToPlain(field.html || '') || field.label || 'Текстовый блок')
+              : (field.label.trim() || 'Новый вопрос');
+            const cond = conditionSummary(step, field);
+            return (
+            <div key={field.key} className={`adm-eq-card adm-eq-card--${kind}`}>
+              <div className="adm-eq-card-head">
+                <span className="adm-eq-badge">
+                  {kind === 'info' ? 'Блок' : qn != null ? `Вопрос ${qn}` : kind === 'branch' ? 'Условие' : 'Вопрос'}
+                </span>
+                <span className="adm-eq-head-title">{headTitle}</span>
+                <span className="adm-eq-head-meta">{typeLabel(field.type)}</span>
+                {cond && <span className="adm-eq-cond-chip" title={cond}>{cond}</span>}
+                <div className="adm-forum-field-actions">
+                  <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => expandField(field.key, !open)}>
+                    {open ? 'Скрыть' : 'Открыть'}
+                  </button>
+                  <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => moveField(stepIndex, fieldIndex, -1)}>↑</button>
+                  <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => moveField(stepIndex, fieldIndex, 1)}>↓</button>
+                  <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={() => removeField(stepIndex, fieldIndex)}>×</button>
+                </div>
+              </div>
+              {open && (
+              <div className="adm-eq-card-body">
               {field.type !== 'info_text' && (
               <input
                 className="adm-input"
@@ -775,16 +946,32 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                       updateField(stepIndex, fieldIndex, { visibleWhen: { field: dep.key, equals } });
                     }}
                   />
-                  Условие
+                  Показывать только если…
                 </label>
               )}
               {field.visibleWhen && (() => {
                 const parents = conditionParentsInStep(step, field.key);
                 const parent = parents.find(f => f.key === field.visibleWhen!.field) || parents[0];
+                const selected = eveningVisibleEqualsList(field.visibleWhen.equals);
+                const setEquals = (next: EveningVisibleEquals[]) => {
+                  if (!next.length) return;
+                  updateField(stepIndex, fieldIndex, {
+                    visibleWhen: {
+                      field: field.visibleWhen!.field,
+                      equals: packEveningVisibleEquals(next),
+                    },
+                  });
+                };
+                const toggleEquals = (value: EveningVisibleEquals, on: boolean) => {
+                  const next = on
+                    ? (selected.includes(value) ? selected : [...selected, value])
+                    : selected.filter(e => e !== value);
+                  setEquals(next);
+                };
                 return (
                   <>
                     <select
-                      className="adm-input adm-input-narrow"
+                      className="adm-input"
                       value={field.visibleWhen.field}
                       onChange={e => {
                         const dep = parents.find(f => f.key === e.target.value);
@@ -802,45 +989,64 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                         <option key={f.key} value={f.key}>{f.label.slice(0, 40)}</option>
                       ))}
                     </select>
-                    <select
-                      className="adm-input adm-input-narrow"
-                      value={String(field.visibleWhen.equals)}
-                      onChange={e => {
-                        const raw = e.target.value;
-                        let equals: boolean | string = raw;
-                        if (raw === 'true') equals = true;
-                        else if (raw === 'false') equals = false;
-                        updateField(stepIndex, fieldIndex, {
-                          visibleWhen: { field: field.visibleWhen!.field, equals },
-                        });
-                      }}
-                    >
-                      {parent?.type === 'yes_no' ? (
-                        <>
-                          <option value="true">= Да</option>
-                          <option value="false">= Нет</option>
-                        </>
-                      ) : parent?.type === 'program_event' ? (
-                        <option value="__set__">= событие выбрано</option>
-                      ) : (
-                        <>
-                          {(parent?.options || []).filter(Boolean).map(opt => (
-                            <option key={opt} value={opt}>= {opt}</option>
-                          ))}
-                          {parent?.allowOther && (
-                            <option value="__other__">= {parent.otherLabel || 'Свой вариант'}</option>
+                    {parent?.type === 'program_event' ? (
+                      <span className="adm-muted" style={{ fontSize: 12 }}>если событие выбрано</span>
+                    ) : (
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <div className="adm-label">Показать, если ответ — любой из отмеченных</div>
+                        <p className="adm-muted" style={{ fontSize: 12, margin: '2px 0 8px' }}>
+                          Можно отметить несколько пунктов: вопрос появится, если участник выбрал 1 или 2 или 3.
+                        </p>
+                        <div className="adm-eq-cond-options">
+                          {parent?.type === 'yes_no' ? (
+                            <>
+                              <label className="adm-forum-check">
+                                <input
+                                  type="checkbox"
+                                  checked={selected.includes(true)}
+                                  onChange={e => toggleEquals(true, e.target.checked)}
+                                />
+                                Да
+                              </label>
+                              <label className="adm-forum-check">
+                                <input
+                                  type="checkbox"
+                                  checked={selected.includes(false)}
+                                  onChange={e => toggleEquals(false, e.target.checked)}
+                                />
+                                Нет
+                              </label>
+                            </>
+                          ) : (
+                            <>
+                              {(parent?.options || []).filter(Boolean).map(opt => (
+                                <label key={opt} className="adm-forum-check">
+                                  <input
+                                    type="checkbox"
+                                    checked={selected.includes(opt)}
+                                    onChange={e => toggleEquals(opt, e.target.checked)}
+                                  />
+                                  {opt}
+                                </label>
+                              ))}
+                              {parent?.allowOther && (
+                                <label className="adm-forum-check">
+                                  <input
+                                    type="checkbox"
+                                    checked={selected.includes('__other__')}
+                                    onChange={e => toggleEquals('__other__', e.target.checked)}
+                                  />
+                                  {parent.otherLabel || 'Свой вариант'}
+                                </label>
+                              )}
+                            </>
                           )}
-                        </>
-                      )}
-                    </select>
+                        </div>
+                      </div>
+                    )}
                   </>
                 );
               })()}
-              <div className="adm-forum-field-actions">
-                <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => moveField(stepIndex, fieldIndex, -1)}>↑</button>
-                <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => moveField(stepIndex, fieldIndex, 1)}>↓</button>
-                <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={() => removeField(stepIndex, fieldIndex)}>×</button>
-              </div>
               {field.type === 'info_text' && (
                 <div style={{ gridColumn: '1 / -1' }}>
                   <RichHtmlEditor
@@ -919,30 +1125,106 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                   )}
                 </div>
               )}
+              {field.type === 'yes_no' && (
+                <div style={{ gridColumn: '1 / -1', marginTop: 8 }}>
+                  <div className="adm-label">Следующий вопрос по ответу</div>
+                  <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 8px' }}>
+                    Можно привязать отдельный вопрос к «Да» и к «Нет». Участник увидит его только после своего выбора.
+                  </p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-secondary adm-btn-sm"
+                      onClick={() => addFollowUpQuestion(stepIndex, fieldIndex, true, 'Уточните, если Да')}
+                    >
+                      + Вопрос если Да
+                    </button>
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-secondary adm-btn-sm"
+                      onClick={() => addFollowUpQuestion(stepIndex, fieldIndex, false, 'Уточните, если Нет')}
+                    >
+                      + Вопрос если Нет
+                    </button>
+                  </div>
+                  {followUpsFor(step, field.key, true).map(f => (
+                    <p key={f.key} className="adm-eq-follow-hint">Да → {f.label.trim() || 'без названия'}</p>
+                  ))}
+                  {followUpsFor(step, field.key, false).map(f => (
+                    <p key={f.key} className="adm-eq-follow-hint">Нет → {f.label.trim() || 'без названия'}</p>
+                  ))}
+                </div>
+              )}
               {field.type === 'choice' && (
                 <div style={{ gridColumn: '1 / -1', marginTop: 6 }}>
                   <div className="adm-label">Варианты ответа</div>
+                  <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 8px' }}>
+                    У каждого пункта можно привязать следующий вопрос. Если один и тот же вопрос должен
+                    появиться при 1 или 2 или 3 — откройте этот вопрос и отметьте несколько пунктов в блоке «Показывать только если».
+                  </p>
                   {(field.options || []).map((opt, oi) => (
-                    <div key={oi} className="adm-forum-diag-row" style={{ marginTop: 4 }}>
-                      <input
-                        className="adm-input"
-                        value={opt}
-                        onChange={e => {
-                          const options = [...(field.options || [])];
-                          options[oi] = e.target.value;
-                          updateField(stepIndex, fieldIndex, { options });
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="adm-btn adm-btn-ghost adm-btn-sm"
-                        disabled={(field.options || []).length <= 2}
-                        onClick={() => updateField(stepIndex, fieldIndex, {
-                          options: (field.options || []).filter((_, idx) => idx !== oi),
-                        })}
-                      >
-                        ×
-                      </button>
+                    <div key={oi} style={{ marginTop: 6 }}>
+                      <div className="adm-eq-option-follow">
+                        <input
+                          className="adm-input"
+                          value={opt}
+                          onChange={e => renameChoiceOption(stepIndex, fieldIndex, oi, e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="adm-btn adm-btn-secondary adm-btn-sm"
+                          disabled={!opt.trim()}
+                          title="Добавить вопрос, который увидят только выбравшие этот пункт"
+                          onClick={() => addFollowUpQuestion(
+                            stepIndex,
+                            fieldIndex,
+                            opt,
+                            `Уточните, если выбрали «${opt.slice(0, 40)}»`,
+                          )}
+                        >
+                          + Вопрос если выбран
+                        </button>
+                        <button
+                          type="button"
+                          className="adm-btn adm-btn-ghost adm-btn-sm"
+                          disabled={(field.options || []).length <= 2}
+                          onClick={() => {
+                            const removed = (field.options || [])[oi];
+                            setConfig(prev => {
+                              const steps = prev.steps.map((s, si) => {
+                                if (si !== stepIndex) return s;
+                                const fields = s.fields.map((f, fi) => {
+                                  if (fi === fieldIndex) {
+                                    return { ...f, options: (f.options || []).filter((_, idx) => idx !== oi) };
+                                  }
+                                  if (f.visibleWhen?.field === field.key) {
+                                    const list = eveningVisibleEqualsList(f.visibleWhen.equals)
+                                      .filter(e => e !== removed);
+                                    if (!list.length) return { ...f, visibleWhen: undefined };
+                                    return {
+                                      ...f,
+                                      visibleWhen: {
+                                        ...f.visibleWhen,
+                                        equals: packEveningVisibleEquals(list),
+                                      },
+                                    };
+                                  }
+                                  return f;
+                                });
+                                return { ...s, fields };
+                              });
+                              return { ...prev, steps };
+                            });
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                      {followUpsFor(step, field.key, opt).map(f => (
+                        <p key={f.key} className="adm-eq-follow-hint">
+                          → {f.label.trim() || 'без названия'}
+                        </p>
+                      ))}
                     </div>
                   ))}
                   <button
@@ -966,6 +1248,21 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                     />
                     Свой вариант (текст)
                   </label>
+                  {field.allowOther && (
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-secondary adm-btn-sm"
+                      style={{ marginTop: 6 }}
+                      onClick={() => addFollowUpQuestion(
+                        stepIndex,
+                        fieldIndex,
+                        '__other__',
+                        `Уточните, если выбрали «${field.otherLabel || 'Свой вариант'}»`,
+                      )}
+                    >
+                      + Вопрос если свой вариант
+                    </button>
+                  )}
                 </div>
               )}
               {field.type === 'program_event' && (
@@ -1030,8 +1327,11 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                   )}
                 </div>
               )}
+              </div>
+              )}
             </div>
-          ))}
+            );
+          })}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => addField(stepIndex)}>
               + Добавить вопрос

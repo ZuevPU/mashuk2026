@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { EveningField, EveningQuestionnaireConfig, EveningStep } from './types';
+import { withEveningQuestionNumber, type EveningField, type EveningQuestionnaireConfig, type EveningStep } from './types';
 import {
   buildEveningProgramPickNodes,
   countProgramLeaves,
@@ -68,14 +68,19 @@ function isValueSet(value: unknown): boolean {
 function fieldVisible(field: EveningField, form: Record<string, unknown>, allFields: EveningField[]): boolean {
   if (!field.visibleWhen) return true;
   const v = form[field.visibleWhen.field];
-  const expected = field.visibleWhen.equals;
-  if (expected === '__set__') return isValueSet(v);
-  if (expected === '__other__') {
-    const parent = allFields.find(f => f.key === field.visibleWhen!.field);
-    const opts = parent?.options ?? [];
-    return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v);
-  }
-  return v === expected;
+  const parent = allFields.find(f => f.key === field.visibleWhen!.field);
+  const expectedList = Array.isArray(field.visibleWhen.equals)
+    ? field.visibleWhen.equals
+    : [field.visibleWhen.equals];
+  if (expectedList.length === 0) return false;
+  return expectedList.some((expected) => {
+    if (expected === '__set__') return isValueSet(v);
+    if (expected === '__other__') {
+      const opts = parent?.options ?? [];
+      return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v);
+    }
+    return v === expected;
+  });
 }
 
 function stepHasVisibleFields(step: EveningStep, form: Record<string, unknown>, day: number | null): boolean {
@@ -318,6 +323,20 @@ export function EveningQuestionnaireParticipantPreview({
 
   const currentStep = steps[Math.min(step, Math.max(steps.length - 1, 0))] ?? null;
   const visibleFields = (currentStep?.fields || []).filter(f => fieldVisible(f, form, currentStep?.fields || []));
+  const questionNumbers = useMemo(() => {
+    const map = new Map<string, number>();
+    let n = 0;
+    for (const s of steps) {
+      for (const f of s.fields) {
+        if (f.type === 'info_text') continue;
+        if (!fieldVisible(f, form, s.fields)) continue;
+        if (f.type === 'role_select' && day != null && day > 6) continue;
+        n += 1;
+        map.set(f.key, n);
+      }
+    }
+    return map;
+  }, [steps, form, day]);
   const showExperiment = !!currentStep && (
     currentStep.id === 'experiment' || currentStep.fields.some(f => f.type === 'experiment_text')
   );
@@ -548,7 +567,7 @@ export function EveningQuestionnaireParticipantPreview({
             </div>
           )}
 
-          {visibleFields.map(renderField)}
+          {visibleFields.map(f => renderField(withEveningQuestionNumber(f, questionNumbers)))}
 
           {day === 7 && currentStep.fields.some(f => f.type === 'role_select') && (
             <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>

@@ -40,12 +40,15 @@ export type EveningField = {
   forumFinal?: boolean;
   /**
    * Show field when another field matches.
+   * `equals` may be one value or an array (OR): show if the parent matches any.
    * Special equals:
    * - `__other__` — choice «свой вариант»
    * - `__set__` — parent has a non-empty value (e.g. event picked + rated)
    */
-  visibleWhen?: { field: string; equals: boolean | string | number };
+  visibleWhen?: { field: string; equals: EveningVisibleEquals | EveningVisibleEquals[] };
 };
+
+export type EveningVisibleEquals = boolean | string | number;
 
 /** One selected theme/block with optional inline 1–10 score. */
 export type EveningProgramEventItem = {
@@ -442,12 +445,23 @@ export function isFieldVisible(
 ): boolean {
   if (!field.visibleWhen) return true;
   const v = form[field.visibleWhen.field];
-  const expected = field.visibleWhen.equals;
+  const parent = allFields.find(f => f.key === field.visibleWhen!.field);
+  const expectedList = Array.isArray(field.visibleWhen.equals)
+    ? field.visibleWhen.equals
+    : [field.visibleWhen.equals];
+  if (expectedList.length === 0) return false;
+  return expectedList.some(expected => matchEveningVisibleEquals(v, expected, parent));
+}
+
+function matchEveningVisibleEquals(
+  v: unknown,
+  expected: EveningVisibleEquals,
+  parent: EveningField | undefined,
+): boolean {
   if (expected === '__set__') {
     return isEveningFieldValueSet(v);
   }
   if (expected === '__other__') {
-    const parent = allFields.find(f => f.key === field.visibleWhen!.field);
     const opts = parent?.options ?? [];
     return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v);
   }

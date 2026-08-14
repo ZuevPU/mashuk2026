@@ -14,7 +14,7 @@ export type EveningField = {
   linkedEventIds?: number[];
   /** Empty / missing = all directions. Non-empty = only these direction ids. */
   audienceDirectionIds?: number[];
-  visibleWhen?: { field: string; equals: boolean | string | number };
+  visibleWhen?: { field: string; equals: boolean | string | number | Array<boolean | string | number> };
 };
 
 export type EveningStep = {
@@ -200,14 +200,19 @@ function fieldVisible(
 ): boolean {
   if (!field.visibleWhen) return true;
   const v = form[field.visibleWhen.field];
-  const expected = field.visibleWhen.equals;
-  if (expected === '__set__') return isFieldValueSet(v);
-  if (expected === '__other__') {
-    const parent = allFields.find(f => f.key === field.visibleWhen!.field);
-    const opts = parent?.options ?? [];
-    return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v);
-  }
-  return v === expected;
+  const parent = allFields.find(f => f.key === field.visibleWhen!.field);
+  const expectedList = Array.isArray(field.visibleWhen.equals)
+    ? field.visibleWhen.equals
+    : [field.visibleWhen.equals];
+  if (expectedList.length === 0) return false;
+  return expectedList.some((expected) => {
+    if (expected === '__set__') return isFieldValueSet(v);
+    if (expected === '__other__') {
+      const opts = parent?.options ?? [];
+      return typeof v === 'string' && v.trim().length > 0 && !opts.includes(v);
+    }
+    return v === expected;
+  });
 }
 
 /** Flatten nested sub-blocks to selectable leaves under a large program block. */
@@ -591,6 +596,21 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     () => (currentStep?.fields ?? []).filter(f => fieldVisible(f, form, currentStep?.fields ?? [])),
     [currentStep, form],
   );
+  const questionNumbers = useMemo(() => {
+    const map = new Map<string, number>();
+    let n = 0;
+    for (const s of steps) {
+      for (const f of s.fields) {
+        if (f.type === 'info_text') continue;
+        if (!fieldVisible(f, form, s.fields)) continue;
+        if (f.type === 'experiment_text' && !experiment) continue;
+        if (f.type === 'role_select' && (!questionnaire.askTomorrowRole || surveyDay > 6)) continue;
+        n += 1;
+        map.set(f.key, n);
+      }
+    }
+    return map;
+  }, [steps, form, experiment, questionnaire.askTomorrowRole, surveyDay]);
   const showExperimentBlock = currentStep && isExperimentStep(currentStep) && !!experiment;
 
   const stepReady = useMemo(() => {
@@ -608,14 +628,18 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     return true;
   }, [visibleFields, form, questionnaire.programEventOptions]);
 
-  const fieldTop = (label: string) => (
-    <span className="evening-q__label">{label}</span>
+  const numberedLabel = (field: EveningField) => {
+    const n = questionNumbers.get(field.key);
+    return n != null ? `${n}. ${field.label}` : field.label;
+  };
+  const fieldTop = (field: EveningField) => (
+    <span className="evening-q__label">{numberedLabel(field)}</span>
   );
 
   const renderField = (field: EveningField) => {
     if (field.type === 'scale_1_5') {
       return (
-        <FormItem key={field.key} top={fieldTop(field.label)}>
+        <FormItem key={field.key} top={fieldTop(field)}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {[1, 2, 3, 4, 5].map(n => (
               <button
@@ -636,7 +660,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     }
     if (field.type === 'scale_1_10') {
       return (
-        <FormItem key={field.key} top={fieldTop(field.label)}>
+        <FormItem key={field.key} top={fieldTop(field)}>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
               <button key={n} type="button" onClick={() => setField(field.key, n)}
@@ -651,7 +675,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     if (field.type === 'yes_no') {
       const val = !!form[field.key];
       return (
-        <FormItem key={field.key} top={fieldTop(field.label)}>
+        <FormItem key={field.key} top={fieldTop(field)}>
           <div style={{ display: 'flex', gap: 8 }}>
             <Button mode={val ? 'primary' : 'secondary'} onClick={() => setField(field.key, true)}>Да</Button>
             <Button mode={!val ? 'primary' : 'secondary'} onClick={() => setField(field.key, false)}>Нет</Button>
@@ -665,7 +689,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
       const otherOn = !!field.allowOther && raw.length > 0 && !opts.includes(raw);
       const otherLabel = field.otherLabel || 'Свой вариант';
       return (
-        <FormItem key={field.key} top={fieldTop(field.label)}>
+        <FormItem key={field.key} top={fieldTop(field)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {opts.map(opt => (
               <button
@@ -722,7 +746,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
       return (
         <ProgramEventPicker
           key={field.key}
-          field={field}
+          field={{ ...field, label: numberedLabel(field) }}
           value={current}
           nodes={pack?.events || []}
           emptyReason={pack?.emptyReason}
@@ -733,7 +757,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     if (field.type === 'text' || field.type === 'experiment_text') {
       if (field.type === 'experiment_text' && !experiment) return null;
       return (
-        <FormItem key={field.key} top={fieldTop(field.label)}>
+        <FormItem key={field.key} top={fieldTop(field)}>
           <textarea
             value={String(form[field.key] || '')}
             onChange={e => setField(field.key, e.target.value)}
@@ -760,7 +784,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     if (field.type === 'role_select') {
       if (!questionnaire.askTomorrowRole || surveyDay > 6) return null;
       return (
-        <FormItem key={field.key} top={fieldTop(field.label)}>
+        <FormItem key={field.key} top={fieldTop(field)}>
           <CustomSelect
             options={(questionnaire.roles || []).map(r => ({ label: r.name, value: r.roleKey }))}
             value={tomorrowRole || undefined}
