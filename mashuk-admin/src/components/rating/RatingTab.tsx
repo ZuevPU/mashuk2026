@@ -27,7 +27,8 @@ function parseHashFilters(): Partial<LeaderboardFiltersState> {
   if (mode === 'points' || mode === 'nomination') patch.mode = mode;
   else if (mode === 'medals') patch.mode = 'points';
   const scope = params.get('scope');
-  if (scope === 'total' || scope === 'day' || scope === 'shift') patch.scope = scope;
+  if (scope === 'total' || scope === 'day') patch.scope = scope;
+  else if (scope === 'shift') patch.scope = 'total';
   const track = params.get('track');
   if (track === 'total' || track === 'path' || track === 'experience') patch.track = track;
   if (params.get('day')) patch.day = params.get('day')!;

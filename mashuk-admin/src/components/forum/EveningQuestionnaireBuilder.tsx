@@ -446,7 +446,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
         <p className="adm-kb-panel-sub">
           {isForum
             ? 'Одна анкета на всю смену. Участники заполняют её на главной после публикации.'
-            : 'Конструктор шагов и полей вечерней анкеты. Публикация по дням — участники видят только опубликованную версию.'}
+            : 'Конструктор шагов и полей вечерней анкеты. Вопросы для дашборда «Итоги форума» отмечайте чекбоксом «Итоговый вопрос форума».'
         </p>
       </div>
       <p className="adm-forum-hint">
@@ -743,6 +743,16 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                   onChange={e => updateField(stepIndex, fieldIndex, { required: e.target.checked })}
                 />
                 Обязательное
+              </label>
+              )}
+              {field.type !== 'info_text' && !isForum && (
+              <label className="adm-forum-check" title="Ответы попадут на дашборд «Итоги форума»">
+                <input
+                  type="checkbox"
+                  checked={!!field.forumFinal}
+                  onChange={e => updateField(stepIndex, fieldIndex, { forumFinal: e.target.checked || undefined })}
+                />
+                Итоговый вопрос форума
               </label>
               )}
               {conditionParentsInStep(step, field.key).length > 0 && (

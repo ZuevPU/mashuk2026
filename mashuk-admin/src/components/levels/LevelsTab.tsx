@@ -556,7 +556,6 @@ export function LevelsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                   ['path', 'Линия «Путь»'],
                   ['experience', 'Линия «Опыт»'],
                   ['day', 'Лидеры дня'],
-                  ['shift', 'Лидеры смены (дни 1–7)'],
                 ] as const).map(([key, lbl]) => (
                   <label key={key} className="adm-field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <input

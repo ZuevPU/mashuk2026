@@ -10,6 +10,7 @@ export type { HubLens } from './hubLenses';
 const HubActivityScreen = lazy(() => import('./HubActivityScreen').then(m => ({ default: m.HubActivityScreen })));
 const HubAfterBlocksScreen = lazy(() => import('./HubAfterBlocksScreen').then(m => ({ default: m.HubAfterBlocksScreen })));
 const HubDayResultsScreen = lazy(() => import('./HubDayResultsScreen').then(m => ({ default: m.HubDayResultsScreen })));
+const HubForumResultsScreen = lazy(() => import('./HubForumResultsScreen').then(m => ({ default: m.HubForumResultsScreen })));
 const HubDirectionScreen = lazy(() => import('./HubDirectionScreen').then(m => ({ default: m.HubDirectionScreen })));
 const HubExchangeScreen = lazy(() => import('./HubExchangeScreen').then(m => ({ default: m.HubExchangeScreen })));
 const HubGroupsScreen = lazy(() => import('./HubGroupsScreen').then(m => ({ default: m.HubGroupsScreen })));
@@ -66,7 +67,7 @@ function HubShell({ onOpenCard }: { onOpenCard: (id: number) => void }) {
       {lens === 'forum' && <HubForumScreen onLensChange={setLens} />}
       {lens === 'stats' && <LazyLens><HubStatsScreen onLensChange={setLens} /></LazyLens>}
       {lens === 'dayResults' && <LazyLens><HubDayResultsScreen /></LazyLens>}
-      {lens === 'forumResults' && <LazyLens><HubDayResultsScreen source="forum" /></LazyLens>}
+      {lens === 'forumResults' && <LazyLens><HubForumResultsScreen /></LazyLens>}
       {lens === 'state' && <LazyLens><HubStateScreen /></LazyLens>}
       {lens === 'activity' && <LazyLens><HubActivityScreen /></LazyLens>}
       {lens === 'piggybank' && <LazyLens><HubPiggybankScreen /></LazyLens>}

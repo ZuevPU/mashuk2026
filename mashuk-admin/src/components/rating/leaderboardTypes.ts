@@ -51,7 +51,7 @@ export const NOMINATION_OPTIONS: { key: string; label: string }[] = [
 
 export const DEFAULT_LEADERBOARD_FILTERS: LeaderboardFiltersState = {
   mode: 'points',
-  scope: 'shift',
+  scope: 'total',
   track: 'total',
   day: '1',
   nomination: 'sport',

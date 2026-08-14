@@ -24,6 +24,8 @@ export type EveningField = {
   linkedEventIds?: number[];
   /** Empty / missing = all directions. Non-empty = only these direction ids. */
   audienceDirectionIds?: number[];
+  /** Вопрос относится к итоговой анкете форума (дашборд «Итоги форума»). */
+  forumFinal?: boolean;
   /** Special equals: `__set__` = parent filled; `__other__` = choice other. */
   visibleWhen?: { field: string; equals: boolean | string | number };
 };

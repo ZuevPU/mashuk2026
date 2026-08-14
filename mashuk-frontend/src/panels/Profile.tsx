@@ -97,7 +97,7 @@ export const ProfilePanel: React.FC<{
   const [lbTrack, setLbTrack] = useState<'total' | 'path' | 'experience'>('total');
   const [lbMode, setLbMode] = useState<'points' | 'nomination'>('points');
   const [lbNomination, setLbNomination] = useState('sport');
-  const [lbScope, setLbScope] = useState<'total' | 'day' | 'shift'>('total');
+  const [lbScope, setLbScope] = useState<'total' | 'day'>('total');
   const [lbDay, setLbDay] = useState('1');
   const [lbDirection, setLbDirection] = useState('');
   const [lbGroupId, setLbGroupId] = useState('');
@@ -1068,7 +1068,6 @@ export const ProfilePanel: React.FC<{
               </div>
               <div className="time-sw" style={{ marginTop: 10 }}>
                 {([
-                  { key: 'shift', label: 'За смену' },
                   { key: 'day', label: 'За день' },
                   { key: 'total', label: 'Итоговый' },
                 ] as const).map((t) => (

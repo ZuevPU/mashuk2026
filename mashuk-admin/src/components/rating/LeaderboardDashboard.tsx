@@ -39,6 +39,7 @@ export function LeaderboardDashboard({
     ...DEFAULT_LEADERBOARD_FILTERS,
     day: defaultDay,
     ...initialFilters,
+    ...(initialFilters?.scope === 'shift' ? { scope: 'total' as const } : {}),
   });
   const [rows, setRows] = useState<LeaderboardRow[]>([]);
   const [directions, setDirections] = useState<string[]>([]);

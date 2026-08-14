@@ -35,6 +35,10 @@ export type EveningField = {
    */
   audienceDirectionIds?: number[];
   /**
+   * Question belongs to the final forum questionnaire and feeds «Итоги форума».
+   */
+  forumFinal?: boolean;
+  /**
    * Show field when another field matches.
    * Special equals:
    * - `__other__` — choice «свой вариант»
@@ -382,6 +386,26 @@ export function normalizeExperimentStep(config: EveningQuestionnaireConfig): Eve
     steps.push(experimentStep);
   }
   return { ...eveningPublishMeta(config), steps };
+}
+
+export function isForumFinalEveningField(field: EveningField): boolean {
+  return field.forumFinal === true && field.type !== 'info_text';
+}
+
+/** Поля вечерней анкеты, отмеченные как итоговые вопросы форума (по всем дням смены). */
+export function collectForumFinalEveningFields(
+  settings: typeof forumSettings.$inferSelect | null,
+  days: number[] = [1, 2, 3, 4, 5, 6, 7],
+): EveningField[] {
+  const map = new Map<string, EveningField>();
+  for (const day of days) {
+    const cfg = resolveEveningConfigForDay(settings, day);
+    for (const field of (cfg.steps || []).flatMap(s => s.fields)) {
+      if (!isForumFinalEveningField(field)) continue;
+      if (!map.has(field.key)) map.set(field.key, field);
+    }
+  }
+  return [...map.values()];
 }
 
 export function resolveEveningConfigForDay(

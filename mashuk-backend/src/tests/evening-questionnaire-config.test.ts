@@ -14,6 +14,7 @@ import {
   resolveEveningConfigForDay,
   stripPointBFromEveningConfig,
   normalizeExperimentStep,
+  collectForumFinalEveningFields,
 } from '../services/eveningQuestionnaireConfig.js';
 
 describe('eveningQuestionnaireConfig', () => {
@@ -299,5 +300,36 @@ describe('eveningQuestionnaireConfig', () => {
     });
     assert.equal(copied.steps[0].fields[0].type, 'info_text');
     assert.equal(copied.steps[0].fields[0].html, '<p><b>Важно</b></p>');
+  });
+
+  it('collects evening fields marked as forum-final', () => {
+    const fields = collectForumFinalEveningFields({
+      eveningQuestionnaireByDay: {
+        '1': {
+          steps: [{
+            id: 's',
+            title: 'S',
+            fields: [
+              { key: 'housing', type: 'scale_1_5', label: 'Быт', forumFinal: true },
+              { key: 'skip', type: 'text', label: 'Не в итогах' },
+              { key: 'intro', type: 'info_text', label: 'Текст', forumFinal: true },
+            ],
+          }],
+        },
+        '2': {
+          steps: [{
+            id: 's',
+            title: 'S',
+            fields: [
+              { key: 'housing', type: 'scale_1_5', label: 'Быт день 2', forumFinal: true },
+              { key: 'nps', type: 'scale_1_10', label: 'Рекомендуете коллегам?', forumFinal: true },
+            ],
+          }],
+        },
+      },
+    } as never);
+    assert.equal(fields.length, 2);
+    assert.equal(fields[0].key, 'housing');
+    assert.equal(fields[1].key, 'nps');
   });
 });

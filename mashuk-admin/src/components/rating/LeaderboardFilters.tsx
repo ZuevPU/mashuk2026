@@ -63,10 +63,9 @@ export function LeaderboardFilters({
       )}
 
       <Segment<LeaderboardScope>
-        value={filters.scope}
+        value={filters.scope === 'shift' ? 'total' : filters.scope}
         onChange={scope => set({ scope })}
         options={[
-          { key: 'shift', label: scopeLabel('shift') },
           { key: 'day', label: scopeLabel('day') },
           { key: 'total', label: scopeLabel('total') },
         ]}
