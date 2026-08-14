@@ -7,13 +7,16 @@ export type EveningFieldType =
   | 'program_event'
   | 'role_select'
   | 'experiment_text'
-  | 'point_b_cta';
+  | 'point_b_cta'
+  | 'info_text';
 
 export type EveningField = {
   key: string;
   type: EveningFieldType;
   label: string;
   required?: boolean;
+  /** Formatted HTML for type=info_text. */
+  html?: string;
   options?: string[];
   allowOther?: boolean;
   otherLabel?: string;
@@ -64,6 +67,7 @@ export const EVENING_FIELD_TYPE_OPTIONS: { value: EveningFieldType; label: strin
   { value: 'yes_no', label: 'Да / нет' },
   { value: 'choice', label: 'Один ответ из списка' },
   { value: 'program_event', label: 'События программы + оценка 1–10' },
+  { value: 'info_text', label: 'Текстовый блок' },
   { value: 'text', label: 'Текстовый ответ' },
   { value: 'scale_1_10', label: 'Шкала 1–10' },
   { value: 'role_select', label: 'Выбор роли на завтра' },

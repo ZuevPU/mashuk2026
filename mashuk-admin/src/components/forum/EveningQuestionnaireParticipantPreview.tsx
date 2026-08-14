@@ -453,6 +453,19 @@ export function EveningQuestionnaireParticipantPreview({
         </div>
       );
     }
+    if (field.type === 'info_text') {
+      const html = (field.html || '').trim();
+      const plain = field.label.trim();
+      return (
+        <div
+          key={field.key}
+          className="adm-evening-info-block"
+          {...(html
+            ? { dangerouslySetInnerHTML: { __html: html } }
+            : { children: plain || 'Текстовый блок' })}
+        />
+      );
+    }
     if (field.type === 'role_select') {
       if (day != null && day > 6) return null;
       return (

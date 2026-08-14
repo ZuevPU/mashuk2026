@@ -11,13 +11,16 @@ export type EveningFieldType =
   | 'program_event'
   | 'role_select'
   | 'experiment_text'
-  | 'point_b_cta';
+  | 'point_b_cta'
+  | 'info_text';
 
 export type EveningField = {
   key: string;
   type: EveningFieldType;
   label: string;
   required?: boolean;
+  /** Formatted HTML for type=info_text (participant sees it as a divider). */
+  html?: string;
   /** Options for type=choice */
   options?: string[];
   allowOther?: boolean;
@@ -402,6 +405,10 @@ export function resolveEveningConfigForDay(
     return normalizeExperimentStep(stripPointBFromEveningConfig(config));
   }
   return normalizeExperimentStep(config);
+}
+
+export function isEveningDisplayField(field: { type?: string | null }): boolean {
+  return field.type === 'info_text';
 }
 
 export function isFieldVisible(

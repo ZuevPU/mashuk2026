@@ -10,6 +10,8 @@ import {
   type EveningStep,
 } from './types';
 import { EveningQuestionnaireParticipantPreview } from './EveningQuestionnaireParticipantPreview';
+import { RichHtmlEditor } from '../admin/RichHtmlEditor';
+import { htmlToPlain } from '../admin/RichFormatToolbar';
 import {
   buildEveningProgramPickNodes,
   countProgramLeaves,
@@ -266,6 +268,24 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
     });
   };
 
+  const addInfoBlock = (stepIndex: number) => {
+    const keys = collectFieldKeys(config);
+    const key = slugKey('info_block', keys);
+    const field: EveningField = {
+      key,
+      type: 'info_text',
+      label: '',
+      required: false,
+      html: '',
+    };
+    setConfig(prev => {
+      const steps = prev.steps.map((s, si) =>
+        si === stepIndex ? { ...s, fields: [...s.fields, field] } : s,
+      );
+      return { ...prev, steps };
+    });
+  };
+
   /** Ready-made chain: Да/Нет → события/подтемы с оценкой 1–10 под каждой */
   const addProgramRateChain = (stepIndex: number) => {
     const keys = collectFieldKeys(config);
@@ -330,6 +350,13 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
         return;
       }
       for (const f of step.fields) {
+        if (f.type === 'info_text') {
+          if (!htmlToPlain(f.html || '').trim() && !f.label.trim()) {
+            alert('У текстового блока должен быть текст.');
+            return;
+          }
+          continue;
+        }
         if (!f.label.trim()) {
           alert('У каждого поля должна быть подпись для участника.');
           return;
@@ -655,12 +682,17 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
           </div>
           {step.fields.map((field, fieldIndex) => (
             <div key={field.key} className="adm-forum-field-row">
+              {field.type !== 'info_text' && (
               <input
                 className="adm-input"
                 value={field.label}
                 onChange={e => onLabelChange(stepIndex, fieldIndex, e.target.value)}
                 placeholder="Текст вопроса для участника"
               />
+              )}
+              {field.type === 'info_text' && (
+                <div className="adm-muted" style={{ fontSize: 12, fontWeight: 700 }}>Текстовый блок</div>
+              )}
               <select
                 className="adm-input"
                 value={field.type}
@@ -681,6 +713,21 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                   if (type !== 'program_event') {
                     patch.linkedEventIds = undefined;
                   }
+                  if (type === 'info_text') {
+                    patch.required = false;
+                    patch.html = field.html || (field.label.trim()
+                      ? `<p>${field.label
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')}</p>`
+                      : '');
+                  } else {
+                    patch.html = undefined;
+                    if (field.type === 'info_text') {
+                      const plain = htmlToPlain(field.html || '');
+                      if (plain && !field.label.trim()) patch.label = plain;
+                    }
+                  }
                   updateField(stepIndex, fieldIndex, patch);
                 }}
               >
@@ -688,6 +735,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
+              {field.type !== 'info_text' && (
               <label className="adm-forum-check">
                 <input
                   type="checkbox"
@@ -696,6 +744,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                 />
                 Обязательное
               </label>
+              )}
               {conditionParentsInStep(step, field.key).length > 0 && (
                 <label className="adm-forum-check">
                   <input
@@ -782,6 +831,23 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                 <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => moveField(stepIndex, fieldIndex, 1)}>↓</button>
                 <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={() => removeField(stepIndex, fieldIndex)}>×</button>
               </div>
+              {field.type === 'info_text' && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <RichHtmlEditor
+                    label="Текст для участника"
+                    value={field.html || ''}
+                    resetKey={field.key}
+                    minHeight={88}
+                    onChange={html => updateField(stepIndex, fieldIndex, {
+                      html,
+                      label: htmlToPlain(html),
+                    })}
+                  />
+                  <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
+                    Участник видит этот текст как перебивку между вопросами — без поля ответа.
+                  </p>
+                </div>
+              )}
               <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
                 <div className="adm-label">Направления</div>
                 <p className="adm-muted" style={{ fontSize: 12, margin: '2px 0 6px' }}>
@@ -959,6 +1025,14 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => addField(stepIndex)}>
               + Добавить вопрос
+            </button>
+            <button
+              type="button"
+              className="adm-btn adm-btn-secondary adm-btn-sm"
+              onClick={() => addInfoBlock(stepIndex)}
+              title="Текст-перебивка между вопросами: цвет, размер, жирный, курсив, подчёркивание"
+            >
+              + Текстовый блок
             </button>
             <button
               type="button"

@@ -7,8 +7,42 @@ type ToolbarProps = {
 
 function run(editor: HTMLElement | null, cmd: string, value?: string) {
   editor?.focus();
+  document.execCommand('styleWithCSS', false, 'true');
   document.execCommand(cmd, false, value);
   editor?.focus();
+}
+
+const FONT_SIZES = [
+  { value: '12', label: '12' },
+  { value: '14', label: '14' },
+  { value: '16', label: '16' },
+  { value: '18', label: '18' },
+  { value: '22', label: '22' },
+  { value: '28', label: '28' },
+];
+
+function applyFontSize(editor: HTMLElement | null, px: string) {
+  if (!editor) return;
+  editor.focus();
+  document.execCommand('styleWithCSS', false, 'true');
+  document.execCommand('fontSize', false, '7');
+  const candidates = editor.querySelectorAll(
+    'font[size="7"], span[style*="xxx-large"], span[style*="xx-large"]',
+  );
+  candidates.forEach((el) => {
+    if (el instanceof HTMLFontElement) {
+      const span = document.createElement('span');
+      span.style.fontSize = `${px}px`;
+      if (el.color) span.style.color = el.color;
+      span.innerHTML = el.innerHTML;
+      el.replaceWith(span);
+      return;
+    }
+    if (el instanceof HTMLElement) {
+      el.style.fontSize = `${px}px`;
+    }
+  });
+  editor.focus();
 }
 
 export function RichFormatToolbar({ editorRef, onAfterCommand }: ToolbarProps) {
@@ -19,14 +53,6 @@ export function RichFormatToolbar({ editorRef, onAfterCommand }: ToolbarProps) {
 
   return (
     <div className="adm-rich-toolbar" role="toolbar" aria-label="Форматирование">
-      <button
-        type="button"
-        className="adm-btn adm-btn-sm adm-btn-secondary adm-rich-btn"
-        title="Заголовок"
-        onMouseDown={e => { e.preventDefault(); exec('formatBlock', 'h3'); }}
-      >
-        З
-      </button>
       <button
         type="button"
         className="adm-btn adm-btn-sm adm-btn-secondary adm-rich-btn adm-rich-btn-b"
@@ -51,7 +77,43 @@ export function RichFormatToolbar({ editorRef, onAfterCommand }: ToolbarProps) {
       >
         П
       </button>
+      <label className="adm-rich-color-wrap" title="Цвет текста">
+        <span className="adm-muted" style={{ fontSize: 11 }}>Цвет</span>
+        <input
+          type="color"
+          className="adm-rich-color"
+          defaultValue="#1d1d1f"
+          onMouseDown={e => e.preventDefault()}
+          onChange={e => exec('foreColor', e.target.value)}
+        />
+      </label>
+      <select
+        className="adm-input adm-rich-size"
+        title="Размер шрифта"
+        defaultValue=""
+        onMouseDown={e => e.preventDefault()}
+        onChange={e => {
+          const px = e.target.value;
+          if (!px) return;
+          applyFontSize(editorRef.current, px);
+          onAfterCommand?.();
+          e.currentTarget.value = '';
+        }}
+      >
+        <option value="">Размер</option>
+        {FONT_SIZES.map(s => (
+          <option key={s.value} value={s.value}>{s.label}</option>
+        ))}
+      </select>
       <span className="adm-rich-toolbar-sep" aria-hidden />
+      <button
+        type="button"
+        className="adm-btn adm-btn-sm adm-btn-secondary adm-rich-btn"
+        title="Заголовок"
+        onMouseDown={e => { e.preventDefault(); exec('formatBlock', 'h3'); }}
+      >
+        З
+      </button>
       <button
         type="button"
         className="adm-btn adm-btn-sm adm-btn-secondary adm-rich-btn"

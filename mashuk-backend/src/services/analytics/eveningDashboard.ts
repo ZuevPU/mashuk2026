@@ -251,7 +251,7 @@ export async function buildEveningDashboard(
   const questions = slim
     ? []
     : fields
-      .filter(f => f.type !== 'point_b_cta' && !isPracticeNpsField(f))
+      .filter(f => f.type !== 'point_b_cta' && f.type !== 'info_text' && !isPracticeNpsField(f))
       .map(f => aggregateField(f, submittedRows))
       .filter(q => q.answered > 0 || fields.some(f => f.key === q.key));
 

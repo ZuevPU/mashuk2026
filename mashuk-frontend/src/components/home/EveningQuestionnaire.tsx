@@ -7,6 +7,7 @@ export type EveningField = {
   type: string;
   label: string;
   required?: boolean;
+  html?: string;
   options?: string[];
   allowOther?: boolean;
   otherLabel?: string;
@@ -156,6 +157,40 @@ function isFieldValueSet(value: unknown): boolean {
   if (isProgramEventValue(value)) return isProgramEventComplete(value);
   if (typeof value === 'object') return Object.keys(value as object).length > 0;
   return false;
+}
+
+function sanitizeInfoHtml(html: string): string {
+  if (!html) return '';
+  const root = document.createElement('div');
+  root.innerHTML = html;
+  const allowed = new Set(['P', 'BR', 'DIV', 'SPAN', 'B', 'STRONG', 'I', 'EM', 'U', 'FONT', 'H3', 'H4', 'UL', 'OL', 'LI']);
+  const walk = (el: Element) => {
+    for (const child of Array.from(el.children)) {
+      if (!allowed.has(child.tagName)) {
+        child.replaceWith(document.createTextNode(child.textContent || ''));
+        continue;
+      }
+      for (const attr of Array.from(child.attributes)) {
+        const name = attr.name.toLowerCase();
+        if (name.startsWith('on') || name === 'src' || name === 'href') {
+          child.removeAttribute(attr.name);
+          continue;
+        }
+        if (name === 'style') {
+          const safe = (child.getAttribute('style') || '')
+            .split(';')
+            .map(s => s.trim())
+            .filter(s => /^(color|font-size|font-weight|font-style|text-decoration|text-align|background-color)\s*:/i.test(s))
+            .join('; ');
+          if (safe) child.setAttribute('style', safe);
+          else child.removeAttribute('style');
+        }
+      }
+      walk(child);
+    }
+  };
+  walk(root);
+  return root.innerHTML;
 }
 
 function fieldVisible(
@@ -560,6 +595,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
 
   const stepReady = useMemo(() => {
     for (const f of visibleFields) {
+      if (f.type === 'info_text') continue;
       if (f.type === 'program_event') {
         const answered = programEventAnswerComplete(f, form, questionnaire.programEventOptions);
         if (f.required && !answered) return false;
@@ -707,6 +743,20 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
         </FormItem>
       );
     }
+    if (field.type === 'info_text') {
+      const html = sanitizeInfoHtml(field.html || '');
+      const plain = (field.label || '').trim();
+      if (!html && !plain) return null;
+      return (
+        <div
+          key={field.key}
+          className="evening-info-block"
+          {...(html
+            ? { dangerouslySetInnerHTML: { __html: html } }
+            : { children: plain })}
+        />
+      );
+    }
     if (field.type === 'role_select') {
       if (!questionnaire.askTomorrowRole || surveyDay > 6) return null;
       return (
@@ -726,6 +776,11 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     const askRole = questionnaire.askTomorrowRole !== false && surveyDay <= 6;
     const ratings = { ...form };
     delete (ratings as Record<string, unknown>).tomorrowRoleKey;
+    for (const s of rawSteps) {
+      for (const f of s.fields) {
+        if (f.type === 'info_text') delete (ratings as Record<string, unknown>)[f.key];
+      }
+    }
     const isWrap = submitPath.includes('forum-wrap');
     await apiPost(submitPath, isWrap
       ? { ratings }

@@ -128,6 +128,7 @@ export function resolveEveningQuestionFields(
       ? cfg.steps
       : DEFAULT_EVENING_QUESTIONNAIRE_CONFIG.steps;
     for (const field of steps.flatMap(s => s.fields)) {
+      if (field.type === 'info_text') continue;
       if (!map.has(field.key)) map.set(field.key, field);
     }
   }
@@ -160,6 +161,7 @@ export function formatEveningFieldValue(
   ratings: Record<string, unknown>,
   tomorrowRoleKey: string | null,
 ): string | number {
+  if (field.type === 'info_text') return '';
   if (field.key === 'tomorrowRoleKey' || field.type === 'role_select') {
     const fromRatings = ratings[field.key];
     const key = tomorrowRoleKey

@@ -773,6 +773,29 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 .adm-evening-preview-btn.primary { background: #2D6A4F; color: #fff; }
 .adm-evening-preview-btn.secondary { background: #fff; color: #1D1D1F; border: 1px solid #ddd; }
 .adm-evening-preview-btn.ghost { background: transparent; color: #666; }
+.adm-evening-info-block {
+  margin: 2px 0 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #F7F5F0;
+  border: 1px solid #E8E2D6;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #1d1d1f;
+}
+.adm-evening-info-block p { margin: 0.35em 0; }
+.adm-evening-info-block p:first-child { margin-top: 0; }
+.adm-evening-info-block p:last-child { margin-bottom: 0; }
+.adm-evening-info-block b,
+.adm-evening-info-block strong { font-weight: 700; }
+.adm-evening-info-block i,
+.adm-evening-info-block em { font-style: italic; }
+.adm-evening-info-block u { text-decoration: underline; }
+.adm-evening-info-block h3 {
+  margin: 0.2em 0 0.35em;
+  font-size: 1.1em;
+  font-weight: 700;
+}
 
 /* Knowledge base — participant phone preview */
 .adm-kb-preview-card {
@@ -1763,6 +1786,26 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 .adm-rich-btn-b { font-weight: 800; }
 .adm-rich-btn-i { font-style: italic; }
 .adm-rich-btn-u { text-decoration: underline; }
+.adm-rich-color-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.adm-rich-color {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--m-border, #E8E4DC);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.adm-rich-size {
+  width: 88px;
+  min-width: 88px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
 .adm-rich-editor {
   min-height: 120px;
   overflow: auto;

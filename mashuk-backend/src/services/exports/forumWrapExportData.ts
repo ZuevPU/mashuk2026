@@ -16,6 +16,7 @@ import {
 function fieldsFromConfig(config: { steps?: Array<{ fields: EveningField[] }> }): EveningField[] {
   const map = new Map<string, EveningField>();
   for (const field of (config.steps || []).flatMap(s => s.fields)) {
+    if (field.type === 'info_text') continue;
     if (!map.has(field.key)) map.set(field.key, field);
   }
   return [...map.values()];

@@ -10,6 +10,7 @@ import {
   isEveningOpenForDay,
   isFieldForDirection,
   isFieldVisible,
+  isEveningDisplayField,
   resolveEveningConfigForDay,
   stripPointBFromEveningConfig,
   normalizeExperimentStep,
@@ -282,5 +283,21 @@ describe('eveningQuestionnaireConfig', () => {
     assert.equal(fresh.forcePublished, undefined);
     assert.equal(fresh.forceUnpublished, undefined);
     assert.equal(fresh.opensAtMsk, '21:15');
+  });
+
+  it('keeps formatted info_text blocks as display-only fields', () => {
+    const field = {
+      key: 'intro',
+      type: 'info_text' as const,
+      label: 'Перебивка',
+      html: '<p><b>Важно</b></p>',
+    };
+    assert.equal(isEveningDisplayField(field), true);
+    assert.equal(isEveningDisplayField({ type: 'text' }), false);
+    const copied = copyEveningQuestionnaireContent({
+      steps: [{ id: 'open', title: 'Выводы', fields: [field] }],
+    });
+    assert.equal(copied.steps[0].fields[0].type, 'info_text');
+    assert.equal(copied.steps[0].fields[0].html, '<p><b>Важно</b></p>');
   });
 });

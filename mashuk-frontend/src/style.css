@@ -550,6 +550,31 @@ body {
   color: #888;
 }
 
+.evening-info-block {
+  margin: 2px 0 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #F7F5F0;
+  border: 1px solid #E8E2D6;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #1d1d1f;
+  word-break: break-word;
+}
+.evening-info-block p { margin: 0.35em 0; }
+.evening-info-block p:first-child { margin-top: 0; }
+.evening-info-block p:last-child { margin-bottom: 0; }
+.evening-info-block b,
+.evening-info-block strong { font-weight: 700; }
+.evening-info-block i,
+.evening-info-block em { font-style: italic; }
+.evening-info-block u { text-decoration: underline; }
+.evening-info-block h3 {
+  margin: 0.2em 0 0.35em;
+  font-size: 1.1em;
+  font-weight: 700;
+}
+
 /* Cards */
 .m-card {
   background: var(--m-card-bg);
