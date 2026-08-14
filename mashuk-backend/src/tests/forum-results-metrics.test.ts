@@ -5,6 +5,7 @@ import {
   buildForumNps,
   classifyForumField,
   clusterSimilarTexts,
+  rowHasForumFinalAnswer,
 } from '../services/analytics/forumResultsMetrics.js';
 
 describe('forumResultsMetrics', () => {
@@ -79,5 +80,12 @@ describe('forumResultsMetrics', () => {
       'Сделайте ремонт душевых',
     ]);
     assert.equal(clusters[0].n, 2);
+  });
+
+  it('rowHasForumFinalAnswer looks only at marked fields', () => {
+    const marked = [{ key: 'housing', type: 'scale_1_5' as const, label: 'Быт' }];
+    assert.equal(rowHasForumFinalAnswer({ housing: 5, skip: 'секрет' }, marked), true);
+    assert.equal(rowHasForumFinalAnswer({ skip: 'секрет', likedMost: 'много текста' }, marked), false);
+    assert.equal(rowHasForumFinalAnswer({}, marked), false);
   });
 });

@@ -1,7 +1,6 @@
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import type { EveningField } from '../eveningQuestionnaireConfig.js';
 import { collectForumFinalEveningFields } from '../eveningQuestionnaireConfig.js';
-import { collectForumWrapExportRows } from '../exports/forumWrapExportData.js';
 import {
   collectEveningExportRows,
   type EveningExportRow,
@@ -28,6 +27,7 @@ import {
   formalShareOfFields,
   round1,
   round2,
+  rowHasForumFinalAnswer,
   scaleMean,
   textValue,
   yesSharePct,
@@ -127,8 +127,8 @@ export type ForumTextSection = {
 };
 
 /**
- * Итоги форума — дашборд итоговой анкеты смены.
- * Источники: итоговая анкета форума + вопросы вечерней анкеты с флагом forumFinal.
+ * Итоги форума — только вопросы вечерней анкеты с галочкой «Итоговый вопрос форума».
+ * Итоговая анкета форума (wrap) сюда не подмешивается.
  */
 export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
   const settings = await getForumSettings(filters.shiftId);
@@ -138,41 +138,30 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
     p => p.onboardingCompletedAt && !isOrganizerDirection(p.direction),
   ).length;
 
-  const wrap = await collectForumWrapExportRows({
-    shiftId: filters.shiftId,
-    direction: filters.direction ?? undefined,
-    group: filters.group ?? undefined,
-    ageCategory: filters.ageCategory ?? undefined,
-    activityQ: filters.activity ?? undefined,
-    includeDrafts: true,
-  });
-
-  const evening = await collectEveningExportRows({
-    shiftId: filters.shiftId,
-    day: null,
-    direction: filters.direction ?? undefined,
-    group: filters.group ?? undefined,
-    ageCategory: filters.ageCategory ?? undefined,
-    activityQ: filters.activity ?? undefined,
-    includeDrafts: false,
-  });
-
   const markedDaily = collectForumFinalEveningFields(settings as never);
-  const wrapFields = wrap.fields;
+  const evening = markedDaily.length
+    ? await collectEveningExportRows({
+      shiftId: filters.shiftId,
+      day: null,
+      direction: filters.direction ?? undefined,
+      group: filters.group ?? undefined,
+      ageCategory: filters.ageCategory ?? undefined,
+      activityQ: filters.activity ?? undefined,
+      includeDrafts: false,
+    })
+    : { rows: [] as EveningExportRow[] };
 
-  const wrapSubmitted = wrap.rows.filter(r =>
-    r.status === 'сдано' && !isOrganizerDirection(r.directionName || r.p.direction),
-  );
   const eveningSubmitted = evening.rows.filter(r =>
     r.status === 'сдано' && !isOrganizerDirection(r.directionName || r.p.direction),
   );
 
-  const useMarked = markedDaily.length > 0;
-  const primarySubmitted = useMarked ? eveningSubmitted : wrapSubmitted;
-  const primaryFields = useMarked ? markedDaily : wrapFields;
+  const primaryFields = markedDaily;
+  const primarySubmitted = eveningSubmitted.filter(r =>
+    rowHasForumFinalAnswer(r.ratings, primaryFields),
+  );
 
   const classified = primaryFields.map(f => ({ f, kind: classifyForumField(f) }));
-  const markedScaleFields = markedDaily.filter(f => classifyForumField(f) === 'scale_block');
+  const markedScaleFields = primaryFields.filter(f => classifyForumField(f) === 'scale_block');
   const scaleFields = classified.filter(c => c.kind === 'scale_block').map(c => c.f);
   const scaleRows = primarySubmitted;
   const blocks: ForumScaleBlock[] = [];
@@ -286,9 +275,7 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
     ? round2(blocks.reduce((a, b) => a + b.mean, 0) / blocks.length)
     : (nps?.mean ?? null);
   const attentionBlocks = blocks.filter(b => b.low >= 10).length;
-  const submittedN = useMarked
-    ? new Set(eveningSubmitted.map(r => r.participantId)).size
-    : wrapSubmitted.length;
+  const submittedN = new Set(primarySubmitted.map(r => r.participantId)).size;
 
   return {
     filters,
@@ -304,7 +291,7 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
       attentionBlocks,
       formalPct,
       questionCount: primaryFields.length,
-      source: useMarked ? 'evening_marked' : 'forum_wrap',
+      source: 'evening_marked',
     },
     blocks,
     heat,
@@ -320,7 +307,7 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
     diagnostics: {
       notes: markedDaily.length
         ? []
-        : ['Отметьте вопросы в «Итоговая анкета вечера» чекбоксом «Итоговый вопрос форума» — они появятся на этом дашборде.'],
+        : ['На дашборде только вопросы с галочкой «Итоговый вопрос форума» в «Итоговая анкета вечера». Отметьте нужные — они появятся здесь. Остальные вопросы дня и итоговая анкета форума сюда не попадают.'],
     },
     exportPath: '/exports/forum-pack?mode=shift',
   };

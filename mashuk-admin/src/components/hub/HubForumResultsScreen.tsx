@@ -207,8 +207,8 @@ export function HubForumResultsScreen() {
         title="Итоги форума — итоговая анкета"
         hint={
           m
-            ? `Сдано ${m.submitted} из ${m.total} · ${m.questionCount} вопросов · индекс ${m.index ?? '—'}`
-            : 'Аналитика итоговой анкеты форума'
+            ? `Сдано ${m.submitted} из ${m.total} · ${m.questionCount} итоговых вопросов форума · индекс ${m.index ?? '—'}`
+            : 'Только вопросы вечерней анкеты с галочкой «Итоговый вопрос форума»'
         }
       />
 
@@ -229,7 +229,7 @@ export function HubForumResultsScreen() {
           <DayResultsSection
             id="hub-forum-pulse"
             title="Пульс смены"
-            note="Четыре числа, по которым штаб решает, что сработало за смену."
+            note="Считаются только вопросы вечерней анкеты с галочкой «Итоговый вопрос форума»."
           >
             <HubKpiRow
               cols={4}

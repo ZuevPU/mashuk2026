@@ -433,4 +433,22 @@ describe('eveningQuestionnaireConfig', () => {
     assert.equal(fields[0].key, 'housing');
     assert.equal(fields[1].key, 'nps');
   });
+
+  it('collectForumFinalEveningFields ignores unmarked evening questions', () => {
+    const fields = collectForumFinalEveningFields({
+      eveningQuestionnaireByDay: {
+        '1': {
+          steps: [{
+            id: 's',
+            title: 'S',
+            fields: [
+              { key: 'likedMost', type: 'text', label: 'Что понравилось' },
+              { key: 'tripYes', type: 'yes_no', label: 'Выезд' },
+            ],
+          }],
+        },
+      },
+    } as never);
+    assert.deepEqual(fields.map(f => f.key), []);
+  });
 });

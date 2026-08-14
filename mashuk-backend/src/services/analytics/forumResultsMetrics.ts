@@ -104,6 +104,20 @@ export function yesNoValue(raw: unknown): boolean | null {
   return null;
 }
 
+/** True if the row has any answer among the marked forum-final fields. */
+export function rowHasForumFinalAnswer(
+  ratings: Record<string, unknown>,
+  fields: EveningField[],
+): boolean {
+  for (const field of fields) {
+    const raw = ratings[field.key];
+    if (raw == null || raw === '') continue;
+    if (typeof raw === 'string' && !raw.trim()) continue;
+    return true;
+  }
+  return false;
+}
+
 export function textValue(raw: unknown): string {
   if (raw == null) return '';
   if (typeof raw === 'string') return raw.trim();
