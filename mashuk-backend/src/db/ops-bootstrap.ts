@@ -18,18 +18,29 @@ import { ROLE_CATALOG } from '../services/roleService.js';
 import { FORUM_MEDALS_CATALOG } from '../services/forumMedalsCatalog.js';
 
 async function ensureShiftId(): Promise<number> {
-  const [active] = await db.select().from(shifts).where(eq(shifts.status, 'active')).limit(1);
-  if (active) return active.id;
-  const [any] = await db.select().from(shifts).limit(1);
-  if (any) return any.id;
+  const rows = await db.select().from(shifts);
+  const visible = rows.filter(s => s.isPublished && !s.isSandbox && s.status !== 'archived');
+  if (visible.length) {
+    return visible.find(s => s.status === 'active')?.id ?? visible[0].id;
+  }
+
+  const candidate = rows.find(s => s.status === 'active') ?? rows[0];
+  if (candidate) {
+    await db.update(shifts)
+      .set({ isPublished: true, isSandbox: false, updatedAt: new Date() })
+      .where(eq(shifts.id, candidate.id));
+    return candidate.id;
+  }
+
   const [created] = await db.insert(shifts).values({
-    code: 'sandbox',
-    name: 'Смена 0 · песочница',
+    code: 'shift1',
+    name: 'Смена 1',
     status: 'active',
-    isSandbox: true,
+    isSandbox: false,
+    isPublished: true,
     totalDays: 8,
     currentDay: 1,
-    shiftLabel: 'Песочница',
+    shiftLabel: 'Смена 1',
   }).returning();
   return created.id;
 }
