@@ -1,6 +1,6 @@
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import type { EveningField } from '../eveningQuestionnaireConfig.js';
-import { collectForumFinalEveningFields } from '../eveningQuestionnaireConfig.js';
+import { collectForumFinalEveningFieldDays } from '../eveningQuestionnaireConfig.js';
 import {
   collectEveningExportRows,
   type EveningExportRow,
@@ -37,14 +37,26 @@ import {
   type ForumQuote,
   type ForumScaleBlock,
 } from './forumResultsMetrics.js';
+import { buildPracticeRecommendNps } from './practiceRecommendNps.js';
 
 function dirOf(r: EveningExportRow): string {
   return (r.directionName || r.p.direction || '—').trim() || '—';
 }
 
+function rowsForField(
+  rows: EveningExportRow[],
+  fieldKey: string,
+  daysByKey: Map<string, number[]>,
+): EveningExportRow[] {
+  const days = daysByKey.get(fieldKey);
+  if (!days?.length) return rows;
+  return rows.filter(r => days.includes(r.dayNumber));
+}
+
 function buildHeat(
   blocks: ForumScaleBlock[],
   submitted: EveningExportRow[],
+  daysByKey: Map<string, number[]>,
 ) {
   const dirMap = new Map<string, EveningExportRow[]>();
   for (const r of submitted) {
@@ -56,10 +68,10 @@ function buildHeat(
     .map(([dir, rows]) => {
       const vals = blocks.map(b => {
         const scaleVals: number[] = [];
-        for (const r of rows) {
+        for (const r of rowsForField(rows, b.key, daysByKey)) {
           const raw = r.ratings[b.key];
           const n = typeof raw === 'number' ? raw : Number(raw);
-          if (Number.isFinite(n) && n >= 1 && n <= 5) scaleVals.push(n);
+          if (Number.isFinite(n) && n >= 1 && n <= 10) scaleVals.push(n);
         }
         const v = mean(scaleVals);
         if (v == null) return { v: null as number | null, dev: 0 };
@@ -138,7 +150,9 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
     p => p.onboardingCompletedAt && !isOrganizerDirection(p.direction),
   ).length;
 
-  const markedDaily = collectForumFinalEveningFields(settings as never);
+  const marked = collectForumFinalEveningFieldDays(settings as never);
+  const markedDaily = marked.fields;
+  const daysByKey = marked.daysByKey;
   const evening = markedDaily.length
     ? await collectEveningExportRows({
       shiftId: filters.shiftId,
@@ -157,21 +171,23 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
 
   const primaryFields = markedDaily;
   const primarySubmitted = eveningSubmitted.filter(r =>
-    rowHasForumFinalAnswer(r.ratings, primaryFields),
+    rowHasForumFinalAnswer(r.ratings, primaryFields, {
+      dayNumber: r.dayNumber,
+      daysByKey,
+    }),
   );
 
   const classified = primaryFields.map(f => ({ f, kind: classifyForumField(f) }));
-  const markedScaleFields = primaryFields.filter(f => classifyForumField(f) === 'scale_block');
-  const scaleFields = classified.filter(c => c.kind === 'scale_block').map(c => c.f);
-  const scaleRows = primarySubmitted;
+  const markedScaleFields = classified.filter(c => c.kind === 'scale_block').map(c => c.f);
+  const scaleFields = markedScaleFields;
   const blocks: ForumScaleBlock[] = [];
   for (const f of scaleFields) {
-    const block = buildScaleBlock(scaleRows, f);
+    const block = buildScaleBlock(rowsForField(primarySubmitted, f.key, daysByKey), f);
     if (block) blocks.push(block);
   }
   blocks.sort((a, b) => b.low - a.low);
 
-  const { heat, heatForum } = buildHeat(blocks, scaleRows);
+  const { heat, heatForum } = buildHeat(blocks, primarySubmitted, daysByKey);
 
   const seriesDays = [1, 2, 3, 4, 5, 6, 7];
   const dayLabels = seriesDays.map(day => ({
@@ -189,44 +205,55 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
   }
   const directions = [...dirNames].sort((a, b) => a.localeCompare(b, 'ru'));
   const drilldownFields = markedScaleFields.length ? markedScaleFields : scaleFields;
-  const blockDayRatings: DirectionDayRatings[] = drilldownFields.map(field =>
-    buildDirectionDayRatings({
-      days: dayLabels,
+  const blockDayRatings: DirectionDayRatings[] = drilldownFields.map(field => {
+    const fieldDays = daysByKey.get(field.key) ?? seriesDays;
+    return buildDirectionDayRatings({
+      days: dayLabels.filter(d => fieldDays.includes(d.day)),
       directions,
-      rows: eveningSubmitted.map(r => ({
+      rows: rowsForField(eveningSubmitted, field.key, daysByKey).map(r => ({
         dayNumber: r.dayNumber,
         direction: dirOf(r),
         ratings: r.ratings,
       })),
       field: { key: field.key, label: field.label || field.key, type: field.type },
-    }),
-  );
+    });
+  }).filter(block => block.days.length > 0);
 
   const npsField = classified.find(c => c.kind === 'nps')?.f;
-  const nps: ForumNps | null = npsField ? buildForumNps(primarySubmitted, npsField) : null;
+  const nps: ForumNps | null = npsField
+    ? buildForumNps(rowsForField(primarySubmitted, npsField.key, daysByKey), npsField)
+    : null;
 
   const choices: ForumChoiceDist[] = [];
   for (const { f, kind } of classified) {
     if (kind === 'point_b' || kind === 'role' || kind === 'plan_when' || kind === 'choice' || kind === 'yesno') {
-      const dist = buildChoiceDist(primarySubmitted, f, kind);
+      const dist = buildChoiceDist(rowsForField(primarySubmitted, f.key, daysByKey), f, kind);
       if (dist.n) choices.push(dist);
     }
   }
 
   const pointB = choices.find(c => c.kind === 'point_b') ?? null;
-  const pointBBranches = pointB
-    ? followUpTexts(primaryFields, pointB.key, primarySubmitted)
-    : [];
+  const choiceFollowUps: Record<string, Array<{ title: string; n: number; quotes: ForumQuote[] }>> = {};
+  for (const ch of choices) {
+    const branches = followUpTexts(
+      primaryFields,
+      ch.key,
+      rowsForField(primarySubmitted, ch.key, daysByKey),
+    );
+    if (branches.length) choiceFollowUps[ch.key] = branches;
+  }
+  const pointBBranches = pointB ? (choiceFollowUps[pointB.key] ?? []) : [];
 
   const texts: ForumTextSection[] = [];
   for (const { f, kind } of classified) {
     if (kind !== 'improve' && kind !== 'selfway' && kind !== 'nextstep' && kind !== 'final') continue;
+    const fieldRows = rowsForField(primarySubmitted, f.key, daysByKey);
     const quotes = collectQuotes(
-      primarySubmitted.map(r => ({ ratings: r.ratings, direction: dirOf(r) })),
+      fieldRows.map(r => ({ ratings: r.ratings, direction: dirOf(r) })),
       f.key,
       { label: f.label },
     );
-    const rawTexts = primarySubmitted.map(r => textValue(r.ratings[f.key])).filter(Boolean);
+    const rawTexts = fieldRows.map(r => textValue(r.ratings[f.key])).filter(Boolean);
     texts.push({
       key: f.key,
       label: f.label || f.key,
@@ -240,10 +267,11 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
   const compact: ForumCompactCard[] = [];
   for (const { f, kind } of classified) {
     if (kind !== 'psych' && kind !== 'rating_sys' && kind !== 'bot' && kind !== 'materials') continue;
-    const yn = yesSharePct(primarySubmitted, f.key);
-    const sm = scaleMean(primarySubmitted, f.key, f.type === 'scale_1_10' ? 10 : 5);
+    const fieldRows = rowsForField(primarySubmitted, f.key, daysByKey);
+    const yn = yesSharePct(fieldRows, f.key);
+    const sm = scaleMean(fieldRows, f.key, f.type === 'scale_1_10' ? 10 : 5);
     const quotes = collectQuotes(
-      primarySubmitted.map(r => ({ ratings: r.ratings, direction: dirOf(r) })),
+      fieldRows.map(r => ({ ratings: r.ratings, direction: dirOf(r) })),
       f.key,
       { minLen: 16, label: f.label },
     );
@@ -263,6 +291,17 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
     });
   }
 
+  const programKeys = classified.filter(c => c.kind === 'program_event').map(c => c.f.key);
+  const practiceRows = programKeys.length
+    ? primarySubmitted.filter(r => programKeys.some(key => {
+      const days = daysByKey.get(key);
+      return !days?.length || days.includes(r.dayNumber);
+    }))
+    : [];
+  const practiceRecommendNps = programKeys.length
+    ? buildPracticeRecommendNps(practiceRows.map(r => r.ratings), programKeys)
+    : { available: false, note: '', byPractice: [] };
+
   const finalTexts = texts.filter(t => t.kind === 'final').flatMap(t => t.quotes.map(q => q.text));
   const tags = buildTagCloud(finalTexts);
 
@@ -275,7 +314,8 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
     ? round2(blocks.reduce((a, b) => a + b.mean, 0) / blocks.length)
     : (nps?.mean ?? null);
   const attentionBlocks = blocks.filter(b => b.low >= 10).length;
-  const submittedN = new Set(primarySubmitted.map(r => r.participantId)).size;
+  const submittedForms = primarySubmitted.length;
+  const submittedPeople = new Set(primarySubmitted.map(r => r.participantId)).size;
 
   return {
     filters,
@@ -283,11 +323,12 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
     meta: {
       day: currentDay,
       total: cohortSize,
-      submitted: submittedN,
+      submitted: submittedForms,
+      submittedPeople,
       drafts: 0,
       scaleN,
       index,
-      fillRatePct: cohortSize ? round1((submittedN / cohortSize) * 100) : 0,
+      fillRatePct: cohortSize ? round1((submittedPeople / cohortSize) * 100) : 0,
       attentionBlocks,
       formalPct,
       questionCount: primaryFields.length,
@@ -301,9 +342,11 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
     choices,
     pointB,
     pointBBranches,
+    choiceFollowUps,
     texts,
     compact,
     tags,
+    practiceRecommendNps,
     diagnostics: {
       notes: markedDaily.length
         ? []

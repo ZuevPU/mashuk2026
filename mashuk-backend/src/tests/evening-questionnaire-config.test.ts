@@ -16,6 +16,7 @@ import {
   stripPointBFromEveningConfig,
   normalizeExperimentStep,
   collectForumFinalEveningFields,
+  collectForumFinalEveningFieldDays,
 } from '../services/eveningQuestionnaireConfig.js';
 
 describe('eveningQuestionnaireConfig', () => {
@@ -450,5 +451,35 @@ describe('eveningQuestionnaireConfig', () => {
       },
     } as never);
     assert.deepEqual(fields.map(f => f.key), []);
+  });
+
+  it('collectForumFinalEveningFieldDays keeps only days where the checkbox is on', () => {
+    const { daysByKey } = collectForumFinalEveningFieldDays({
+      eveningQuestionnaireByDay: {
+        '1': {
+          steps: [{
+            id: 's',
+            title: 'S',
+            fields: [
+              { key: 'housing', type: 'scale_1_5', label: 'Быт', forumFinal: true },
+              { key: 'mood', type: 'scale_1_5', label: 'Настроение' },
+            ],
+          }],
+        },
+        '2': {
+          steps: [{
+            id: 's',
+            title: 'S',
+            fields: [
+              { key: 'housing', type: 'scale_1_5', label: 'Быт' },
+              { key: 'nps', type: 'scale_1_10', label: 'Рекомендуете?', forumFinal: true },
+            ],
+          }],
+        },
+      },
+    } as never);
+    assert.deepEqual(daysByKey.get('housing'), [1]);
+    assert.deepEqual(daysByKey.get('nps'), [2]);
+    assert.equal(daysByKey.has('mood'), false);
   });
 });

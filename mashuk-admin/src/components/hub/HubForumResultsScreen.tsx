@@ -16,6 +16,7 @@ import {
 } from './dayResultsUi';
 import { HubLensLayout, type HubNavItem } from './HubSideNav';
 import { QuoteBrowser } from './QuoteBrowser';
+import { PracticeRecommendNpsTable } from '../analytics/PracticeRecommendNpsTable';
 
 type Block = { key: string; label: string; n: number; mean: number; dist: number[]; low: number };
 type HeatRow = { dir: string; n: number; vals: Array<{ v: number | null; dev: number }>; idx: number; isForum?: boolean };
@@ -65,6 +66,7 @@ type ForumResultsData = {
   meta: {
     total: number;
     submitted: number;
+    submittedPeople?: number;
     drafts: number;
     scaleN: number;
     index: number | null;
@@ -81,9 +83,20 @@ type ForumResultsData = {
   choices: ChoiceDist[];
   pointB: ChoiceDist | null;
   pointBBranches: Array<{ title: string; n: number; quotes: Quote[] }>;
+  choiceFollowUps?: Record<string, Array<{ title: string; n: number; quotes: Quote[] }>>;
   texts: TextSection[];
   compact: CompactCard[];
   tags: Array<{ word: string; n: number }>;
+  practiceRecommendNps?: {
+    available?: boolean;
+    note?: string;
+    byPractice?: Array<{
+      practice: string;
+      responses: number;
+      scores: Record<string, number>;
+      nps: number;
+    }>;
+  };
   diagnostics?: { notes?: string[] };
   exportPath?: string;
 };
@@ -95,6 +108,7 @@ const NAV: HubNavItem[] = [
   { id: 'hub-forum-heatmap', label: 'Теплокарта' },
   { id: 'hub-forum-improve', label: 'Улучшения' },
   { id: 'hub-forum-nps', label: 'NPS' },
+  { id: 'hub-forum-practices', label: 'Практики' },
   { id: 'hub-forum-pointb', label: 'Точка Б' },
   { id: 'hub-forum-role', label: 'Роль' },
   { id: 'hub-forum-plans', label: 'Планы' },
@@ -193,6 +207,7 @@ export function HubForumResultsScreen() {
     if (item.id === 'hub-forum-heatmap') return !!data?.heat.length;
     if (item.id === 'hub-forum-improve') return !!improve;
     if (item.id === 'hub-forum-nps') return !!data?.nps;
+    if (item.id === 'hub-forum-practices') return !!(data?.practiceRecommendNps?.byPractice?.length);
     if (item.id === 'hub-forum-pointb') return !!pointB;
     if (item.id === 'hub-forum-role') return !!roleChoice || !!selfway || otherChoices.length > 0;
     if (item.id === 'hub-forum-plans') return !!planWhen || !!nextstep;
@@ -207,7 +222,7 @@ export function HubForumResultsScreen() {
         title="Итоги форума — итоговая анкета"
         hint={
           m
-            ? `Сдано ${m.submitted} из ${m.total} · ${m.questionCount} итоговых вопросов форума · индекс ${m.index ?? '—'}`
+            ? `Сдано ${m.submitted} анкет · ${m.submittedPeople ?? m.submitted} из ${m.total} участников · ${m.questionCount} итоговых вопросов`
             : 'Только вопросы вечерней анкеты с галочкой «Итоговый вопрос форума»'
         }
       />
@@ -232,28 +247,22 @@ export function HubForumResultsScreen() {
             note="Считаются только вопросы вечерней анкеты с галочкой «Итоговый вопрос форума»."
           >
             <HubKpiRow
-              cols={4}
+              cols={2}
               items={[
                 {
-                  value: m.index ?? '—',
-                  label: 'Индекс форума — среднее по блокам',
-                  sub: `шкала 1–5 · n=${m.scaleN}`,
+                  value: m.submitted,
+                  label: 'Сдано анкет',
+                  sub: `${m.submittedPeople ?? m.submitted} из ${m.total} участников · ${m.fillRatePct}%`,
                 },
                 {
-                  value: `${m.fillRatePct}%`,
-                  label: 'Сдали анкету',
-                  sub: `${m.submitted} из ${m.total} · черновиков ${m.drafts}`,
-                },
-                {
-                  value: `${m.attentionBlocks} из ${data.blocks.length || '—'}`,
-                  label: 'Блока в зоне внимания',
-                  sub: 'где ≥10% оценок ниже 4',
-                  accent: m.attentionBlocks > 0 ? '#B7791F' : undefined,
-                },
-                {
-                  value: `${m.formalPct}%`,
-                  label: 'Формальных ответов в тексте',
-                  sub: '«.», «-», «всё ок» — качество рефлексии',
+                  value: data.nps ? data.nps.score : '—',
+                  label: 'NPS',
+                  sub: data.nps
+                    ? `${data.nps.fieldLabel} · n=${data.nps.n} · ср. ${data.nps.mean}`
+                    : 'Нет шкалы 1–10 «рекомендовать» среди итоговых вопросов',
+                  accent: data.nps
+                    ? (data.nps.score >= 0 ? '#2E7D53' : '#B23B32')
+                    : undefined,
                 },
               ]}
             />
@@ -443,6 +452,19 @@ export function HubForumResultsScreen() {
             </DayResultsSection>
           )}
 
+          {(data.practiceRecommendNps?.byPractice?.length ?? 0) > 0 && (
+            <DayResultsSection
+              id="hub-forum-practices"
+              title="Практики и темы программы"
+              note="Только поле «Событие / тема из программы», отмеченное как итоговый вопрос форума."
+            >
+              <PracticeRecommendNpsTable
+                data={data.practiceRecommendNps}
+                title="Оценки практик из итоговых вопросов"
+              />
+            </DayResultsSection>
+          )}
+
           {data.nps && (
             <DayResultsSection
               id="hub-forum-nps"
@@ -540,6 +562,16 @@ export function HubForumResultsScreen() {
                       <div className="adm-day-results-nb">{item.pct}%</div>
                     </div>
                   ))}
+                  {(data.choiceFollowUps?.[ch.key]?.length ?? 0) > 0 && (
+                    <div className="adm-forum-branchgrid">
+                      {data.choiceFollowUps![ch.key].map(b => (
+                        <div key={b.title} className="adm-forum-branchcard">
+                          <div className="adm-forum-branchname">{b.title}</div>
+                          <QuoteBrowser quotes={b.quotes} total={b.n} compact />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </DashCard>
               ))}
             </DayResultsSection>

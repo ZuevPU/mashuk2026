@@ -53,7 +53,10 @@ type ScoreHit = { practice: string; score: number };
  * Основной путь: любое поле типа program_event → { items: [{ eventTitle, score }] }.
  * Legacy: practiceEvent/practiceName + recommendScore.
  */
-export function extractPracticeScores(ratings: Record<string, unknown> | null | undefined): ScoreHit[] {
+export function extractPracticeScores(
+  ratings: Record<string, unknown> | null | undefined,
+  fieldKeys?: string[],
+): ScoreHit[] {
   if (!ratings || typeof ratings !== 'object') return [];
 
   const hits: ScoreHit[] = [];
@@ -63,8 +66,11 @@ export function extractPracticeScores(ratings: Record<string, unknown> | null | 
     hits.push({ practice, score });
   };
 
-  // 1) Все значения анкеты: форма program_event (ключ любой — «Цепочка: Да → темы + оценки»).
-  for (const value of Object.values(ratings)) {
+  // 1) Значения program_event: все ключи или только отмеченные итоговые.
+  const values = fieldKeys?.length
+    ? fieldKeys.map(key => ratings[key])
+    : Object.values(ratings);
+  for (const value of values) {
     const normalized = normalizeEveningProgramEventValue(value);
     if (!normalized?.items.length) continue;
     for (const item of normalized.items) {
@@ -75,6 +81,11 @@ export function extractPracticeScores(ratings: Record<string, unknown> | null | 
     }
   }
   if (hits.length) return hits;
+  if (fieldKeys?.length && !fieldKeys.some(key => (
+    key === 'recommendScore' || key === 'practiceEvent' || key === 'practiceName'
+  ))) {
+    return [];
+  }
 
   // 2) Legacy: отдельная шкала recommendScore + название практики
   const score = coerceScore(ratings.recommendScore);
@@ -101,6 +112,7 @@ export function extractPracticeScores(ratings: Record<string, unknown> | null | 
  */
 export function buildPracticeRecommendNps(
   ratingRows: Array<Record<string, unknown> | null | undefined>,
+  fieldKeys?: string[],
 ): PracticeRecommendNpsResult {
   type Agg = {
     n: number;
@@ -113,7 +125,7 @@ export function buildPracticeRecommendNps(
   const byPractice = new Map<string, Agg>();
 
   for (const ratings of ratingRows) {
-    for (const hit of extractPracticeScores(ratings)) {
+    for (const hit of extractPracticeScores(ratings, fieldKeys)) {
       const agg = byPractice.get(hit.practice) ?? {
         n: 0,
         sum: 0,

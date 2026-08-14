@@ -79,4 +79,27 @@ describe('practiceRecommendNps', () => {
     assert.equal(hits[0].score, 9);
     assert.match(hits[0].practice, /Практика А/);
   });
+
+  it('extractPracticeScores with fieldKeys ignores unmarked program_event answers', () => {
+    const hits = extractPracticeScores({
+      markedPractice: {
+        items: [{
+          eventId: 1,
+          eventTitle: 'Отмеченная',
+          parentEventTitle: 'Блок',
+          score: 9,
+        }],
+      },
+      otherPractice: {
+        items: [{
+          eventId: 2,
+          eventTitle: 'Чужая',
+          parentEventTitle: 'Блок',
+          score: 3,
+        }],
+      },
+    }, ['markedPractice']);
+    assert.equal(hits.length, 1);
+    assert.match(hits[0].practice, /Отмеченная/);
+  });
 });

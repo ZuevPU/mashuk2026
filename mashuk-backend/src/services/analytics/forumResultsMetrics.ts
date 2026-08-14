@@ -30,6 +30,7 @@ export type ForumFieldKind =
   | 'final'
   | 'choice'
   | 'yesno'
+  | 'program_event'
   | 'skip';
 
 const STOP_WORDS = new Set([
@@ -49,18 +50,16 @@ const STOP_WORDS = new Set([
 ]);
 
 export function classifyForumField(f: EveningField): ForumFieldKind {
-  if (f.type === 'info_text') return 'skip';
+  if (f.type === 'info_text' || f.type === 'point_b_cta') return 'skip';
   const label = (f.label || '').toLowerCase();
   const key = (f.key || '').toLowerCase();
   const blob = `${key} ${label}`;
 
+  if (f.type === 'program_event') return 'program_event';
   if (f.type === 'scale_1_10' && /рекоменд|nps|коллег|друзьям/.test(blob)) return 'nps';
   if (f.type === 'scale_1_5' && /рейтинг/.test(blob)) return 'rating_sys';
   if (f.type === 'scale_1_5' && /бот/.test(blob)) return 'bot';
-  if (f.type === 'scale_1_5' || f.type === 'scale_1_10') {
-    if (/движен\S* к своей цели|находишься в движен/.test(label)) return 'skip';
-    return f.type === 'scale_1_10' ? 'nps' : 'scale_block';
-  }
+  if (f.type === 'scale_1_5' || f.type === 'scale_1_10') return 'scale_block';
 
   if (f.type === 'role_select') return 'role';
   if (f.type === 'choice') {
@@ -104,16 +103,31 @@ export function yesNoValue(raw: unknown): boolean | null {
   return null;
 }
 
+export function hasForumFinalFieldAnswer(
+  ratings: Record<string, unknown>,
+  field: EveningField,
+): boolean {
+  const raw = ratings[field.key];
+  if (raw == null || raw === '') return false;
+  if (typeof raw === 'string' && !raw.trim()) return false;
+  if (field.type === 'program_event' && typeof raw === 'object' && !Array.isArray(raw)) {
+    const items = (raw as { items?: unknown[] }).items;
+    if (Array.isArray(items)) return items.length > 0;
+    return Object.keys(raw).length > 0;
+  }
+  return true;
+}
+
 /** True if the row has any answer among the marked forum-final fields. */
 export function rowHasForumFinalAnswer(
   ratings: Record<string, unknown>,
   fields: EveningField[],
+  opts?: { dayNumber?: number; daysByKey?: Map<string, number[]> },
 ): boolean {
   for (const field of fields) {
-    const raw = ratings[field.key];
-    if (raw == null || raw === '') continue;
-    if (typeof raw === 'string' && !raw.trim()) continue;
-    return true;
+    const days = opts?.daysByKey?.get(field.key);
+    if (days && opts?.dayNumber != null && !days.includes(opts.dayNumber)) continue;
+    if (hasForumFinalFieldAnswer(ratings, field)) return true;
   }
   return false;
 }

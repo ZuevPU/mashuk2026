@@ -400,15 +400,27 @@ export function collectForumFinalEveningFields(
   settings: typeof forumSettings.$inferSelect | null,
   days: number[] = [1, 2, 3, 4, 5, 6, 7],
 ): EveningField[] {
+  return [...collectForumFinalEveningFieldDays(settings, days).fields];
+}
+
+/** Те же поля + дни, на которых стоит галочка «Итоговый вопрос форума». */
+export function collectForumFinalEveningFieldDays(
+  settings: typeof forumSettings.$inferSelect | null,
+  days: number[] = [1, 2, 3, 4, 5, 6, 7],
+): { fields: EveningField[]; daysByKey: Map<string, number[]> } {
   const map = new Map<string, EveningField>();
+  const daysByKey = new Map<string, number[]>();
   for (const day of days) {
     const cfg = resolveEveningConfigForDay(settings, day);
     for (const field of (cfg.steps || []).flatMap(s => s.fields)) {
       if (!isForumFinalEveningField(field)) continue;
       if (!map.has(field.key)) map.set(field.key, field);
+      const list = daysByKey.get(field.key) ?? [];
+      if (!list.includes(day)) list.push(day);
+      daysByKey.set(field.key, list);
     }
   }
-  return [...map.values()];
+  return { fields: [...map.values()], daysByKey };
 }
 
 export function resolveEveningConfigForDay(

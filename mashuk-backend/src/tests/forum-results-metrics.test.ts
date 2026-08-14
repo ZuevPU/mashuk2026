@@ -37,6 +37,12 @@ describe('forumResultsMetrics', () => {
     assert.equal(classifyForumField({
       key: 'customChoice', type: 'choice', label: 'Какой формат удобнее?', options: ['A', 'B'],
     }), 'choice');
+    assert.equal(classifyForumField({
+      key: 'mood10', type: 'scale_1_10', label: 'Насколько день был насыщенным?',
+    }), 'scale_block');
+    assert.equal(classifyForumField({
+      key: 'practice', type: 'program_event', label: 'Какие практики посетили?',
+    }), 'program_event');
   });
 
   it('buildChoiceDist maps yes_no answers to Да/Нет', () => {
@@ -87,5 +93,15 @@ describe('forumResultsMetrics', () => {
     assert.equal(rowHasForumFinalAnswer({ housing: 5, skip: 'секрет' }, marked), true);
     assert.equal(rowHasForumFinalAnswer({ skip: 'секрет', likedMost: 'много текста' }, marked), false);
     assert.equal(rowHasForumFinalAnswer({}, marked), false);
+    assert.equal(rowHasForumFinalAnswer(
+      { housing: 5 },
+      marked,
+      { dayNumber: 2, daysByKey: new Map([['housing', [1]]]) },
+    ), false);
+    assert.equal(rowHasForumFinalAnswer(
+      { housing: 5 },
+      marked,
+      { dayNumber: 1, daysByKey: new Map([['housing', [1]]]) },
+    ), true);
   });
 });
