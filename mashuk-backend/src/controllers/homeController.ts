@@ -34,6 +34,7 @@ import { getLevelProgress, totalRatingScore } from '../services/pointsService.js
 import { loadDayContext } from './dayStateController.js';
 import { resolveEveningSurveyDayForParticipant } from '../services/eveningSurveyDay.js';
 import { resolveHomeActiveCard } from '../services/homeActiveCard.js';
+import { loadForumWrapPayload } from './forumWrapController.js';
 import { getShiftById, isShiftLive } from '../services/shiftService.js';
 import {
   buildSuppressedVisibilityKeys,
@@ -56,6 +57,18 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         .where(and(eq(piggybank.participantId, participant.id), isNull(piggybank.deletedAt)));
       const pathProg = await getLevelProgress(participant.pathPoints ?? 0, 'path');
       const expProg = await getLevelProgress(participant.experiencePoints ?? 0, 'experience');
+      const forumWrapQuestionnaire = await loadForumWrapPayload(participant, settings);
+      const wrapCard = forumWrapQuestionnaire.available
+        ? {
+          kind: 'forum_wrap' as const,
+          phase: timeSlot,
+          tag: '✦ Итоги форума',
+          title: 'Итоговая анкета форума',
+          subtitle: 'Коротко о всей смене — займёт несколько минут',
+          route: '/home?forumWrap=1',
+          cta: 'Заполнить →',
+        }
+        : null;
       res.json({
         user: {
           firstName: participant.firstName,
@@ -72,11 +85,12 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         currentDate: now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', timeZone: 'Europe/Moscow' }),
         dayFocus: null,
         priorityAction: null,
-        activeCard: null,
+        activeCard: wrapCard,
         delayedSurvey: null,
         roleOfDay: null,
         experiment: null,
         eveningQuestionnaire: { available: false, completed: false },
+        forumWrapQuestionnaire,
         missedQuestions: [],
         unansweredAfterBlocks: [],
         practicesSection: null,
@@ -415,6 +429,8 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       /* migration pending */
     }
 
+    const forumWrapQuestionnaire = await loadForumWrapPayload(participant, settings);
+
     const activeCard = resolveHomeActiveCard({
       now,
       eveningWrap,
@@ -422,6 +438,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       priorityAction,
       eveningCard,
       eveningQuestionnaire,
+      forumWrapQuestionnaire,
       schedule,
       touchpointItems: touchpointItems.map(i => ({
         id: typeof i.id === 'number' ? i.id : 0,
@@ -554,6 +571,7 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
       roleOfDay: dayContext.roleOfDay,
       experiment: currentDay === 8 ? null : (eveningContext.experiment ?? dayContext.experiment),
       eveningQuestionnaire,
+      forumWrapQuestionnaire,
       missedQuestions: [...activeMissed, ...lockedMissed],
       unansweredAfterBlocks,
       practicesSection,

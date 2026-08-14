@@ -66,6 +66,7 @@ function HubShell({ onOpenCard }: { onOpenCard: (id: number) => void }) {
       {lens === 'forum' && <HubForumScreen onLensChange={setLens} />}
       {lens === 'stats' && <LazyLens><HubStatsScreen onLensChange={setLens} /></LazyLens>}
       {lens === 'dayResults' && <LazyLens><HubDayResultsScreen /></LazyLens>}
+      {lens === 'forumResults' && <LazyLens><HubDayResultsScreen source="forum" /></LazyLens>}
       {lens === 'state' && <LazyLens><HubStateScreen /></LazyLens>}
       {lens === 'activity' && <LazyLens><HubActivityScreen /></LazyLens>}
       {lens === 'piggybank' && <LazyLens><HubPiggybankScreen /></LazyLens>}

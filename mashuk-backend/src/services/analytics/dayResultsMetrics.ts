@@ -267,3 +267,58 @@ export function pickPreferredScaleFields<T extends { key: string; label?: string
     - (firstIndex.get(eveningScaleTopicKey(b)) ?? 99));
   return out;
 }
+
+export function isDirectionWorkField(f: { key: string; label?: string }): boolean {
+  if (f.key === 'direction') return true;
+  const label = (f.label || '').toLowerCase();
+  return /тематическ\S* направлен/.test(label) && /работ|оценк/.test(label);
+}
+
+function parseDayScale(raw: unknown, maxScale: number): number | null {
+  const num = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(num) || num < 1 || num > maxScale) return null;
+  return num;
+}
+
+export type DirectionDayCell = { filled: number; avg: number | null };
+
+export type DirectionDayRatings = {
+  fieldKey: string;
+  fieldLabel: string;
+  days: Array<{ day: number; label: string }>;
+  rows: Array<{ direction: string; cells: DirectionDayCell[] }>;
+};
+
+/** Матрица: направление × день форума по шкале «работа тематического направления». */
+export function buildDirectionDayRatings(opts: {
+  days: Array<{ day: number; label: string }>;
+  directions: string[];
+  rows: Array<{ dayNumber: number; direction: string; ratings: Record<string, unknown> }>;
+  field: { key: string; label: string; type?: string };
+}): DirectionDayRatings {
+  const maxScale = opts.field.type === 'scale_1_10' ? 10 : 5;
+  const buckets = new Map<string, number[]>();
+  const cellKey = (dir: string, day: number) => `${dir}\0${day}`;
+
+  for (const r of opts.rows) {
+    const v = parseDayScale(r.ratings[opts.field.key], maxScale);
+    if (v == null) continue;
+    const k = cellKey(r.direction, r.dayNumber);
+    const arr = buckets.get(k) ?? [];
+    arr.push(v);
+    buckets.set(k, arr);
+  }
+
+  return {
+    fieldKey: opts.field.key,
+    fieldLabel: opts.field.label,
+    days: opts.days,
+    rows: opts.directions.map(direction => ({
+      direction,
+      cells: opts.days.map(({ day }) => {
+        const vals = buckets.get(cellKey(direction, day)) ?? [];
+        return { filled: vals.length, avg: mean(vals) };
+      }),
+    })),
+  };
+}

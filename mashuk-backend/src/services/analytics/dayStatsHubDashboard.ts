@@ -443,6 +443,12 @@ export async function buildDayStatsHubDashboard(filters: AnalyticsFilters, req?:
         : `${Math.round(eveningFill)}% заполн.`,
     },
     {
+      lens: 'forumResults',
+      title: 'Итоги форума',
+      sub: 'итоговая анкета смены',
+      metric: 'сводка',
+    },
+    {
       lens: 'exchange',
       title: 'Обмен опытом',
       sub: `${exDayQ.length} вопросов за день`,

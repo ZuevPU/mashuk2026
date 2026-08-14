@@ -93,7 +93,7 @@ export const updateAdminShift = async (req: AdminRequest, res: Response): Promis
     'shiftLabel', 'recommendationThreshold', 'sectionsVisibility', 'groupAssignMode',
     'kbUnlockThreshold', 'kbUnlockDisabled', 'kbPastDaysPolicy',
     'pushBlockTypes', 'pushNightSlotEnabled', 'teamConfirmHoursDefault',
-    'eveningQuestionnaireConfig', 'eveningQuestionnaireByDay', 'answerConfirmation',
+    'eveningQuestionnaireConfig', 'eveningQuestionnaireByDay', 'forumWrapQuestionnaireConfig', 'answerConfirmation',
     'exchangeLimits',
     'profileProgressWeights', 'pdfTemplate', 'recommendationTemplates',
     'roleDiagnosticsConfig', 'leaderboardScopes',

@@ -15,6 +15,7 @@ import { adminUploadImage } from '../controllers/pushBannerController.js';
 import { uploadAdminFile } from '../controllers/uploadController.js';
 import * as analyticsCtrl from '../controllers/analyticsController.js';
 import * as hubCtrl from '../controllers/hubController.js';
+import * as forumWrapCtrl from '../controllers/forumWrapController.js';
 import * as exportsCtrl from '../controllers/exportController.js';
 import * as exportCustomCtrl from '../controllers/exportCustomController.js';
 import * as shiftsCtrl from '../controllers/adminShiftController.js';
@@ -115,6 +116,9 @@ router.patch('/evening-questionnaire', requireAdminRole('settings'), wrap(admin.
 router.post('/evening-questionnaire/copy', requireAdminRole('settings'), wrap(admin.copyAdminEveningQuestionnaire));
 router.post('/evening-questionnaire/reset', requireAdminRole('settings'), wrap(admin.resetAdminEveningQuestionnaire));
 router.post('/evening-questionnaire/notify', requireAdminRole('settings'), wrap(admin.notifyAdminEveningQuestionnaire));
+router.get('/forum-wrap-questionnaire', wrap(forumWrapCtrl.getAdminForumWrapQuestionnaire));
+router.patch('/forum-wrap-questionnaire', requireAdminRole('settings'), wrap(forumWrapCtrl.patchAdminForumWrapQuestionnaire));
+router.post('/forum-wrap-questionnaire/notify', requireAdminRole('settings'), wrap(forumWrapCtrl.notifyAdminForumWrapQuestionnaire));
 router.get('/kb-unlocks', wrap(admin.listKbDayUnlocks));
 router.post('/kb-unlocks', requireAdminRole('settings'), wrap(admin.createKbDayUnlock));
 router.delete('/kb-unlocks/:participantId/:dayNumber', requireAdminRole('settings'), wrap(admin.deleteKbDayUnlock));
@@ -294,6 +298,7 @@ router.post('/analytics/refresh', requireAdminRole('settings'), wrap(analyticsCt
 router.get('/analytics/hub/forum', P('analytics', 'read'), wrap(hubCtrl.getHubForumHandler));
 router.get('/analytics/hub/forum-extras', P('analytics', 'read'), wrap(hubCtrl.getHubForumExtrasHandler));
 router.get('/analytics/hub/day-results', P('analytics', 'read'), wrap(hubCtrl.getHubDayResultsHandler));
+router.get('/analytics/hub/forum-results', P('analytics', 'read'), wrap(hubCtrl.getHubForumResultsHandler));
 router.get('/analytics/hub/state', P('analytics', 'read'), wrap(hubCtrl.getHubStateHandler));
 router.get('/analytics/hub/activity', P('analytics', 'read'), wrap(hubCtrl.getHubActivityHandler));
 router.get('/analytics/hub/piggybank', P('analytics', 'read'), wrap(hubCtrl.getHubPiggybankHandler));

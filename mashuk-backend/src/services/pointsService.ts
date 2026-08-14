@@ -22,6 +22,7 @@ export async function resolveAwardForumDay(explicit?: number | null): Promise<nu
 const PATH_ACTIONS = new Set([
   'question_answer',
   'evening_complete',
+  'forum_wrap_complete',
   'piggybank_idea',
   'piggybank_thought',
   'piggybank_question',

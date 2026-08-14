@@ -8,7 +8,7 @@ import { roleLabel } from '../exports/exportLabels.js';
 import type { EveningField } from '../eveningQuestionnaireConfig.js';
 import { getForumSettings } from '../helpers.js';
 import { isOrganizerDirection } from '../leaderboardQuery.js';
-import { getMoscowParts } from '../timePhase.js';
+import { getForumDayDateLabel, getMoscowParts } from '../timePhase.js';
 import { EVENING_SCALE_KEYS } from '../touchpointTemplates.js';
 import { buildPracticeRecommendNps, extractPracticeScores } from './practiceRecommendNps.js';
 import { buildGoalProgressByDirection, isGoalProgressField } from './goalProgressByDirection.js';
@@ -16,10 +16,12 @@ import type { AnalyticsFilters } from './analyticsQuery.js';
 import { resolveDayRange } from './analyticsQuery.js';
 import { loadCohortParticipants } from './cohort.js';
 import {
+  buildDirectionDayRatings,
   countNamed,
   directionSpread,
   deviation,
   formalSharePct,
+  isDirectionWorkField,
   lowSharePct,
   mean,
   medianLen,
@@ -474,9 +476,6 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
   const dayFilter = days.length === 1 ? days[0] : null;
 
   const cohort = await loadCohortParticipants(filters, req);
-  const cohortSize = cohort.filter(
-    p => p.onboardingCompletedAt && !isOrganizerDirection(p.direction),
-  ).length;
 
   const { rows, fields, diagnostics } = await collectEveningExportRows({
     shiftId: filters.shiftId,
@@ -487,6 +486,45 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
     activityQ: filters.activity ?? undefined,
     includeDrafts: true,
   });
+
+  return assembleHubResultsFromRows({
+    filters,
+    settings,
+    currentDay,
+    dayFilter,
+    cohort,
+    rows,
+    fields,
+    diagnostics,
+    fetchAllDaysForSeries: dayFilter != null,
+    exportPath: dayFilter
+      ? `/exports/evening-summary?mode=day&day=${dayFilter}`
+      : '/exports/evening-summary?mode=shift',
+  });
+}
+
+export async function assembleHubResultsFromRows(input: {
+  filters: AnalyticsFilters;
+  settings: Awaited<ReturnType<typeof getForumSettings>>;
+  currentDay: number;
+  dayFilter: number | null;
+  cohort: Awaited<ReturnType<typeof loadCohortParticipants>>;
+  rows: EveningExportRow[];
+  fields: EveningField[];
+  diagnostics: { notes?: string[]; eveningOpenNow?: boolean | null; eveningForceUnpublished?: boolean | null };
+  fetchAllDaysForSeries?: boolean;
+  skipDaySeries?: boolean;
+  directionDays?: Array<{ day: number; label: string }>;
+  exportPath?: string | null;
+}) {
+  const {
+    filters, settings, currentDay, dayFilter, cohort, rows, fields, diagnostics,
+    fetchAllDaysForSeries, skipDaySeries, directionDays, exportPath,
+  } = input;
+
+  const cohortSize = cohort.filter(
+    p => p.onboardingCompletedAt && !isOrganizerDirection(p.direction),
+  ).length;
 
   const nonOrgRows = rows.filter(r => !isOrganizerDirection(r.directionName || r.p.direction));
   const submittedRows = nonOrgRows.filter(r => r.status === 'сдано');
@@ -588,10 +626,14 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
   const draftByDir = buildDraftsByDir(draftRows, cohortByDir);
   const hours = buildHours(submittedRows);
 
-  // Динамика по дням 1–8 (пустые дни — null)
-  const seriesDays = [1, 2, 3, 4, 5, 6, 7, 8];
-  let daySeries: Array<{ day: number; index: number | null; lowShare: number | null; submitted: number }> = [];
-  if (dayFilter != null) {
+  // Динамика и матрица направлений
+  const totalDays = Math.max(1, Math.min(16, settings.totalDays ?? 8));
+  const seriesDays = directionDays?.length
+    ? directionDays.map(d => d.day)
+    : Array.from({ length: totalDays }, (_, i) => i + 1);
+  let allSubmitted = submittedRows;
+  let allFields = fields;
+  if (fetchAllDaysForSeries) {
     const all = await collectEveningExportRows({
       shiftId: filters.shiftId,
       day: null,
@@ -601,32 +643,52 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
       activityQ: filters.activity ?? undefined,
       includeDrafts: false,
     });
-    const allSubmitted = all.rows.filter(
+    allSubmitted = all.rows.filter(
       r => r.status === 'сдано' && !isOrganizerDirection(r.directionName || r.p.direction),
     );
-    const allScales = all.fields.filter(f => isScaleField(f) && !isGoalProgressField(f));
-    daySeries = seriesDays.map(day => {
-      const dayRows = allSubmitted.filter(r => r.dayNumber === day);
-      const dayBlocks = buildBlocks(allScales, dayRows);
-      return {
-        day,
-        index: dayIndexForRows(dayBlocks, dayRows),
-        lowShare: avgLowForRows(dayBlocks, dayRows),
-        submitted: dayRows.length,
-      };
-    });
-  } else {
-    daySeries = seriesDays.map(day => {
-      const dayRows = submittedRows.filter(r => r.dayNumber === day);
-      const dayBlocks = buildBlocks(programScales, dayRows);
-      return {
-        day,
-        index: dayIndexForRows(dayBlocks, dayRows),
-        lowShare: avgLowForRows(dayBlocks, dayRows),
-        submitted: dayRows.length,
-      };
-    });
+    allFields = all.fields;
   }
+  const allScales = allFields.filter(f => isScaleField(f) && !isGoalProgressField(f));
+  const daySeries = skipDaySeries
+    ? []
+    : seriesDays.map(day => {
+      const dayRows = allSubmitted.filter(r => r.dayNumber === day);
+      const dayBlocks = buildBlocks(allScales.length ? allScales : programScales, dayRows);
+      return {
+        day,
+        index: dayIndexForRows(dayBlocks, dayRows),
+        lowShare: avgLowForRows(dayBlocks, dayRows),
+        submitted: dayRows.length,
+      };
+    });
+
+  const dirField = allFields.find(isDirectionWorkField)
+    ?? fields.find(isDirectionWorkField)
+    ?? { key: 'direction', label: 'Работа в рамках тематического направления', type: 'scale_1_5' as const };
+  const dirNames = new Set<string>();
+  for (const p of cohort) {
+    if (!p.onboardingCompletedAt || isOrganizerDirection(p.direction)) continue;
+    dirNames.add((p.direction || '—').trim() || '—');
+  }
+  for (const r of allSubmitted) {
+    const d = dirOf(r);
+    if (!isOrganizerDirection(d)) dirNames.add(d);
+  }
+  const directionDayRatings = buildDirectionDayRatings({
+    days: directionDays?.length
+      ? directionDays
+      : seriesDays.map(day => ({
+        day,
+        label: getForumDayDateLabel(settings.startDate ?? null, day) || `День ${day}`,
+      })),
+    directions: [...dirNames].sort((a, b) => a.localeCompare(b, 'ru')),
+    rows: allSubmitted.map(r => ({
+      dayNumber: r.dayNumber,
+      direction: dirOf(r),
+      ratings: r.ratings,
+    })),
+    field: dirField,
+  });
 
   const diagNotes = buildDiagnostics(fields, submittedRows, diagnostics.notes ?? []);
 
@@ -667,13 +729,12 @@ export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: 
     draftByDir,
     hours,
     daySeries,
+    directionDayRatings,
     diagnostics: {
       notes: diagNotes,
-      eveningOpenNow: diagnostics.eveningOpenNow,
-      eveningForceUnpublished: diagnostics.eveningForceUnpublished,
+      eveningOpenNow: diagnostics.eveningOpenNow ?? null,
+      eveningForceUnpublished: diagnostics.eveningForceUnpublished ?? null,
     },
-    exportPath: dayFilter
-      ? `/exports/evening-summary?mode=day&day=${dayFilter}`
-      : '/exports/evening-summary?mode=shift',
+    exportPath: exportPath ?? undefined,
   };
 }

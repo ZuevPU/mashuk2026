@@ -340,6 +340,8 @@ export const App = () => {
             <h1>
               {tab === 'forum' && forumFocus?.anchor === 'forum-cfg-evening'
                 ? 'Итоговая анкета вечера'
+                : tab === 'forum' && forumFocus?.anchor === 'forum-cfg-wrap'
+                  ? 'Итоговая анкета форума'
                 : TAB_LABELS[tab]}
             </h1>
           </div>

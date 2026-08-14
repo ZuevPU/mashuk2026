@@ -95,6 +95,10 @@ export type EveningQuestionnaireProps = {
     }>;
   };
   experiment?: EveningExperimentContext;
+  /** Override API paths for the forum wrap-up questionnaire. */
+  submitPath?: string;
+  draftPath?: string;
+  heading?: string;
   onClose: () => void;
   onSubmitted: () => void;
 };
@@ -490,6 +494,9 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
   currentDay,
   questionnaire,
   experiment,
+  submitPath = '/day-state/evening',
+  draftPath = '/day-state/evening/draft',
+  heading,
   onClose,
   onSubmitted,
 }) => {
@@ -524,14 +531,14 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
   const persistDraft = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      apiPatch('/day-state/evening/draft', {
-        dayNumber: surveyDay,
+      apiPatch(draftPath, {
+        ...(draftPath.includes('forum-wrap') ? {} : { dayNumber: surveyDay }),
         step,
         form,
         tomorrowRoleKey: tomorrowRole || undefined,
       }).catch(() => undefined);
     }, 400);
-  }, [surveyDay, step, form, tomorrowRole]);
+  }, [draftPath, surveyDay, step, form, tomorrowRole]);
 
   useEffect(() => {
     persistDraft();
@@ -719,12 +726,15 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     const askRole = questionnaire.askTomorrowRole !== false && surveyDay <= 6;
     const ratings = { ...form };
     delete (ratings as Record<string, unknown>).tomorrowRoleKey;
-    await apiPost('/day-state/evening', {
-      dayNumber: surveyDay,
-      tomorrowRoleKey: askRole && tomorrowRole ? tomorrowRole : undefined,
-      ratings,
-      experimentStatus: experiment?.status === 'done' ? 'done' : undefined,
-    });
+    const isWrap = submitPath.includes('forum-wrap');
+    await apiPost(submitPath, isWrap
+      ? { ratings }
+      : {
+        dayNumber: surveyDay,
+        tomorrowRoleKey: askRole && tomorrowRole ? tomorrowRole : undefined,
+        ratings,
+        experimentStatus: experiment?.status === 'done' ? 'done' : undefined,
+      });
     onSubmitted();
   };
 
@@ -739,7 +749,9 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
 
   return (
     <div className="m-card evening-q">
-      <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>Итоговая анкета · день {surveyDay}</div>
+      <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>
+        {heading || `Итоговая анкета · день ${surveyDay}`}
+      </div>
       <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
         {currentStep.title} · шаг {step + 1} из {steps.length} · можно закрыть и вернуться
       </div>

@@ -22,6 +22,7 @@ export const ACTION_CATALOG: ActionCatalogDef[] = [
   // High cap: each open touchpoint + depth bonus both use this action (~2 rows/answer).
   { actionType: 'question_answer', displayName: 'Точка осмысления (ответ)', track: 'path', group: 'path', pointsPerUnit: 5, maxAccruals: 10000 },
   { actionType: 'evening_complete', displayName: 'Итоги дня', track: 'path', group: 'path', pointsPerUnit: 15, maxAccruals: 16 },
+  { actionType: 'forum_wrap_complete', displayName: 'Итоги форума', track: 'path', group: 'path', pointsPerUnit: 15, maxAccruals: 1 },
   { actionType: 'point_a_complete', displayName: 'Точка А (вход)', track: 'path', group: 'path', pointsPerUnit: 20, maxAccruals: 1 },
   { actionType: 'point_b_complete', displayName: 'Точка Б (выход)', track: 'path', group: 'path', pointsPerUnit: 30, maxAccruals: 1 },
   { actionType: 'exchange_question', displayName: 'Вопрос в «Общении»', track: 'path', group: 'path', pointsPerUnit: 3, maxAccruals: 30 },

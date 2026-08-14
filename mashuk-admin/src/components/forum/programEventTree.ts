@@ -40,7 +40,7 @@ export function flattenProgramEvents(nodes: ProgramEventRow[] | undefined | null
 
 export function buildEveningProgramPickNodes(
   events: ProgramEventRow[],
-  day: number,
+  day: number | null,
   linkedIds?: number[] | null,
 ): ProgramPickNode[] {
   const flat = flattenProgramEvents(events).filter(e => !isBreak(e));
@@ -63,6 +63,8 @@ export function buildEveningProgramPickNodes(
     children: sort(byParent.get(e.id) || []).map(build),
   });
 
+  const matchesDay = (e: ProgramEventRow) => day == null || e.dayNumber === day;
+
   const linked = [...new Set((linkedIds || []).filter(id => Number.isFinite(id) && id > 0))];
   const byId = new Map(flat.map(e => [e.id, e]));
   let roots: ProgramEventRow[];
@@ -70,7 +72,7 @@ export function buildEveningProgramPickNodes(
     // Only keep links that belong to this questionnaire day (ignore leftovers from copy).
     roots = linked
       .map(id => byId.get(id))
-      .filter((e): e is ProgramEventRow => !!e && e.dayNumber === day);
+      .filter((e): e is ProgramEventRow => !!e && matchesDay(e));
     // Prefer outermost: drop linked nodes whose ancestor is also linked
     const rootSet = new Set(roots.map(r => r.id));
     roots = roots.filter(e => {
@@ -82,7 +84,7 @@ export function buildEveningProgramPickNodes(
       return true;
     });
   } else {
-    roots = sort(flat.filter(e => !e.parentEventId && e.dayNumber === day));
+    roots = sort(flat.filter(e => !e.parentEventId && matchesDay(e)));
   }
   return roots.map(build);
 }

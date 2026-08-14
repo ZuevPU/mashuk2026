@@ -211,6 +211,23 @@ describe('home active card', () => {
     assert.equal(card?.kind, 'program_now');
     assert.equal(card?.title, 'Утренний круг');
   });
+
+  it('prefers forum wrap over live program', async () => {
+    const { resolveHomeActiveCard } = await import('../services/homeActiveCard.js');
+    const noon = new Date(Date.UTC(2026, 7, 12, 9, 0, 0));
+    const card = resolveHomeActiveCard({
+      now: noon,
+      eveningWrap: false,
+      currentDay: 7,
+      priorityAction: null,
+      eveningCard: null,
+      eveningQuestionnaire: { available: false, completed: false },
+      forumWrapQuestionnaire: { available: true, completed: false },
+      schedule: [{ kind: 'now', title: 'Мастер-класс', time: '12:00', place: 'Зал' }],
+      touchpointItems: [],
+    });
+    assert.equal(card?.kind, 'forum_wrap');
+  });
 });
 
 describe('piggybank dict', () => {

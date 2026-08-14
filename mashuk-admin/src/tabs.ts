@@ -77,6 +77,14 @@ export const FORUM_EVENING_NAV: NavShortcut = {
   anchor: 'forum-cfg-evening',
 };
 
+export const FORUM_WRAP_NAV: NavShortcut = {
+  kind: 'anchor',
+  id: 'forum-wrap',
+  label: 'Итоговая анкета форума',
+  tab: 'forum',
+  anchor: 'forum-cfg-wrap',
+};
+
 /** Группы боковой навигации (Apple Settings–style) */
 export const NAV_GROUPS: { id: string; label: string; items: NavEntry[] }[] = [
   {
@@ -87,7 +95,7 @@ export const NAV_GROUPS: { id: string; label: string; items: NavEntry[] }[] = [
   {
     id: 'program',
     label: 'Программа',
-    items: ['forum', FORUM_EVENING_NAV, 'shifts', 'events', 'speakers', 'knowledge', 'tasks', 'questions'],
+    items: ['forum', FORUM_EVENING_NAV, FORUM_WRAP_NAV, 'shifts', 'events', 'speakers', 'knowledge', 'tasks', 'questions'],
   },
   {
     id: 'engagement',

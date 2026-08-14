@@ -75,6 +75,13 @@ interface HomeData {
     completed: boolean;
     dayNumber?: number;
   } | null;
+  forumWrapQuestionnaire?: {
+    available: boolean;
+    open?: boolean;
+    opensAt?: string | null;
+    forcePublished?: boolean;
+    completed: boolean;
+  } | null;
   missedQuestions: { id: number; title: string; closeTime: string; expired?: boolean; overdue?: boolean }[];
   unansweredAfterBlocks?: { id: number; title: string; overdue?: boolean }[];
   practicesSection?: {
@@ -144,6 +151,7 @@ export const HomePanel: React.FC<{
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showEvening, setShowEvening] = useState(false);
+  const [showForumWrap, setShowForumWrap] = useState(false);
   const [showHomeNotice, setShowHomeNotice] = useState(false);
   const [dismissedBanners, setDismissedBanners] = useState<number[]>([]);
 
@@ -186,13 +194,15 @@ export const HomePanel: React.FC<{
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
-    if (params.get('evening') === '1') setShowEvening(true);
+    if (params.get('forumWrap') === '1') setShowForumWrap(true);
+    else if (params.get('evening') === '1') setShowEvening(true);
   }, []);
 
   /** Итоговая анкета / плашка главного экрана — отдельные модалки (не в ленте). */
   useEffect(() => {
     if (activePanel !== id) {
       if (showEvening) setShowEvening(false);
+      if (showForumWrap) setShowForumWrap(false);
       if (showHomeNotice) setShowHomeNotice(false);
       return;
     }
@@ -215,6 +225,26 @@ export const HomePanel: React.FC<{
       );
       return () => setModal(null);
     }
+    if (showForumWrap) {
+      const closeWrap = () => setShowForumWrap(false);
+      setModal(
+        <ModalRoot activeModal="forum-wrap" onClose={closeWrap}>
+          <ModalPage id="forum-wrap" settlingHeight={100} onClose={closeWrap}>
+            <ModalPageHeader>Итоговая анкета форума</ModalPageHeader>
+            <EveningDaySummaryFlow
+              variant="forumWrap"
+              onClose={closeWrap}
+              onSubmitted={() => {
+                closeWrap();
+                setSnackbar('Итоговая анкета форума сохранена · +15 Путь');
+                reload();
+              }}
+            />
+          </ModalPage>
+        </ModalRoot>,
+      );
+      return () => setModal(null);
+    }
     if (showHomeNotice && data?.homeNotice) {
       const closeNotice = () => setShowHomeNotice(false);
       setModal(
@@ -228,7 +258,7 @@ export const HomePanel: React.FC<{
       return () => setModal(null);
     }
     setModal(null);
-  }, [showEvening, showHomeNotice, data?.homeNotice, activePanel, id, setModal]);
+  }, [showEvening, showForumWrap, showHomeNotice, data?.homeNotice, activePanel, id, setModal]);
 
   const piggyCaptureOpts = (onSaved?: () => void) => ({
     onSaved,
@@ -269,6 +299,7 @@ export const HomePanel: React.FC<{
   const lastName = d.user?.lastName || fetchedUser?.last_name || '';
   const schedule = d.schedule ?? [];
   const showEveningCard = !!d.eveningCard && (d.timeSlot === 'evening' || d.eveningWrap);
+  const showForumWrapCard = !!d.forumWrapQuestionnaire?.available;
   const showQuick = d.currentDay !== 8 && (d.ui?.showQuickCapture ?? true);
   const card = d.activeCard;
   const nowEvents = schedule.filter(ev => ev.kind === 'now');
@@ -277,6 +308,7 @@ export const HomePanel: React.FC<{
   const showSingleActiveCard = card && !showProgramNowCards;
   const hidePriorityDup = card && d.priorityAction && card.route === d.priorityAction.route;
   const hideEveningDup = card?.kind === 'evening_survey';
+  const hideForumWrapDup = card?.kind === 'forum_wrap';
   // «Сейчас» / «Скоро» уже в активной карточке — не дублируем в «Расписании»
   let scheduleList = schedule;
   if (card?.kind === 'program_now' || showProgramNowCards) {
@@ -346,7 +378,8 @@ export const HomePanel: React.FC<{
             subtitle={card!.subtitle}
             buttonText={card!.cta}
             onClick={() => {
-              if (card!.route.includes('evening=1')) setShowEvening(true);
+              if (card!.route.includes('forumWrap=1')) setShowForumWrap(true);
+              else if (card!.route.includes('evening=1')) setShowEvening(true);
               else routeNavigator.push(card!.route);
             }}
           />
@@ -409,6 +442,16 @@ export const HomePanel: React.FC<{
             subtitle={d.eveningCard!.subtitle}
             buttonText="Заполнить →"
             onClick={() => setShowEvening(true)}
+          />
+        )}
+
+        {showForumWrapCard && !showForumWrap && !hideForumWrapDup && (
+          <PriorityAction
+            tag="✦ Итоги форума"
+            title="Итоговая анкета форума"
+            subtitle="Коротко о всей смене — займёт несколько минут"
+            buttonText="Заполнить →"
+            onClick={() => setShowForumWrap(true)}
           />
         )}
 

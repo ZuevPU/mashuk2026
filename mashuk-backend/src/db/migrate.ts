@@ -219,6 +219,21 @@ async function ensureExchangeCategoriesSchema(pool: ReturnType<typeof createPool
   `);
 }
 
+/** Apply forum wrap questionnaire columns if missing (0065). */
+async function ensureForumWrapQuestionnaireSchema(pool: ReturnType<typeof createPool>): Promise<void> {
+  const { rows } = await pool.query<{ ok: number }>(
+    `SELECT 1 AS ok FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'participants' AND column_name = 'forum_wrap_ratings'
+     LIMIT 1`,
+  );
+  if (rows.length > 0) return;
+
+  const sqlPath = path.join(__dirname, '../../drizzle/0065_forum_wrap_questionnaire.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  console.warn('Repair: applying 0065_forum_wrap_questionnaire.sql');
+  await pool.query(sql);
+}
+
 export async function runMigrations(): Promise<void> {
   const pool = createPool(process.env.DATABASE_URL!);
   const db = drizzle(pool);
@@ -239,6 +254,7 @@ export async function runMigrations(): Promise<void> {
     await ensureQuestionAnswerAccrualCap(pool);
     await ensureExchangeCategoriesSchema(pool);
     await ensureQrRepeatableScansSchema(pool);
+    await ensureForumWrapQuestionnaireSchema(pool);
     await pool.end();
   }
 }

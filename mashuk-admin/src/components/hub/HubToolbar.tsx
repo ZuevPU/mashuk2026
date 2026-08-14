@@ -6,6 +6,7 @@ const LENS_LABELS: Record<HubLens, string> = {
   forum: 'Форум',
   stats: 'Статистика',
   dayResults: 'Итоги дня',
+  forumResults: 'Итоги форума',
   state: 'Состояние',
   activity: 'Активность',
   piggybank: 'Копилка',
@@ -17,7 +18,7 @@ const LENS_LABELS: Record<HubLens, string> = {
 };
 
 const LENS_ORDER: HubLens[] = [
-  'forum', 'stats', 'dayResults', 'state', 'activity', 'piggybank', 'afterBlocks', 'exchange',
+  'forum', 'stats', 'dayResults', 'forumResults', 'state', 'activity', 'piggybank', 'afterBlocks', 'exchange',
   'direction', 'groups', 'participant',
 ];
 
@@ -68,6 +69,7 @@ export function HubToolbar({
       </div>
 
       <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', marginTop: 8 }}>
+        {lens !== 'forumResults' && (
         <label className="adm-insights-filter">
           Дата
           <select
@@ -87,6 +89,7 @@ export function HubToolbar({
             ))}
           </select>
         </label>
+        )}
         <label className="adm-insights-filter">
           Направление
           <select

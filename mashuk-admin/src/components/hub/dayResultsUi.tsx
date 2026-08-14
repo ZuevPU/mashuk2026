@@ -120,6 +120,20 @@ export function heatCellStyle(dev: number): { background: string; color: string 
   return { background: 'transparent', color: 'var(--m-text)' };
 }
 
+/** Абсолютная оценка 1–5: низкая — красный, средняя — розовый, высокая — зелёный. */
+export function scoreCellStyle(avg: number | null): { background: string; color: string } {
+  if (avg == null || !Number.isFinite(avg)) {
+    return { background: 'transparent', color: 'var(--m-text-secondary)' };
+  }
+  if (avg < 4) {
+    return { background: 'rgba(255, 59, 48, 0.18)', color: '#B91C1C' };
+  }
+  if (avg < 4.5) {
+    return { background: 'rgba(255, 59, 48, 0.08)', color: '#9F1239' };
+  }
+  return { background: 'rgba(52, 199, 89, 0.18)', color: '#0F766E' };
+}
+
 export function HBar({
   widthPct,
   color = 'var(--m-accent)',

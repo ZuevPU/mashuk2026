@@ -27,6 +27,8 @@ type Props = {
   initialDay?: number;
   /** Optional; if omitted, loaded from /directions. */
   directions?: DirectionOpt[];
+  /** `forum` — единая итоговая анкета смены, без дней. */
+  mode?: 'day' | 'forum';
 };
 
 const EMPTY_CONFIG: EveningQuestionnaireConfig = {
@@ -53,7 +55,8 @@ function filterConfigForDirectionPreview(
   };
 }
 
-export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, directions: directionsProp }: Props) {
+export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, directions: directionsProp, mode = 'day' }: Props) {
+  const isForum = mode === 'forum';
   const [day, setDay] = useState(() => {
     const d = Number(initialDay);
     return Number.isFinite(d) && d >= 1 && d <= 7 ? d : 1;
@@ -72,6 +75,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
   const [programEvents, setProgramEvents] = useState<ProgramEventRow[]>([]);
   const [roles, setRoles] = useState<{ roleKey: string; name: string }[]>([]);
   const [directionsLocal, setDirectionsLocal] = useState<DirectionOpt[]>([]);
+  const [defaultConfig, setDefaultConfig] = useState<EveningQuestionnaireConfig | null>(null);
   const directions = directionsProp?.length ? directionsProp : directionsLocal;
 
   const applyPublishState = (res: {
@@ -95,13 +99,16 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
   const loadDay = async (d: number) => {
     setLoading(true);
     try {
-      const ev = await adminFetch(`/evening-questionnaire?day=${d}`);
+      const ev = isForum
+        ? await adminFetch('/forum-wrap-questionnaire')
+        : await adminFetch(`/evening-questionnaire?day=${d}`);
       const c = ev.config as EveningQuestionnaireConfig;
       const fallback = ev.defaultConfig as EveningQuestionnaireConfig | undefined;
+      if (fallback?.steps?.length) setDefaultConfig(JSON.parse(JSON.stringify(fallback)));
       if (c?.steps?.length) setConfig(JSON.parse(JSON.stringify(c)));
       else if (fallback?.steps?.length) setConfig(JSON.parse(JSON.stringify(fallback)));
       else setConfig(JSON.parse(JSON.stringify(EMPTY_CONFIG)));
-      setOpensAtMsk(ev.opensAtMsk || c?.opensAtMsk || '22:00');
+      setOpensAtMsk(ev.opensAtMsk || c?.opensAtMsk || (isForum ? '10:00' : '22:00'));
       setForcePublished(!!ev.forcePublished);
       setForceUnpublished(!!ev.forceUnpublished);
       setIsOpenNow(!!ev.isOpenNow);
@@ -116,7 +123,8 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
 
   useEffect(() => {
     loadDay(day).catch(() => {});
-  }, [day]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when day changes; forum mode loads once
+  }, [isForum ? 0 : day]);
 
   useEffect(() => {
     adminFetch('/roles')
@@ -149,14 +157,15 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
   }, [adminFetch]);
 
   const dayProgramTrees = useMemo(
-    () => buildEveningProgramPickNodes(programEvents, day, null),
-    [programEvents, day],
+    () => buildEveningProgramPickNodes(programEvents, isForum ? null : day, null),
+    [programEvents, day, isForum],
   );
 
   // Drop linkedEventIds that belong to another day (typical after «copy day» in admin).
   // Wait until this day's program tree is non-empty — otherwise an empty tree
   // would wipe links on a day whose events have not been published yet.
   useEffect(() => {
+    if (isForum) return;
     if (programEvents.length === 0) return;
     const dayIds = new Set(dayProgramTrees.map(e => e.id));
     if (dayIds.size === 0) return;
@@ -174,7 +183,9 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
       }));
       return changed ? { ...prev, steps } : prev;
     });
-  }, [day, dayProgramTrees, programEvents.length]);
+  }, [day, dayProgramTrees, programEvents.length, isForum]);
+
+  const configPath = () => (isForum ? '/forum-wrap-questionnaire' : `/evening-questionnaire?day=${day}`);
 
   const updateStep = (index: number, patch: Partial<EveningStep>) => {
     setConfig(prev => {
@@ -336,7 +347,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
         forcePublishedAt?: string;
         forceUnpublished?: boolean;
       };
-      const res = await adminFetch(`/evening-questionnaire?day=${day}`, {
+      const res = await adminFetch(configPath(), {
         method: 'PATCH',
         body: JSON.stringify({
           config: { ...configBody, opensAtMsk },
@@ -344,7 +355,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
         }),
       });
       applyPublishState(res);
-    }, `Анкета дня ${day} сохранена`);
+    }, isForum ? 'Итоговая анкета форума сохранена' : `Анкета дня ${day} сохранена`);
   };
 
   /** publish | schedule | unpublish */
@@ -353,12 +364,14 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
     const forceUnpublishedNext = mode === 'unpublish';
     const msg =
       mode === 'publish'
-        ? `Анкета дня ${day} опубликована сейчас`
+        ? (isForum ? 'Итоговая анкета форума опубликована сейчас' : `Анкета дня ${day} опубликована сейчас`)
         : mode === 'unpublish'
-          ? `Анкета дня ${day} снята с публикации`
-          : `Анкета дня ${day}: публикация по времени ${opensAtMsk} МСК`;
+          ? (isForum ? 'Итоговая анкета форума снята с публикации' : `Анкета дня ${day} снята с публикации`)
+          : (isForum
+            ? `Итоговая анкета форума: публикация по времени ${opensAtMsk} МСК`
+            : `Анкета дня ${day}: публикация по времени ${opensAtMsk} МСК`);
     act(async () => {
-      const res = await adminFetch(`/evening-questionnaire?day=${day}`, {
+      const res = await adminFetch(configPath(), {
         method: 'PATCH',
         body: JSON.stringify({
           config: {
@@ -402,16 +415,19 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
   return (
     <div className="adm-forum-block">
       <div className="adm-kb-panel-head">
-        <h3>Итоговая анкета вечера</h3>
+        <h3>{isForum ? 'Итоговая анкета форума' : 'Итоговая анкета вечера'}</h3>
         <p className="adm-kb-panel-sub">
-          Конструктор шагов и полей вечерней анкеты. Публикация по дням — участники видят только опубликованную версию.
+          {isForum
+            ? 'Одна анкета на всю смену. Участники заполняют её на главной после публикации.'
+            : 'Конструктор шагов и полей вечерней анкеты. Публикация по дням — участники видят только опубликованную версию.'}
         </p>
       </div>
       <p className="adm-forum-hint">
-        Участники заполняют эту анкету вечером на главной (дни 1–7). Точка Б — отдельный вопрос в последний день смены (день 8), в эту анкету не входит.
-        Поле «Эксперимент с ролью» лучше выносить в отдельный шаг — на главной оно показывается отдельным блоком с текстом эксперимента дня.
-        Тип «Событие / тема из программы» берёт блоки дня из раздела «Программа»; можно ограничить список галочками и собрать цепочку «Да → событие → оценка».
+        {isForum
+          ? 'Не путать с вечерней анкетой дня и с Точкой Б. Тип «Событие / тема из программы» может брать блоки всех дней смены.'
+          : 'Участники заполняют эту анкету вечером на главной (дни 1–7). Точка Б — отдельный вопрос в последний день смены (день 8), в эту анкету не входит. Поле «Эксперимент с ролью» лучше выносить в отдельный шаг — на главной оно показывается отдельным блоком с текстом эксперимента дня. Тип «Событие / тема из программы» берёт блоки дня из раздела «Программа»; можно ограничить список галочками и собрать цепочку «Да → событие → оценка».'}
       </p>
+      {!isForum && (
       <div className="adm-seg adm-forum-day-seg">
         {Array.from({ length: 7 }, (_, i) => i + 1).map(d => (
           <button key={d} type="button" className={day === d ? 'on' : ''} onClick={() => setDay(d)}>
@@ -419,10 +435,13 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
           </button>
         ))}
       </div>
+      )}
       {loading && <p className="adm-muted">Загрузка…</p>}
       {!loading && hasOwnConfig === false && (
         <p className="adm-forum-hint">
-          Для дня {day} ещё нет своей сохранённой анкеты — показан шаблон. «Сохранить анкету» или публикация запишет копию именно на этот день.
+          {isForum
+            ? 'Ещё нет сохранённой анкеты форума — показан шаблон. «Сохранить анкету» или публикация запишет конфиг смены.'
+            : `Для дня ${day} ещё нет своей сохранённой анкеты — показан шаблон. «Сохранить анкету» или публикация запишет копию именно на этот день.`}
         </p>
       )}
 
@@ -478,15 +497,22 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
           title="Рассылка в ЛС сообщества VK и уведомление мини-приложения: анкета доступна"
           onClick={() => {
             if (!confirm(
-              `Оповестить участников смены, что итоговая анкета дня ${day} доступна?\n\n`
-              + 'Сообщение уйдёт через VK (сообщество + мини-приложение). '
-              + 'Тем, кто уже сдал анкету за этот день, письмо не отправим.',
+              isForum
+                ? 'Оповестить участников смены, что итоговая анкета форума доступна?\n\n'
+                  + 'Сообщение уйдёт через VK (сообщество + мини-приложение). '
+                  + 'Тем, кто уже сдал анкету, письмо не отправим.'
+                : `Оповестить участников смены, что итоговая анкета дня ${day} доступна?\n\n`
+                  + 'Сообщение уйдёт через VK (сообщество + мини-приложение). '
+                  + 'Тем, кто уже сдал анкету за этот день, письмо не отправим.',
             )) return;
             act(async () => {
-              const res = await adminFetch(`/evening-questionnaire/notify?day=${day}`, {
-                method: 'POST',
-                body: JSON.stringify({}),
-              }) as {
+              const res = await adminFetch(
+                isForum ? '/forum-wrap-questionnaire/notify' : `/evening-questionnaire/notify?day=${day}`,
+                {
+                  method: 'POST',
+                  body: JSON.stringify({}),
+                },
+              ) as {
                 sentTo?: number;
                 audience?: number;
                 skippedCompleted?: number;
@@ -504,6 +530,8 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
       </div>
 
       <div className="adm-forum-toolbar">
+        {!isForum && (
+          <>
         <label className="adm-forum-inline">
           Скопировать настройки с дня
           <select value={copyFromDay} onChange={e => setCopyFromDay(Number(e.target.value))}>
@@ -532,14 +560,27 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
         >
           Копировать
         </button>
+          </>
+        )}
         <button
           type="button"
           className="adm-btn adm-btn-secondary adm-btn-sm"
           onClick={() => {
-            if (!confirm(`Сбросить анкету дня ${day} к заводским настройкам?`)) return;
+            if (!confirm(isForum
+              ? 'Сбросить итоговую анкету форума к заводским настройкам?'
+              : `Сбросить анкету дня ${day} к заводским настройкам?`)) return;
             act(async () => {
-              await adminFetch(`/evening-questionnaire/reset?day=${day}`, { method: 'POST' });
-              await loadDay(day);
+              if (isForum) {
+                const fallback = defaultConfig || { steps: [{ id: 'step_1', title: 'Новый шаг', fields: [] }] };
+                const res = await adminFetch('/forum-wrap-questionnaire', {
+                  method: 'PATCH',
+                  body: JSON.stringify({ config: fallback, opensAtMsk: fallback.opensAtMsk || '10:00' }),
+                });
+                applyPublishState(res);
+              } else {
+                await adminFetch(`/evening-questionnaire/reset?day=${day}`, { method: 'POST' });
+                await loadDay(day);
+              }
             }, 'Сброшено');
           }}
         >
@@ -548,6 +589,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
         <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setPreviewOpen(v => !v)}>
           {previewOpen ? 'Скрыть предпросмотр' : 'Предпросмотр'}
         </button>
+        {!isForum && (
         <button
           type="button"
           className="adm-btn adm-btn-primary adm-btn-sm"
@@ -562,6 +604,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
         >
           Скачать ответы за день форума D{day}
         </button>
+        )}
         <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={save}>
           Сохранить анкету
         </button>
@@ -588,7 +631,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
             </label>
           )}
           <EveningQuestionnaireParticipantPreview
-            day={day}
+            day={isForum ? null : day}
             config={filterConfigForDirectionPreview(config, previewDirectionId)}
             programEvents={programEvents}
             roles={roles}

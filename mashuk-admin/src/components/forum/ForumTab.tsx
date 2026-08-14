@@ -18,6 +18,7 @@ const FORUM_SETTINGS_NAV: HubNavItem[] = [
   { id: 'forum-cfg-groups', label: 'Группы' },
   { id: 'forum-cfg-focus', label: 'Фокус дня' },
   { id: 'forum-cfg-evening', label: 'Итоговая' },
+  { id: 'forum-cfg-wrap', label: 'Итоги' },
   { id: 'forum-cfg-menu', label: 'Меню' },
   { id: 'forum-cfg-pdf', label: 'Профиль' },
   { id: 'forum-cfg-consents', label: 'Согласия' },
@@ -849,6 +850,17 @@ export function ForumTab({ adminFetch, act, reloadKey, focusAnchor, focusNonce }
           adminFetch={adminFetch}
           act={act}
           initialDay={currentDay}
+          directions={directions.map((d: { id: number; name: string }) => ({ id: d.id, name: d.name }))}
+        />
+      </div>
+      </section>
+
+      <section id="forum-cfg-wrap" className="adm-forum-anchor">
+      <div className="card adm-forum-block adm-kb-panel">
+        <EveningQuestionnaireBuilder
+          mode="forum"
+          adminFetch={adminFetch}
+          act={act}
           directions={directions.map((d: { id: number; name: string }) => ({ id: d.id, name: d.name }))}
         />
       </div>

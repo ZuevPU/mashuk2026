@@ -3124,6 +3124,47 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   font-size: 13px;
 }
 .adm-day-results-scroll { overflow-x: auto; }
+.adm-dir-score-table {
+  border-collapse: collapse;
+  min-width: 720px;
+}
+.adm-dir-score-table th,
+.adm-dir-score-table td {
+  border: 1px solid rgba(60, 60, 67, 0.14);
+  text-align: center;
+  vertical-align: middle;
+  padding: 7px 8px;
+  white-space: nowrap;
+}
+.adm-dir-score-table thead th {
+  background: #F5F5F7;
+  font-size: 11px;
+  font-weight: 650;
+  color: #1D1D1F;
+  text-transform: none;
+  letter-spacing: -0.01em;
+}
+.adm-dir-score-table .adm-dir-score-stub,
+.adm-dir-score-table .adm-dir-score-name {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
+  min-width: 160px;
+  white-space: normal;
+}
+.adm-dir-score-table thead .adm-dir-score-stub {
+  background: #F5F5F7;
+  z-index: 2;
+}
+.adm-dir-score-table .adm-dir-score-day {
+  font-weight: 700;
+}
+.adm-dir-score-table .adm-dir-score-n {
+  color: #86868B;
+  font-variant-numeric: tabular-nums;
+}
 .adm-day-results-row {
   display: grid;
   grid-template-columns: 1fr 46px;

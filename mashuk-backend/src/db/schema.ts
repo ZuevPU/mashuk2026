@@ -55,6 +55,7 @@ export const shifts = pgTable('shifts', {
   teamConfirmHoursDefault: integer('team_confirm_hours_default').default(24),
   eveningQuestionnaireConfig: jsonb('evening_questionnaire_config'),
   eveningQuestionnaireByDay: jsonb('evening_questionnaire_by_day'),
+  forumWrapQuestionnaireConfig: jsonb('forum_wrap_questionnaire_config'),
   answerConfirmation: jsonb('answer_confirmation'),
   /** Обмен опытом: { maxQuestionsTotal (= в день), maxAnswersForPoints } */
   exchangeLimits: jsonb('exchange_limits'),
@@ -86,6 +87,7 @@ export const forumSettings = pgTable('forum_settings', {
   teamConfirmHoursDefault: integer('team_confirm_hours_default').default(24),
   eveningQuestionnaireConfig: jsonb('evening_questionnaire_config'),
   eveningQuestionnaireByDay: jsonb('evening_questionnaire_by_day'),
+  forumWrapQuestionnaireConfig: jsonb('forum_wrap_questionnaire_config'),
   answerConfirmation: jsonb('answer_confirmation'),
   /** Обмен опытом: { maxQuestionsTotal (= в день), maxAnswersForPoints } */
   exchangeLimits: jsonb('exchange_limits'),
@@ -405,6 +407,8 @@ export const participants = pgTable('participants', {
   isBlocked: boolean('is_blocked').default(false),
   blockedAt: timestamp('blocked_at'),
   blockReason: varchar('block_reason', { length: 500 }),
+  forumWrapRatings: jsonb('forum_wrap_ratings'),
+  forumWrapDraft: jsonb('forum_wrap_draft'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('participants_direction_id_idx').on(table.directionId),

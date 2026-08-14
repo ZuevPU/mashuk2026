@@ -21,7 +21,7 @@ type ProgramEventValue = { items: ProgramEventItem[] };
 type RoleOpt = { roleKey: string; name: string };
 
 type Props = {
-  day: number;
+  day: number | null;
   config: EveningQuestionnaireConfig;
   programEvents: ProgramEventRow[];
   /** Роли из pedagogical_roles (админка «Роли»). */
@@ -78,10 +78,10 @@ function fieldVisible(field: EveningField, form: Record<string, unknown>, allFie
   return v === expected;
 }
 
-function stepHasVisibleFields(step: EveningStep, form: Record<string, unknown>, day: number): boolean {
+function stepHasVisibleFields(step: EveningStep, form: Record<string, unknown>, day: number | null): boolean {
   return step.fields.some(f => {
     if (!fieldVisible(f, form, step.fields)) return false;
-    if (f.type === 'role_select' && day > 6) return false;
+    if (f.type === 'role_select' && day != null && day > 6) return false;
     return true;
   });
 }
@@ -454,7 +454,7 @@ export function EveningQuestionnaireParticipantPreview({
       );
     }
     if (field.type === 'role_select') {
-      if (day > 6) return null;
+      if (day != null && day > 6) return null;
       return (
         <div key={field.key} className="adm-evening-preview-field">
           <div className="adm-evening-preview-label">{field.label}</div>
@@ -499,10 +499,14 @@ export function EveningQuestionnaireParticipantPreview({
 
   return (
     <div className="adm-evening-preview-shell">
-      <div className="adm-forum-preview-label">Как у участника · итоговая анкета · день {day}</div>
+      <div className="adm-forum-preview-label">
+        Как у участника · {day == null ? 'итоговая анкета форума' : `итоговая анкета · день ${day}`}
+      </div>
       <div className="adm-evening-preview-phone">
         <div className="adm-evening-preview-card">
-          <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>Итоговая анкета · день {day}</div>
+          <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>
+            {day == null ? 'Итоговая анкета форума' : `Итоговая анкета · день ${day}`}
+          </div>
           <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
             {currentStep.title} · шаг {step + 1} из {steps.length} · можно закрыть и вернуться
           </div>

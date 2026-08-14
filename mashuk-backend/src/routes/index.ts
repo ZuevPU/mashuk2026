@@ -7,6 +7,7 @@ import { getMe, register, completeOnboarding, listOnboardingMeta, listPublishedS
 import { listDirections } from '../controllers/directionsController.js';
 import { getHome, quickPiggybank } from '../controllers/homeController.js';
 import { updateExperimentStatus, submitEveningQuestionnaire, patchEveningDraft } from '../controllers/dayStateController.js';
+import { patchForumWrapDraft, submitForumWrapQuestionnaire } from '../controllers/forumWrapController.js';
 import {
   getProgram, getProgramSettings, getRecommendations, markAttendance, getKnowledgeBase, getKnowledgeBaseDays, saveMaterialToPiggybank,
 } from '../controllers/programController.js';
@@ -53,6 +54,8 @@ router.post('/piggybank/quick', vkAuthMiddleware, requireParticipant, quickPiggy
 router.post('/day-state/experiment', vkAuthMiddleware, requireParticipant, updateExperimentStatus);
 router.post('/day-state/evening', vkAuthMiddleware, requireParticipant, submitEveningQuestionnaire);
 router.patch('/day-state/evening/draft', vkAuthMiddleware, requireParticipant, patchEveningDraft);
+router.post('/forum-wrap', vkAuthMiddleware, requireParticipant, submitForumWrapQuestionnaire);
+router.patch('/forum-wrap/draft', vkAuthMiddleware, requireParticipant, patchForumWrapDraft);
 
 router.get('/program/settings', vkAuthMiddleware, requireParticipant, getProgramSettings);
 router.get('/program', vkAuthMiddleware, requireParticipant, getProgram);

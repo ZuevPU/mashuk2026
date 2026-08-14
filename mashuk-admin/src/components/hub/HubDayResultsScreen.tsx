@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, Fragment } from 'react';
 import {
   CartesianGrid,
   Line,
@@ -27,6 +27,7 @@ import {
   StackBar,
   fillTone,
   heatCellStyle,
+  scoreCellStyle,
   lowTone,
 } from './dayResultsUi';
 import { HubLensLayout, type HubNavItem } from './HubSideNav';
@@ -55,6 +56,16 @@ type HeatRow = {
   vals: Array<{ v: number | null; dev: number }>;
   idx: number;
   isForum?: boolean;
+};
+
+type DirectionDayRatings = {
+  fieldKey: string;
+  fieldLabel: string;
+  days: Array<{ day: number; label: string }>;
+  rows: Array<{
+    direction: string;
+    cells: Array<{ filled: number; avg: number | null }>;
+  }>;
 };
 
 type DayResultsData = {
@@ -90,6 +101,7 @@ type DayResultsData = {
   draftByDir: Array<{ dir: string; n: number; pct: number }>;
   hours: Array<{ h: number; n: number }>;
   daySeries: Array<{ day: number; index: number | null; lowShare: number | null; submitted: number }>;
+  directionDayRatings?: DirectionDayRatings | null;
   diagnostics?: { notes?: string[] };
   exportPath?: string;
 };
@@ -105,6 +117,7 @@ function isPracticePickLabel(text: string): boolean {
  */
 const DAY_RESULTS_NAV: HubNavItem[] = [
   { id: 'hub-day-pulse', label: 'Пульс' },
+  { id: 'hub-day-dir-scores', label: 'Оценка' },
   { id: 'hub-day-spine', label: 'Хребет' },
   { id: 'hub-day-heatmap', label: 'Теплокарта' },
   { id: 'hub-day-goal', label: 'Цель' },
@@ -116,7 +129,9 @@ const DAY_RESULTS_NAV: HubNavItem[] = [
   { id: 'hub-day-dynamics', label: 'Динамика' },
 ];
 
-export function HubDayResultsScreen() {
+const FORUM_RESULTS_NAV: HubNavItem[] = DAY_RESULTS_NAV.filter(item => item.id !== 'hub-day-dynamics');
+
+export function HubDayResultsScreen({ source = 'day' }: { source?: 'day' | 'forum' }) {
   const {
     adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group,
   } = useInsights();
@@ -130,20 +145,25 @@ export function HubDayResultsScreen() {
     setLoading(true);
     setErr(null);
     const params = hubFilterParams({
-      mode: 'day',
-      forumDay,
+      mode: source === 'forum' ? 'shift' : 'day',
+      forumDay: source === 'forum' ? 'all' : forumDay,
       direction,
       group,
       ageCategory,
       activity,
     });
-    adminFetch(`/analytics/hub/day-results?${params.toString()}`)
+    const path = source === 'forum'
+      ? `/analytics/hub/forum-results?${params.toString()}`
+      : `/analytics/hub/day-results?${params.toString()}`;
+    adminFetch(path)
       .then(res => setData(res as DayResultsData))
       .catch((e: unknown) => {
-        setErr(e instanceof Error ? e.message : 'Не удалось загрузить итоги дня');
+        setErr(e instanceof Error ? e.message : source === 'forum'
+          ? 'Не удалось загрузить итоги форума'
+          : 'Не удалось загрузить итоги дня');
       })
       .finally(() => setLoading(false));
-  }, [adminFetch, forumDay, direction, group, ageCategory, activity]);
+  }, [adminFetch, forumDay, direction, group, ageCategory, activity, source]);
 
   const allForum = isAllForumDay(forumDay);
   const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);
@@ -202,16 +222,25 @@ export function HubDayResultsScreen() {
   }, [data, m]);
 
   return (
-    <HubLensLayout className="adm-day-results" items={DAY_RESULTS_NAV} navLabel="Разделы итогов дня">
+    <HubLensLayout
+      className="adm-day-results"
+      items={source === 'forum' ? FORUM_RESULTS_NAV : DAY_RESULTS_NAV}
+      navLabel={source === 'forum' ? 'Разделы итогов форума' : 'Разделы итогов дня'}
+    >
       <DashScreenTitle
-        title="Итоги дня — вечерняя анкета"
+        title={source === 'forum' ? 'Итоги форума — итоговая анкета' : 'Итоги дня — вечерняя анкета'}
         hint={
           m
-            ? `День ${m.day} из 8 · сдано ${m.submitted} из ${m.total} · индекс ${m.index ?? '—'}`
-            : 'Аналитика итоговой анкеты для утреннего штаба'
+            ? (source === 'forum'
+              ? `Сдано ${m.submitted} из ${m.total} · индекс ${m.index ?? '—'}`
+              : `День ${m.day} из 8 · сдано ${m.submitted} из ${m.total} · индекс ${m.index ?? '—'}`)
+            : (source === 'forum'
+              ? 'Аналитика итоговой анкеты форума'
+              : 'Аналитика итоговой анкеты для утреннего штаба')
         }
       />
 
+      {source !== 'forum' && (
       <div className="adm-day-results-days" aria-label="Дни форума">
         {[1, 2, 3, 4, 5, 6, 7, 8].map(d => {
           const cls = [
@@ -231,6 +260,7 @@ export function HubDayResultsScreen() {
           );
         })}
       </div>
+      )}
 
       {loading && !data && <p className="adm-muted">Загрузка…</p>}
       {loading && !!data && <p className="adm-muted" style={{ fontSize: 12 }}>Обновление…</p>}
@@ -248,9 +278,10 @@ export function HubDayResultsScreen() {
 
           <DayResultsSection
             id="hub-day-pulse"
-            title="Пульс дня"
-            note="Четыре числа, по которым утренний штаб решает, менять ли что-то в программе."
+            title={source === 'forum' ? 'Пульс форума' : 'Пульс дня'}
+            note="Четыре числа, по которым штаб решает, менять ли что-то в программе."
           >
+            {source !== 'forum' && (
             <DashCard title="Индекс форума по дням">
               <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
                 Среднее по шкалам итоговой анкеты за каждый день смены (1–5). Карточки ниже — срез выбранного дня.
@@ -302,13 +333,14 @@ export function HubDayResultsScreen() {
                 </p>
               )}
             </DashCard>
+            )}
 
             <HubKpiRow
               cols={4}
               items={[
                 {
                   value: m.index ?? '—',
-                  label: 'Индекс дня — среднее по блокам',
+                  label: source === 'forum' ? 'Индекс форума — среднее по блокам' : 'Индекс дня — среднее по блокам',
                   sub: `шкала 1–5 · n=${m.scaleN}`,
                 },
                 {
@@ -328,6 +360,69 @@ export function HubDayResultsScreen() {
                 },
               ]}
             />
+          </DayResultsSection>
+
+          <DayResultsSection
+            id="hub-day-dir-scores"
+            title="Оценка работы в тематическом направлении"
+            note={source === 'forum'
+              ? 'Все направления × итоговая анкета форума. «Заполнили» — сколько ответили на этот вопрос, «Оценка» — среднее 1–5.'
+              : 'Все направления × каждый день смены. «Заполнили» — сколько ответили на этот вопрос, «Оценка» — среднее 1–5. Таблица не зависит от выбранного дня сверху.'}
+          >
+            <DashCard className="adm-day-results-scroll">
+              {!data.directionDayRatings?.rows.length || !data.directionDayRatings.days.length ? (
+                <p className="adm-muted">Нет оценок по работе тематического направления.</p>
+              ) : (
+                <>
+                  <table className="adm-table adm-day-results-table adm-dir-score-table">
+                    <thead>
+                      <tr>
+                        <th rowSpan={2} className="adm-dir-score-stub">Направление</th>
+                        {data.directionDayRatings.days.map(d => (
+                          <th key={d.day} colSpan={2} className="adm-dir-score-day">{d.label}</th>
+                        ))}
+                      </tr>
+                      <tr>
+                        {data.directionDayRatings.days.map(d => (
+                          <Fragment key={`sub-${d.day}`}>
+                            <th>Заполнили</th>
+                            <th>Оценка</th>
+                          </Fragment>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.directionDayRatings.rows.map(r => (
+                        <tr key={r.direction}>
+                          <td className="adm-dir-score-name">{r.direction}</td>
+                          {r.cells.map((c, i) => (
+                            <Fragment key={`${r.direction}-${data.directionDayRatings!.days[i]?.day ?? i}`}>
+                              <td className="adm-dir-score-n">
+                                {c.filled > 0 ? c.filled : <span className="adm-muted">—</span>}
+                              </td>
+                              <td>
+                                {c.avg == null ? (
+                                  <span className="adm-muted">—</span>
+                                ) : (
+                                  <span className="adm-day-results-cell" style={scoreCellStyle(c.avg)}>
+                                    {c.avg.toFixed(2)}
+                                  </span>
+                                )}
+                              </td>
+                            </Fragment>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="adm-day-results-legend" style={{ marginTop: 12 }}>
+                    <span><i style={{ background: 'rgba(255, 59, 48, 0.35)' }} />ниже 4</span>
+                    <span><i style={{ background: 'rgba(255, 59, 48, 0.12)' }} />4.00–4.49</span>
+                    <span><i style={{ background: 'rgba(52, 199, 89, 0.35)' }} />4.50 и выше</span>
+                  </div>
+                </>
+              )}
+            </DashCard>
           </DayResultsSection>
 
           <DayResultsSection
@@ -715,6 +810,7 @@ export function HubDayResultsScreen() {
             </div>
           </DayResultsSection>
 
+          {source !== 'forum' && (
           <DayResultsSection
             id="hub-day-dynamics"
             title="Динамика по дням"
@@ -749,7 +845,9 @@ export function HubDayResultsScreen() {
               </div>
             </DashCard>
           </DayResultsSection>
+          )}
 
+          {source !== 'forum' && (
           <div style={{ marginTop: 8 }}>
             <button
               type="button"
@@ -766,6 +864,7 @@ export function HubDayResultsScreen() {
               Скачать XLSX итоговой анкеты
             </button>
           </div>
+          )}
         </>
       )}
     </HubLensLayout>

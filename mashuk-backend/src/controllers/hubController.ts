@@ -2,6 +2,7 @@ import type { Response } from 'express';
 import type { AdminRequest } from '../middlewares/adminAuth.js';
 import { resolveAnalyticsFilters } from '../services/analytics/analyticsQuery.js';
 import { buildDayResultsDashboard } from '../services/analytics/dayResultsDashboard.js';
+import { buildForumResultsDashboard } from '../services/analytics/forumResultsDashboard.js';
 import {
   buildHubForumDashboard,
   buildHubForumExtras,
@@ -30,6 +31,11 @@ export async function getHubForumExtrasHandler(req: AdminRequest, res: Response)
 export async function getHubDayResultsHandler(req: AdminRequest, res: Response): Promise<void> {
   const filters = await resolveAnalyticsFilters(req);
   res.json(await buildDayResultsDashboard(filters, req));
+}
+
+export async function getHubForumResultsHandler(req: AdminRequest, res: Response): Promise<void> {
+  const filters = await resolveAnalyticsFilters(req);
+  res.json(await buildForumResultsDashboard(filters, req));
 }
 
 export async function getHubStateHandler(req: AdminRequest, res: Response): Promise<void> {

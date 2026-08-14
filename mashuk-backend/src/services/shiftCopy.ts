@@ -321,6 +321,7 @@ export async function copyShiftModules(opts: {
       }
       const eveningByDay = remapEveningLinkedEvents(source.eveningQuestionnaireByDay, eventIdMap);
       const eveningCfg = remapEveningLinkedEvents(source.eveningQuestionnaireConfig, eventIdMap);
+      const forumWrapCfg = remapEveningLinkedEvents(source.forumWrapQuestionnaireConfig, eventIdMap);
       await tx.update(shifts).set({
         recommendationThreshold: source.recommendationThreshold,
         sectionsVisibility: source.sectionsVisibility,
@@ -333,6 +334,7 @@ export async function copyShiftModules(opts: {
         teamConfirmHoursDefault: source.teamConfirmHoursDefault,
         eveningQuestionnaireConfig: eveningCfg as typeof source.eveningQuestionnaireConfig,
         eveningQuestionnaireByDay: eveningByDay as typeof source.eveningQuestionnaireByDay,
+        forumWrapQuestionnaireConfig: forumWrapCfg as typeof source.forumWrapQuestionnaireConfig,
         answerConfirmation: source.answerConfirmation,
         exchangeLimits: source.exchangeLimits,
         profileProgressWeights: source.profileProgressWeights,

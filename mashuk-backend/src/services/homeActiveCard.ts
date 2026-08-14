@@ -2,6 +2,7 @@ import { getMoscowPhase } from './timePhase.js';
 
 export type HomeActiveCardKind =
   | 'evening_survey'
+  | 'forum_wrap'
   | 'delayed_survey'
   | 'program_now'
   | 'program_soon'
@@ -26,6 +27,7 @@ export interface ResolveHomeActiveCardInput {
   priorityAction: { type: string; title: string; subtitle: string; route: string } | null;
   eveningCard: { title: string; subtitle: string } | null;
   eveningQuestionnaire: { available: boolean; completed: boolean };
+  forumWrapQuestionnaire?: { available: boolean; completed: boolean };
   schedule: { kind: string; title: string; time: string; place?: string | null }[];
   touchpointItems: { id: number; title?: string; state: string }[];
   delayedSurvey?: { id: number; title: string; subtitle: string } | null;
@@ -43,7 +45,7 @@ export function resolveHomeActiveCard(input: ResolveHomeActiveCardInput): HomeAc
   const phase = getMoscowPhase(now);
   const {
     eveningWrap, currentDay, priorityAction, eveningCard, eveningQuestionnaire, schedule, touchpointItems,
-    delayedSurvey,
+    delayedSurvey, forumWrapQuestionnaire,
   } = input;
 
   if (delayedSurvey) {
@@ -84,6 +86,18 @@ export function resolveHomeActiveCard(input: ResolveHomeActiveCardInput): HomeAc
       title: eveningCard.title,
       subtitle: eveningCard.subtitle,
       route: '/home?evening=1',
+      cta: 'Заполнить →',
+    };
+  }
+
+  if (forumWrapQuestionnaire?.available && !forumWrapQuestionnaire.completed) {
+    return {
+      kind: 'forum_wrap',
+      phase,
+      tag: '✦ Итоги форума',
+      title: 'Итоговая анкета форума',
+      subtitle: 'Коротко о всей смене — займёт несколько минут',
+      route: '/home?forumWrap=1',
       cta: 'Заполнить →',
     };
   }
