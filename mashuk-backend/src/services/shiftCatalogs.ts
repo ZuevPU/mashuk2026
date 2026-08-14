@@ -113,21 +113,22 @@ export async function ensureShiftCatalogs<T extends DbLike>(
   return { directionMap, speakerMap, placeMap };
 }
 
-async function cloneByName<TTable extends typeof directions | typeof programPlaces | typeof thematicTags>(
+async function cloneByName(
   tx: DbLike,
-  table: TTable,
+  table: typeof directions | typeof programPlaces | typeof thematicTags,
   sourceId: number,
   targetId: number,
-  toInsert: (row: TTable['$inferSelect']) => TTable['$inferInsert'],
+  toInsert: (row: { id: number; name: string } & Record<string, unknown>) => Record<string, unknown>,
 ): Promise<Map<number, number>> {
-  const src = await tx.select().from(table).where(eq(table.shiftId, sourceId)) as TTable['$inferSelect'][];
-  const existing = await tx.select().from(table).where(eq(table.shiftId, targetId)) as TTable['$inferSelect'][];
+  const catalog = table as typeof directions;
+  const src = await tx.select().from(catalog).where(eq(catalog.shiftId, sourceId));
+  const existing = await tx.select().from(catalog).where(eq(catalog.shiftId, targetId));
   if (!existing.length && src.length) {
     for (const row of src) {
-      await tx.insert(table).values(toInsert(row) as never);
+      await tx.insert(catalog).values(toInsert(row) as typeof directions.$inferInsert);
     }
   }
-  const dst = await tx.select().from(table).where(eq(table.shiftId, targetId)) as TTable['$inferSelect'][];
+  const dst = await tx.select().from(catalog).where(eq(catalog.shiftId, targetId));
   return nameMap(src, dst);
 }
 

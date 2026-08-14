@@ -3024,6 +3024,9 @@ export const crudMaterials = {
   },
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
+    const [existing] = await db.select().from(materials).where(eq(materials.id, id)).limit(1);
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+    const shiftId = existing.shiftId ?? await resolveAdminShiftId(req);
     const body = req.body as Record<string, unknown>;
     const kb = normalizeMaterialKbUnlock(body);
     const sections = await normalizeMaterialKbSections(body, { partial: true });
