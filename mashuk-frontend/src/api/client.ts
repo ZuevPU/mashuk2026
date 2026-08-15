@@ -258,6 +258,7 @@ function mediaOriginFromApiBase(apiBase: string): string {
 export function resolvePublicMediaUrl(url: string): string {
   const raw = String(url || '').trim();
   if (!raw) return '';
+  if (raw.startsWith('data:image/')) return raw;
   const origin = mediaOriginFromApiBase(API_URL);
   const fromUploadsPath = (pathname: string) => {
     const marker = '/uploads/';
@@ -265,7 +266,7 @@ export function resolvePublicMediaUrl(url: string): string {
     const name = (idx >= 0 ? pathname.slice(idx + marker.length) : pathname.replace(/^\/uploads\//, ''))
       .split(/[?#]/)[0];
     if (!/^[a-zA-Z0-9._-]+$/.test(name)) return raw;
-    return origin ? `${origin}/uploads/${name}` : `/uploads/${name}`;
+    return origin ? `${origin}/api/uploads/${name}` : `/api/uploads/${name}`;
   };
   if (raw.includes('/uploads/')) {
     try {

@@ -49,4 +49,11 @@ describe('uploadImageStorage', () => {
     assert.equal(list.length, 1);
     assert.ok(list[0].endsWith('/uploads/a.jpg'));
   });
+
+  it('keeps inline data-image URLs for home-notice photos', () => {
+    const data = 'data:image/jpeg;base64,/9j/4AAQ';
+    const list = coerceImageUrlList([data, '/uploads/a.jpg']);
+    assert.equal(list[0], data);
+    assert.ok(list[1].endsWith('/uploads/a.jpg'));
+  });
 });

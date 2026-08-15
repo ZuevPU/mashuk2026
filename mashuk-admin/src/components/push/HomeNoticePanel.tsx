@@ -54,10 +54,11 @@ function statusLabel(status: string) {
   return 'Черновик';
 }
 
-/** Shrink notice photos ~2× before upload so they stay sharp on the phone screen. */
-async function fileToResizedDataUrl(file: File, scale = 0.5, quality = 0.86): Promise<string> {
+/** Fit notice photos into 960px so the card stays sharp and the payload stays small. */
+async function fileToResizedDataUrl(file: File, maxEdge = 960, quality = 0.82): Promise<string> {
   try {
     const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
     const w = Math.max(1, Math.round(bitmap.width * scale));
     const h = Math.max(1, Math.round(bitmap.height * scale));
     const canvas = document.createElement('canvas');
@@ -72,8 +73,7 @@ async function fileToResizedDataUrl(file: File, scale = 0.5, quality = 0.86): Pr
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(bitmap, 0, 0, w, h);
     bitmap.close();
-    const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-    return canvas.toDataURL(mime, quality);
+    return canvas.toDataURL('image/jpeg', quality);
   } catch {
     throw new Error('Этот формат фото не читается. Сохраните как JPG или PNG и загрузите снова.');
   }
@@ -172,18 +172,24 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
     if (!files?.length) return;
     const urls: string[] = [];
     for (const file of Array.from(files)) {
-      const dataUrl = await fileToResizedDataUrl(file, 0.5);
-      const up = await adminFetch('/upload-image', {
-        method: 'POST',
-        body: JSON.stringify({ dataUrl }),
-      }) as { url: string };
-      if (up?.url) urls.push(up.url);
+      const dataUrl = await fileToResizedDataUrl(file);
+      // Keep the data URL on the notice so the photo survives Timeweb redeploys
+      // (ephemeral /uploads disk). Also try the public upload for other clients.
+      try {
+        await adminFetch('/upload-image', {
+          method: 'POST',
+          body: JSON.stringify({ dataUrl }),
+        });
+      } catch {
+        // Disk upload is optional for the home plate.
+      }
+      urls.push(dataUrl);
     }
     if (!urls.length) throw new Error('Не удалось загрузить картинку');
     const next: Draft = { ...draft, imageUrls: [...draft.imageUrls, ...urls] };
     if (!next.title.trim()) next.title = 'Объявление';
     setDraft(next);
-    setPreviewMode('modal');
+    setPreviewMode('compact');
     await persist(undefined, next);
   };
 
@@ -271,7 +277,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
           <span className="adm-label">Картинки</span>
           <p className="adm-muted" style={{ margin: '0 0 6px', fontSize: 11 }}>
             Первая картинка сразу видна на карточке главной. Остальные — в модалке.
-            После загрузки сохраняем автоматически.
+            Фото сохраняется вместе с плашкой и не пропадает после выкладки.
           </p>
           <input
             type="file"
@@ -296,13 +302,20 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
                   <img
                     src={resolvePublicMediaUrl(url)}
                     alt=""
+                    referrerPolicy="no-referrer"
                     style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8, border: '1px solid #ddd' }}
                   />
                   <button
                     type="button"
                     className="adm-btn adm-btn-secondary adm-btn-sm"
                     style={{ position: 'absolute', top: -6, right: -6, padding: '0 6px', fontSize: 12 }}
-                    onClick={() => patchDraft({ imageUrls: draft.imageUrls.filter((_, j) => j !== i) })}
+                    onClick={() => {
+                      const next = { ...draft, imageUrls: draft.imageUrls.filter((_, j) => j !== i) };
+                      setDraft(next);
+                      if (editingId) {
+                        void act(() => persist(undefined, next), 'Картинка удалена', { reload: false });
+                      }
+                    }}
                   >
                     ×
                   </button>
@@ -413,6 +426,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
                 <img
                   src={resolvePublicMediaUrl(draft.imageUrls[0])}
                   alt=""
+                  referrerPolicy="no-referrer"
                   style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 14, flexShrink: 0 }}
                 />
               )}
@@ -459,6 +473,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
                       key={`${url}-${i}`}
                       src={resolvePublicMediaUrl(url)}
                       alt=""
+                      referrerPolicy="no-referrer"
                       style={{ width: '100%', borderRadius: 10 }}
                     />
                   ))}

@@ -3,7 +3,10 @@ import path from 'path';
 import crypto from 'crypto';
 import { env } from '../config/env.js';
 
-const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
+export const UPLOAD_DIR = path.resolve(
+  process.env.UPLOAD_DIR
+    || (fs.existsSync('/app') ? '/app/uploads' : path.join(process.cwd(), 'uploads')),
+);
 
 export const MAX_PARTICIPANT_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -32,7 +35,7 @@ export function publicUploadBaseUrl(): string {
 }
 
 export function publicUploadUrl(filename: string): string {
-  return `${publicUploadBaseUrl()}/uploads/${filename}`;
+  return `${publicUploadBaseUrl()}/api/uploads/${filename}`;
 }
 
 const UPLOAD_NAME_RE = /^[a-zA-Z0-9._-]+$/;
@@ -101,9 +104,17 @@ export function coerceImageUrlList(raw: unknown): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const item of list) {
-    const resolved = resolveStoredUploadUrl(String(item ?? '').trim());
+    const rawItem = String(item ?? '').trim();
+    const resolved = rawItem.startsWith('data:image/')
+      ? rawItem
+      : resolveStoredUploadUrl(rawItem);
     if (!resolved) continue;
-    if (!/^https?:\/\//.test(resolved) && !resolved.startsWith('/uploads/')) continue;
+    if (
+      !/^https?:\/\//.test(resolved)
+      && !resolved.startsWith('/uploads/')
+      && !resolved.startsWith('/api/uploads/')
+      && !resolved.startsWith('data:image/')
+    ) continue;
     if (seen.has(resolved)) continue;
     seen.add(resolved);
     out.push(resolved);
@@ -113,17 +124,23 @@ export function coerceImageUrlList(raw: unknown): string[] {
 
 /** True if URL points at our /uploads/ tree (same origin as PUBLIC_URL / local API). */
 export function isOwnUploadUrl(raw: string): boolean {
+  const name = extractUploadFilename(raw);
+  if (!name) return false;
   try {
     const base = publicUploadBaseUrl();
-    const u = new URL(raw);
-    const expected = new URL(`${base}/uploads/`);
-    if (u.origin !== expected.origin) return false;
-    if (!u.pathname.startsWith(expected.pathname)) return false;
-    const name = u.pathname.slice(expected.pathname.length);
-    return /^[a-zA-Z0-9._-]+$/.test(name) && name.length > 0;
+    const u = new URL(raw, `${base}/`);
+    const expected = new URL(base);
+    return u.origin === expected.origin;
   } catch {
     return false;
   }
+}
+
+export function resolveUploadFilePath(filename: string): string | null {
+  if (!isSafeUploadFilename(filename)) return null;
+  const full = path.resolve(UPLOAD_DIR, filename);
+  if (full !== UPLOAD_DIR && !full.startsWith(`${UPLOAD_DIR}${path.sep}`)) return null;
+  return fs.existsSync(full) ? full : null;
 }
 
 export class UploadImageError extends Error {

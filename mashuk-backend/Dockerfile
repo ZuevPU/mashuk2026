@@ -59,7 +59,7 @@ COPY --from=builder /app/drizzle ./drizzle
 COPY assets ./assets
 COPY config ./config
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
-RUN chmod +x docker-entrypoint.sh
+RUN chmod +x docker-entrypoint.sh && mkdir -p /app/uploads
 
 EXPOSE 8080
 

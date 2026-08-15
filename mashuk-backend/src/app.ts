@@ -1,5 +1,4 @@
 import express, { type Request, type Response } from 'express';
-import path from 'path';
 import { sql } from 'drizzle-orm';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';
@@ -8,6 +7,10 @@ import { db, pool } from './db/index.js';
 import routes from './routes/index.js';
 import adminRoutes from './routes/admin.js';
 import { errorHandler } from './middlewares/errorHandler.js';
+import {
+  ensureUploadDir,
+  resolveUploadFilePath,
+} from './utils/uploadImageStorage.js';
 
 export function createApp() {
   const app = express();
@@ -86,7 +89,21 @@ export function createApp() {
   });
 
   app.use(express.json({ limit: '6mb' }));
-  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+  ensureUploadDir();
+  const sendUploadedFile = (req: Request, res: Response) => {
+    const name = String(req.params.file || '');
+    const filePath = resolveUploadFilePath(name);
+    if (!filePath) {
+      res.status(404).end();
+      return;
+    }
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.sendFile(filePath);
+  };
+  app.get('/uploads/:file', sendUploadedFile);
+  app.get('/api/uploads/:file', sendUploadedFile);
 
   // Global rate limit (admin API excluded — many parallel reads on Questions tab)
   app.use(rateLimit({
@@ -95,7 +112,10 @@ export function createApp() {
     message: { error: 'Too many requests, please try again later.' },
     standardHeaders: true,
     legacyHeaders: false,
-    skip: (req) => req.path.startsWith('/api/admin'),
+    skip: (req) => {
+      const p = req.path || '';
+      return p.startsWith('/api/admin') || p.startsWith('/uploads') || p.startsWith('/api/uploads');
+    },
   }));
 
   const healthHandler = (_req: Request, res: Response) => {
