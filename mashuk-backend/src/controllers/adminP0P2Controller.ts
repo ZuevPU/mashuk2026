@@ -135,13 +135,20 @@ export const crudGroups = {
       res.status(400).json({ error: 'Nothing to update' });
       return;
     }
+    const [before] = await db.select({
+      directionId: participantGroups.directionId,
+    }).from(participantGroups).where(eq(participantGroups.id, id)).limit(1);
+    if (!before) { res.status(404).json({ error: 'Not found' }); return; }
     const [updated] = await db.update(participantGroups).set(patch).where(eq(participantGroups.id, id)).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
     // sync group_name on participants
     await db.update(participants).set({ groupName: updated.name }).where(eq(participants.groupId, id));
-    // Force members' direction from the group's direction column
-    const { applyGroupDirectionToMembers } = await import('../services/groupDirectionSync.js');
-    const synced = await applyGroupDirectionToMembers(id);
+    let synced = 0;
+    const directionChanged = patch.directionId !== undefined && patch.directionId !== before.directionId;
+    if (directionChanged) {
+      const { applyGroupDirectionToMembers } = await import('../services/groupDirectionSync.js');
+      synced = await applyGroupDirectionToMembers(id);
+    }
     res.json({ group: updated, directionSynced: synced });
   },
   delete: async (req: AdminRequest, res: Response) => {

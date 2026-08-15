@@ -632,11 +632,14 @@ export function ForumTab({ adminFetch, act, reloadKey, focusAnchor, focusNonce }
             <button
               type="button"
               className="adm-btn adm-btn-secondary"
-              onClick={() => act(async () => {
-                const res = await adminFetch('/groups/sync-directions', { method: 'POST' });
-                await load();
-                return `Направление обновлено у ${res.synced ?? 0} участников`;
-              })}
+              onClick={() => {
+                if (!confirm('Перезаписать направление всех участников по направлению их группы? Выбор, который человек сделал при регистрации, будет заменён.')) return;
+                act(async () => {
+                  const res = await adminFetch('/groups/sync-directions', { method: 'POST' });
+                  await load();
+                  return `Направление обновлено у ${res.synced ?? 0} участников`;
+                });
+              }}
             >
               Применить направления групп к участникам
             </button>

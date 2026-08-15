@@ -20,6 +20,7 @@ import { scheduleParticipantAvatarSync } from '../services/participantAvatarSync
 import { healParticipantPlaceholderName, resolveOnboardingName } from '../services/participantName.js';
 import { needsShift2InterestsReselection } from '../services/shift2InterestsGate.js';
 import { getForumSettings } from '../services/helpers.js';
+import { groupsMatchingDirection } from '../services/groupDirectionSync.js';
 import {
   findParticipantForVk,
   getShiftById,
@@ -80,6 +81,9 @@ async function assignGroup(
       eq(participantGroups.shiftId, shiftId),
     )).limit(1);
     if (!g) return { groupId: null, groupName: null };
+    if (g.directionId != null && g.directionId !== directionId) {
+      throw new Error('Эта группа относится к другому направлению. Выберите группу своего направления.');
+    }
     const [c] = await db.select({ c: count() }).from(participants).where(and(
       eq(participants.groupId, g.id),
       eq(participants.shiftId, shiftId),
@@ -90,14 +94,13 @@ async function assignGroup(
     return { groupId: g.id, groupName: g.name };
   }
 
-  // Auto: least-filled group. Direction of the participant is forced from the group later.
-  void directionId;
   const groups = await db.select().from(participantGroups)
     .where(eq(participantGroups.shiftId, shiftId))
     .orderBy(asc(participantGroups.id));
-  let best: typeof groups[0] | null = null;
+  const pool = groupsMatchingDirection(groups, directionId);
+  let best: typeof pool[0] | null = null;
   let bestCount = Infinity;
-  for (const g of groups) {
+  for (const g of pool) {
     const [c] = await db.select({ c: count() }).from(participants).where(and(
       eq(participants.groupId, g.id),
       eq(participants.shiftId, shiftId),
@@ -325,10 +328,12 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       res.status(400).json({ error: e instanceof Error ? e.message : 'Group assign failed' });
       return;
     }
-    if (mode === 'list' && !groupAssign.groupId
-      && (await db.select().from(participantGroups).where(eq(participantGroups.shiftId, shiftId))).length > 0) {
-      res.status(400).json({ error: 'Выберите группу' });
-      return;
+    if (mode === 'list' && !groupAssign.groupId) {
+      const shiftGroups = await db.select().from(participantGroups).where(eq(participantGroups.shiftId, shiftId));
+      if (groupsMatchingDirection(shiftGroups, dir.id).length > 0) {
+        res.status(400).json({ error: 'Выберите группу' });
+        return;
+      }
     }
 
     const consentVersions = await getActiveConsentVersions();
@@ -347,8 +352,15 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       return;
     }
 
-    const { resolveDirectionFromGroup } = await import('../services/groupDirectionSync.js');
-    const finalDir = await resolveDirectionFromGroup(groupAssign.groupId, { id: dir.id, name: dir.name });
+    if (groupAssign.groupId) {
+      const [assignedGroup] = await db.select({
+        directionId: participantGroups.directionId,
+      }).from(participantGroups).where(eq(participantGroups.id, groupAssign.groupId)).limit(1);
+      if (assignedGroup?.directionId && assignedGroup.directionId !== dir.id) {
+        res.status(400).json({ error: 'Эта группа относится к другому направлению. Выберите группу своего направления.' });
+        return;
+      }
+    }
 
     const resolvedName = await resolveOnboardingName(vkUserId, data.firstName, data.lastName);
     if ('error' in resolvedName) {
@@ -371,8 +383,8 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       consentAnalyticsVersion: data.consentAnalyticsVersion ?? consentVersions.analytics,
       groupId: groupAssign.groupId,
       groupName: groupAssign.groupName,
-      directionId: finalDir.id,
-      direction: finalDir.name,
+      directionId: dir.id,
+      direction: dir.name,
       interests: data.interests,
       interestsReselectedAt: new Date(),
       goalAnswers: data.goalAnswers,

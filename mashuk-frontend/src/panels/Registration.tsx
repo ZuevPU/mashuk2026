@@ -86,7 +86,12 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   const [consentPdMeta, setConsentPdMeta] = useState<{ version: number; title: string; body: string } | null>(null);
   const [consentAnalyticsMeta, setConsentAnalyticsMeta] = useState<{ version: number; title: string; body: string } | null>(null);
   const [groupAssignMode, setGroupAssignMode] = useState<'list' | 'auto'>('list');
-  const [groups, setGroups] = useState<{ id: number; name: string; seatsLeft: number | null }[]>([]);
+  const [groups, setGroups] = useState<{
+    id: number;
+    name: string;
+    seatsLeft: number | null;
+    directionId?: number | null;
+  }[]>([]);
   const [groupId, setGroupId] = useState<number | null>(null);
   const [goalAnswers, setGoalAnswers] = useState<string[]>(['', '', '', '', '']);
   const [interests, setInterests] = useState<string[]>([]);
@@ -247,7 +252,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
     if (!selectedShiftId) return;
     apiGet<{
       groupAssignMode?: string;
-      groups?: { id: number; name: string; seatsLeft: number | null }[];
+      groups?: { id: number; name: string; seatsLeft: number | null; directionId?: number | null }[];
       goalQuestions?: unknown;
       interestGroups?: Array<{ title: string; tags: string[] }>;
       interestMin?: number;
@@ -291,6 +296,18 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
       .catch(() => undefined);
   }, [selectedShiftId]);
 
+  const groupsForDirection = useMemo(() => {
+    if (!directionId) return [];
+    return groups.filter(g => g.directionId == null || g.directionId === directionId);
+  }, [groups, directionId]);
+
+  useEffect(() => {
+    setGroupId(prev => {
+      if (prev == null) return prev;
+      return groupsForDirection.some(g => g.id === prev) ? prev : null;
+    });
+  }, [groupsForDirection]);
+
   const progressValue = step === 'result' || step === 'confirm'
     ? 100
     : step === 0
@@ -301,7 +318,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
     hasRealName
     && directionId && age && Number(age) >= 14 && Number(age) <= 100
     && workplace.trim() && position.trim() && region
-    && (groupAssignMode !== 'list' || groups.length === 0 || groupId),
+    && (groupAssignMode !== 'list' || groupsForDirection.length === 0 || groupId),
   );
   const canGoStep2 = visibleGoalQuestionsFilled(goalQuestions, goalAnswers);
   const canGoStep3 = interests.length >= interestMin && interests.length <= interestMax;
@@ -466,7 +483,10 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 placeholder="Выберите направление"
                 options={directions.map(d => ({ label: d.name, value: d.id }))}
                 value={directionId ?? undefined}
-                onChange={e => setDirectionId(Number(e.target.value))}
+                onChange={e => {
+                  setDirectionId(Number(e.target.value));
+                  setGroupId(null);
+                }}
               />
             </FormItem>
             <FormItem top="Место работы *">
@@ -497,11 +517,11 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 />
               </FormItem>
             )}
-            {groupAssignMode === 'list' && groups.length > 0 && (
+            {groupAssignMode === 'list' && groupsForDirection.length > 0 && (
               <FormItem top="Группа *">
                 <CustomSelect
                   placeholder="Выберите группу"
-                  options={groups.map(g => ({
+                  options={groupsForDirection.map(g => ({
                     label: g.seatsLeft != null ? `${g.name} (мест: ${g.seatsLeft})` : g.name,
                     value: g.id,
                   }))}

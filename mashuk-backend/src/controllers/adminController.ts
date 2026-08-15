@@ -217,18 +217,10 @@ export const updateParticipantGroup = async (req: AdminRequest, res: Response): 
     return;
   }
 
-  const { resolveDirectionFromGroup } = await import('../services/groupDirectionSync.js');
-  const dirPatch = group.directionId
-    ? await resolveDirectionFromGroup(group.id, { id: 0, name: '' })
-    : null;
   const memberPatch: Partial<typeof participants.$inferInsert> = {
     groupId: group.id,
     groupName: group.name,
   };
-  if (dirPatch?.fromGroup) {
-    memberPatch.directionId = dirPatch.id;
-    memberPatch.direction = dirPatch.name;
-  }
 
   const [updated] = await db.update(participants)
     .set(memberPatch)
@@ -244,7 +236,6 @@ export const updateParticipantGroup = async (req: AdminRequest, res: Response): 
     newValue: {
       groupId: group.id,
       groupName: group.name,
-      ...(dirPatch?.fromGroup ? { directionId: dirPatch.id, direction: dirPatch.name } : {}),
     },
     isCritical: true,
   });

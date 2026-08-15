@@ -2,7 +2,15 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { directions, participantGroups, participants } from '../db/schema.js';
 
-/** If the group has a direction, force it onto all members (and return that direction). */
+/** Groups without a direction, or tied to the chosen one. */
+export function groupsMatchingDirection<T extends { directionId?: number | null }>(
+  groups: T[],
+  directionId: number,
+): T[] {
+  return groups.filter(g => g.directionId == null || g.directionId === directionId);
+}
+
+/** Read the group's direction if set. Registration keeps the participant's own choice. */
 export async function resolveDirectionFromGroup(
   groupId: number | null | undefined,
   fallback: { id: number; name: string },
