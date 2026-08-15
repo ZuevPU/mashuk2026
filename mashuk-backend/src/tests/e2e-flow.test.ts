@@ -2,7 +2,7 @@ import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import { createApp } from '../app.js';
-import { getAdminBearerToken } from './adminTestHelper.js';
+import { getAdminBearerToken, groupIdForDirection, interestsFromOnboardingMeta } from './adminTestHelper.js';
 import { TINY_PNG_DATA_URL } from './fixtures/tinyPng.js';
 
 const E2E_VK_ID = 999001;
@@ -36,7 +36,7 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
       .get('/api/auth/onboarding-meta')
       .set('X-Test-Vk-Id', String(E2E_VK_ID));
     assert.equal(meta.status, 200);
-    const groupId = meta.body.groups?.[0]?.id ?? null;
+    const groupId = groupIdForDirection(meta.body.groups, directionId);
     const consents = await request(app).get('/api/consents/active');
     assert.equal(consents.status, 200);
 
@@ -63,13 +63,7 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
           'Результат 8 дней',
           'Ожидания от участников',
         ],
-        interests: [
-          'проектная работа',
-          'подростки',
-          'осмысленность обучения',
-          'командная работа учителей',
-          'открытые уроки',
-        ],
+        interests: interestsFromOnboardingMeta(meta.body),
         roleAnswers: [1, 1, 0, 1, 1, 2, 0, 3],
       });
     assert.equal(onboarding.status, 200, JSON.stringify(onboarding.body));
@@ -343,7 +337,7 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
     const meta = await request(app)
       .get('/api/auth/onboarding-meta')
       .set('X-Test-Vk-Id', String(staleVk));
-    const groupId = meta.body.groups?.[0]?.id ?? null;
+    const groupId = groupIdForDirection(meta.body.groups, directionId);
     const consents = await request(app).get('/api/consents/active');
     assert.equal(consents.status, 200);
     const currentPd = consents.body.pd?.version ?? 1;
@@ -365,13 +359,7 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
         consentAnalyticsVersion: consents.body.analytics?.version ?? 1,
         groupId,
         goalAnswers: ['a', 'b', 'c', 'd', 'e'],
-        interests: [
-          'проектная работа',
-          'подростки',
-          'осмысленность обучения',
-          'командная работа учителей',
-          'открытые уроки',
-        ],
+        interests: interestsFromOnboardingMeta(meta.body),
         roleAnswers: [1, 1, 0, 1, 1, 2, 0, 3],
       });
     assert.equal(bad.status, 400);
