@@ -45,6 +45,28 @@ export function isPlaceholderDisplayName(
     || (first === 'test' && last === 'user');
 }
 
+export function hasCyrillicScript(raw?: string | null): boolean {
+  return /[\u0400-\u04FF]/.test(sanitizePersonName(raw));
+}
+
+/** True when the stored name is Latin-only (Petr Zuev) and can be replaced by the VK Russian name. */
+export function isLatinOnlyPersonName(
+  firstName?: string | null,
+  lastName?: string | null,
+): boolean {
+  const first = sanitizePersonName(firstName);
+  const last = sanitizePersonName(lastName);
+  if (!first || !last || isPlaceholderDisplayName(first, last)) return false;
+  const full = `${first} ${last}`;
+  return /[A-Za-z]/.test(full) && !hasCyrillicScript(full);
+}
+
+function nameQuality(firstName: string, lastName: string): number {
+  if (!firstName || !lastName || isPlaceholderDisplayName(firstName, lastName)) return 0;
+  if (hasCyrillicScript(`${firstName} ${lastName}`)) return 2;
+  return 1;
+}
+
 export function pickPersonName(opts: {
   vkFirstName?: string | null;
   vkLastName?: string | null;
@@ -55,14 +77,15 @@ export function pickPersonName(opts: {
   const vkLast = sanitizePersonName(opts.vkLastName);
   const clientFirst = sanitizePersonName(opts.clientFirstName);
   const clientLast = sanitizePersonName(opts.clientLastName);
-  const clientIsPlaceholder = isPlaceholderDisplayName(clientFirst, clientLast);
-
-  const firstName = vkFirst || (clientIsPlaceholder ? '' : clientFirst);
-  const lastName = vkLast || (clientIsPlaceholder ? '' : clientLast);
+  const vkScore = nameQuality(vkFirst, vkLast);
+  const clientScore = nameQuality(clientFirst, clientLast);
+  const useVk = vkScore > 0 && vkScore >= clientScore;
+  const firstName = useVk ? vkFirst : clientScore > 0 ? clientFirst : '';
+  const lastName = useVk ? vkLast : clientScore > 0 ? clientLast : '';
   return {
     firstName,
     lastName,
-    ok: Boolean(firstName && lastName && !isPlaceholderDisplayName(firstName, lastName)),
+    ok: nameQuality(firstName, lastName) > 0,
   };
 }
 
@@ -93,10 +116,19 @@ type NamedRow = {
   lastName?: string | null;
 };
 
-export async function repairPlaceholderNames<T extends NamedRow>(rows: T[]): Promise<T[]> {
-  const targets = rows.filter(p =>
-    p.vkId > 1 && isPlaceholderDisplayName(p.firstName, p.lastName),
-  );
+export function needsVkDisplayNameHeal(
+  firstName?: string | null,
+  lastName?: string | null,
+): boolean {
+  return isPlaceholderDisplayName(firstName, lastName)
+    || isLatinOnlyPersonName(firstName, lastName);
+}
+
+async function applyVkNames<T extends NamedRow>(
+  rows: T[],
+  shouldRepair: (row: T) => boolean,
+): Promise<T[]> {
+  const targets = rows.filter(p => p.vkId > 1 && shouldRepair(p));
   if (!targets.length) return rows;
 
   const profiles = await batchFetchVkUserProfiles(targets.map(p => p.vkId));
@@ -110,6 +142,11 @@ export async function repairPlaceholderNames<T extends NamedRow>(rows: T[]): Pro
       clientLastName: row.lastName,
     });
     if (!picked.ok) continue;
+    if (
+      isLatinOnlyPersonName(row.firstName, row.lastName)
+      && !hasCyrillicScript(`${picked.firstName} ${picked.lastName}`)
+    ) continue;
+    if (picked.firstName === row.firstName && picked.lastName === row.lastName) continue;
     patched.set(row.id, { firstName: picked.firstName, lastName: picked.lastName });
   }
   if (!patched.size) return rows;
@@ -124,10 +161,14 @@ export async function repairPlaceholderNames<T extends NamedRow>(rows: T[]): Pro
   });
 }
 
+export async function repairPlaceholderNames<T extends NamedRow>(rows: T[]): Promise<T[]> {
+  return applyVkNames(rows, p => needsVkDisplayNameHeal(p.firstName, p.lastName));
+}
+
 export async function healParticipantPlaceholderName<T extends NamedRow>(
   row: T | null | undefined,
 ): Promise<T | null> {
-  if (!row || row.vkId <= 1 || !isPlaceholderDisplayName(row.firstName, row.lastName)) {
+  if (!row || row.vkId <= 1 || !needsVkDisplayNameHeal(row.firstName, row.lastName)) {
     return row ?? null;
   }
   const [healed] = await repairPlaceholderNames([row]);

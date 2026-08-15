@@ -46,6 +46,8 @@ async function vkUsersGetMany(userIds: string, token: string): Promise<VkUserPho
   const qs = new URLSearchParams({
     user_ids: userIds,
     fields: 'photo_100,photo_200,first_name,last_name',
+    // Russian names: without lang VK often returns the English profile name (Petr Zuev).
+    lang: '0',
     access_token: token,
     v: VK_VERSION,
   });

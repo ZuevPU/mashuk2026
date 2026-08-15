@@ -1,7 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  hasCyrillicScript,
+  isLatinOnlyPersonName,
   isPlaceholderDisplayName,
+  needsVkDisplayNameHeal,
   parseEditablePersonName,
   pickPersonName,
   sanitizePersonName,
@@ -64,5 +67,40 @@ describe('participantName', () => {
     assert.equal('error' in parseEditablePersonName('Тест', 'Пользователь'), true);
     assert.equal('error' in parseEditablePersonName('', 'Иванов'), true);
     assert.equal('error' in parseEditablePersonName('Анна', '123'), true);
+  });
+
+  it('detects Latin-only VK names like Petr Zuev', () => {
+    assert.equal(isLatinOnlyPersonName('Petr', 'Zuev'), true);
+    assert.equal(isLatinOnlyPersonName('Пётр', 'Зуев'), false);
+    assert.equal(isLatinOnlyPersonName('Петр', 'Зуев'), false);
+    assert.equal(isLatinOnlyPersonName('Тест', 'Пользователь'), false);
+    assert.equal(hasCyrillicScript('Зуев'), true);
+    assert.equal(hasCyrillicScript('Zuev'), false);
+    assert.equal(needsVkDisplayNameHeal('Petr', 'Zuev'), true);
+    assert.equal(needsVkDisplayNameHeal('Пётр', 'Зуев'), false);
+  });
+
+  it('prefers the Russian VK name over a Latin registration name', () => {
+    const picked = pickPersonName({
+      vkFirstName: 'Пётр',
+      vkLastName: 'Зуев',
+      clientFirstName: 'Petr',
+      clientLastName: 'Zuev',
+    });
+    assert.equal(picked.ok, true);
+    assert.equal(picked.firstName, 'Пётр');
+    assert.equal(picked.lastName, 'Зуев');
+  });
+
+  it('keeps a Cyrillic client name when VK only has Latin', () => {
+    const picked = pickPersonName({
+      vkFirstName: 'Petr',
+      vkLastName: 'Zuev',
+      clientFirstName: 'Пётр',
+      clientLastName: 'Зуев',
+    });
+    assert.equal(picked.ok, true);
+    assert.equal(picked.firstName, 'Пётр');
+    assert.equal(picked.lastName, 'Зуев');
   });
 });
