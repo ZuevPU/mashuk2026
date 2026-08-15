@@ -14,8 +14,15 @@ import {
   tasks,
   thematicTags,
 } from '../db/schema.js';
+function remapId(id: number | null | undefined, map: Map<number, number>): number | null {
+  if (id == null || !Number.isFinite(id) || id <= 0) return null;
+  if (map.has(id)) return map.get(id) ?? null;
+  return new Set(map.values()).has(id) ? id : null;
+}
+
 function remapLinkedIds(ids: unknown, map: Map<number, number>): number[] {
   if (!Array.isArray(ids)) return [];
+  const targetIds = new Set(map.values());
   const out: number[] = [];
   for (const raw of ids) {
     const n = Number(raw);
@@ -25,7 +32,7 @@ function remapLinkedIds(ids: unknown, map: Map<number, number>): number[] {
       if (mapped) out.push(mapped);
       continue;
     }
-    out.push(n);
+    if (targetIds.has(n)) out.push(n);
   }
   return out;
 }
@@ -42,7 +49,15 @@ export function remapAudienceDirectionTree(config: unknown, map: Map<number, num
       out[key] = remapLinkedIds(value, map);
     } else if (key === 'audienceDirectionId') {
       const n = Number(value);
-      out[key] = Number.isFinite(n) && n > 0 ? (map.get(n) ?? value) : value;
+      if (!Number.isFinite(n) || n <= 0) {
+        out[key] = value;
+      } else if (map.has(n)) {
+        out[key] = map.get(n);
+      } else if (new Set(map.values()).has(n)) {
+        out[key] = n;
+      } else {
+        out[key] = null;
+      }
     } else {
       out[key] = remapAudienceDirectionTree(value, map);
     }
@@ -216,7 +231,7 @@ export async function remapShiftDirectionRefs(
     audienceDirectionIds: events.audienceDirectionIds,
   }).from(events).where(eq(events.shiftId, shiftId));
   for (const e of evs) {
-    const nextId = e.audienceDirectionId ? (directionMap.get(e.audienceDirectionId) ?? e.audienceDirectionId) : null;
+    const nextId = remapId(e.audienceDirectionId, directionMap);
     const nextIds = remapLinkedIds(e.audienceDirectionIds, directionMap);
     await tx.update(events).set({
       audienceDirectionId: nextId,

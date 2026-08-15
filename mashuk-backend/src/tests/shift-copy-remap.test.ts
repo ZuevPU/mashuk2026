@@ -40,7 +40,7 @@ describe('shift copy id remap', () => {
         ],
       }],
     }, map) as { steps: Array<{ fields: Array<Record<string, unknown>> }> };
-    assert.deepEqual(remapped.steps[0].fields[0].audienceDirectionIds, [30, 99]);
+    assert.deepEqual(remapped.steps[0].fields[0].audienceDirectionIds, [30]);
     assert.equal(remapped.steps[0].fields[1].audienceDirectionId, 40);
 
     const alreadyLocal = remapAudienceDirectionTree({

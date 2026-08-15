@@ -460,7 +460,7 @@ export async function copyShiftModules(opts: {
             ...rest.showWhen,
             questionId: rest.showWhen.questionId && questionIdMap.has(rest.showWhen.questionId)
               ? questionIdMap.get(rest.showWhen.questionId)!
-              : rest.showWhen.questionId,
+              : undefined,
           }
           : rest.showWhen;
         const [created] = await tx.insert(questions).values({
@@ -520,7 +520,7 @@ export async function copyShiftModules(opts: {
           qrToken: null,
           status: 'draft',
           isHidden: false,
-          medalId: rest.medalId ? (medalIdMap.get(rest.medalId) ?? rest.medalId) : null,
+          medalId: rest.medalId ? (medalIdMap.get(rest.medalId) ?? null) : null,
           programPlaceId: rest.programPlaceId
             ? (catalogs.placeMap.get(rest.programPlaceId) ?? null)
             : null,

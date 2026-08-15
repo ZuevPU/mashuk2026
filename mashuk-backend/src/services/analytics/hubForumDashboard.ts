@@ -32,7 +32,10 @@ async function loadCommunityQueueCounts(shiftId: number | null) {
       .innerJoin(participants, eq(exchangeQuestions.participantId, participants.id))
       .where(exchangeScope('pending')),
     db.select({ count: count() }).from(orgThreads)
-      .where(eq(orgThreads.status, 'waiting')),
+      .innerJoin(participants, eq(orgThreads.participantId, participants.id))
+      .where(shiftId != null
+        ? and(eq(orgThreads.status, 'waiting'), eq(participants.shiftId, shiftId))
+        : eq(orgThreads.status, 'waiting')),
     db.select({ count: count() }).from(exchangeQuestions)
       .innerJoin(participants, eq(exchangeQuestions.participantId, participants.id))
       .where(exchangeScope('approved')),

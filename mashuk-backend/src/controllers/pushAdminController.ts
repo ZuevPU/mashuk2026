@@ -70,7 +70,8 @@ export const listPushNotifications = async (req: AdminRequest, res: Response): P
   const sentFrom = req.query.sentFrom as string | undefined;
   const sentTo = req.query.sentTo as string | undefined;
 
-  const conditions = [];
+  const shiftId = await resolveAdminShiftId(req);
+  const conditions = [eq(adminPushNotifications.shiftId, shiftId)];
   if (status) conditions.push(eq(adminPushNotifications.status, status));
   if (notificationType) conditions.push(eq(adminPushNotifications.notificationType, notificationType));
   if (audienceType) conditions.push(eq(adminPushNotifications.audienceType, audienceType));
@@ -87,9 +88,10 @@ export const listPushNotifications = async (req: AdminRequest, res: Response): P
   if (conditions.length) q = q.where(and(...conditions)) as typeof q;
 
   const items = await q;
-  const [totalRow] = await db.select({ n: count() }).from(adminPushNotifications);
+  const [totalRow] = await db.select({ n: count() }).from(adminPushNotifications)
+    .where(eq(adminPushNotifications.shiftId, shiftId));
   const [queuedRow] = await db.select({ n: count() }).from(adminPushNotifications)
-    .where(eq(adminPushNotifications.status, 'queued'));
+    .where(and(eq(adminPushNotifications.status, 'queued'), eq(adminPushNotifications.shiftId, shiftId)));
 
   res.json({
     notifications: items.map(rowToApi),
@@ -99,7 +101,11 @@ export const listPushNotifications = async (req: AdminRequest, res: Response): P
 
 export const getPushNotification = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
-  const [row] = await db.select().from(adminPushNotifications).where(eq(adminPushNotifications.id, id)).limit(1);
+  const shiftId = await resolveAdminShiftId(req);
+  const [row] = await db.select().from(adminPushNotifications).where(and(
+    eq(adminPushNotifications.id, id),
+    eq(adminPushNotifications.shiftId, shiftId),
+  )).limit(1);
   if (!row) { res.status(404).json({ error: 'Not found' }); return; }
   res.json({ notification: rowToApi(row) });
 };
@@ -130,9 +136,10 @@ export const updatePushNotification = async (req: AdminRequest, res: Response): 
   const patch = toDbValues(parsed.data as Record<string, unknown>);
   delete (patch as { createdByAdminId?: number }).createdByAdminId;
 
+  const shiftId = await resolveAdminShiftId(req);
   const [updated] = await db.update(adminPushNotifications)
     .set(patch)
-    .where(eq(adminPushNotifications.id, id))
+    .where(and(eq(adminPushNotifications.id, id), eq(adminPushNotifications.shiftId, shiftId)))
     .returning();
   if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
   res.json({ notification: rowToApi(updated) });
@@ -145,6 +152,10 @@ export const deletePushNotification = async (req: AdminRequest, res: Response): 
   await db.delete(participantPushDeliveries).where(eq(participantPushDeliveries.notificationId, id));
   await db.delete(pushTriggerFires).where(eq(pushTriggerFires.notificationId, id));
 
+  const shiftId = await resolveAdminShiftId(req);
+  const [owned] = await db.select({ id: adminPushNotifications.id }).from(adminPushNotifications)
+    .where(and(eq(adminPushNotifications.id, id), eq(adminPushNotifications.shiftId, shiftId))).limit(1);
+  if (!owned) { res.status(404).json({ error: 'Not found' }); return; }
   const [deleted] = await db.delete(adminPushNotifications)
     .where(eq(adminPushNotifications.id, id)).returning();
   if (!deleted) { res.status(404).json({ error: 'Not found' }); return; }
@@ -162,7 +173,11 @@ export const deletePushNotification = async (req: AdminRequest, res: Response): 
 
 export const duplicatePushNotification = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
-  const [src] = await db.select().from(adminPushNotifications).where(eq(adminPushNotifications.id, id)).limit(1);
+  const shiftId = await resolveAdminShiftId(req);
+  const [src] = await db.select().from(adminPushNotifications).where(and(
+    eq(adminPushNotifications.id, id),
+    eq(adminPushNotifications.shiftId, shiftId),
+  )).limit(1);
   if (!src) { res.status(404).json({ error: 'Not found' }); return; }
 
   const { id: _id, sentAt, deliveredCount, openedCount, triggerFiredAt, createdAt, ...rest } = src;

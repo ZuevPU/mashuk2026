@@ -1,5 +1,6 @@
 import { Response } from 'express';
-import { desc, eq, asc } from 'drizzle-orm';
+import { and, desc, eq, asc } from 'drizzle-orm';
+import { resolveAdminShiftId } from '../services/shiftService.js';
 import { db } from '../db/index.js';
 import { orgMessages, orgThreads, participants } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
@@ -116,16 +117,16 @@ export const replyOrgThread = async (req: ParticipantRequest, res: Response): Pr
 export const adminListOrgThreads = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
     const status = req.query.status as string | undefined;
-    let threads = await db.select({
+    const shiftId = await resolveAdminShiftId(req);
+    const conditions = [eq(participants.shiftId, shiftId)];
+    if (status) conditions.push(eq(orgThreads.status, status));
+    const threads = await db.select({
       t: orgThreads,
       p: participants,
     }).from(orgThreads)
-      .leftJoin(participants, eq(orgThreads.participantId, participants.id))
+      .innerJoin(participants, eq(orgThreads.participantId, participants.id))
+      .where(and(...conditions))
       .orderBy(desc(orgThreads.updatedAt));
-
-    if (status) {
-      threads = threads.filter(r => r.t.status === status);
-    }
 
     const result = await Promise.all(threads.map(async (row) => {
       const messages = await db.select().from(orgMessages)
@@ -156,11 +157,18 @@ export const adminReplyOrgThread = async (req: AdminRequest, res: Response): Pro
       return;
     }
 
-    const [thread] = await db.select().from(orgThreads).where(eq(orgThreads.id, threadId)).limit(1);
-    if (!thread) {
+    const shiftId = await resolveAdminShiftId(req);
+    const [owned] = await db.select({
+      t: orgThreads,
+    }).from(orgThreads)
+      .innerJoin(participants, eq(orgThreads.participantId, participants.id))
+      .where(and(eq(orgThreads.id, threadId), eq(participants.shiftId, shiftId)))
+      .limit(1);
+    if (!owned) {
       res.status(404).json({ error: 'Thread not found' });
       return;
     }
+    const thread = owned.t;
 
     const [message] = await db.insert(orgMessages).values({
       threadId,
@@ -205,11 +213,18 @@ export const adminDeleteOrgThread = async (req: AdminRequest, res: Response): Pr
       res.status(400).json({ error: 'Invalid thread id' });
       return;
     }
-    const [thread] = await db.select().from(orgThreads).where(eq(orgThreads.id, threadId)).limit(1);
-    if (!thread) {
+    const shiftId = await resolveAdminShiftId(req);
+    const [owned] = await db.select({
+      t: orgThreads,
+    }).from(orgThreads)
+      .innerJoin(participants, eq(orgThreads.participantId, participants.id))
+      .where(and(eq(orgThreads.id, threadId), eq(participants.shiftId, shiftId)))
+      .limit(1);
+    if (!owned) {
       res.status(404).json({ error: 'Thread not found' });
       return;
     }
+    const thread = owned.t;
 
     await db.delete(orgMessages).where(eq(orgMessages.threadId, threadId));
     await db.delete(orgThreads).where(eq(orgThreads.id, threadId));

@@ -142,14 +142,16 @@ async function listExchangeRows(req: AdminRequest, res: Response) {
 async function listOrgRows(req: AdminRequest, res: Response) {
   const q = (req.query.q as string | undefined)?.trim();
   const status = req.query.status as string | undefined;
-  const conditions = [];
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
+  const conditions = [eq(participants.shiftId, shiftId)];
   if (status) conditions.push(eq(orgThreads.status, status));
   const rows = await db.select({
     t: orgThreads,
     p: participants,
   }).from(orgThreads)
-    .leftJoin(participants, eq(orgThreads.participantId, participants.id))
-    .where(conditions.length ? and(...conditions) : undefined)
+    .innerJoin(participants, eq(orgThreads.participantId, participants.id))
+    .where(and(...conditions))
     .orderBy(desc(orgThreads.updatedAt))
     .limit(200);
 
@@ -244,7 +246,9 @@ export const crudQuestions = {
 
   getOne: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
-    const [q] = await db.select().from(questions).where(eq(questions.id, id)).limit(1);
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
+    const [q] = await db.select().from(questions).where(and(eq(questions.id, id), eq(questions.shiftId, shiftId))).limit(1);
     if (!q) { res.status(404).json({ error: 'Not found' }); return; }
     const opts = await db.select().from(questionOptions)
       .where(eq(questionOptions.questionId, id))
@@ -284,7 +288,9 @@ export const crudQuestions = {
     const id = Number(req.params.id);
     const parsed = parseBody(questionUpdateSchema, req.body);
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
-    const [before] = await db.select().from(questions).where(eq(questions.id, id)).limit(1);
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
+    const [before] = await db.select().from(questions).where(and(eq(questions.id, id), eq(questions.shiftId, shiftId))).limit(1);
     if (!before) { res.status(404).json({ error: 'Not found' }); return; }
 
     const nextAudienceType = (parsed.data as { audienceType?: string }).audienceType ?? before.audienceType;

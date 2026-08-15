@@ -2509,6 +2509,12 @@ export const moderateTask = async (req: AdminRequest, res: Response): Promise<vo
     res.status(404).json({ error: 'Submission not found' });
     return;
   }
+  const shiftId = await resolveAdminShiftId(req);
+  const [taskRow] = await db.select({ shiftId: tasks.shiftId }).from(tasks).where(eq(tasks.id, existing.taskId)).limit(1);
+  if (!taskRow || taskRow.shiftId !== shiftId) {
+    res.status(404).json({ error: 'Submission not found' });
+    return;
+  }
 
   if (hasAnswerPatch || (hasCommentPatch && !status)) {
     const { normalizePostUrl } = await import('../services/taskEligibility.js');
@@ -2589,8 +2595,19 @@ export const bulkModerateTasks = async (req: AdminRequest, res: Response): Promi
     return;
   }
   const { applyTaskModeration } = await import('../services/taskModerationService.js');
+  const shiftId = await resolveAdminShiftId(req);
   const results: { id: number; ok: boolean; error?: string }[] = [];
   for (const id of ids) {
+    const [existing] = await db.select({ taskId: taskSubmissions.taskId }).from(taskSubmissions).where(eq(taskSubmissions.id, id)).limit(1);
+    if (!existing) {
+      results.push({ id, ok: false, error: 'Submission not found' });
+      continue;
+    }
+    const [taskRow] = await db.select({ shiftId: tasks.shiftId }).from(tasks).where(eq(tasks.id, existing.taskId)).limit(1);
+    if (!taskRow || taskRow.shiftId !== shiftId) {
+      results.push({ id, ok: false, error: 'Submission not found' });
+      continue;
+    }
     const result = await applyTaskModeration(
       id,
       status,
@@ -2618,9 +2635,13 @@ export const getModerationSummary = async (req: AdminRequest, res: Response): Pr
       eq(participants.shiftId, shiftId),
     ));
   const [tasksRow] = await db.select({ count: count() }).from(taskSubmissions)
-    .where(or(
-      eq(taskSubmissions.status, 'pending'),
-      eq(taskSubmissions.status, 'pending_team'),
+    .innerJoin(tasks, eq(taskSubmissions.taskId, tasks.id))
+    .where(and(
+      or(
+        eq(taskSubmissions.status, 'pending'),
+        eq(taskSubmissions.status, 'pending_team'),
+      ),
+      eq(tasks.shiftId, shiftId),
     ));
   res.json({
     pendingExchange: exchangeRow?.count ?? 0,
@@ -3723,7 +3744,8 @@ export const triggerAnalyticsRecalc = async (_req: AdminRequest, res: Response):
   res.json({ ok: true });
 };
 
-export const listPendingSubmissions = async (_req: AdminRequest, res: Response): Promise<void> => {
+export const listPendingSubmissions = async (req: AdminRequest, res: Response): Promise<void> => {
+  const shiftId = await resolveAdminShiftId(req);
   const rows = await db.select({
     s: taskSubmissions,
     p: participants,
@@ -3731,7 +3753,10 @@ export const listPendingSubmissions = async (_req: AdminRequest, res: Response):
   }).from(taskSubmissions)
     .leftJoin(participants, eq(taskSubmissions.participantId, participants.id))
     .leftJoin(tasks, eq(taskSubmissions.taskId, tasks.id))
-    .where(eq(taskSubmissions.status, 'pending'));
+    .where(and(
+      eq(taskSubmissions.status, 'pending'),
+      eq(tasks.shiftId, shiftId),
+    ));
 
   const subIds = rows.map(r => r.s.id);
   const confRows = subIds.length
@@ -3787,7 +3812,7 @@ export const listAllSubmissions = async (req: AdminRequest, res: Response): Prom
   const sortBy = String(req.query.sortBy || 'submittedAt');
   const sortDirFn = req.query.sortDir === 'asc' ? asc : desc;
 
-  const conditions = [];
+  const conditions = [eq(tasks.shiftId, await resolveAdminShiftId(req))];
   if (statusRaw) {
     const statuses = statusRaw.split(',').map(s => s.trim()).filter(Boolean);
     if (statuses.length === 1) conditions.push(eq(taskSubmissions.status, statuses[0]));

@@ -216,7 +216,7 @@ export function ExchangePeerSection({
       setCategoryId(null);
       setText('');
       setAudience('all');
-      onSubmitted(`Вопрос отправлен на проверку. После публикации он появится в теме «${catTitle}».`);
+      onSubmitted(`Вопрос отправлен на проверку. Баллы начислятся после одобрения, затем он появится в теме «${catTitle}».`);
       await reload();
     } catch (err) {
       onError(err instanceof ApiError ? err.message : 'Не удалось отправить вопрос');
@@ -257,7 +257,7 @@ export function ExchangePeerSection({
             <div style={{ fontSize: 12, color: '#666', marginBottom: 8, lineHeight: 1.45 }}>
               Можно задать ещё {limits.questionsLeft} {questionsWord(limits.questionsLeft)} сегодня
               {' '}(из {limits.questionsMax} в день
-              {limits.pointsPerQuestion != null ? `, +${limits.pointsPerQuestion} за вопрос` : ''}).
+              {limits.pointsPerQuestion != null ? `, +${limits.pointsPerQuestion} после одобрения` : ''}).
             </div>
           )}
           <div style={{ fontSize: 12, color: '#2D6A4F', marginBottom: 8, lineHeight: 1.4 }}>
