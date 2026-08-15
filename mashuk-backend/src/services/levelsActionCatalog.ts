@@ -41,7 +41,7 @@ export const ACTION_CATALOG: ActionCatalogDef[] = [
   { actionType: 'state_check_morning', displayName: 'Утренняя проверка состояния', track: 'path', group: 'path', pointsPerUnit: 5, maxAccruals: 24, source: SRC.stateCheck },
   { actionType: 'state_check_day', displayName: 'Дневная проверка состояния', track: 'path', group: 'path', pointsPerUnit: 5, maxAccruals: 24, source: SRC.stateCheck },
   { actionType: 'state_check_evening', displayName: 'Вечерняя проверка состояния', track: 'path', group: 'path', pointsPerUnit: 5, maxAccruals: 24, source: SRC.stateCheck },
-  // High cap: each open touchpoint + depth bonus both use this action (~2 rows/answer).
+  // High cap: each open touchpoint uses this action; do not add a depth bonus.
   { actionType: 'question_answer', displayName: 'Точка осмысления (ответ)', track: 'path', group: 'path', pointsPerUnit: 5, maxAccruals: 10000, source: SRC.afterBlocks },
   { actionType: 'evening_complete', displayName: 'Итоги дня', track: 'path', group: 'path', pointsPerUnit: 15, maxAccruals: 16, source: SRC.evening },
   { actionType: 'forum_wrap_complete', displayName: 'Итоги форума', track: 'path', group: 'path', pointsPerUnit: 15, maxAccruals: 1, source: SRC.wrap },

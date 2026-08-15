@@ -924,15 +924,7 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
         forumDay,
       );
 
-    let reflectionBonus = 0;
-    if (depthLabel === 'Личный вывод' || depthLabel === 'Перенос в практику') {
-      const bonus = await awardPoints(req.participant!.id, 'question_answer', 3, forumDay, {
-        relatedLogId: pointsResult?.logId,
-      });
-      reflectionBonus = bonus?.awarded ?? 0;
-    }
-
-    const xpAwarded = (pointsResult?.awarded ?? 0) + reflectionBonus;
+    const xpAwarded = pointsResult?.awarded ?? 0;
     if (!pointsResult && (typeof question.points === 'number' ? question.points : 5) > 0) {
       console.warn(
         `submitAnswer: no points awarded for question=${questionId} participant=${req.participant!.id} action=${actionType}`,
