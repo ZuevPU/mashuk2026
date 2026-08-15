@@ -4490,6 +4490,14 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 }
 .adm-narr-actions li { margin: 6px 0; }
 .adm-hub-quotes-card { margin-top: 14px; }
+.adm-answer-sort {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+}
 .adm-answer-card {
   margin-top: 10px;
   padding: 14px 16px;
@@ -4502,6 +4510,16 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+.adm-answer-points-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #e8f5ee;
+  color: #1f6b45;
+  font-size: 12px;
+  font-weight: 700;
 }
 .adm-answer-awards {
   display: flex;

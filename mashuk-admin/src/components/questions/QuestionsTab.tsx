@@ -430,8 +430,23 @@ export function QuestionsTab({
 
   const loadAnswers = (questionId: number, title: string) => {
     setAnswersModal(m => ({ ...m, open: true, questionId, title, loading: true }));
-    adminFetch(`/questions/${questionId}/answers?limit=80`)
-      .then(r => setAnswersModal(m => ({ ...m, loading: false, rows: r.answers || [] })))
+    const loadAll = async () => {
+      const rows: any[] = [];
+      let offset = 0;
+      const limit = 200;
+      let total = Infinity;
+      while (offset < total) {
+        const r = await adminFetch(`/questions/${questionId}/answers?limit=${limit}&offset=${offset}`);
+        const batch = r.answers || [];
+        total = Number(r.total ?? rows.length + batch.length);
+        rows.push(...batch);
+        if (!batch.length) break;
+        offset += batch.length;
+      }
+      return rows;
+    };
+    loadAll()
+      .then(rows => setAnswersModal(m => ({ ...m, loading: false, rows })))
       .catch(() => setAnswersModal(m => ({ ...m, loading: false, rows: [] })));
   };
 
