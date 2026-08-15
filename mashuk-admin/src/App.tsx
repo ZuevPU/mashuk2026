@@ -378,7 +378,7 @@ export const App = () => {
           )}
           {tab === 'directions' && <DirectionsTab {...tabProps} />}
           {tab === 'onboarding' && (
-            <OnboardingTab {...tabProps} onOpenProgram={() => selectTab('events')} />
+            <OnboardingTab {...tabProps} />
           )}
           {tab === 'forum' && (
             <ForumTab

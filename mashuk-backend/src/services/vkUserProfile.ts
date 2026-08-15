@@ -7,7 +7,20 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 type CacheEntry = { url: string | null; at: number };
 const avatarCache = new Map<number, CacheEntry>();
 
-type VkUserPhoto = { id?: number; photo_100?: string; photo_200?: string };
+type VkUserPhoto = {
+  id?: number;
+  first_name?: string;
+  last_name?: string;
+  photo_100?: string;
+  photo_200?: string;
+};
+
+export type VkUserProfile = {
+  id: number;
+  firstName: string | null;
+  lastName: string | null;
+  photoUrl: string | null;
+};
 
 function vkToken(): string | null {
   return env.VK_SERVICE_TOKEN || env.VK_COMMUNITY_TOKEN || null;
@@ -17,10 +30,22 @@ function photoFromUser(u: VkUserPhoto): string | null {
   return u.photo_200 || u.photo_100 || null;
 }
 
+function profileFromUser(u: VkUserPhoto): VkUserProfile | null {
+  if (u.id == null) return null;
+  const firstName = String(u.first_name ?? '').trim() || null;
+  const lastName = String(u.last_name ?? '').trim() || null;
+  return {
+    id: u.id,
+    firstName,
+    lastName,
+    photoUrl: photoFromUser(u),
+  };
+}
+
 async function vkUsersGetMany(userIds: string, token: string): Promise<VkUserPhoto[]> {
   const qs = new URLSearchParams({
     user_ids: userIds,
-    fields: 'photo_100,photo_200',
+    fields: 'photo_100,photo_200,first_name,last_name',
     access_token: token,
     v: VK_VERSION,
   });
@@ -30,7 +55,7 @@ async function vkUsersGetMany(userIds: string, token: string): Promise<VkUserPho
     response?: VkUserPhoto[];
   };
   if (data.error) {
-    console.warn('VK users.get avatars:', data.error.error_code, data.error.error_msg);
+    console.warn('VK users.get:', data.error.error_code, data.error.error_msg);
     return [];
   }
   if (!data.response?.length) return [];
@@ -105,5 +130,42 @@ export async function batchFetchVkAvatarUrls(vkIds: number[]): Promise<Map<numbe
     }
   }
 
+  return out;
+}
+
+export async function fetchVkUserProfile(vkId: number | null | undefined): Promise<VkUserProfile | null> {
+  if (vkId == null || !Number.isFinite(vkId) || vkId <= 0) return null;
+  const token = vkToken();
+  if (!token) return null;
+  try {
+    const users = await vkUsersGetMany(String(vkId), token);
+    const profile = users[0] ? profileFromUser(users[0]) : null;
+    if (profile?.photoUrl) cacheAvatar(vkId, profile.photoUrl);
+    return profile;
+  } catch {
+    return null;
+  }
+}
+
+export async function batchFetchVkUserProfiles(vkIds: number[]): Promise<Map<number, VkUserProfile>> {
+  const out = new Map<number, VkUserProfile>();
+  const token = vkToken();
+  if (!token || vkIds.length === 0) return out;
+
+  const unique = [...new Set(vkIds.filter(id => id > 0))];
+  for (let i = 0; i < unique.length; i += BATCH_SIZE) {
+    const chunk = unique.slice(i, i + BATCH_SIZE);
+    try {
+      const users = await vkUsersGetMany(chunk.join(','), token);
+      for (const user of users) {
+        const profile = profileFromUser(user);
+        if (!profile) continue;
+        out.set(profile.id, profile);
+        if (profile.photoUrl) cacheAvatar(profile.id, profile.photoUrl);
+      }
+    } catch {
+      /* keep going */
+    }
+  }
   return out;
 }

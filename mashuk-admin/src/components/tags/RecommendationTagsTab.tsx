@@ -83,7 +83,7 @@ export function RecommendationTagsTab({ adminFetch, act, reloadKey }: AdminTabPr
       }
       setForm(null);
       await load();
-    }, 'Тег сохранён');
+    }, 'Интерес сохранён');
   };
 
   const previewMerge = async () => {
@@ -97,7 +97,7 @@ export function RecommendationTagsTab({ adminFetch, act, reloadKey }: AdminTabPr
 
   const doMerge = () => {
     if (!mergeFrom || !mergeTo) return;
-    if (!window.confirm('Объединить теги? Действие необратимо.')) return;
+    if (!window.confirm('Объединить интересы? Действие необратимо.')) return;
     act(async () => {
       await adminFetch('/thematic-tags/merge', {
         method: 'POST',
@@ -107,7 +107,7 @@ export function RecommendationTagsTab({ adminFetch, act, reloadKey }: AdminTabPr
       setMergeTo('');
       setMergePreview(null);
       await load();
-    }, 'Теги объединены');
+    }, 'Интересы объединены');
   };
 
   const bulkMerge = () => {
@@ -158,11 +158,11 @@ export function RecommendationTagsTab({ adminFetch, act, reloadKey }: AdminTabPr
 
   return (
     <div className="adm-forum">
-      <AdminPageHero title={`Управление тегами · ${total} тегов`} hint="Единый реестр тегов для рекомендаций и регистрации." />
+      <AdminPageHero title={`Интересы · ${total}`} hint="Единый справочник смены: отсюда интересы попадают в программу и в шаг регистрации. У каждой смены свой список." />
 
       {form && (
         <div className="card adm-forum-block">
-          <h3>{form.id ? 'Редактировать тег' : 'Создать тег'}</h3>
+          <h3>{form.id ? 'Редактировать интерес' : 'Создать интерес'}</h3>
           <label className="adm-field"><span className="adm-label">Название</span>
             <input className="adm-input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
           </label>
@@ -212,7 +212,7 @@ export function RecommendationTagsTab({ adminFetch, act, reloadKey }: AdminTabPr
             {APP_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
           </select>
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => load()}>Применить</button>
-          <button type="button" className="adm-btn adm-btn-primary" onClick={() => setForm({ name: '', applicationTypes: ['events', 'interests'] } as TagRow)}>+ Создать тег</button>
+          <button type="button" className="adm-btn adm-btn-primary" onClick={() => setForm({ name: '', applicationTypes: ['events', 'interests'] } as TagRow)}>+ Создать интерес</button>
           <button type="button" className="adm-btn adm-btn-secondary" disabled={selected.size < 2} onClick={bulkMerge}>Объединить выбранные</button>
         </div>
 
@@ -220,11 +220,11 @@ export function RecommendationTagsTab({ adminFetch, act, reloadKey }: AdminTabPr
           <h4>Слияние (merge)</h4>
           <div className="adm-forum-toolbar">
             <select className="adm-input" value={mergeFrom} onChange={e => setMergeFrom(e.target.value ? Number(e.target.value) : '')}>
-              <option value="">Тег-источник</option>
+              <option value="">Интерес-источник</option>
               {tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
             <select className="adm-input" value={mergeTo} onChange={e => setMergeTo(e.target.value ? Number(e.target.value) : '')}>
-              <option value="">Тег-назначение</option>
+              <option value="">Интерес-назначение</option>
               {tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
             <button type="button" className="adm-btn adm-btn-secondary" onClick={previewMerge}>Preview</button>
@@ -276,7 +276,7 @@ export function RecommendationTagsTab({ adminFetch, act, reloadKey }: AdminTabPr
                         label: 'Удалить',
                         danger: true,
                         onClick: () => {
-                          if (!confirmDelete(`Удалить тег «${t.name}»?`)) return;
+                          if (!confirmDelete(`Удалить интерес «${t.name}»?`)) return;
                           act(async () => {
                             try {
                               await adminFetch(`/thematic-tags/${t.id}`, { method: 'DELETE' });
@@ -284,7 +284,7 @@ export function RecommendationTagsTab({ adminFetch, act, reloadKey }: AdminTabPr
                               const msg = String(err);
                               if (!msg.includes('Tag has links')) throw err;
                               if (!window.confirm(
-                                `Тег «${t.name}» используется (события ${t.usage?.events ?? 0}, материалы ${t.usage?.materials ?? 0}, участники ${t.usage?.participants ?? 0}).\n\nУдалить и снять со всех связей?`,
+                                `Интерес «${t.name}» используется (события ${t.usage?.events ?? 0}, материалы ${t.usage?.materials ?? 0}, участники ${t.usage?.participants ?? 0}).\n\nУдалить и снять со всех связей?`,
                               )) return;
                               await adminFetch(`/thematic-tags/${t.id}?force=1`, { method: 'DELETE' });
                             }

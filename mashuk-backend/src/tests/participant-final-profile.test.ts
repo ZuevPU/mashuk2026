@@ -7,7 +7,9 @@ import {
   classifyPiggyThemesDetailed,
   classifyPointATopic,
   classifyPointBItem,
+  isNextStepPlanQuestion,
   pairPointAtoB,
+  pickNextStepFromQa,
   emptyFinalProfile,
   extractCriterionTarget,
   filterProfilePiggy,
@@ -119,6 +121,21 @@ describe('participantFinalProfileLogic', () => {
     assert.equal(pb.planWhen, 'Ближайшие 14 дней');
   });
 
+  it('picks first step and when from final-questionnaire answers', () => {
+    const firstQ = 'Как вы планируете использовать результаты программы? С какого первого шага готовы начать?';
+    const whenQ = 'Когда планируете сделать этот шаг?';
+    assert.equal(classifyPointBItem(firstQ, 'Предложу открытый урок на педсовете'), 'plan');
+    assert.equal(classifyPointBItem(whenQ, 'Ближайшие 14 дней'), 'planWhen');
+    assert.equal(isNextStepPlanQuestion(firstQ), true);
+    assert.equal(isNextStepPlanQuestion(whenQ), true);
+    const picked = pickNextStepFromQa([
+      { q: firstQ, a: 'Предложу открытый урок на педсовете', kind: 'open' },
+      { q: whenQ, a: 'Ближайшие 14 дней', kind: 'closed' },
+    ]);
+    assert.equal(picked.nextStep, 'Предложу открытый урок на педсовете');
+    assert.equal(picked.nextStepWhen, 'Ближайшие 14 дней');
+  });
+
   it('pairs point A goal with marked point B follow-up', () => {
     assert.equal(classifyPointATopic('С какой целью ты приехал на Машук?'), 'goal');
     assert.equal(classifyPointATopic('По каким признакам поймёшь, что достиг цели?'), 'criterion');
@@ -180,6 +197,10 @@ describe('renderFinalProfileHtml', () => {
     assert.ok(html.includes('Твой Машук за 20 секунд'));
     assert.ok(html.includes('Ролевые эксперименты'));
     assert.ok(html.includes('Итог смены'));
+    assert.ok(html.includes('Первый шаг в итоговой анкете пока не указан'));
+    assert.ok(html.includes('Срок в итоговой анкете не указан'));
+    assert.ok(!html.includes('Финальная анкета ещё не пройдена'));
+    assert.ok(!html.includes('Например: «Когда на первом педсовете'));
     assert.ok(!html.includes('__PROFILE_JSON__'));
     assert.ok(!html.includes('<script>alert'));
   });

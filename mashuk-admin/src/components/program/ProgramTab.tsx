@@ -25,7 +25,7 @@ import type { AdminTabProps } from '../admin/types';
 const PROGRAM_NAV: HubNavItem[] = [
   { id: 'prog-hero', label: 'Обзор' },
   { id: 'prog-calendar', label: 'Календарь' },
-  { id: 'prog-tags', label: 'Теги' },
+  { id: 'prog-tags', label: 'Интересы' },
   { id: 'prog-places', label: 'Места' },
   { id: 'prog-types', label: 'Типы' },
   { id: 'prog-days', label: 'Дни' },
@@ -66,10 +66,8 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
   const [directions, setDirections] = useState<{ id: number; name: string }[]>([]);
   const [scheduleDays, setScheduleDays] = useState<ScheduleDayRow[]>([]);
   const [versions, setVersions] = useState<any[]>([]);
-  const [newTagName, setNewTagName] = useState('');
   const [newPlaceName, setNewPlaceName] = useState('');
   const [newBlockTypeName, setNewBlockTypeName] = useState('');
-  const [editingTag, setEditingTag] = useState<{ id: number; name: string } | null>(null);
   const [editingPlace, setEditingPlace] = useState<{ id: number; name: string } | null>(null);
   const [editingBlockType, setEditingBlockType] = useState<{ id: number; name: string } | null>(null);
   const [newDayNumber, setNewDayNumber] = useState('');
@@ -77,8 +75,6 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
   const [editingDayId, setEditingDayId] = useState<number | null>(null);
   const [editingDayLabel, setEditingDayLabel] = useState('');
   const [newDayDate, setNewDayDate] = useState('');
-  const [mergeFrom, setMergeFrom] = useState('');
-  const [mergeTo, setMergeTo] = useState('');
   const [copyFromDay, setCopyFromDay] = useState(1);
   const [drawer, setDrawer] = useState<DrawerState>({ open: false });
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -390,138 +386,30 @@ export function ProgramTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps
       </div>
       </section>
 
-      <AdminAccordion id="prog-tags" title="Тематические теги" summary={`${tags.length} тегов`}>
+      <AdminAccordion id="prog-tags" title="Интересы" summary={`${tags.length}`}>
         <p className="adm-forum-hint">
-          Совпадают с интересами из регистрации — от них строится блок «Рекомендуем тебе».
+          Справочник интересов смены. Ими помечают события, и по ним участник выбирает интересы при регистрации.
+          Править список можно только в Система → Интересы.
           {setTab && (
             <>
               {' '}
               <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => setTab('recommendation-tags')}>
-                Полное управление тегами →
+                Открыть Система → Интересы →
               </button>
             </>
           )}
         </p>
-        {tags.length === 0 && <p className="adm-muted">Создайте теги — без них не работают рекомендации.</p>}
-        <div className="adm-forum-toolbar">
-          <input className="adm-input" value={newTagName} onChange={e => setNewTagName(e.target.value)} placeholder="Новый тег" style={{ maxWidth: 220 }} />
-          <button
-            type="button"
-            className="adm-btn adm-btn-secondary adm-btn-sm"
-            onClick={() => {
-              if (!newTagName.trim()) return;
-              act(async () => {
-                await adminFetch('/thematic-tags', { method: 'POST', body: JSON.stringify({ name: newTagName.trim() }) });
-                setNewTagName('');
-                await reloadTags();
-              }, 'Тег добавлен');
-            }}
-          >
-            Добавить
-          </button>
-        </div>
-        <div className="adm-program-tag-pick" style={{ marginTop: 10 }}>
-          {tags.map(t => (
-            <span key={t.id} className="tag-chip adm-program-tag-chip">
-              {editingTag?.id === t.id ? (
-                <>
-                  <input
-                    className="adm-input adm-input-narrow"
-                    value={editingTag.name}
-                    onChange={e => setEditingTag({ id: t.id, name: e.target.value })}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const name = editingTag.name.trim();
-                        if (!name) return;
-                        act(async () => {
-                          await adminFetch(`/thematic-tags/${t.id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
-                          setEditingTag(null);
-                          await reloadTags();
-                          await reloadAllEvents();
-                        }, 'Тег переименован');
-                      }
-                    }}
-                  />
-                  <button type="button" className="adm-btn adm-btn-sm adm-btn-primary" onClick={() => {
-                    const name = editingTag.name.trim();
-                    if (!name) return;
-                    act(async () => {
-                      await adminFetch(`/thematic-tags/${t.id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
-                      setEditingTag(null);
-                      await reloadTags();
-                      await reloadAllEvents();
-                    }, 'Тег переименован');
-                  }}>Сохранить</button>
-                  <button type="button" className="adm-btn adm-btn-sm adm-btn-ghost" onClick={() => setEditingTag(null)}>Отмена</button>
-                </>
-              ) : (
-                <>
-                  <span className="adm-program-tag-name">{t.name}</span>
-                  <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => setEditingTag({ id: t.id, name: t.name })}>Изменить</button>
-                  <button
-                    type="button"
-                    className="adm-btn adm-btn-ghost adm-btn-sm"
-                    style={{ color: '#9B2C2C' }}
-                    onClick={() => {
-                      if (!confirmDelete(`Удалить тег «${t.name}»?`)) return;
-                      act(async () => {
-                        try {
-                          await adminFetch(`/thematic-tags/${t.id}`, { method: 'DELETE' });
-                        } catch (err) {
-                          const msg = String(err);
-                          if (!msg.includes('Tag has links')) throw err;
-                          if (!window.confirm(
-                            `Тег «${t.name}» уже используется в событиях, материалах или интересах.\n\nУдалить и снять его со всех связей?`,
-                          )) return;
-                          await adminFetch(`/thematic-tags/${t.id}?force=1`, { method: 'DELETE' });
-                        }
-                        await reloadTags();
-                        await reloadAllEvents();
-                      }, 'Тег удалён');
-                    }}
-                  >
-                    Удалить
-                  </button>
-                </>
-              )}
-            </span>
-          ))}
-        </div>
-        <details className="adm-program-merge" style={{ marginTop: 16 }}>
-          <summary>Обслуживание: объединить два тега</summary>
-          <div className="adm-forum-toolbar" style={{ marginTop: 8 }}>
-            <select className="adm-input" value={mergeFrom} onChange={e => setMergeFrom(e.target.value)}>
-              <option value="">Откуда (удалится)</option>
-              {tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-            <span>→</span>
-            <select className="adm-input" value={mergeTo} onChange={e => setMergeTo(e.target.value)}>
-              <option value="">Куда</option>
-              {tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-            <button
-              type="button"
-              className="adm-btn adm-btn-secondary adm-btn-sm"
-              onClick={() => {
-                if (!mergeFrom || !mergeTo) return;
-                if (!confirm('Объединить теги? Это необратимо.')) return;
-                act(async () => {
-                  await adminFetch('/thematic-tags/merge', {
-                    method: 'POST',
-                    body: JSON.stringify({ fromId: Number(mergeFrom), toId: Number(mergeTo) }),
-                  });
-                  setMergeFrom('');
-                  setMergeTo('');
-                  await reloadTags();
-                  await reloadAllEvents();
-                }, 'Теги объединены');
-              }}
-            >
-              Объединить
-            </button>
+        {tags.length === 0 ? (
+          <p className="adm-muted">Пока пусто — добавьте интересы в Системе, иначе не заработают рекомендации.</p>
+        ) : (
+          <div className="adm-program-tag-pick" style={{ marginTop: 10 }}>
+            {tags.map(t => (
+              <span key={t.id} className="tag-chip adm-program-tag-chip">
+                <span className="adm-program-tag-name">{t.name}</span>
+              </span>
+            ))}
           </div>
-        </details>
+        )}
       </AdminAccordion>
 
       <AdminAccordion id="prog-places" title="Места проведения" summary={`${places.length} мест`}>

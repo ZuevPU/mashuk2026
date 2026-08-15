@@ -505,7 +505,6 @@ export function normalizeInterestGroups(raw: unknown): Array<{ title: string; ta
     const tags = tagsRaw
       .map(t => String(t ?? '').trim().slice(0, 100))
       .filter(t => t.length > 0);
-    if (tags.length === 0) continue;
     out.push({ title, tags });
   }
   return out.length > 0 ? out : defaults;

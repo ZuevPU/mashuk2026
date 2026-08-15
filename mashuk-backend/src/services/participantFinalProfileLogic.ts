@@ -475,6 +475,28 @@ export function classifyPointBItem(q: string, a: string): PointBSlot {
   return 'other';
 }
 
+/** Вопросы «первый шаг» / срок из итоговой анкеты — блок «Один шаг на 30 дней», не Точка Б. */
+export function isNextStepPlanQuestion(q: string): boolean {
+  const slot = classifyPointBItem(q, '');
+  return slot === 'plan' || slot === 'planWhen';
+}
+
+export function pickNextStepFromQa(items: FinalProfileQa[]): {
+  nextStep: string | null;
+  nextStepWhen: string | null;
+} {
+  let nextStep: string | null = null;
+  let nextStepWhen: string | null = null;
+  for (const item of items) {
+    const a = String(item.a || '').trim();
+    if (!a) continue;
+    const slot = classifyPointBItem(item.q, a);
+    if (slot === 'planWhen') nextStepWhen = clampText(a, 120);
+    else if (slot === 'plan') nextStep = clampText(a, 300);
+  }
+  return { nextStep, nextStepWhen };
+}
+
 export function assemblePointB(items: FinalProfileQa[]): FinalProfile['pointB'] {
   const out: FinalProfile['pointB'] = {
     completed: items.some(x => x.a.trim()),
@@ -547,6 +569,7 @@ export function pairPointAtoB(
     pointBItems.forEach((b, i) => {
       if (used.has(i)) return;
       const slot = classifyPointBItem(b.q, b.a);
+      if (slot === 'plan' || slot === 'planWhen') return;
       const pref = preferred.indexOf(slot);
       const slotScore = pref === -1 ? 0 : (preferred.length - pref) * 10;
       const textScore = tokenOverlap(`${a.q} ${a.a}`, `${b.q} ${b.a}`);

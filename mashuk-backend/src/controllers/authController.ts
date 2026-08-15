@@ -17,6 +17,7 @@ import { getActiveConsentVersions } from './consentsController.js';
 import { generateQrToken } from '../services/qrService.js';
 import { awardPoints } from '../services/pointsService.js';
 import { scheduleParticipantAvatarSync } from '../services/participantAvatarSync.js';
+import { healParticipantPlaceholderName, resolveOnboardingName } from '../services/participantName.js';
 import { getForumSettings } from '../services/helpers.js';
 import {
   findParticipantForVk,
@@ -185,6 +186,7 @@ export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> =>
     if (!user.avatarUrl) {
       scheduleParticipantAvatarSync(user.id);
     }
+    user = await healParticipantPlaceholderName(user) ?? user;
 
     const shift = await getShiftById(user.shiftId);
     res.json({
@@ -330,11 +332,17 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
     const { resolveDirectionFromGroup } = await import('../services/groupDirectionSync.js');
     const finalDir = await resolveDirectionFromGroup(groupAssign.groupId, { id: dir.id, name: dir.name });
 
+    const resolvedName = await resolveOnboardingName(vkUserId, data.firstName, data.lastName);
+    if ('error' in resolvedName) {
+      res.status(400).json({ error: resolvedName.error });
+      return;
+    }
+
     const values = {
       vkId: vkUserId,
       shiftId,
-      firstName: data.firstName,
-      lastName: data.lastName,
+      firstName: resolvedName.firstName,
+      lastName: resolvedName.lastName,
       age: data.age,
       workplace: data.workplace,
       position: data.position,
@@ -409,11 +417,21 @@ export const register = async (req: VkAuthRequest, res: Response): Promise<void>
       return;
     }
 
+    const resolvedName = await resolveOnboardingName(
+      vkUserId,
+      String(firstName ?? ''),
+      String(lastName ?? ''),
+    );
+    if ('error' in resolvedName) {
+      res.status(400).json({ error: resolvedName.error });
+      return;
+    }
+
     const values = {
       vkId: vkUserId,
       shiftId,
-      firstName: firstName || null,
-      lastName: lastName || null,
+      firstName: resolvedName.firstName,
+      lastName: resolvedName.lastName,
       directionId: dir.id,
       direction: dir.name,
       consentPd: true,

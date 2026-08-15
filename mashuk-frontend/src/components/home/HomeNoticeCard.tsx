@@ -24,8 +24,25 @@ function noticeCtaLabel(notice: HomeNoticeItem): string {
 
 function noticeImages(notice: HomeNoticeItem): string[] {
   const raw = notice.imageUrls ?? notice.image_urls;
-  if (!Array.isArray(raw)) return [];
-  return raw.map(u => resolvePublicMediaUrl(String(u || ''))).filter(Boolean);
+  let list: unknown[] = [];
+  if (Array.isArray(raw)) list = raw;
+  else if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      list = Array.isArray(parsed) ? parsed : [raw];
+    } catch {
+      list = [raw];
+    }
+  }
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of list) {
+    const url = resolvePublicMediaUrl(String(item || '').trim());
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    out.push(url);
+  }
+  return out;
 }
 
 type CardProps = {
@@ -44,8 +61,9 @@ export function HomeNoticeCard({ notice, onOpen }: CardProps) {
           className="m-home-notice__cover"
           src={cover}
           alt=""
-          loading="lazy"
+          loading="eager"
           decoding="async"
+          referrerPolicy="no-referrer"
         />
       )}
       <div className="m-home-notice__main">
@@ -102,6 +120,7 @@ export function HomeNoticeModalBody({ notice, onAfterOpenLink }: ModalBodyProps)
               className="m-home-notice-modal__img"
               loading="lazy"
               decoding="async"
+              referrerPolicy="no-referrer"
             />
           ))}
         </div>

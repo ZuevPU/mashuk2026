@@ -81,19 +81,24 @@ export function resolvePublicMediaUrl(url: string): string {
   if (!raw) return '';
   const origin = mediaOriginFromApiBase(API_BASE);
   const fromUploadsPath = (pathname: string) => {
-    const name = pathname.replace(/^\/uploads\//, '');
+    const marker = '/uploads/';
+    const idx = pathname.indexOf(marker);
+    const name = (idx >= 0 ? pathname.slice(idx + marker.length) : pathname.replace(/^\/uploads\//, ''))
+      .split(/[?#]/)[0];
     if (!/^[a-zA-Z0-9._-]+$/.test(name)) return raw;
     return origin ? `${origin}/uploads/${name}` : `/uploads/${name}`;
   };
-  if (raw.startsWith('/uploads/')) return fromUploadsPath(raw);
-  try {
-    const parsed = new URL(raw);
-    if (parsed.pathname.startsWith('/uploads/')) {
-      const local = /localhost|127\.0\.0\.1/i.test(parsed.hostname);
-      if (local || origin) return fromUploadsPath(parsed.pathname);
+  if (raw.includes('/uploads/')) {
+    try {
+      const parsed = raw.startsWith('http') ? new URL(raw) : null;
+      const pathname = parsed?.pathname || raw;
+      const local = parsed ? /localhost|127\.0\.0\.1/i.test(parsed.hostname) : false;
+      if (!parsed || local || origin || raw.startsWith('/uploads/')) {
+        return fromUploadsPath(pathname.startsWith('/') ? pathname : `/${pathname}`);
+      }
+    } catch {
+      return fromUploadsPath(raw);
     }
-  } catch {
-    // keep original
   }
   return raw;
 }

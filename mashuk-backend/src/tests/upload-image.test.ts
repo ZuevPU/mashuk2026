@@ -1,8 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  coerceImageUrlList,
+  extractUploadFilename,
   isOwnUploadUrl,
+  resolveStoredUploadUrl,
   saveUploadedImage,
+  toStoredUploadPath,
   UploadImageError,
   publicUploadBaseUrl,
 } from '../utils/uploadImageStorage.js';
@@ -33,5 +37,16 @@ describe('uploadImageStorage', () => {
     assert.equal(isOwnUploadUrl(`${base}/uploads/abc.jpg`), true);
     assert.equal(isOwnUploadUrl('https://example.com/uploads/abc.jpg'), false);
     assert.equal(isOwnUploadUrl(`${base}/api/secret`), false);
+  });
+
+  it('rewrites /api/uploads and json-shaped image lists', () => {
+    assert.equal(extractUploadFilename('https://host.example/api/uploads/uuid-file.jpg'), 'uuid-file.jpg');
+    assert.equal(extractUploadFilename('/uploads/uuid-file.jpg'), 'uuid-file.jpg');
+    const resolved = resolveStoredUploadUrl('https://old.example/api/uploads/uuid-file.jpg');
+    assert.ok(resolved.endsWith('/uploads/uuid-file.jpg'));
+    assert.equal(toStoredUploadPath(resolved), '/uploads/uuid-file.jpg');
+    const list = coerceImageUrlList('["/uploads/a.jpg","https://x.test/api/uploads/a.jpg"]');
+    assert.equal(list.length, 1);
+    assert.ok(list[0].endsWith('/uploads/a.jpg'));
   });
 });

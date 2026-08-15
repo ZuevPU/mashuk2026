@@ -11,6 +11,7 @@ export type HomeNoticeRow = {
   ctaUrl: string | null;
   ctaLabel: string | null;
   imageUrls: string[] | null;
+  image_urls?: string[] | null;
   status: string;
   publishedAt: string | null;
   visibleFrom: string | null;
@@ -41,9 +42,9 @@ function rowToDraft(row: HomeNoticeRow): Draft {
     body: row.body || '',
     ctaUrl: row.ctaUrl || '',
     ctaLabel: row.ctaLabel || 'Открыть',
-    imageUrls: Array.isArray(row.imageUrls)
-      ? row.imageUrls.map(resolvePublicMediaUrl).filter(Boolean)
-      : [],
+    imageUrls: (Array.isArray(row.imageUrls) ? row.imageUrls : Array.isArray(row.image_urls) ? row.image_urls : [])
+      .map(u => resolvePublicMediaUrl(String(u || '')))
+      .filter(Boolean),
   };
 }
 
@@ -74,12 +75,7 @@ async function fileToResizedDataUrl(file: File, scale = 0.5, quality = 0.86): Pr
     const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
     return canvas.toDataURL(mime, quality);
   } catch {
-    return new Promise<string>((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(String(r.result));
-      r.onerror = reject;
-      r.readAsDataURL(file);
-    });
+    throw new Error('Этот формат фото не читается. Сохраните как JPG или PNG и загрузите снова.');
   }
 }
 
@@ -204,8 +200,8 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
           <div>
             <h3 style={{ margin: 0, fontSize: 16 }}>Плашка главного экрана</h3>
             <p className="adm-muted" style={{ margin: '4px 0 0', fontSize: 12 }}>
-              На главной — карточка с фото и кнопкой «Посмотреть». Внутри модалки — текст, ссылка и все картинки.
-              На смене может быть только одна опубликованная плашка.
+              На главной участника — карточка с первым фото и кнопкой «Посмотреть». В модалке — текст, ссылка и все картинки.
+              После загрузки нажмите «Опубликовать», иначе плашка останется черновиком и в приложении не появится.
             </p>
           </div>
           <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={openCreate}>

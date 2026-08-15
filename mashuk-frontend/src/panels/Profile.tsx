@@ -113,7 +113,6 @@ export const ProfilePanel: React.FC<{
   const [lbLoading, setLbLoading] = useState(false);
   const [shiftResults, setShiftResults] = useState<any>(null);
   const [shiftResultsLoading, setShiftResultsLoading] = useState(false);
-  const [shiftExportLoading, setShiftExportLoading] = useState(false);
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [answersOpen, setAnswersOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -315,24 +314,6 @@ export const ProfilePanel: React.FC<{
       setSnackbar(err instanceof ApiError ? err.message : 'Не удалось экспортировать');
     } finally {
       setExportLoading(false);
-    }
-  };
-
-  const downloadShiftResults = async (format: 'pdf' | 'csv') => {
-    setShiftExportLoading(true);
-    try {
-      const blob = await apiDownloadBlob(`/profile/shift-results?format=${format}`);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = format === 'pdf' ? 'shift_results.pdf' : 'shift_results.csv';
-      a.click();
-      URL.revokeObjectURL(url);
-      setSnackbar(format === 'pdf' ? 'PDF сохранён' : 'CSV сохранён');
-    } catch (err) {
-      setSnackbar(err instanceof ApiError ? err.message : 'Не удалось скачать');
-    } finally {
-      setShiftExportLoading(false);
     }
   };
 
@@ -1008,14 +989,6 @@ export const ProfilePanel: React.FC<{
                       <span>Итого за смену</span>
                       <span className="shift-results-pts">✦ {shiftResults.totalPoints ?? 0}</span>
                     </div>
-                  </div>
-                  <div className="shift-results-actions">
-                    <Button size="m" stretched mode="secondary" loading={shiftExportLoading} onClick={() => downloadShiftResults('pdf')}>
-                      Скачать PDF
-                    </Button>
-                    <Button size="m" stretched mode="tertiary" loading={shiftExportLoading} onClick={() => downloadShiftResults('csv')}>
-                      Скачать CSV
-                    </Button>
                   </div>
                 </>
               ) : (

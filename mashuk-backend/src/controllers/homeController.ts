@@ -525,7 +525,11 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     }[] = [];
     try {
       const { listActivePushBanners } = await import('./pushBannerController.js');
-      activePushBanners = await listActivePushBanners(participant.id, now);
+      const { resolveStoredUploadUrl } = await import('../utils/uploadImageStorage.js');
+      activePushBanners = (await listActivePushBanners(participant.id, now)).map(b => ({
+        ...b,
+        imageUrl: b.imageUrl ? resolveStoredUploadUrl(b.imageUrl) : b.imageUrl,
+      }));
     } catch {
       // migration pending
     }

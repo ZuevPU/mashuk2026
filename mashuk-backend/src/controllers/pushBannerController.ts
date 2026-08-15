@@ -1,23 +1,12 @@
 import { Response } from 'express';
-import fs from 'fs';
-import path from 'path';
-import crypto from 'crypto';
 import { and, eq, gt, isNull, or } from 'drizzle-orm';
-import { publicUploadUrl } from '../utils/uploadImageStorage.js';
+import { resolveStoredUploadUrl, saveUploadedImage, UploadImageError } from '../utils/uploadImageStorage.js';
 import { db } from '../db/index.js';
 import { participantPushDeliveries } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { refreshNotificationStats } from '../services/pushService.js';
 import { fireWebhookTrigger } from '../services/pushTriggerRunner.js';
-
-const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
-
-function ensureUploadDir() {
-  if (!fs.existsSync(UPLOAD_DIR)) {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-  }
-}
 
 export async function listActivePushBanners(participantId: number, now = new Date()) {
   return db.select().from(participantPushDeliveries)
@@ -82,7 +71,7 @@ export const adminUploadImage = async (req: AdminRequest, res: Response): Promis
     const { dataUrl, photoUrl } = req.body as { dataUrl?: string; photoUrl?: string };
 
     if (photoUrl && /^https?:\/\//.test(photoUrl)) {
-      res.json({ url: photoUrl });
+      res.json({ url: resolveStoredUploadUrl(photoUrl) });
       return;
     }
 
@@ -91,25 +80,13 @@ export const adminUploadImage = async (req: AdminRequest, res: Response): Promis
       return;
     }
 
-    const match = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
-    if (!match) {
-      res.status(400).json({ error: 'Invalid dataUrl format' });
-      return;
-    }
-
-    const ext = match[1].split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
-    const buffer = Buffer.from(match[2], 'base64');
-    if (buffer.length > 5 * 1024 * 1024) {
-      res.status(400).json({ error: 'Image too large (max 5MB)' });
-      return;
-    }
-
-    ensureUploadDir();
-    const filename = `${crypto.randomUUID()}.${ext}`;
-    fs.writeFileSync(path.join(UPLOAD_DIR, filename), buffer);
-
-    res.json({ url: publicUploadUrl(filename) });
+    const url = await saveUploadedImage(dataUrl);
+    res.json({ url });
   } catch (err) {
+    if (err instanceof UploadImageError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: 'Upload failed' });
   }

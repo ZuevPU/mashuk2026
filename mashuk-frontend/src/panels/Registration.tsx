@@ -6,6 +6,7 @@ import {
 import { UserInfo } from '@vkontakte/vk-bridge';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { apiGet, apiPost, getStoredShiftId, setShiftChoiceDone, setStoredShiftId } from '../api/client';
+import { bridge, isVkEnvironment, withTimeout } from '../utils/vkBridgeClient';
 import { requestVkPushPermission } from '../utils/pushNotifications';
 import {
   GOAL_QUESTIONS,
@@ -48,6 +49,11 @@ interface Direction {
 
 const DEV_FIRST_NAME = 'Тест';
 const DEV_LAST_NAME = 'Пользователь';
+
+function isPlaceholderVkName(first?: string | null, last?: string | null): boolean {
+  const full = `${(first || '').trim()} ${(last || '').trim()}`.toLowerCase();
+  return full === 'тест пользователь' || full === 'test user';
+}
 
 type PublishedShift = {
   id: number;
@@ -105,8 +111,26 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   const [diagOptionToRole, setDiagOptionToRole] = useState<RoleKey[][] | null>(null);
   const [apiRoles, setApiRoles] = useState<ApiRole[] | null>(null);
 
-  const firstName = fetchedUser?.first_name || DEV_FIRST_NAME;
-  const lastName = fetchedUser?.last_name || DEV_LAST_NAME;
+  const [vkUser, setVkUser] = useState<UserInfo | null>(fetchedUser);
+  const allowDevName = import.meta.env.DEV && !isVkEnvironment();
+  const firstName = vkUser?.first_name || (allowDevName ? DEV_FIRST_NAME : '');
+  const lastName = vkUser?.last_name || (allowDevName ? DEV_LAST_NAME : '');
+  const hasRealName = Boolean(firstName && lastName && !isPlaceholderVkName(firstName, lastName));
+
+  useEffect(() => {
+    if (fetchedUser?.first_name) setVkUser(fetchedUser);
+  }, [fetchedUser]);
+
+  useEffect(() => {
+    if (hasRealName || !isVkEnvironment() || typeof bridge.send !== 'function') return;
+    let cancelled = false;
+    withTimeout(bridge.send('VKWebAppGetUserInfo'), 8000)
+      .then((user) => {
+        if (!cancelled && user?.first_name) setVkUser(user);
+      })
+      .catch(() => { /* retry stays available on the form */ });
+    return () => { cancelled = true; };
+  }, [hasRealName]);
 
   const scoredRole = useMemo(() => {
     if (roleAnswers.some(a => a === null)) return null;
@@ -274,7 +298,8 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
       : ((step as number) / 4) * 100;
 
   const canGoStep1 = Boolean(
-    directionId && age && Number(age) >= 14 && Number(age) <= 100
+    hasRealName
+    && directionId && age && Number(age) >= 14 && Number(age) <= 100
     && workplace.trim() && position.trim() && region
     && (groupAssignMode !== 'list' || groups.length === 0 || groupId),
   );
@@ -292,6 +317,10 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
 
   const handleFinish = async () => {
     if (!directionId || !scoredRole || roleAnswers.some(a => a === null)) return;
+    if (!hasRealName) {
+      setError('Не удалось получить имя из ВКонтакте. Закройте мини-приложение и откройте снова.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -311,7 +340,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         goalAnswers: pruneHiddenGoalAnswers(goalQuestions, goalAnswers).map(a => a.trim()),
         interests,
         roleAnswers,
-        vkPhotoUrl: fetchedUser?.photo_200 || fetchedUser?.photo_100 || undefined,
+        vkPhotoUrl: vkUser?.photo_200 || vkUser?.photo_100 || undefined,
         shiftId: selectedShiftId,
       });
       void requestVkPushPermission();
@@ -407,7 +436,28 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                   : ''}
               </p>
             </Div>
-            <Cell subtitle="ФИО из ВКонтакте">{firstName} {lastName}</Cell>
+            <Cell subtitle="ФИО из ВКонтакте">
+              {hasRealName ? `${firstName} ${lastName}` : 'Не удалось получить имя из ВКонтакте'}
+            </Cell>
+            {!hasRealName && (
+              <Div>
+                <p style={{ margin: '0 0 8px', fontSize: 13, color: '#D70015' }}>
+                  Без имени из ВК регистрацию сохранить нельзя. Нажмите «Повторить» или откройте приложение заново.
+                </p>
+                <Button
+                  size="m"
+                  mode="secondary"
+                  onClick={() => {
+                    if (typeof bridge.send !== 'function') return;
+                    withTimeout(bridge.send('VKWebAppGetUserInfo'), 8000)
+                      .then((user) => { if (user?.first_name) setVkUser(user); })
+                      .catch(() => setError('ВКонтакте не вернул имя. Откройте приложение ещё раз.'));
+                  }}
+                >
+                  Повторить запрос имени
+                </Button>
+              </Div>
+            )}
             <FormItem top="Возраст *">
               <Input type="number" value={age} onChange={e => setAge(e.target.value)} placeholder="34" />
             </FormItem>

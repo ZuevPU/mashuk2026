@@ -139,7 +139,15 @@ function riskHint(){
 }
 function choiceRow(options, selected){
   const sel=String(selected||'').toLowerCase();
-  return options.map(o=>`<span class="choice ${sel&&sel.includes(o.toLowerCase().slice(0,10))?'on':''}">${esc(o)}</span>`).join('');
+  return options.map(o=>`<span class="choice ${sel&&sel.includes(o.toLowerCase().slice(0,10))?'on':''}">${esc(o)}</span>`).join(' ');
+}
+function whenRow(selected){
+  const opts=['Первые 48 часов','Ближайшие 14 дней','Ближайшие 3 месяца'];
+  const sel=String(selected||'').trim();
+  if(!sel) return '<p class="tiny">Срок в итоговой анкете не указан</p>';
+  const known=opts.find(o=>sel.toLowerCase().includes(o.toLowerCase().slice(0,10)));
+  if(known) return `<span class="choice on">${esc(known)}</span>`;
+  return `<div class="quote">${esc(sel)}</div>`;
 }
 
 const HEAD=`<div style="margin-top:8mm"><h1>${esc(P.person.name)}</h1>
@@ -259,7 +267,7 @@ const goalMid=`<div class="sec"><h2>Траектория цели</h2>
 </div>`;
 
 const compareRows=P.compare||[];
-const leftoverB=(B.leftover||[]).filter(it=>!/естественн.*роль|способ.*действов|какой ролью/.test((it.q||'').toLowerCase()));
+const leftoverB=(B.leftover||[]).filter(it=>!/естественн.*роль|способ.*действов|какой ролью|перв(ого|ый) шаг|планируете использовать|когда планир/.test((it.q||'').toLowerCase()));
 const pointB=`<div class="sec"><h2>Точка Б · с чем вы уезжаете</h2>
  <p class="muted" style="font-size:11pt">Сверка со стартом: слева — точка А, справа — ответы из вечерней анкеты, помеченные как точка Б. Вопросы про роль остаются в «Ролевых экспериментах».</p>
  ${compareRows.length?compareRows.map(row=>`<div style="margin-bottom:5mm">
@@ -287,10 +295,9 @@ const step=`<div class="sec"><h2>Один шаг на 30 дней</h2>
   <div><div class="n">Финиш</div><p style="margin:1mm 0 0;font-size:11pt">${esc(P.person.to)}</p></div>
  </div>
  <div class="tiny" style="margin:3mm 0 2mm">Как вы планируете использовать результаты программы? С какого первого шага готовы начать?</div>
- ${P.nextStep?`<div class="quote">${esc(P.nextStep)}</div>`:'<p class="tiny">Финальная анкета ещё не пройдена</p>'}
+ ${P.nextStep?`<div class="quote">${esc(P.nextStep)}</div>`:'<p class="tiny">Первый шаг в итоговой анкете пока не указан</p>'}
  <div class="tiny" style="margin:3mm 0 2mm">Когда планируете сделать этот шаг?</div>
- ${choiceRow(['Первые 48 часов','Ближайшие 14 дней','Ближайшие 3 месяца'], P.nextStepWhen)}
- <p class="tiny" style="margin-top:2mm">Например: «Когда на первом педсовете зайдёт речь про открытые уроки — я предложу провести один в нашем формате».</p>
+ ${whenRow(P.nextStepWhen)}
 </div>`;
 
 const closing=`<div class="sec"><h2>Итог смены</h2>

@@ -359,7 +359,7 @@ export function ForumTab({ adminFetch, act, reloadKey, focusAnchor, focusNonce }
               value={recThreshold}
               onChange={e => setRecThreshold(Number(e.target.value))}
             />
-            <span className="adm-muted">Сколько общих тегов с интересами нужно для рекомендации события</span>
+            <span className="adm-muted">Сколько общих интересов нужно для рекомендации события</span>
           </label>
         </div>
         <div className="adm-forum-grid-2" style={{ marginTop: 12 }}>

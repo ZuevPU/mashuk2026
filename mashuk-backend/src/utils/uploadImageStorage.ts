@@ -35,24 +35,80 @@ export function publicUploadUrl(filename: string): string {
   return `${publicUploadBaseUrl()}/uploads/${filename}`;
 }
 
-/** Rewrite relative or localhost /uploads URLs to the current public host. */
+const UPLOAD_NAME_RE = /^[a-zA-Z0-9._-]+$/;
+
+export function isSafeUploadFilename(name: string): boolean {
+  return UPLOAD_NAME_RE.test(name) && name.length > 0 && name.length < 180;
+}
+
+/** Filename from `/uploads/x.jpg` or `https://host/api/uploads/x.jpg`. */
+export function extractUploadFilename(raw: string): string | null {
+  const t = String(raw || '').trim();
+  if (!t) return null;
+  const marker = '/uploads/';
+  const fromPath = (pathname: string) => {
+    const idx = pathname.indexOf(marker);
+    if (idx < 0) return null;
+    const name = pathname.slice(idx + marker.length).split(/[?#]/)[0];
+    return isSafeUploadFilename(name) ? name : null;
+  };
+  if (t.startsWith(marker) || !/^[a-z][a-z0-9+.-]*:/i.test(t)) {
+    return fromPath(t.startsWith(marker) ? t : `/${t.replace(/^\/+/, '')}`);
+  }
+  try {
+    return fromPath(new URL(t).pathname);
+  } catch {
+    return fromPath(t);
+  }
+}
+
+/** Rewrite relative, /api/uploads or localhost /uploads URLs to the current public host. */
 export function resolveStoredUploadUrl(raw: string): string {
   const t = String(raw || '').trim();
   if (!t) return '';
-  if (t.startsWith('/uploads/')) {
-    const name = t.slice('/uploads/'.length);
-    return /^[a-zA-Z0-9._-]+$/.test(name) ? publicUploadUrl(name) : t;
-  }
-  try {
-    const u = new URL(t);
-    if (u.pathname.startsWith('/uploads/')) {
-      const name = u.pathname.slice('/uploads/'.length);
-      if (/^[a-zA-Z0-9._-]+$/.test(name)) return publicUploadUrl(name);
+  const name = extractUploadFilename(t);
+  return name ? publicUploadUrl(name) : t;
+}
+
+/** Portable path to store in DB (survives PUBLIC_URL changes). */
+export function toStoredUploadPath(raw: string): string {
+  const name = extractUploadFilename(raw);
+  return name ? `/uploads/${name}` : String(raw || '').trim();
+}
+
+/** jsonb / string / {0: url} → public upload URLs. */
+export function coerceImageUrlList(raw: unknown): string[] {
+  let list: unknown[] = [];
+  if (Array.isArray(raw)) {
+    list = raw;
+  } else if (typeof raw === 'string') {
+    const t = raw.trim();
+    if (!t) return [];
+    if (t.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(t) as unknown;
+        if (Array.isArray(parsed)) list = parsed;
+        else list = [t];
+      } catch {
+        list = [t];
+      }
+    } else {
+      list = [t];
     }
-  } catch {
-    // keep original
+  } else if (raw && typeof raw === 'object') {
+    list = Object.values(raw as Record<string, unknown>);
   }
-  return t;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of list) {
+    const resolved = resolveStoredUploadUrl(String(item ?? '').trim());
+    if (!resolved) continue;
+    if (!/^https?:\/\//.test(resolved) && !resolved.startsWith('/uploads/')) continue;
+    if (seen.has(resolved)) continue;
+    seen.add(resolved);
+    out.push(resolved);
+  }
+  return out;
 }
 
 /** True if URL points at our /uploads/ tree (same origin as PUBLIC_URL / local API). */

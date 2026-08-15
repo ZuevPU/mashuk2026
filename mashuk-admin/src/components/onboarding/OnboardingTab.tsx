@@ -33,7 +33,7 @@ function snapshotConfig(cfg: RoleDiagnosticsConfig): string {
   return JSON.stringify(cfg);
 }
 
-export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: AdminTabProps & { onOpenProgram?: () => void }) {
+export function OnboardingTab({ adminFetch, act, reloadKey, setTab }: AdminTabProps) {
   const [step, setStep] = useState<OnboardingStep>('goals');
   const [loading, setLoading] = useState(true);
 
@@ -269,14 +269,13 @@ export function OnboardingTab({ adminFetch, act, reloadKey, onOpenProgram }: Adm
             groups={interestGroups}
             interestMin={interestMin}
             interestMax={interestMax}
-            onChange={setInterestGroups}
             onLimitsChange={(min, max) => {
               setInterestMin(min);
               setInterestMax(max);
             }}
-            onSave={() => saveConfig('Интересы сохранены')}
+            onSave={() => saveConfig('Лимиты интересов сохранены')}
             dirty={interestsDirty}
-            onOpenProgram={onOpenProgram}
+            onOpenSystem={setTab ? () => setTab('recommendation-tags') : undefined}
           />
         )}
         {step === 'diag' && (

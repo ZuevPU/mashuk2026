@@ -260,7 +260,7 @@ export function EventEditorForm({
         <SpeakerMultiPick speakers={speakers} selectedIds={draft.speakerIds} onChange={ids => setDraft({ ...draft, speakerIds: ids })} />
       </div>
       <div className="adm-field">
-        <span className="adm-label">Тематические теги</span>
+        <span className="adm-label">Интересы</span>
         <ThematicTagPick tags={allTags} selectedNames={draft.tagNames} onChange={names => setDraft({ ...draft, tagNames: names })} />
       </div>
       <label className="adm-forum-check">
@@ -330,7 +330,7 @@ export function EventEditorForm({
               <SpeakerMultiPick speakers={speakers} selectedIds={childSpeakerIds} onChange={setChildSpeakerIds} />
             </div>
             <div className="adm-field" style={{ marginTop: 8 }}>
-              <span className="adm-label">Тематические теги</span>
+              <span className="adm-label">Интересы</span>
               <ThematicTagPick tags={allTags} selectedNames={childTagNames} onChange={setChildTagNames} />
             </div>
             <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" style={{ marginTop: 8 }} onClick={addChild}>

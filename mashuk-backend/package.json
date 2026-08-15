@@ -16,6 +16,7 @@
     "db:setup": "npm run db:push && npm run db:seed",
     "db:ops": "tsx src/db/ops-bootstrap.ts",
     "sync-avatars": "tsx src/scripts/sync-participant-avatars.ts",
+    "repair-names": "tsx src/scripts/repair-placeholder-names.ts",
     "classify:exchange": "tsx scripts/classify-exchange-archive.ts",
     "db:prod-ready": "tsx src/db/apply-0006.ts && tsx src/db/apply-0007.ts && tsx src/db/apply-0008.ts && npm run db:seed && npm run db:ops"
   },

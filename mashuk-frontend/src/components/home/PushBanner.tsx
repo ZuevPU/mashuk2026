@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { apiPost } from '../../api/client';
+import { apiPost, resolvePublicMediaUrl } from '../../api/client';
 
 export type PushBannerItem = {
   id: number;
@@ -61,8 +61,9 @@ export function PushBanner({ banners, onDismiss }: Props) {
           <div style={{ fontSize: 13, marginTop: 6, paddingRight: 24 }}>{b.personalizedBody}</div>
           {b.imageUrl && (
             <img
-              src={b.imageUrl}
+              src={resolvePublicMediaUrl(b.imageUrl)}
               alt=""
+              referrerPolicy="no-referrer"
               style={{ maxWidth: '100%', marginTop: 8, borderRadius: 8 }}
             />
           )}

@@ -167,8 +167,8 @@ const LABELS: Record<string, string> = {
   task_delete: 'Удаление задания',
   material_delete: 'Удаление материала',
   medal_delete: 'Удаление медали',
-  tag_merge: 'Слияние тегов',
-  tag_delete: 'Удаление тега',
+  tag_merge: 'Слияние интересов',
+  tag_delete: 'Удаление интереса',
   forum_settings: 'Настройки форума',
 
   // Выгрузки (префикс export_ — не путать с типами вопросов)

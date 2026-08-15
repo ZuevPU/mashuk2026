@@ -102,10 +102,16 @@ export const App = () => {
 
       if (isVkEnvironment()) {
         try {
-          const user = await withTimeout(bridge.send('VKWebAppGetUserInfo'), 5000);
+          const user = await withTimeout(bridge.send('VKWebAppGetUserInfo'), 8000);
           setUser(user);
         } catch (e) {
           console.warn('VK Bridge GetUserInfo failed', e);
+          try {
+            const retry = await withTimeout(bridge.send('VKWebAppGetUserInfo'), 8000);
+            setUser(retry);
+          } catch (retryErr) {
+            console.warn('VK Bridge GetUserInfo retry failed', retryErr);
+          }
         }
       }
 

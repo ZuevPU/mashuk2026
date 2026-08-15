@@ -4,7 +4,7 @@ import { db } from '../db/index.js';
 import { homeNotices } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { resolveAdminShiftId } from '../services/shiftService.js';
-import { resolveStoredUploadUrl } from '../utils/uploadImageStorage.js';
+import { coerceImageUrlList, toStoredUploadPath } from '../utils/uploadImageStorage.js';
 
 const STATUSES = new Set(['draft', 'published', 'archived']);
 
@@ -17,10 +17,14 @@ function parseOptionalDate(value: unknown): Date | null | undefined {
 }
 
 function normalizeImageUrls(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map(u => resolveStoredUploadUrl(String(u ?? '').trim()))
-    .filter(u => /^https?:\/\//.test(u) || u.startsWith('/uploads/'));
+  return coerceImageUrlList(raw).map(u => toStoredUploadPath(u)).filter(Boolean);
+}
+
+function toAdminNotice(row: typeof homeNotices.$inferSelect) {
+  return {
+    ...row,
+    imageUrls: coerceImageUrlList(row.imageUrls),
+  };
 }
 
 function normalizeCtaUrl(raw: unknown): string | null {
@@ -39,9 +43,7 @@ function toPublicNotice(row: typeof homeNotices.$inferSelect) {
     body: row.body ?? '',
     ctaUrl: row.ctaUrl ?? null,
     ctaLabel: row.ctaLabel ?? null,
-    imageUrls: Array.isArray(row.imageUrls)
-      ? row.imageUrls.map(u => resolveStoredUploadUrl(String(u))).filter(Boolean)
-      : [],
+    imageUrls: coerceImageUrlList(row.imageUrls),
   };
 }
 
@@ -75,7 +77,7 @@ export const listHomeNotices = async (req: AdminRequest, res: Response): Promise
     const rows = await db.select().from(homeNotices)
       .where(eq(homeNotices.shiftId, shiftId))
       .orderBy(desc(homeNotices.updatedAt), desc(homeNotices.id));
-    res.json({ notices: rows });
+    res.json({ notices: rows.map(toAdminNotice) });
   } catch (error) {
     console.error('listHomeNotices:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -97,7 +99,7 @@ export const getHomeNotice = async (req: AdminRequest, res: Response): Promise<v
       res.status(404).json({ error: 'Not found' });
       return;
     }
-    res.json({ notice: row });
+    res.json({ notice: toAdminNotice(row) });
   } catch (error) {
     console.error('getHomeNotice:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -120,7 +122,7 @@ export const createHomeNotice = async (req: AdminRequest, res: Response): Promis
     const ctaLabel = req.body.ctaLabel != null && String(req.body.ctaLabel).trim()
       ? String(req.body.ctaLabel).trim().slice(0, 120)
       : null;
-    const imageUrls = normalizeImageUrls(req.body.imageUrls);
+    const imageUrls = normalizeImageUrls(req.body.imageUrls ?? req.body.image_urls);
     const visibleFrom = parseOptionalDate(req.body.visibleFrom);
     const visibleUntil = parseOptionalDate(req.body.visibleUntil);
     if (req.body.visibleFrom !== undefined && visibleFrom === undefined) {
@@ -152,7 +154,7 @@ export const createHomeNotice = async (req: AdminRequest, res: Response): Promis
       updatedAt: now,
     }).returning();
 
-    res.json({ notice: row });
+    res.json({ notice: toAdminNotice(row) });
   } catch (error) {
     console.error('createHomeNotice:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -193,8 +195,8 @@ export const updateHomeNotice = async (req: AdminRequest, res: Response): Promis
       const v = String(req.body.ctaLabel ?? '').trim();
       patch.ctaLabel = v ? v.slice(0, 120) : null;
     }
-    if (req.body.imageUrls !== undefined) {
-      patch.imageUrls = normalizeImageUrls(req.body.imageUrls);
+    if (req.body.imageUrls !== undefined || req.body.image_urls !== undefined) {
+      patch.imageUrls = normalizeImageUrls(req.body.imageUrls ?? req.body.image_urls);
     }
     if (req.body.visibleFrom !== undefined) {
       const d = parseOptionalDate(req.body.visibleFrom);
@@ -231,7 +233,7 @@ export const updateHomeNotice = async (req: AdminRequest, res: Response): Promis
       .set(patch)
       .where(eq(homeNotices.id, id))
       .returning();
-    res.json({ notice: row });
+    res.json({ notice: row ? toAdminNotice(row) : row });
   } catch (error) {
     console.error('updateHomeNotice:', error);
     res.status(500).json({ error: 'Internal server error' });

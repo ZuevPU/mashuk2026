@@ -25,8 +25,8 @@ export function ThematicTagPick({ tags, selectedNames, onChange }: Props) {
         const names = ids.map(id => tags.find(t => t.id === id)?.name).filter(Boolean) as string[];
         onChange(names);
       }}
-      placeholder="Выберите или найдите тег…"
-      emptyHint="Начните ввод названия тега"
+      placeholder="Выберите или найдите интерес…"
+      emptyHint="Начните ввод названия интереса"
       minQueryLength={0}
     />
   );

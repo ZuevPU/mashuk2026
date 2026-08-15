@@ -48,7 +48,7 @@ export const TAB_LABELS: Record<Tab, string> = {
   analytics: 'Дашборды',
   exports: 'Выгрузки',
   push: 'Уведомления',
-  'recommendation-tags': 'Теги',
+  'recommendation-tags': 'Интересы',
   admins: 'Админы',
   journal: 'Журнал',
   medals: 'Медали',

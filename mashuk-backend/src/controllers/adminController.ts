@@ -72,6 +72,7 @@ import {
   collectProfileAiConsentFieldKeys,
   loadProfileAiConsentMap,
 } from '../services/profileAiConsent.js';
+import { repairPlaceholderNames } from '../services/participantName.js';
 import {
   getShiftById,
   pickShiftOpPatch,
@@ -92,7 +93,8 @@ export const listParticipants = async (req: AdminRequest, res: Response): Promis
   const settings = await loadForumSettings(allShiftsDeleted ? null : parsed.shiftId);
   parsed.consentFieldKeys = collectProfileAiConsentFieldKeys(settings);
   const result = await queryParticipants(parsed);
-  const withAvatars = await enrichParticipantsWithAvatarUrls(result.participants, { preferStored: false });
+  const withNames = await repairPlaceholderNames(result.participants);
+  const withAvatars = await enrichParticipantsWithAvatarUrls(withNames, { preferStored: false });
   const consentMap = await loadProfileAiConsentMap(
     withAvatars.map(p => p.id),
     parsed.consentFieldKeys,
@@ -828,6 +830,8 @@ async function rebindTagName(fromName: string, toName: string, shiftId: number) 
     await db.update(participants).set({ interests: next }).where(eq(participants.id, p.id));
     participantsUpdated++;
   }
+  const { renameInterestInOnboarding } = await import('../services/interestCatalog.js');
+  await renameInterestInOnboarding(shiftId, fromName, toName);
   return { eventsUpdated, materialsUpdated: matsUpdated, participantsUpdated };
 }
 
@@ -864,7 +868,7 @@ export const crudThematicTags = {
     const [nameTaken] = await db.select({ id: thematicTags.id }).from(thematicTags)
       .where(and(eq(thematicTags.shiftId, shiftId), eq(thematicTags.name, name))).limit(1);
     if (nameTaken) {
-      res.status(400).json({ error: 'Тег с таким названием уже есть в этой смене' });
+      res.status(400).json({ error: 'Интерес с таким названием уже есть в этой смене' });
       return;
     }
     let slug = String(req.body.slug || slugifyTagName(name)).trim();
@@ -884,11 +888,13 @@ export const crudThematicTags = {
       }).returning();
       const { logAdminAction } = await import('../services/adminActionsLog.js');
       await logAdminAction({ req, actionType: 'tag_create', section: 'recommendation-tags', objectId: t.id, newValue: t });
+      const { syncInterestCatalogToOnboarding } = await import('../services/interestCatalog.js');
+      await syncInterestCatalogToOnboarding(shiftId);
       res.json({ tag: t });
     } catch (error) {
       const msg = error instanceof Error ? error.message : '';
       if (/thematic_tags_slug_unique|duplicate key|unique/i.test(msg)) {
-        res.status(400).json({ error: 'Такой тег уже есть. Если это другая смена — обновите сервер и попробуйте ещё раз.' });
+        res.status(400).json({ error: 'Такой интерес уже есть. Если это другая смена — обновите сервер и попробуйте ещё раз.' });
         return;
       }
       throw error;
@@ -909,7 +915,7 @@ export const crudThematicTags = {
       const dup = await db.select({ id: thematicTags.id }).from(thematicTags)
         .where(and(eq(thematicTags.shiftId, shiftId), eq(thematicTags.name, newName), sql`${thematicTags.id} <> ${id}`)).limit(1);
       if (dup.length) {
-        res.status(400).json({ error: 'Тег с таким названием уже есть' });
+        res.status(400).json({ error: 'Интерес с таким названием уже есть' });
         return;
       }
       patch.name = newName;
@@ -943,6 +949,8 @@ export const crudThematicTags = {
       req, actionType: 'tag_update', section: 'recommendation-tags', objectId: id,
       oldValue: before, newValue: { ...updated, rebind },
     });
+    const { syncInterestCatalogToOnboarding } = await import('../services/interestCatalog.js');
+    await syncInterestCatalogToOnboarding(shiftId);
     res.json({ tag: updated, rebind });
   },
   delete: async (req: AdminRequest, res: Response) => {
@@ -960,7 +968,7 @@ export const crudThematicTags = {
     if (totalLinks > 0 && !force) {
       res.status(409).json({
         error: 'Tag has links',
-        message: 'Тег используется. Удалите с force=1, чтобы снять его со всех связей.',
+        message: 'Интерес используется. Удалите с force=1, чтобы снять его со всех связей.',
         usage,
       });
       return;
@@ -977,6 +985,8 @@ export const crudThematicTags = {
       req, actionType: 'tag_delete', section: 'recommendation-tags', objectId: id,
       oldValue: { ...deleted, usage }, isCritical: true,
     });
+    const { syncInterestCatalogToOnboarding } = await import('../services/interestCatalog.js');
+    await syncInterestCatalogToOnboarding(shiftId);
     res.json({ ok: true, unlinked: totalLinks > 0, usage });
   },
   reorder: async (req: AdminRequest, res: Response) => {
@@ -1019,6 +1029,8 @@ export const crudThematicTags = {
       req, actionType: 'tag_merge', section: 'recommendation-tags', objectId: fromId,
       oldValue: { from: from.name, to: to.name }, newValue: preview, isCritical: true,
     });
+    const { syncInterestCatalogToOnboarding } = await import('../services/interestCatalog.js');
+    await syncInterestCatalogToOnboarding(shiftId);
     res.json({ ok: true, kept: to, removed: from.name, ...preview });
   },
 };
@@ -1207,10 +1219,17 @@ export const updateForumSettings = async (req: AdminRequest, res: Response): Pro
     return;
   }
   if (body.roleDiagnosticsConfig != null) {
-    body.roleDiagnosticsConfig = normalizeOnboardingConfig({
+    const merged = normalizeOnboardingConfig({
       ...(current.roleDiagnosticsConfig as Record<string, unknown> | null),
       ...(body.roleDiagnosticsConfig as Record<string, unknown>),
     });
+    const { applyInterestCatalogToGroups, listShiftInterestNames, syncInterestCatalogToOnboarding } = await import('../services/interestCatalog.js');
+    await syncInterestCatalogToOnboarding(shiftId);
+    const catalog = await listShiftInterestNames(shiftId);
+    body.roleDiagnosticsConfig = {
+      ...merged,
+      interestGroups: applyInterestCatalogToGroups(merged.interestGroups, catalog),
+    };
   }
   if (body.exchangeLimits !== undefined) {
     const {
@@ -3808,6 +3827,8 @@ export const listEventAttendance = async (req: AdminRequest, res: Response): Pro
 
 export const getForumSettings = async (req: AdminRequest, res: Response): Promise<void> => {
   const shiftId = await resolveAdminShiftId(req);
+  const { syncInterestCatalogToOnboarding } = await import('../services/interestCatalog.js');
+  await syncInterestCatalogToOnboarding(shiftId);
   const shift = await getShiftById(shiftId);
   const settings = shift ? shiftOpsToForumShape(shift) : await loadForumSettings();
   res.json({ settings: { ...settings, shiftId }, editingShiftId: shiftId });

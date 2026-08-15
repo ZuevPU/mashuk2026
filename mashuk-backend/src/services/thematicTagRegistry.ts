@@ -21,7 +21,7 @@ export async function ensureThematicTagRegistry(names: string[], shiftId: number
       shiftId,
       name,
       isActive: true,
-      applicationTypes: ['events', 'materials'],
+      applicationTypes: ['events', 'interests'],
     }).returning();
     byName.set(name.toLowerCase(), created.name);
     out.push(created.name);

@@ -1570,7 +1570,7 @@ body {
   }
 }
 
-.m-card, .m-hdr, .m-prio, .m-tp, .m-tmi, .m-tl-wrap, .m-rec-block, .pb-w, .tk, .pf-hdr, .ab-card {
+.m-card, .m-hdr, .m-prio, .m-tp, .m-tmi, .m-tl-wrap, .m-rec-block, .pb-w, .tk, .pf-hdr, .ab-card, .m-home-notice {
   max-width: 100%;
   box-sizing: border-box;
   word-break: break-word;

@@ -36,6 +36,8 @@ import {
   assembleGoalMidFromQa,
   assemblePointB,
   buildProfileAiCopy,
+  isNextStepPlanQuestion,
+  pickNextStepFromQa,
   clampText,
   classifyPiggyThemesDetailed,
   emptyEnergy,
@@ -54,9 +56,11 @@ import {
   type ProfileZone,
 } from './participantFinalProfileLogic.js';
 import {
+  collectForumFinalEveningFieldDays,
   collectPointBEveningFieldDays,
   collectPointZhEveningFieldDays,
   type EveningField,
+  type EveningQuestionnaireConfig,
   type ForumFinalQuestion,
 } from './eveningQuestionnaireConfig.js';
 import { formatEveningFieldValue } from './exports/eveningExportData.js';
@@ -224,10 +228,44 @@ function nextStepFromParticipant(p: typeof participants.$inferSelect): {
     const when = typeof edited.when === 'string' ? edited.when.trim() : null;
     if (text) return { nextStep: clampText(text, 300), nextStepWhen: when };
   }
-  if (p.nextExperiment?.trim()) {
-    return { nextStep: clampText(p.nextExperiment, 300), nextStepWhen: null };
-  }
   return { nextStep: null, nextStepWhen: null };
+}
+
+type EveningSettings = Parameters<typeof collectPointBEveningFieldDays>[0];
+
+function rawEveningFieldsForDay(settings: EveningSettings, day: number): EveningField[] {
+  const byDay = (settings as { eveningQuestionnaireByDay?: Record<string, EveningQuestionnaireConfig> } | null)
+    ?.eveningQuestionnaireByDay;
+  const dayEntry = byDay?.[String(day)];
+  const global = (settings as { eveningQuestionnaireConfig?: EveningQuestionnaireConfig } | null)
+    ?.eveningQuestionnaireConfig;
+  const config = dayEntry?.steps?.length ? dayEntry : global;
+  return (config?.steps || []).flatMap(s => s.fields || []);
+}
+
+function collectNextStepEveningQuestions(
+  settings: EveningSettings,
+  days: number[],
+): ForumFinalQuestion[] {
+  const byId = new Map<string, ForumFinalQuestion>();
+  const add = (q: ForumFinalQuestion) => {
+    if (!isNextStepPlanQuestion(q.field.label || '')) return;
+    const id = q.id || q.field.key;
+    const prev = byId.get(id);
+    if (prev) {
+      prev.days = [...new Set([...prev.days, ...q.days])].sort((a, b) => a - b);
+    } else {
+      byId.set(id, { id, days: [...q.days], field: q.field });
+    }
+  };
+  for (const q of collectForumFinalEveningFieldDays(settings, days).questions) add(q);
+  for (const q of collectPointBEveningFieldDays(settings, days).questions) add(q);
+  for (const day of days) {
+    for (const field of rawEveningFieldsForDay(settings, day)) {
+      add({ id: field.key, days: [day], field });
+    }
+  }
+  return [...byId.values()];
 }
 
 export async function buildFinalProfile(participantId: number): Promise<FinalProfile | null> {
@@ -535,13 +573,23 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
     collectPointZhEveningFieldDays(eveningSettings, markedDays).questions,
     dayStates,
   );
+  const eveningNextStep = collectMarkedEveningQa(
+    collectNextStepEveningQuestions(eveningSettings, markedDays),
+    dayStates,
+  );
   const mergedPointBItems = mergeQa(eveningPointB, pointB.items);
   Object.assign(pointB, assemblePointB(mergedPointBItems));
   const paired = pairPointAtoB(pointA, pointB.items);
-  pointB.leftover = paired.leftoverB;
+  pointB.leftover = paired.leftoverB.filter(it => !isNextStepPlanQuestion(it.q));
   const compare = paired.pairs;
   const goalMid = assembleGoalMidFromQa(eveningPointZh) || pickGoalMid(dayStates);
-  const { nextStep, nextStepWhen } = nextStepFromParticipant(p);
+  const editedNext = nextStepFromParticipant(p);
+  const fromEvening = pickNextStepFromQa(eveningNextStep);
+  const nextStep = editedNext.nextStep
+    || fromEvening.nextStep
+    || pointB.plan
+    || (p.nextExperiment?.trim() ? clampText(p.nextExperiment, 300) : null);
+  const nextStepWhen = editedNext.nextStepWhen || fromEvening.nextStepWhen || pointB.planWhen;
   const name = [p.firstName, p.lastName].filter(Boolean).join(' ').trim() || `Участник ${p.id}`;
   const dirName = p.direction || '—';
   const startRole = roleLabel(p.strongRole) || p.strongRole || null;
@@ -603,8 +651,8 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
     },
     reflection,
     goalMid,
-    nextStep: nextStep || pointB.plan,
-    nextStepWhen: nextStepWhen || pointB.planWhen,
+    nextStep,
+    nextStepWhen,
     ai,
   };
 

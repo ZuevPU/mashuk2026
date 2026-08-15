@@ -3,7 +3,7 @@ export function translateApiError(message: string): string {
   if (message.includes('Not authenticated')) return 'Не авторизован';
   if (message.includes('Session expired')) return 'Сессия истекла. Войдите снова.';
   if (message.includes('Tag has links')) {
-    return 'Тег используется в событиях, материалах или интересах. Удалите принудительно или объедините с другим тегом.';
+    return 'Интерес используется в событиях, материалах или у участников. Удалите принудительно или объедините с другим.';
   }
   if (message.includes('Insufficient permissions')) {
     return 'Недостаточно прав для этого действия.';
