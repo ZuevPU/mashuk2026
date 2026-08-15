@@ -1,7 +1,7 @@
 import { and, count, desc, eq, isNotNull, isNull, lte } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { delayedSurvey, participants, pushQueue } from '../../db/schema.js';
-import { resolveActiveShift } from '../shiftService.js';
+import { getShiftById } from '../shiftService.js';
 import { fullName, formatTs } from './exportCommon.js';
 
 const DEFAULT_WEEKS_AFTER_SHIFT = 7;
@@ -26,8 +26,11 @@ export function computeMeasureDate(
   return measure;
 }
 
-export async function buildDelayedMeasureRows(weeksAfter = DEFAULT_WEEKS_AFTER_SHIFT) {
-  const shift = await resolveActiveShift();
+export async function buildDelayedMeasureRows(
+  weeksAfter = DEFAULT_WEEKS_AFTER_SHIFT,
+  shiftId?: number | null,
+) {
+  const shift = shiftId != null ? await getShiftById(shiftId) : null;
   const measureDate = computeMeasureDate(shift?.startDate ?? null, shift?.totalDays ?? 8, weeksAfter);
   const conditions = [
     isNull(participants.selfDeletedAt),
@@ -52,9 +55,10 @@ export async function buildDelayedMeasureRows(weeksAfter = DEFAULT_WEEKS_AFTER_S
 export async function scheduleDelayedSurveyFromShiftEnd(opts: {
   weeksAfter?: number;
   adminId?: number | null;
+  shiftId?: number | null;
 } = {}) {
   const weeksAfter = opts.weeksAfter ?? DEFAULT_WEEKS_AFTER_SHIFT;
-  const built = await buildDelayedMeasureRows(weeksAfter);
+  const built = await buildDelayedMeasureRows(weeksAfter, opts.shiftId);
   const scheduledAt = built.measureDate;
   let n = 0;
   for (const row of built.rows) {

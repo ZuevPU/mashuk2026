@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  adminPushNotifications, events, pushTriggerFires,
+  adminPushNotifications, events, pushTriggerFires, tasks,
 } from '../db/schema.js';
 import { executeAdminPushCampaign } from './pushService.js';
 import { resolveEventInterval } from './eventSchedule.js';
@@ -24,8 +24,11 @@ async function claimTriggerFire(notificationId: number, fireKey: string): Promis
   }
 }
 
+export function taskPublishFireKey(cfg: { taskId?: number | null }, taskId: number): string {
+  return cfg.taskId != null ? `task_${taskId}` : 'task_any';
+}
+
 export async function runProgramEventBeforeTriggers(now = new Date()): Promise<number> {
-  const settings = await getForumSettings();
   const rows = await db.select().from(adminPushNotifications)
     .where(and(
       eq(adminPushNotifications.status, 'queued'),
@@ -39,8 +42,9 @@ export async function runProgramEventBeforeTriggers(now = new Date()): Promise<n
 
     const [ev] = await db.select().from(events).where(eq(events.id, cfg.eventId)).limit(1);
     if (!ev || !ev.isPublished || !ev.dayPublished) continue;
+    if (n.shiftId != null && ev.shiftId != null && n.shiftId !== ev.shiftId) continue;
 
-    const interval = resolveEventInterval(ev, ev.shiftId ? await getForumSettings(ev.shiftId) : settings);
+    const interval = resolveEventInterval(ev, await getForumSettings(ev.shiftId ?? n.shiftId));
     if (!interval?.start) continue;
 
     const minutesBefore = cfg.minutesBefore ?? 15;
@@ -63,6 +67,7 @@ export async function runProgramEventBeforeTriggers(now = new Date()): Promise<n
 }
 
 export async function fireTaskPublishTrigger(taskId: number, now = new Date()): Promise<void> {
+  const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
   const rows = await db.select().from(adminPushNotifications)
     .where(and(
       eq(adminPushNotifications.status, 'queued'),
@@ -73,8 +78,9 @@ export async function fireTaskPublishTrigger(taskId: number, now = new Date()): 
     const cfg = (n.triggerConfig ?? {}) as TriggerConfig;
     if (cfg.kind !== 'task_publish') continue;
     if (cfg.taskId != null && cfg.taskId !== taskId) continue;
+    if (n.shiftId != null && task?.shiftId != null && n.shiftId !== task.shiftId) continue;
 
-    const fireKey = `task_${taskId}`;
+    const fireKey = taskPublishFireKey(cfg, taskId);
     if (!(await claimTriggerFire(n.id, fireKey))) continue;
 
     await executeAdminPushCampaign(n);

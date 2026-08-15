@@ -4,7 +4,7 @@ import {
 } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  questions, questionOptions, answers, exchangeQuestions, exchangeAnswers, orgThreads, participants, forumSettings,
+  questions, questionOptions, answers, exchangeQuestions, exchangeAnswers, orgThreads, participants,
   adminActionsLog, directions,
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
@@ -423,6 +423,10 @@ export const crudQuestions = {
       res.status(404).json({ error: 'Вопрос не найден' });
       return;
     }
+    if (q.status !== 'published' || q.isHidden) {
+      res.status(400).json({ error: 'Уведомление можно отправить только по опубликованному вопросу' });
+      return;
+    }
     const adminText = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
     if (!adminText) {
       res.status(400).json({ error: 'Введите текст сообщения для участников' });
@@ -495,7 +499,10 @@ export const crudQuestions = {
     const [src] = await db.select().from(questions).where(eq(questions.id, id)).limit(1);
     if (!src) { res.status(404).json({ error: 'Not found' }); return; }
     const fromDay = src.dayNumber ?? normalizeDayNumbers(src.dayNumbers ?? undefined, 1)[0];
-    const [settings] = await db.select().from(forumSettings).limit(1);
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const { getForumSettings } = await import('../services/helpers.js');
+    const adminShiftId = await resolveAdminShiftId(req);
+    const settings = await getForumSettings(adminShiftId);
     const startDate = settings?.startDate || new Date();
     const { publishTime, closeTime } = shiftQuestionWindows(
       src, fromDay, targetDay, startDate,
@@ -504,6 +511,7 @@ export const crudQuestions = {
     const { id: _id, createdAt, ...rest } = src;
     const [copy] = await db.insert(questions).values({
       ...rest,
+      shiftId: adminShiftId,
       dayNumber: targetDay,
       dayNumbers: [targetDay],
       publishTime,
@@ -720,11 +728,17 @@ export const copyQuestionsSelected = async (req: AdminRequest, res: Response): P
   const parsed = parseBody(copyQuestionsSelectedSchema, req.body);
   if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
   const { ids, targetDay, overwrite } = parsed.data;
-  const [settings] = await db.select().from(forumSettings).limit(1);
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const { getForumSettings } = await import('../services/helpers.js');
+  const adminShiftId = await resolveAdminShiftId(req);
+  const settings = await getForumSettings(adminShiftId);
   const startDate = settings?.startDate || new Date();
 
   if (overwrite) {
-    const allOnDay = await db.select().from(questions).where(eq(questions.dayNumber, targetDay));
+    const allOnDay = await db.select().from(questions).where(and(
+      eq(questions.dayNumber, targetDay),
+      eq(questions.shiftId, adminShiftId),
+    ));
     for (const t of allOnDay) {
       await db.delete(answers).where(eq(answers.questionId, t.id));
       await db.delete(questionOptions).where(eq(questionOptions.questionId, t.id));
@@ -743,6 +757,7 @@ export const copyQuestionsSelected = async (req: AdminRequest, res: Response): P
     const { id: _id, createdAt, ...rest } = q;
     const [row] = await db.insert(questions).values({
       ...rest,
+      shiftId: adminShiftId,
       dayNumber: targetDay,
       dayNumbers: [targetDay],
       publishTime,

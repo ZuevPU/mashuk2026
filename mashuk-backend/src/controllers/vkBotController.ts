@@ -1,9 +1,9 @@
 import type { Request, Response } from 'express';
 import { eq, and, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { participants } from '../db/schema.js';
+import { events, participants } from '../db/schema.js';
 import { env } from '../config/env.js';
-import { resolveActiveShiftId } from '../services/shiftService.js';
+import { listLiveShifts } from '../services/shiftService.js';
 import {
   parseEventAttendanceRef,
   recordEventAttendance,
@@ -42,14 +42,19 @@ function extractRef(message: NonNullable<VkCallbackBody['object']>['message']): 
   return null;
 }
 
-async function findParticipantByVk(vkId: number) {
-  const shiftId = await resolveActiveShiftId();
-  const [row] = await db.select().from(participants).where(and(
+async function findParticipantByVk(vkId: number, preferredShiftId?: number | null) {
+  const rows = await db.select().from(participants).where(and(
     eq(participants.vkId, vkId),
-    eq(participants.shiftId, shiftId),
     isNull(participants.selfDeletedAt),
-  )).limit(1);
-  return row ?? null;
+  ));
+  if (preferredShiftId != null) {
+    const exact = rows.find(r => r.shiftId === preferredShiftId && r.onboardingCompletedAt);
+    if (exact) return exact;
+  }
+  const live = new Set((await listLiveShifts()).map(s => s.id));
+  return rows.find(r => r.onboardingCompletedAt && live.has(r.shiftId))
+    ?? rows.find(r => r.onboardingCompletedAt)
+    ?? null;
 }
 
 /**
@@ -106,7 +111,9 @@ export async function vkBotCallback(req: Request, res: Response): Promise<void> 
   }
 
   try {
-    const participant = await findParticipantByVk(vkId);
+    const [ev] = await db.select({ shiftId: events.shiftId }).from(events)
+      .where(eq(events.id, parsed.eventId)).limit(1);
+    const participant = await findParticipantByVk(vkId, ev?.shiftId);
     if (!participant) {
       await safeReply(vkId, 'Не нашли вашу регистрацию на текущей смене. Откройте мини-приложение форума и завершите регистрацию.');
       return;

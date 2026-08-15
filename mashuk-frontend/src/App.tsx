@@ -18,8 +18,8 @@ import { VolunteerPanel } from './panels/Volunteer';
 import { DelayedSurveyPanel } from './panels/DelayedSurvey';
 import { ScanPanel } from './panels/Scan';
 import { OpenInVkScreen } from './components/OpenInVkScreen';
-import { hasUsableLaunchParams, peekPendingTaskQr } from './utils/launchParams';
-import { apiGet, getHashSearchParams, getShiftChoiceDone, initAuth, setStoredShiftId } from './api/client';
+import { hasUsableLaunchParams, peekPendingTaskQr, setPendingTaskQr } from './utils/launchParams';
+import { apiGet, getHashSearchParams, initAuth, setStoredShiftId } from './api/client';
 
 export const ModalContext = createContext<{ setModal: (modal: ReactNode | null) => void }>({ setModal: () => {} });
 export const useAppModal = () => useContext(ModalContext);
@@ -124,13 +124,21 @@ export const App = () => {
         setSelfDeleted(false);
         setBlockedReason(auth.blockReason || 'Доступ к программе ограничен организаторами.');
         setIsRegistered(false);
-      } else if (auth.registrationAction === 'choose' && !getShiftChoiceDone()) {
+      } else if (auth.registrationAction === 'choose') {
         setIsRegistered(false);
+        const pending = getHashSearchParams();
+        const qr = pending.get('qr');
+        const task = pending.get('task');
+        if (qr) setPendingTaskQr(qr, task ? Number(task) : undefined);
         if (!window.location.hash.includes('registration')) {
           routeNavigator.push('/registration');
         }
       } else if (auth.status === 'needs_registration') {
         setIsRegistered(false);
+        const pending = getHashSearchParams();
+        const qr = pending.get('qr');
+        const task = pending.get('task');
+        if (qr) setPendingTaskQr(qr, task ? Number(task) : undefined);
         if (auth.registrationTargetShiftId) {
           setStoredShiftId(auth.registrationTargetShiftId);
         }
@@ -200,7 +208,13 @@ export const App = () => {
   const handleRegistered = useCallback(() => {
     setIsRegistered(true);
     refreshTabCounts();
-  }, [refreshTabCounts]);
+    const pending = peekPendingTaskQr();
+    if (pending?.qr) {
+      routeNavigator.push(`/scan?qr=${encodeURIComponent(pending.qr)}`);
+    } else if (pending?.taskId) {
+      routeNavigator.push(`/tasks?task=${pending.taskId}`);
+    }
+  }, [refreshTabCounts, routeNavigator]);
 
   const handleSelfDeleted = useCallback(() => {
     setSelfDeleted(true);
@@ -209,6 +223,13 @@ export const App = () => {
 
   const showTab = (key: keyof typeof DEFAULT_SECTIONS) =>
     sectionsVisibility[key] !== false;
+
+  useEffect(() => {
+    if (!isRegistered) return;
+    const hidden = (['tasks', 'program', 'questions'] as const)
+      .find(key => activePanel === key && !showTab(key));
+    if (hidden) routeNavigator.push('/');
+  }, [activePanel, isRegistered, sectionsVisibility, routeNavigator]);
 
   if (loading) {
     return (

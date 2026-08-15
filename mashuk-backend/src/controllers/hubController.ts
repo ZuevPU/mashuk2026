@@ -17,6 +17,7 @@ import { buildDirectionHubDashboard } from '../services/analytics/directionHubDa
 import { buildExchangeHubDashboard } from '../services/analytics/exchangeHubDashboard.js';
 import { buildPiggybankHubDashboard } from '../services/analytics/piggybankHubDashboard.js';
 import { buildStateDashboard } from '../services/analytics/stateDashboard.js';
+import { getAdminEveningForm, patchAdminEveningForm } from '../services/adminEveningForm.js';
 
 export async function getHubForumHandler(req: AdminRequest, res: Response): Promise<void> {
   const filters = await resolveAnalyticsFilters(req);
@@ -92,4 +93,46 @@ export async function getHubParticipantFeedHandler(req: AdminRequest, res: Respo
     return;
   }
   res.json(await buildParticipantDayFeed(participantId, filters, req));
+}
+
+export async function getAdminEveningFormHandler(req: AdminRequest, res: Response): Promise<void> {
+  const participantId = Number(req.params.id);
+  if (!Number.isFinite(participantId) || participantId <= 0) {
+    res.status(400).json({ error: 'participantId required' });
+    return;
+  }
+  const payload = await getAdminEveningForm(participantId, req);
+  if (!payload) {
+    res.status(404).json({ error: 'Анкета не найдена' });
+    return;
+  }
+  res.json(payload);
+}
+
+export async function patchAdminEveningFormHandler(req: AdminRequest, res: Response): Promise<void> {
+  const participantId = Number(req.params.id);
+  if (!Number.isFinite(participantId) || participantId <= 0) {
+    res.status(400).json({ error: 'participantId required' });
+    return;
+  }
+  const dayNumber = Number(req.body?.dayNumber);
+  const ratings = req.body?.ratings;
+  if (!Number.isFinite(dayNumber) || dayNumber < 1 || !ratings || typeof ratings !== 'object' || Array.isArray(ratings)) {
+    res.status(400).json({ error: 'dayNumber and ratings required' });
+    return;
+  }
+  const result = await patchAdminEveningForm(
+    participantId,
+    {
+      dayNumber,
+      ratings: ratings as Record<string, unknown>,
+      tomorrowRoleKey: req.body?.tomorrowRoleKey ?? undefined,
+    },
+    req,
+  );
+  if ('error' in result) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  res.json(result);
 }

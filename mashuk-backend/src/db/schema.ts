@@ -317,9 +317,11 @@ export const pushQueue = pgTable('push_queue', {
   participantIds: jsonb('participant_ids'),
   sentAt: timestamp('sent_at'),
   createdByAdminId: integer('created_by_admin_id'),
+  shiftId: integer('shift_id'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('push_queue_status_scheduled_idx').on(table.status, table.scheduledAt),
+  index('push_queue_shift_id_idx').on(table.shiftId),
 ]);
 
 export const dayFocus = pgTable('day_focus', {

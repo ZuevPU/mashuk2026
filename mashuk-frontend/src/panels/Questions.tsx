@@ -642,6 +642,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
   }, [setModal]);
 
   const unanswered = questions.filter(q => {
+    if (q.publishStatus && q.publishStatus !== 'published') return false;
     if (!(q.status === 'active' || q.status === 'overdue')) return false;
     // Stub «Итоговая анкета по дню» never in the list: until 22:00 it must be
     // invisible; when open it appears only as the top PriorityAction (eveningCard).

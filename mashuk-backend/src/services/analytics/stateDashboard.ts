@@ -78,7 +78,7 @@ function toPathAnswers(rows: KindAnswerRow[]): PathAnswerInput[] {
 }
 
 export async function buildStateDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(filters.shiftId);
   const currentDay = settings.currentDay ?? 1;
   const totalDays = Math.min(Math.max(settings.totalDays ?? 8, 1), 8);
   const days = resolveDayRange(filters, currentDay);

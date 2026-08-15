@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { confirmDelete } from '../../admin/confirmDelete';
-import { getAdminApiBase, getAdminToken } from '../../admin/client';
+import { adminAuthHeaders, adminDownloadBinary, getAdminApiBase } from '../../admin/client';
 import { RowActionsMenu } from '../participants/RowActionsMenu';
 import {
   AdviceFormSection,
@@ -149,18 +149,21 @@ export function AdviceCatalogSection({
   };
 
   const downloadTemplate = async () => {
-    const token = getAdminToken();
-    const res = await fetch(`${getAdminApiBase()}/day-experiments/csv-template`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) throw new Error(await res.text());
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'advice-template.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      await adminDownloadBinary('/day-experiments/csv-template', 'advice-template.csv');
+    } catch {
+      const res = await fetch(`${getAdminApiBase()}/day-experiments/csv-template`, {
+        headers: adminAuthHeaders(),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'advice-template.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
   };
 
   const onImportFile = (file: File) => act(async () => {

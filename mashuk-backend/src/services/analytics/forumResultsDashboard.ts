@@ -38,6 +38,7 @@ import {
   type ForumScaleBlock,
 } from './forumResultsMetrics.js';
 import { buildPracticeRecommendNps } from './practiceRecommendNps.js';
+import { buildForumResultsPeople, type ForumPeopleColumn } from './forumResultsPeople.js';
 
 function dirOf(r: EveningExportRow): string {
   return (r.directionName || r.p.direction || '—').trim() || '—';
@@ -331,6 +332,41 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
   const submittedForms = primarySubmitted.length;
   const submittedPeople = new Set(primarySubmitted.map(r => r.participantId)).size;
 
+  const peopleColumns: ForumPeopleColumn[] = [
+    ...blocks.map(b => {
+      const q = questionsById.get(b.key);
+      return {
+        key: b.key,
+        ratingKey: ratingKeyOf(b),
+        label: b.label,
+        max: (q?.field.type === 'scale_1_10' ? 10 : 5) as 5 | 10,
+        days: q?.days ?? [],
+      };
+    }),
+    ...(nps && npsQ
+      ? [{
+        key: npsQ.q.id,
+        ratingKey: npsQ.f.key,
+        label: npsQ.f.label || npsQ.f.key,
+        max: 10 as const,
+        days: npsQ.q.days,
+      }]
+      : []),
+  ];
+  const people = buildForumResultsPeople(
+    primarySubmitted.map(r => ({
+      participantId: r.participantId,
+      dayNumber: r.dayNumber,
+      ratings: r.ratings,
+      filledAt: r.filledAt,
+      direction: dirOf(r),
+      group: r.p.groupName || '—',
+      firstName: r.p.firstName,
+      lastName: r.p.lastName,
+    })),
+    peopleColumns,
+  );
+
   return {
     filters,
     currentForumDay: currentDay,
@@ -361,6 +397,7 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
     compact,
     tags,
     practiceRecommendNps,
+    people,
     diagnostics: {
       notes: questions.length
         ? []

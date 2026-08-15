@@ -598,13 +598,13 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
         <p className="adm-kb-panel-sub">
           {isForum
             ? 'Одна анкета на всю смену. Участники заполняют её на главной после публикации.'
-            : 'Конструктор шагов и полей вечерней анкеты. Вопросы для дашборда «Итоги форума» отмечайте чекбоксом «Итоговый вопрос форума».'}
+            : 'Конструктор шагов и полей вечерней анкеты. Вопросы для дашборда «Итоги форума» отмечайте чекбоксом «Итоговый вопрос форума». «Точка Б» — финал смены, «Точка Ж» — промежуточный срез.'}
         </p>
       </div>
       <p className="adm-forum-hint">
         {isForum
-          ? 'Не путать с вечерней анкетой дня и с Точкой Б. Тип «Событие / тема из программы» может брать блоки всех дней смены.'
-          : 'Участники заполняют эту анкету вечером на главной (дни 1–7). Точка Б — отдельный вопрос в последний день смены (день 8), в эту анкету не входит. Поле «Эксперимент с ролью» лучше выносить в отдельный шаг — на главной оно показывается отдельным блоком с текстом эксперимента дня. Тип «Событие / тема из программы» берёт блоки дня из раздела «Программа»; можно ограничить список галочками и собрать цепочку «Да → событие → оценка».'}
+          ? 'Не путать с вечерней анкетой дня. Вопросы можно пометить «Точка Б» (финал) или «Точка Ж» (промежуточный срез). Тип «Событие / тема из программы» может брать блоки всех дней смены.'
+          : 'Участники заполняют эту анкету вечером на главной (дни 1–7). «Итоговый вопрос форума» попадает на дашборд «Итоги форума». «Точка Б» — финальный вопрос смены, «Точка Ж» — промежуточный. Поле «Эксперимент с ролью» лучше выносить в отдельный шаг — на главной оно показывается отдельным блоком с текстом эксперимента дня. Тип «Событие / тема из программы» берёт блоки дня из раздела «Программа»; можно ограничить список галочками и собрать цепочку «Да → событие → оценка».'}
       </p>
       {!isForum && (
       <div className="adm-seg adm-forum-day-seg">
@@ -911,6 +911,15 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                 </span>
                 <span className="adm-eq-head-title">{headTitle}</span>
                 <span className="adm-eq-head-meta">{typeLabel(field.type)}</span>
+                {field.forumFinal && field.type !== 'info_text' && (
+                  <span className="adm-eq-point-chip adm-eq-point-chip--final" title="Итоговый вопрос форума">Итог форума</span>
+                )}
+                {field.pointB && field.type !== 'info_text' && (
+                  <span className="adm-eq-point-chip adm-eq-point-chip--b" title="Точка Б — финал смены">Точка Б</span>
+                )}
+                {field.pointZh && field.type !== 'info_text' && (
+                  <span className="adm-eq-point-chip adm-eq-point-chip--zh" title="Точка Ж — промежуточный вопрос">Точка Ж</span>
+                )}
                 {cond && <span className="adm-eq-cond-chip" title={cond}>{cond}</span>}
                 <div className="adm-forum-field-actions">
                   <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => expandField(field.key, !open)}>
@@ -995,6 +1004,32 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
                 />
                 Итоговый вопрос форума
               </label>
+              )}
+              {field.type !== 'info_text' && (
+              <>
+              <label className="adm-forum-check" title="Финальный вопрос смены">
+                <input
+                  type="checkbox"
+                  checked={!!field.pointB}
+                  onChange={e => updateField(stepIndex, fieldIndex, {
+                    pointB: e.target.checked || undefined,
+                    pointZh: e.target.checked ? undefined : field.pointZh,
+                  })}
+                />
+                Точка Б
+              </label>
+              <label className="adm-forum-check" title="Промежуточный вопрос смены">
+                <input
+                  type="checkbox"
+                  checked={!!field.pointZh}
+                  onChange={e => updateField(stepIndex, fieldIndex, {
+                    pointZh: e.target.checked || undefined,
+                    pointB: e.target.checked ? undefined : field.pointB,
+                  })}
+                />
+                Точка Ж
+              </label>
+              </>
               )}
               {conditionParentsBefore(step, fieldIndex).length > 0 && (
                 <label className="adm-forum-check">

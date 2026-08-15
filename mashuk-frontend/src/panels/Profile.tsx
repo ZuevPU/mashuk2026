@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Panel, PanelHeader, Group, Spinner, Select, Button, Snackbar, Checkbox, Input } from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
-import { apiGet, apiPost, apiPatch, apiDownloadBlob, ApiError, getStoredShiftId, setStoredShiftId } from '../api/client';
+import { apiGet, apiPost, apiPatch, apiDownloadBlob, ApiError, getStoredShiftId, setShiftChoiceDone, setStoredShiftId } from '../api/client';
 import { useAppModal } from '../App';
 import { openQuickCapture } from '../components/QuickCaptureFlow';
 import { EmptyState } from '../components/EmptyState';
@@ -512,6 +512,7 @@ export const ProfilePanel: React.FC<{
                           return;
                         }
                         setStoredShiftId(s.id);
+                        setShiftChoiceDone(false);
                         window.location.reload();
                       }}
                     >

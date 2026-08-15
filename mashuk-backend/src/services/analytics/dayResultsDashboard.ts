@@ -470,7 +470,7 @@ function avgLowForRows(blocks: BlockStat[], rows: EveningExportRow[]): number | 
 }
 
 export async function buildDayResultsDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(filters.shiftId);
   const currentDay = settings.currentDay ?? 1;
   const days = resolveDayRange(filters, currentDay);
   const dayFilter = days.length === 1 ? days[0] : null;

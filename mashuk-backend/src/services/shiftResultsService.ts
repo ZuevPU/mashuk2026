@@ -9,7 +9,7 @@ import {
   NOMINATION_LEADERBOARD_KEYS,
   NOMINATION_LABELS,
 } from './leaderboardService.js';
-import { resolveActiveShift } from './shiftService.js';
+import { getShiftById } from './shiftService.js';
 import { COLORS, paintPageBackground, resolvePdfFonts } from './profilePdfLayout.js';
 import { contentDispositionAttachment } from './exports/workbook.js';
 
@@ -31,12 +31,19 @@ export async function gatherShiftResults(participantId: number): Promise<ShiftRe
   const [p] = await db.select().from(participants).where(eq(participants.id, participantId)).limit(1);
   if (!p) return null;
 
-  const shift = await resolveActiveShift();
-  const totalMap = await computeLeaderboardScores([participantId], { scope: 'shift', track: 'total' });
+  const shift = p.shiftId != null ? await getShiftById(p.shiftId) : null;
+  const totalMap = await computeLeaderboardScores([participantId], {
+    scope: 'shift',
+    track: 'total',
+    shiftId: p.shiftId,
+  });
   const nominations: ShiftResultsRow[] = [];
 
   for (const key of NOMINATION_LEADERBOARD_KEYS) {
-    const map = await computeNominationLeaderboard(key, [participantId], { scope: 'shift' });
+    const map = await computeNominationLeaderboard(key, [participantId], {
+      scope: 'shift',
+      shiftId: p.shiftId,
+    });
     const points = map.get(participantId) ?? 0;
     if (points > 0 || key === 'general') {
       nominations.push({

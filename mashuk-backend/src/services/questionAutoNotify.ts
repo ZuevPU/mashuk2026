@@ -135,9 +135,10 @@ export async function notifyQuestionOnPublish(
   q: Q,
   opts?: { wasPublished?: boolean; now?: Date },
 ): Promise<void> {
-  await autoNotifyTouchpointIfLive(q, opts?.now);
-  if (!q.pushOnPublish || opts?.wasPublished) return;
   const custom = (q.pushTemplate || '').trim();
-  if (!custom) return;
-  await notifyQuestionAudience(q, custom, `question_publish_${q.id}`);
+  if (q.pushOnPublish && !opts?.wasPublished && custom) {
+    await notifyQuestionAudience(q, custom, `question_publish_${q.id}`);
+    return;
+  }
+  await autoNotifyTouchpointIfLive(q, opts?.now);
 }

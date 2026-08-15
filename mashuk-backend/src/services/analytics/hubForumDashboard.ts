@@ -313,7 +313,7 @@ export async function buildHubForumDashboard(filters: AnalyticsFilters, req?: Ad
 export async function buildHubForumExtras(filters: AnalyticsFilters, req?: AdminRequest) {
   const forumFilters: AnalyticsFilters = { ...filters };
   const cohort = await loadCohortParticipants(forumFilters, req);
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(filters.shiftId);
   const currentDay = settings.currentDay ?? 1;
   const seriesDays = forumSeriesDays(currentDay);
 

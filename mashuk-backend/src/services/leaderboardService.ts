@@ -2,7 +2,7 @@ import { and, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { participants, pointsLog, userMedals, tasks, taskSubmissions } from '../db/schema.js';
 import { pointsTrackForAction, totalRatingScore, isUnifiedRatingEnabled, participantRatingScore } from './pointsService.js';
-import { resolveActiveShift } from './shiftService.js';
+import { getShiftById, resolveActiveShift } from './shiftService.js';
 import { FORUM_RATING_MAX_DAY } from './leaderboardQuery.js';
 import { forumDayWindowMsk } from './timePhase.js';
 
@@ -11,7 +11,7 @@ export type LeaderboardMode = 'points' | 'medals' | 'nomination';
 export type MedalMode = 'count' | 'holders';
 export type LeaderboardSort = 'score' | 'name';
 
-export type LeaderboardPeriodOpts = { scope?: LeaderboardScope; day?: number };
+export type LeaderboardPeriodOpts = { scope?: LeaderboardScope; day?: number; shiftId?: number | null };
 
 export type LeaderboardScopesConfig = {
   total?: boolean;
@@ -83,9 +83,22 @@ function logPointsForTrack(actionType: string, points: number, track: string): n
   return null;
 }
 
+async function resolveCohortShiftId(
+  participantIds: number[],
+  explicit?: number | null,
+): Promise<number | null> {
+  if (explicit != null && Number.isFinite(explicit) && explicit > 0) return Number(explicit);
+  if (!participantIds.length) return null;
+  const [p] = await db.select({ shiftId: participants.shiftId })
+    .from(participants)
+    .where(eq(participants.id, participantIds[0]))
+    .limit(1);
+  return p?.shiftId ?? null;
+}
+
 export async function computeLeaderboardScores(
   participantIds: number[],
-  opts: { scope: LeaderboardScope; day?: number; track: string },
+  opts: { scope: LeaderboardScope; day?: number; track: string; shiftId?: number | null },
 ): Promise<Map<number, number>> {
   const map = new Map<number, number>();
   if (participantIds.length === 0) return map;
@@ -110,7 +123,8 @@ export async function computeLeaderboardScores(
     sql`${pointsLog.actionType} NOT LIKE '%\\_revoke' ESCAPE '\\'`,
   ];
   if (opts.scope === 'day' && opts.day) {
-    const shift = await resolveActiveShift();
+    const shiftId = await resolveCohortShiftId(participantIds, opts.shiftId);
+    const shift = shiftId != null ? await getShiftById(shiftId) : await resolveActiveShift();
     if (shift?.startDate) {
       const dayWindow = forumDayWindowMsk(new Date(shift.startDate), opts.day);
       conditions.push(or(
@@ -158,8 +172,11 @@ function taskMatchesForumDay(
   return dns.includes(day);
 }
 
-async function forumDayTimeBounds(day: number): Promise<{ start: Date; end: Date } | null> {
-  const shift = await resolveActiveShift();
+async function forumDayTimeBounds(
+  day: number,
+  shiftId?: number | null,
+): Promise<{ start: Date; end: Date } | null> {
+  const shift = shiftId != null ? await getShiftById(shiftId) : await resolveActiveShift();
   if (!shift?.startDate) return null;
   return forumDayWindowMsk(new Date(shift.startDate), day);
 }
@@ -171,12 +188,15 @@ export async function computeNominationLeaderboard(
 ): Promise<Map<number, number>> {
   const map = new Map<number, number>();
   if (!nominationKey || participantIds.length === 0) return map;
+  const shiftId = await resolveCohortShiftId(participantIds, opts?.shiftId);
   const allTasks = await db.select({
     id: tasks.id,
     points: tasks.points,
     dayNumber: tasks.dayNumber,
     dayNumbers: tasks.dayNumbers,
-  }).from(tasks).where(eq(tasks.nomination, nominationKey));
+  }).from(tasks).where(shiftId != null
+    ? and(eq(tasks.nomination, nominationKey), eq(tasks.shiftId, shiftId))
+    : eq(tasks.nomination, nominationKey));
 
   const scope = opts?.scope ?? 'shift';
   let filteredTasks = allTasks;
@@ -221,13 +241,14 @@ export async function computeMedalCountLeaderboard(
   const scope = opts.scope ?? 'shift';
   const conditions = [inArray(userMedals.participantId, participantIds)];
   if (scope === 'day' && opts.day) {
-    const bounds = await forumDayTimeBounds(opts.day);
+    const bounds = await forumDayTimeBounds(opts.day, await resolveCohortShiftId(participantIds, opts.shiftId));
     if (bounds) {
       conditions.push(gte(userMedals.awardedAt, bounds.start));
       conditions.push(lt(userMedals.awardedAt, bounds.end));
     }
   } else if (scope === 'shift') {
-    const shift = await resolveActiveShift();
+    const shiftId = await resolveCohortShiftId(participantIds, opts.shiftId);
+    const shift = shiftId != null ? await getShiftById(shiftId) : await resolveActiveShift();
     if (shift?.startDate) {
       const start = new Date(shift.startDate);
       start.setUTCHours(0, 0, 0, 0);

@@ -12,7 +12,7 @@ import {
   isTouchpointQuestionForForumDay,
   touchpointCompletionRatio,
 } from '../touchpointProgress.js';
-import { resolveActiveShiftId } from '../shiftService.js';
+import { getShiftById } from '../shiftService.js';
 import { addReadmeSheet, fullName } from './exportCommon.js';
 import { loadEnrichedParticipants } from './participantEnrichment.js';
 import { createWorkbook, sendWorkbook, sendCsv, sendSimpleXlsx } from './workbook.js';
@@ -169,7 +169,7 @@ export async function writeRatingDayExport(
   if (ids.length) {
     const { clampForumDay } = await import('../leaderboardQuery.js');
     const safeDay = clampForumDay(day);
-    const shift = await (await import('../shiftService.js')).resolveActiveShift();
+    const shift = opts.shiftId != null ? await getShiftById(opts.shiftId) : null;
     let dayStart: Date | null = null;
     let dayEnd: Date | null = null;
     if (shift?.startDate) {
@@ -888,7 +888,8 @@ export async function writeActivityExport(
   opts?: { format?: string; shiftId?: number | null },
 ): Promise<void> {
   const format = String(opts?.format || 'xlsx').toLowerCase();
-  const shiftId = opts?.shiftId ?? await resolveActiveShiftId();
+  const shiftId = opts?.shiftId;
+  if (shiftId == null) throw new Error('shiftId required for activity export');
   const pConds = [
     isNull(participants.selfDeletedAt),
     ne(sql`LOWER(${participants.direction})`, 'организатор форума'),
@@ -1014,9 +1015,9 @@ export async function writePointABSummaryExport(res: Response): Promise<void> {
   );
 }
 
-export async function writeDelayedMeasureTemplate(res: Response): Promise<void> {
+export async function writeDelayedMeasureTemplate(res: Response, shiftId?: number | null): Promise<void> {
   const { buildDelayedMeasureRows } = await import('./delayedMeasureService.js');
-  const built = await buildDelayedMeasureRows(7);
+  const built = await buildDelayedMeasureRows(7, shiftId);
   sendCsv(
     res,
     'delayed_measure_template.csv',

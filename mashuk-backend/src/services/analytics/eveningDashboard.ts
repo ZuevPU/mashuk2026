@@ -179,7 +179,7 @@ export async function buildEveningDashboard(
   opts?: EveningDashboardOptions,
 ) {
   const slim = Boolean(opts?.slim);
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(filters.shiftId);
   const currentDay = settings.currentDay ?? 1;
   const days = resolveDayRange(filters, currentDay);
   const dayFilter = days.length === 1 ? days[0] : null;

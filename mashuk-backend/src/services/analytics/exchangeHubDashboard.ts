@@ -26,7 +26,7 @@ function isOtherSlug(slug: string | null | undefined): boolean {
 }
 
 export async function buildExchangeHubDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(filters.shiftId);
   const currentDay = settings.currentDay ?? 1;
   const day = Math.min(8, Math.max(1, filters.day ?? currentDay));
   const totalDays = settings.totalDays ?? 8;

@@ -300,6 +300,8 @@ router.get('/analytics/hub/forum', P('analytics', 'read'), wrap(hubCtrl.getHubFo
 router.get('/analytics/hub/forum-extras', P('analytics', 'read'), wrap(hubCtrl.getHubForumExtrasHandler));
 router.get('/analytics/hub/day-results', P('analytics', 'read'), wrap(hubCtrl.getHubDayResultsHandler));
 router.get('/analytics/hub/forum-results', P('analytics', 'read'), wrap(hubCtrl.getHubForumResultsHandler));
+router.get('/participants/:id/evening-form', P('analytics', 'read'), wrap(hubCtrl.getAdminEveningFormHandler));
+router.patch('/participants/:id/evening-form', P('participants', 'update'), wrap(hubCtrl.patchAdminEveningFormHandler));
 router.get('/analytics/hub/state', P('analytics', 'read'), wrap(hubCtrl.getHubStateHandler));
 router.get('/analytics/hub/activity', P('analytics', 'read'), wrap(hubCtrl.getHubActivityHandler));
 router.get('/analytics/hub/piggybank', P('analytics', 'read'), wrap(hubCtrl.getHubPiggybankHandler));

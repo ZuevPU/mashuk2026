@@ -1,7 +1,8 @@
 import { and, eq, count, gte } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { exchangeAnswers, exchangeQuestions, levelsConfig } from '../db/schema.js';
+import { exchangeAnswers, exchangeQuestions, levelsConfig, participants } from '../db/schema.js';
 import { getForumSettings } from './helpers.js';
+import { loadLevelsConfig } from './shiftContext.js';
 import { env } from '../config/env.js';
 import { startOfMoscowDay } from './questionAutoNotify.js';
 
@@ -90,8 +91,11 @@ export function normalizeExchangeLimitsInput(raw: unknown): ExchangeLimitsConfig
 }
 
 /** Sync levels_config so awardPoints / Levels tab match exchange settings. */
-export async function syncExchangePointsToLevelsConfig(cfg: ExchangeLimitsConfig): Promise<void> {
-  const settings = await getForumSettings();
+export async function syncExchangePointsToLevelsConfig(
+  cfg: ExchangeLimitsConfig,
+  shiftId?: number | null,
+): Promise<void> {
+  const settings = await getForumSettings(shiftId);
   const totalDays = Math.max(1, Number(settings?.totalDays) || 8);
   // Вопросы лимитируются по дню → потолок баллов за смену ≈ лимит × дни форума
   const questionAccruals = Math.max(cfg.maxQuestionsTotal * totalDays, 1);
@@ -108,9 +112,13 @@ export async function syncExchangePointsToLevelsConfig(cfg: ExchangeLimitsConfig
     },
   ];
   for (const item of pairs) {
-    const [existing] = await db.select().from(levelsConfig)
-      .where(eq(levelsConfig.actionType, item.actionType)).limit(1);
-    if (existing) {
+    const existing = shiftId != null
+      ? (await db.select().from(levelsConfig).where(and(
+        eq(levelsConfig.actionType, item.actionType),
+        eq(levelsConfig.shiftId, shiftId),
+      )).limit(1))[0]
+      : await loadLevelsConfig(item.actionType, shiftId);
+    if (existing && (shiftId == null || existing.shiftId === shiftId)) {
       await db.update(levelsConfig)
         .set({
           pointsPerUnit: item.pointsPerUnit,
@@ -123,6 +131,7 @@ export async function syncExchangePointsToLevelsConfig(cfg: ExchangeLimitsConfig
         pointsPerUnit: item.pointsPerUnit,
         maxAccruals: item.maxAccruals,
         track: 'path',
+        shiftId: shiftId ?? null,
         displayName: item.actionType === 'exchange_question'
           ? 'Вопрос в «Общении»'
           : 'Ответ участнику в «Общении»',
@@ -147,8 +156,8 @@ export type ExchangeLimitsState = {
   answersTodayLeft: number;
 };
 
-export async function getExchangeLimitsConfig(): Promise<ExchangeLimitsConfig> {
-  const settings = await getForumSettings();
+export async function getExchangeLimitsConfig(shiftId?: number | null): Promise<ExchangeLimitsConfig> {
+  const settings = await getForumSettings(shiftId);
   return resolveExchangeLimitsConfig(
     (settings as { exchangeLimits?: unknown } | null)?.exchangeLimits,
   );
@@ -157,7 +166,11 @@ export async function getExchangeLimitsConfig(): Promise<ExchangeLimitsConfig> {
 export async function getExchangeLimitsForParticipant(
   participantId: number,
 ): Promise<ExchangeLimitsState> {
-  const cfg = await getExchangeLimitsConfig();
+  const [owner] = await db.select({ shiftId: participants.shiftId })
+    .from(participants)
+    .where(eq(participants.id, participantId))
+    .limit(1);
+  const cfg = await getExchangeLimitsConfig(owner?.shiftId);
   const questionsMax = cfg.maxQuestionsTotal;
   const answersForPointsMax = cfg.maxAnswersForPoints;
   const dayStart = startOfMoscowDay();

@@ -28,6 +28,7 @@ export async function adminCompleteParticipantTask(
   participantId: number,
   taskId: number,
   moderatorComment?: string,
+  opts?: { force?: boolean },
 ): Promise<ManualTaskResult> {
   const [p] = await db.select({ id: participants.id }).from(participants).where(eq(participants.id, participantId)).limit(1);
   if (!p) return { ok: false, error: 'Participant not found', status: 404 };
@@ -37,6 +38,23 @@ export async function adminCompleteParticipantTask(
 
   if (task.confirmationType === 'team') {
     return { ok: false, error: 'Командные задания отмечайте через модерацию заявки', status: 400 };
+  }
+
+  if (!opts?.force) {
+    const [already] = await db.select({ id: taskSubmissions.id }).from(taskSubmissions)
+      .where(and(
+        eq(taskSubmissions.participantId, participantId),
+        eq(taskSubmissions.taskId, taskId),
+        eq(taskSubmissions.status, 'approved'),
+      ))
+      .limit(1);
+    if (already) {
+      return {
+        ok: false,
+        error: 'Задание уже отмечено. Повтор создаст новое начисление баллов.',
+        status: 409,
+      };
+    }
   }
 
   const lifecyclePatch = submissionCreatePatch({

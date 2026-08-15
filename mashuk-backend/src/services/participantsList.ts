@@ -157,9 +157,21 @@ export async function queryParticipants(query: ParticipantListQuery) {
   if (where) listQuery = listQuery.where(where) as typeof listQuery;
   const list = await listQuery;
 
+  let incompleteCount = 0;
+  if (!query.onlySelfDeleted) {
+    const incompleteWhere = and(
+      where,
+      isNull(participants.onboardingCompletedAt),
+    );
+    const [incomplete] = await db.select({ count: count() }).from(participants)
+      .where(incompleteWhere);
+    incompleteCount = Number(incomplete?.count ?? 0);
+  }
+
   return {
     participants: list.map(mapParticipantListRow),
     totalCount: total.count,
+    incompleteCount,
     page,
     limit,
   };

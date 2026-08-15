@@ -3,7 +3,7 @@ import { and, eq, or, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db/index.js';
 import {
-  participantDayState, dayExperiments, questions, answers, events, pointsLog,
+  participantDayState, dayExperiments, questions, answers, events, pointsLog, participants,
 } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
@@ -31,7 +31,6 @@ import {
   collectEveningProgramPickTree,
   filterEventsForEveningProgramPick,
 } from '../services/eveningProgramPickTree.js';
-import { resolveActiveShiftId } from '../services/shiftService.js';
 
 const EVENING_COMPLETE_POINTS = 15;
 
@@ -325,7 +324,13 @@ export async function loadDayContext(
   },
 ) {
   const now = opts?.now ?? new Date();
-  const settings = opts?.settings ?? await getForumSettings();
+  const settings = opts?.settings ?? await (async () => {
+    const [owner] = await db.select({ shiftId: participants.shiftId })
+      .from(participants)
+      .where(eq(participants.id, participantId))
+      .limit(1);
+    return getForumSettings(owner?.shiftId);
+  })();
   const [state] = await db.select().from(participantDayState)
     .where(and(
       eq(participantDayState.participantId, participantId),
@@ -404,10 +409,12 @@ export async function loadDayContext(
   if (programEventFieldDefs.length > 0) {
     const shiftId = typeof (settings as { shiftId?: number }).shiftId === 'number'
       ? (settings as { shiftId: number }).shiftId
-      : await resolveActiveShiftId();
+      : null;
     // Load whole shift: nested sub-events sometimes inherit day visually but may
     // miss day_number; tree builder still anchors roots to the survey day.
-    const shiftEv = await db.select().from(events).where(eq(events.shiftId, shiftId));
+    const shiftEv = shiftId != null
+      ? await db.select().from(events).where(eq(events.shiftId, shiftId))
+      : [];
     const published = filterEventsForEveningProgramPick(shiftEv);
     for (const field of programEventFieldDefs) {
       const tree = collectEveningProgramPickTree(

@@ -38,6 +38,10 @@ export type EveningField = {
    * Question belongs to the final forum questionnaire and feeds «Итоги форума».
    */
   forumFinal?: boolean;
+  /** Точка Б — финальный вопрос смены. */
+  pointB?: boolean;
+  /** Точка Ж — промежуточный вопрос смены. */
+  pointZh?: boolean;
   /**
    * Show field when another field matches.
    * `equals` may be one value or an array (OR): show if the parent matches any.
@@ -597,6 +601,22 @@ export function isForumFinalEveningField(field: EveningField): boolean {
   return field.forumFinal === true && field.type !== 'info_text';
 }
 
+export function isPointBEveningField(field: EveningField): boolean {
+  return field.pointB === true && field.type !== 'info_text';
+}
+
+export function isPointZhEveningField(field: EveningField): boolean {
+  return field.pointZh === true && field.type !== 'info_text';
+}
+
+/** Точка Б (финал) / Точка Ж (промежуточная) / без метки. */
+export function eveningFieldPointKind(field: EveningField): 'b' | 'zh' | null {
+  if (field.type === 'info_text') return null;
+  if (field.pointB) return 'b';
+  if (field.pointZh) return 'zh';
+  return null;
+}
+
 export type ForumFinalQuestion = {
   /** Уникальный id среза (совпадает с key, если вопрос один на все дни). */
   id: string;
@@ -617,24 +637,16 @@ function slugForumFinalPart(value: string): string {
     .slice(0, 40) || 'q';
 }
 
-/** Поля вечерней анкеты, отмеченные как итоговые вопросы форума (по всем дням смены). */
-export function collectForumFinalEveningFields(
+function collectEveningFieldsByMark(
   settings: typeof forumSettings.$inferSelect | null,
-  days: number[] = [1, 2, 3, 4, 5, 6, 7, 8],
-): EveningField[] {
-  return collectForumFinalEveningFieldDays(settings, days).questions.map(q => q.field);
-}
-
-/** Те же поля + дни, на которых стоит галочка «Итоговый вопрос форума». */
-export function collectForumFinalEveningFieldDays(
-  settings: typeof forumSettings.$inferSelect | null,
-  days: number[] = [1, 2, 3, 4, 5, 6, 7, 8],
+  days: number[],
+  match: (field: EveningField) => boolean,
 ): { fields: EveningField[]; daysByKey: Map<string, number[]>; questions: ForumFinalQuestion[] } {
   const hits: Array<{ day: number; field: EveningField }> = [];
   for (const day of days) {
     const cfg = resolveEveningConfigForDay(settings, day);
     for (const field of (cfg.steps || []).flatMap(s => s.fields)) {
-      if (!isForumFinalEveningField(field)) continue;
+      if (!match(field)) continue;
       hits.push({ day, field });
     }
   }
@@ -672,6 +684,54 @@ export function collectForumFinalEveningFieldDays(
     if (q.id === q.field.key) daysByKey.set(q.field.key, q.days);
   }
   return { fields: questions.map(q => q.field), daysByKey, questions };
+}
+
+/** Поля вечерней анкеты, отмеченные как итоговые вопросы форума (по всем дням смены). */
+export function collectForumFinalEveningFields(
+  settings: typeof forumSettings.$inferSelect | null,
+  days: number[] = [1, 2, 3, 4, 5, 6, 7, 8],
+): EveningField[] {
+  return collectForumFinalEveningFieldDays(settings, days).questions.map(q => q.field);
+}
+
+/** Те же поля + дни, на которых стоит галочка «Итоговый вопрос форума». */
+export function collectForumFinalEveningFieldDays(
+  settings: typeof forumSettings.$inferSelect | null,
+  days: number[] = [1, 2, 3, 4, 5, 6, 7, 8],
+): { fields: EveningField[]; daysByKey: Map<string, number[]>; questions: ForumFinalQuestion[] } {
+  return collectEveningFieldsByMark(settings, days, isForumFinalEveningField);
+}
+
+/** Поля вечерней анкеты, отмеченные как Точка Б. */
+export function collectPointBEveningFields(
+  settings: typeof forumSettings.$inferSelect | null,
+  days: number[] = [1, 2, 3, 4, 5, 6, 7, 8],
+): EveningField[] {
+  return collectPointBEveningFieldDays(settings, days).questions.map(q => q.field);
+}
+
+/** Те же поля + дни, на которых стоит галочка «Точка Б». */
+export function collectPointBEveningFieldDays(
+  settings: typeof forumSettings.$inferSelect | null,
+  days: number[] = [1, 2, 3, 4, 5, 6, 7, 8],
+): { fields: EveningField[]; daysByKey: Map<string, number[]>; questions: ForumFinalQuestion[] } {
+  return collectEveningFieldsByMark(settings, days, isPointBEveningField);
+}
+
+/** Поля вечерней анкеты, отмеченные как Точка Ж (промежуточные). */
+export function collectPointZhEveningFields(
+  settings: typeof forumSettings.$inferSelect | null,
+  days: number[] = [1, 2, 3, 4, 5, 6, 7, 8],
+): EveningField[] {
+  return collectPointZhEveningFieldDays(settings, days).questions.map(q => q.field);
+}
+
+/** Те же поля + дни, на которых стоит галочка «Точка Ж». */
+export function collectPointZhEveningFieldDays(
+  settings: typeof forumSettings.$inferSelect | null,
+  days: number[] = [1, 2, 3, 4, 5, 6, 7, 8],
+): { fields: EveningField[]; daysByKey: Map<string, number[]>; questions: ForumFinalQuestion[] } {
+  return collectEveningFieldsByMark(settings, days, isPointZhEveningField);
 }
 
 export function resolveEveningConfigForDay(

@@ -21,6 +21,10 @@ import {
   normalizeExperimentStep,
   collectForumFinalEveningFields,
   collectForumFinalEveningFieldDays,
+  collectPointBEveningFields,
+  collectPointZhEveningFields,
+  collectPointZhEveningFieldDays,
+  eveningFieldPointKind,
 } from '../services/eveningQuestionnaireConfig.js';
 
 describe('eveningQuestionnaireConfig', () => {
@@ -586,5 +590,78 @@ describe('eveningQuestionnaireConfig', () => {
     assert.equal(questions[1].field.label, 'Что сделать, чтобы оценка стала выше');
     assert.deepEqual(questions[1].days, [7]);
     assert.notEqual(questions[0].id, questions[1].id);
+  });
+
+  it('classifies Точка Б and Точка Ж independently from forum-final', () => {
+    assert.equal(eveningFieldPointKind({ key: 'a', type: 'text', label: 'A', pointB: true }), 'b');
+    assert.equal(eveningFieldPointKind({ key: 'b', type: 'text', label: 'B', pointZh: true }), 'zh');
+    assert.equal(eveningFieldPointKind({ key: 'c', type: 'text', label: 'C', forumFinal: true }), null);
+    assert.equal(eveningFieldPointKind({ key: 'd', type: 'info_text', label: 'D', pointB: true }), null);
+  });
+
+  it('collects evening fields marked as Точка Б without mixing forum-final', () => {
+    const fields = collectPointBEveningFields({
+      eveningQuestionnaireByDay: {
+        '1': {
+          steps: [{
+            id: 's',
+            title: 'S',
+            fields: [
+              { key: 'goal', type: 'text', label: 'Что стало с целью', pointB: true },
+              { key: 'housing', type: 'scale_1_5', label: 'Быт', forumFinal: true },
+              { key: 'mood', type: 'scale_1_5', label: 'Настроение', pointZh: true },
+            ],
+          }],
+        },
+      },
+    } as never);
+    assert.deepEqual(fields.map(f => f.key), ['goal']);
+  });
+
+  it('collects evening fields marked as Точка Ж', () => {
+    const fields = collectPointZhEveningFields({
+      eveningQuestionnaireByDay: {
+        '1': {
+          steps: [{
+            id: 's',
+            title: 'S',
+            fields: [
+              { key: 'mood', type: 'scale_1_5', label: 'Настроение', pointZh: true },
+              { key: 'housing', type: 'scale_1_5', label: 'Быт', forumFinal: true },
+              { key: 'skip', type: 'text', label: 'Без метки' },
+            ],
+          }],
+        },
+        '3': {
+          steps: [{
+            id: 's',
+            title: 'S',
+            fields: [
+              { key: 'mood', type: 'scale_1_5', label: 'Настроение', pointZh: true },
+            ],
+          }],
+        },
+      },
+    } as never);
+    assert.deepEqual(fields.map(f => f.key), ['mood']);
+    const { daysByKey } = collectPointZhEveningFieldDays({
+      eveningQuestionnaireByDay: {
+        '1': {
+          steps: [{
+            id: 's',
+            title: 'S',
+            fields: [{ key: 'mood', type: 'scale_1_5', label: 'Настроение', pointZh: true }],
+          }],
+        },
+        '3': {
+          steps: [{
+            id: 's',
+            title: 'S',
+            fields: [{ key: 'mood', type: 'scale_1_5', label: 'Настроение', pointZh: true }],
+          }],
+        },
+      },
+    } as never);
+    assert.deepEqual(daysByKey.get('mood'), [1, 3]);
   });
 });

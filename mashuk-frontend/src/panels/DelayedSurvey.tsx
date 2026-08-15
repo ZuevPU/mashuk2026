@@ -3,7 +3,7 @@ import {
   Panel, PanelHeader, PanelHeaderBack, Group, FormItem, Textarea, Button, Slider, Snackbar,
 } from '@vkontakte/vkui';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
-import { apiGet, apiPost } from '../api/client';
+import { apiGet, apiPost, ApiError } from '../api/client';
 
 type SurveyQuestion = {
   key: string;
@@ -40,8 +40,11 @@ export function DelayedSurveyPanel({ id }: { id: string }) {
       await apiPost(`/delayed-survey/${survey.id}/respond`, { answers });
       setToast('Спасибо! Ответы сохранены.');
       setTimeout(() => routeNavigator.push('/'), 1200);
-    } catch {
-      setToast('Не удалось отправить. Попробуйте позже.');
+    } catch (err) {
+      const message = err instanceof ApiError && err.message
+        ? err.message
+        : 'Не удалось отправить. Попробуйте позже.';
+      setToast(message);
     } finally {
       setSaving(false);
     }

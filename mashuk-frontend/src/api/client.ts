@@ -273,7 +273,7 @@ const SHIFT_CHOICE_KEY = 'mashuk-shift-choice-done';
 
 export function getShiftChoiceDone(): boolean {
   try {
-    return localStorage.getItem(SHIFT_CHOICE_KEY) === '1';
+    return sessionStorage.getItem(SHIFT_CHOICE_KEY) === '1';
   } catch {
     return false;
   }
@@ -281,8 +281,9 @@ export function getShiftChoiceDone(): boolean {
 
 export function setShiftChoiceDone(done = true): void {
   try {
-    if (done) localStorage.setItem(SHIFT_CHOICE_KEY, '1');
-    else localStorage.removeItem(SHIFT_CHOICE_KEY);
+    if (done) sessionStorage.setItem(SHIFT_CHOICE_KEY, '1');
+    else sessionStorage.removeItem(SHIFT_CHOICE_KEY);
+    localStorage.removeItem(SHIFT_CHOICE_KEY);
   } catch {
     // ignore quota / private mode
   }

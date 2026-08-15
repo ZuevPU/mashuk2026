@@ -11,7 +11,6 @@ import {
   resolveEveningConfigForDay,
   type EveningField,
 } from '../eveningQuestionnaireConfig.js';
-import { getForumSettings } from '../helpers.js';
 import { getShiftById, shiftOpsToForumShape } from '../shiftService.js';
 import { EVENING_SCALE_KEYS, EVENING_SCALE_LABELS } from '../touchpointTemplates.js';
 import { roleLabel } from './exportLabels.js';
@@ -57,11 +56,12 @@ export type EveningExportDiagnostics = {
 };
 
 export async function loadSettingsForEveningExport(shiftId?: number | null) {
-  if (shiftId != null && !Number.isNaN(shiftId)) {
-    const shift = await getShiftById(shiftId);
-    if (shift) return shiftOpsToForumShape(shift);
+  if (shiftId == null || Number.isNaN(Number(shiftId))) {
+    throw new Error('shiftId required for evening export');
   }
-  return getForumSettings();
+  const shift = await getShiftById(Number(shiftId));
+  if (!shift) throw new Error('shift not found for evening export');
+  return shiftOpsToForumShape(shift);
 }
 
 export function asEveningRatings(raw: unknown): Record<string, unknown> | null {

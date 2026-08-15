@@ -1,7 +1,7 @@
 import { Response } from 'express';
-import { eq, and, lte, or, isNull, ilike, ne, isNotNull } from 'drizzle-orm';
+import { eq, and, or, isNull, ilike, ne, isNotNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { tasks, taskSubmissions, questions, answers, participants, taskTeamConfirmations, pointsLog } from '../db/schema.js';
+import { tasks, taskSubmissions, participants, taskTeamConfirmations, pointsLog } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { getForumSettings, resolveEffectiveCurrentDay } from '../services/helpers.js';
 import { resolveTaskAwardPoints } from '../services/taskPoints.js';
@@ -15,6 +15,7 @@ import {
   loadParticipantTaskSubmissions,
   pickDisplaySubmission,
   resolveSubmissionWriteAction,
+  taskBelongsToParticipantShift,
 } from '../services/taskEligibility.js';
 import {
   isTaskOnForumDay,
@@ -116,9 +117,10 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
       return;
     }
 
+    const currentDay = resolveEffectiveCurrentDay(settings, now);
     const allTasksRaw = await db.select().from(tasks).where(eq(tasks.shiftId, shiftId));
     const allTasks = allTasksRaw.filter(t =>
-      isTaskPublishedVisible(t, now) && isTaskOnForumDay(t, settings.currentDay ?? 1),
+      isTaskPublishedVisible(t, now) && isTaskOnForumDay(t, currentDay),
     );
 
     const submissions = await db.select().from(taskSubmissions)
@@ -158,7 +160,6 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
     };
 
     const dayStart = mskTodayStart(now);
-    const currentDay = resolveEffectiveCurrentDay(settings, now);
     const dayWindow = settings.startDate
       ? forumDayWindowMsk(new Date(settings.startDate), currentDay)
       : { start: dayStart, end: new Date(dayStart.getTime() + 86_400_000) };
@@ -242,18 +243,9 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
     }).from(participants).where(eq(participants.id, req.participant!.id)).limit(1);
     const experienceTotal = fresh?.experiencePoints ?? req.participant!.experiencePoints ?? 0;
 
-    const dayQuestions = await db.select().from(questions)
-      .where(and(
-        eq(questions.status, 'published'),
-        eq(questions.dayNumber, currentDay),
-        eq(questions.shiftId, req.participant!.shiftId),
-        or(isNull(questions.publishTime), lte(questions.publishTime, now)),
-      ));
-    const participantAnswers = await db.select().from(answers)
-      .where(eq(answers.participantId, req.participant!.id));
-    const answeredIds = new Set(participantAnswers.map(a => a.questionId));
-    const touchpoints = dayQuestions.filter(q => answeredIds.has(q.id)).length;
-    const touchpointsTotal = dayQuestions.length || 7;
+    const { countTouchpointsForDay } = await import('./programController.js');
+    const { completed: touchpoints, total: touchpointsTotal } =
+      await countTouchpointsForDay(req.participant!.id, currentDay);
     const requiredTouchpoints = settings.kbUnlockThreshold ?? 4;
     const unlockDisabled = settings.kbUnlockDisabled === true;
 
@@ -316,8 +308,8 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
     };
 
     const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
-    if (!task) {
-      res.status(404).json({ error: 'Task not found' });
+    if (!task || !taskBelongsToParticipantShift(task, req.participant!.shiftId)) {
+      res.status(404).json({ error: 'Задание не найдено' });
       return;
     }
 
@@ -351,7 +343,7 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
       }
     };
     const forumDay = isQrSubmit
-      ? (await resolveForumDayForNewEntry())
+      ? (await resolveForumDayForNewEntry(req.participant!.shiftId))
       : 0;
     const needsQrWindow = methods.includes('qr')
       || task.confirmationType === 'qr'
@@ -573,7 +565,7 @@ export const resolveTaskQr = async (req: ParticipantRequest, res: Response): Pro
     }
 
     const task = await findTaskByQrCode(code);
-    if (!task) {
+    if (!task || !taskBelongsToParticipantShift(task, req.participant!.shiftId)) {
       res.status(404).json({ error: 'QR-код не найден' });
       return;
     }
@@ -585,7 +577,7 @@ export const resolveTaskQr = async (req: ParticipantRequest, res: Response): Pro
     }
 
     const now = new Date();
-    const forumDay = await resolveForumDayForNewEntry();
+    const forumDay = await resolveForumDayForNewEntry(req.participant!.shiftId);
     if (!isQrInValidWindow(task, now, forumDay)) {
       res.status(400).json({
         error: 'QR-код задания сейчас не активен. Сканируйте только в указанное в админке время и дни.',
@@ -619,7 +611,7 @@ export const scanTask = async (req: ParticipantRequest, res: Response): Promise<
     }
 
     const task = await findTaskByQrCode(code);
-    if (!task) {
+    if (!task || !taskBelongsToParticipantShift(task, req.participant!.shiftId)) {
       res.status(404).json({ error: 'QR-код не найден' });
       return;
     }
@@ -739,6 +731,7 @@ export const searchTeammates = async (req: ParticipantRequest, res: Response): P
         ne(participants.id, selfId),
         isNotNull(participants.onboardingCompletedAt),
         isNull(participants.selfDeletedAt),
+        eq(participants.shiftId, req.participant!.shiftId),
         or(
           ilike(participants.firstName, pattern),
           ilike(participants.lastName, pattern),

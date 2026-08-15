@@ -198,6 +198,7 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
       const latePolicy = lateAnswerPolicyForQuestion(q);
       return {
         ...q,
+        publishStatus: q.status,
         subtitle: q.subtitle ?? null,
         sortOrder: q.sortOrder ?? 0,
         status,
@@ -213,7 +214,8 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
       };
     })
       .filter(q => {
-        if (q.answered) return true;
+        // Unpublished stays only for «Мои ответы»; never in the open feed.
+        if (q.publishStatus !== 'published') return q.answered;
         // Unanswered evening stub is never listed — real UI is Home/Questions eveningCard at opensAt.
         if (isEveningSummaryStubQuestion(q)) return false;
         if (q.access === 'soon') return false;
@@ -1366,7 +1368,7 @@ export const answerExchange = async (req: ParticipantRequest, res: Response): Pr
       getExchangeLimitsConfig,
     } = await import('../services/exchangeLimits.js');
     const limitsBefore = await getExchangeLimitsForParticipant(req.participant!.id);
-    const exchangeCfg = await getExchangeLimitsConfig();
+    const exchangeCfg = await getExchangeLimitsConfig(req.participant!.shiftId);
     // Отвечать можно без лимита; баллы — только за первые N ответов.
     const awardAnswerPoints = limitsBefore.answersForPointsLeft > 0 && exchangeCfg.pointsPerAnswer > 0;
 

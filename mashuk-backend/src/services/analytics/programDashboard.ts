@@ -24,7 +24,7 @@ const SCALE_LABELS: Record<string, string> = {
 };
 
 export async function buildProgramDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(filters.shiftId);
   const days = resolveDayRange(filters, settings.currentDay ?? 1);
   const cohort = await loadCohortParticipants(filters, req);
   const ids = new Set(cohort.map(p => p.id));

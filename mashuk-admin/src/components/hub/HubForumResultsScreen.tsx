@@ -17,6 +17,7 @@ import {
 import { HubLensLayout, type HubNavItem } from './HubSideNav';
 import { QuoteBrowser } from './QuoteBrowser';
 import { PracticeRecommendNpsTable } from '../analytics/PracticeRecommendNpsTable';
+import { ForumResultsPeopleTable, type ForumPeopleColumn, type ForumPeopleRow } from './ForumResultsPeopleTable';
 
 type Block = { key: string; label: string; n: number; mean: number; dist: number[]; low: number };
 type HeatRow = { dir: string; n: number; vals: Array<{ v: number | null; dev: number }>; idx: number; isForum?: boolean };
@@ -99,6 +100,10 @@ type ForumResultsData = {
   };
   diagnostics?: { notes?: string[] };
   exportPath?: string;
+  people?: {
+    columns: ForumPeopleColumn[];
+    rows: ForumPeopleRow[];
+  };
 };
 
 const NAV: HubNavItem[] = [
@@ -116,6 +121,7 @@ const NAV: HubNavItem[] = [
   { id: 'hub-forum-choices', label: 'Другие вопросы' },
   { id: 'hub-forum-extra', label: 'Сервисы' },
   { id: 'hub-forum-final', label: 'Впечатления' },
+  { id: 'hub-forum-people', label: 'Участники' },
 ];
 
 const ROLE_COLORS = ['#B08D3F', '#1F5C4D', '#6FA98A', '#D98E4C', '#B23B32', '#7A6FB0', '#9A968A'];
@@ -158,6 +164,7 @@ export function HubForumResultsScreen() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [blockKey, setBlockKey] = useState('');
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     setLoading(true);
@@ -183,7 +190,7 @@ export function HubForumResultsScreen() {
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить итоги форума');
       })
       .finally(() => setLoading(false));
-  }, [adminFetch, direction, group, ageCategory, activity]);
+  }, [adminFetch, direction, group, ageCategory, activity, reloadTick]);
 
   const m = data?.meta;
   const selectedBlock = useMemo(
@@ -219,6 +226,7 @@ export function HubForumResultsScreen() {
     if (item.id === 'hub-forum-choices') return otherChoices.length > 0;
     if (item.id === 'hub-forum-extra') return !!data?.compact.length;
     if (item.id === 'hub-forum-final') return finals.length > 0;
+    if (item.id === 'hub-forum-people') return (data?.people?.rows.length ?? 0) > 0;
     return true;
   }), [data, improve, pointB, roleChoice, selfway, planWhen, nextstep, finals.length, otherChoices.length]);
 
@@ -707,6 +715,21 @@ export function HubForumResultsScreen() {
                   </div>
                 ))}
               </DashCard>
+            </DayResultsSection>
+          )}
+
+          {(data.people?.rows.length ?? 0) > 0 && (
+            <DayResultsSection
+              id="hub-forum-people"
+              title="Кто заполнил"
+              note="ФИО, направление, группа и тепловая полоса оценок. Нажмите строку, чтобы открыть анкету."
+            >
+              <ForumResultsPeopleTable
+                columns={data.people!.columns}
+                rows={data.people!.rows}
+                adminFetch={adminFetch}
+                onSaved={() => setReloadTick(n => n + 1)}
+              />
             </DayResultsSection>
           )}
 

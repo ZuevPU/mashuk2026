@@ -1,4 +1,4 @@
-import { and, count, eq, isNull, or } from 'drizzle-orm';
+import { and, count, eq, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   medals, userMedals, taskSubmissions, piggybank, answers, participants,
@@ -9,7 +9,6 @@ import { sendPushNotification } from './pushService.js';
 import { isNotNull } from 'drizzle-orm';
 import { medalRuleLabel } from './medalRuleMetrics.js';
 import { piggybankStreak, reflectionStreak } from './streakHelpers.js';
-import { resolveActiveShiftId } from './shiftService.js';
 
 export type ParsedMedalRule = { metric: string; op: '>='; value: number };
 
@@ -81,11 +80,23 @@ export async function getMedalRuleProgress(
 export async function evaluateMedalsForParticipantDetailed(
   participantId: number,
 ): Promise<{ id: number; name: string }[]> {
-  const shiftId = await resolveActiveShiftId();
-  const active = await db.select().from(medals).where(and(
-    eq(medals.isActive, true),
-    or(isNull(medals.shiftId), eq(medals.shiftId, shiftId)),
-  ));
+  const [owner] = await db.select({ shiftId: participants.shiftId })
+    .from(participants)
+    .where(eq(participants.id, participantId))
+    .limit(1);
+  const shiftId = owner?.shiftId ?? null;
+  const own = shiftId != null
+    ? await db.select().from(medals).where(and(
+      eq(medals.isActive, true),
+      eq(medals.shiftId, shiftId),
+    ))
+    : [];
+  const active = own.length
+    ? own
+    : await db.select().from(medals).where(and(
+      eq(medals.isActive, true),
+      isNull(medals.shiftId),
+    ));
   const owned = await db.select().from(userMedals).where(eq(userMedals.participantId, participantId));
   const ownedIds = new Set(owned.map(u => u.medalId));
   const newlyAwarded: { id: number; name: string }[] = [];

@@ -666,9 +666,11 @@ export const getAnalyticsDashboards = async (req: AdminRequest, res: Response): 
 export const scheduleDelayedSurvey = async (req: AdminRequest, res: Response): Promise<void> => {
   const weeks = Number(req.body.weeks) || 7;
   const { scheduleDelayedSurveyFromShiftEnd } = await import('../services/exports/delayedMeasureService.js');
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
   const result = await scheduleDelayedSurveyFromShiftEnd({
     weeksAfter: weeks,
     adminId: req.adminId ?? null,
+    shiftId: await resolveAdminShiftId(req),
   });
   res.json({ ok: true, scheduled: result.scheduled, scheduledAt: result.scheduledAt, shiftId: result.shiftId });
 };

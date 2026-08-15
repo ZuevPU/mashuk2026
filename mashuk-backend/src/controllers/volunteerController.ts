@@ -11,6 +11,7 @@ import {
   isQrInValidWindow,
   loadParticipantTaskSubmissions,
   resolveSubmissionWriteAction,
+  taskBelongsToParticipantShift,
 } from '../services/taskEligibility.js';
 import { resolveForumDayForNewEntry } from '../services/piggybankService.js';
 import {
@@ -55,16 +56,21 @@ export const volunteerConfirm = async (req: AdminRequest & VkAuthRequest, res: R
       }
     }
 
-    const [participant] = await db.select().from(participants)
-      .where(eq(participants.qrToken, participantQrToken))
-      .limit(1);
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, Number(taskId))).limit(1);
+    if (!task) {
+      res.status(404).json({ error: 'Задание не найдено' });
+      return;
+    }
+
+    const matches = await db.select().from(participants)
+      .where(eq(participants.qrToken, participantQrToken));
+    const participant = matches.find(p => taskBelongsToParticipantShift(task, p.shiftId))
+      ?? (matches.length === 1 ? matches[0] : undefined);
     if (!participant) {
       res.status(404).json({ error: 'Участник с таким QR не найден' });
       return;
     }
-
-    const [task] = await db.select().from(tasks).where(eq(tasks.id, Number(taskId))).limit(1);
-    if (!task) {
+    if (!taskBelongsToParticipantShift(task, participant.shiftId)) {
       res.status(404).json({ error: 'Задание не найдено' });
       return;
     }
@@ -75,7 +81,7 @@ export const volunteerConfirm = async (req: AdminRequest & VkAuthRequest, res: R
       return;
     }
     const now = new Date();
-    const forumDay = await resolveForumDayForNewEntry();
+    const forumDay = await resolveForumDayForNewEntry(participant.shiftId);
     if (!isQrInValidWindow(task, now, forumDay)) {
       res.status(400).json({
         error: 'QR-код задания сейчас не активен. Подтверждение только в указанное в админке время и дни.',

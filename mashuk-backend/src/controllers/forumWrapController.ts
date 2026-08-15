@@ -31,7 +31,6 @@ import {
   clearShiftCaches,
   getShiftById,
   resolveAdminShiftId,
-  resolveActiveShiftId,
   shiftOpsToForumShape,
   updateShift,
 } from '../services/shiftService.js';
@@ -224,8 +223,10 @@ export async function loadForumWrapPayload(
     emptyReason: 'none' | 'none_in_program';
   }> = {};
   if (programEventFieldDefs.length > 0) {
-    const shiftId = participant.shiftId || await resolveActiveShiftId();
-    const shiftEv = await db.select().from(events).where(eq(events.shiftId, shiftId));
+    const shiftId = participant.shiftId;
+    const shiftEv = shiftId
+      ? await db.select().from(events).where(eq(events.shiftId, shiftId))
+      : [];
     const published = filterEventsForEveningProgramPick(shiftEv);
     for (const field of programEventFieldDefs) {
       const tree = collectEveningProgramPickTree(

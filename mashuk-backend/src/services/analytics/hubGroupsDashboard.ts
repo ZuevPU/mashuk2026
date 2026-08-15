@@ -47,7 +47,7 @@ export async function buildHubGroupsDashboard(filters: AnalyticsFilters, req?: A
   // Все группы в срезе; фильтр направления / возраста / деятельности сохраняем.
   const groupFilters: AnalyticsFilters = { ...filters, group: null };
 
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(filters.shiftId);
   const currentForumDay = settings.currentDay ?? 1;
   // Итоговая анкета — дни 1–7; день 8 = точка Б.
   const days = forumSeriesDays(Math.min(currentForumDay, 7));

@@ -169,7 +169,7 @@ export async function collectKindAnswerRows(
   rows: KindAnswerRow[];
   questionMeta: { id: number; title: string; dayNumber: number | null }[];
 }> {
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(filters.shiftId);
   const days = resolveDayRange(filters, settings.currentDay ?? 1, settings.totalDays ?? 8);
 
   const qConds = [];
@@ -340,7 +340,7 @@ export async function buildKindDashboard(
   req?: AdminRequest,
   opts?: KindDashboardOptions,
 ) {
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(filters.shiftId);
   const currentDay = settings.currentDay ?? 1;
   const days = resolveDayRange(filters, currentDay, settings.totalDays ?? 8);
   const dayFilter = days.length === 1 ? days[0] : null;

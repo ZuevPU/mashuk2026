@@ -277,10 +277,6 @@ export const restoreParticipantAccount = async (req: AdminRequest, res: Response
     res.status(400).json({ error: 'Participant is not self-deleted' });
     return;
   }
-  if (!existing.onboardingCompletedAt) {
-    res.status(400).json({ error: 'Participant has no completed registration' });
-    return;
-  }
   const [updated] = await db.update(participants)
     .set({ selfDeletedAt: null })
     .where(eq(participants.id, id))
@@ -334,10 +330,6 @@ export const removeParticipantFromProgram = async (req: AdminRequest, res: Respo
   const [existing] = await db.select().from(participants).where(eq(participants.id, id)).limit(1);
   if (!existing) {
     res.status(404).json({ error: 'Participant not found' });
-    return;
-  }
-  if (!existing.onboardingCompletedAt) {
-    res.status(400).json({ error: 'Participant has not completed registration' });
     return;
   }
   if (existing.selfDeletedAt) {
@@ -445,11 +437,13 @@ export const adjustParticipantPoints = async (req: AdminRequest, res: Response):
   }
   const { resolveAwardForumDay } = await import('../services/pointsService.js');
   const { inferForumDayFromTimestamp } = await import('../services/timePhase.js');
-  const settings = await loadForumSettings();
+  const [target] = await db.select({ shiftId: participants.shiftId })
+    .from(participants).where(eq(participants.id, participantId)).limit(1);
+  const settings = await loadForumSettings(target?.shiftId);
   const forumDay = effectiveAt
     ? (inferForumDayFromTimestamp(effectiveAt, settings.startDate ?? null, settings.totalDays ?? 8)
-      ?? await resolveAwardForumDay())
-    : await resolveAwardForumDay();
+      ?? await resolveAwardForumDay(undefined, target?.shiftId))
+    : await resolveAwardForumDay(undefined, target?.shiftId);
   const logValues = (actionType: string, pts: number) => ({
     participantId,
     actionType,
@@ -537,7 +531,8 @@ export const crudDayExperiments = {
       res.status(400).json({ error: parsed.error });
       return;
     }
-    const result = await importAdviceCsv(parsed.data.csv);
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const result = await importAdviceCsv(parsed.data.csv, await resolveAdminShiftId(req));
     res.json(result);
   },
   list: async (req: AdminRequest, res: Response) => {
@@ -545,11 +540,13 @@ export const crudDayExperiments = {
     const roleKey = typeof req.query.roleKey === 'string' ? req.query.roleKey : undefined;
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
     const q = typeof req.query.q === 'string' ? req.query.q : undefined;
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
     const list = await listDayAdviceFromDb({
       day: day && !Number.isNaN(day) ? day : null,
       roleKey,
       status,
       q,
+      shiftId: await resolveAdminShiftId(req),
     });
     res.json({ experiments: list });
   },
@@ -564,12 +561,18 @@ export const crudDayExperiments = {
       res.status(400).json({ error: validated.error });
       return;
     }
-    const { row, created } = await upsertDayAdvice(validated.data);
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const { row, created } = await upsertDayAdvice(validated.data, await resolveAdminShiftId(req));
     res.json({ experiment: row, created });
   },
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
-    const [deleted] = await db.delete(dayExperiments).where(eq(dayExperiments.id, id)).returning();
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
+    const [deleted] = await db.delete(dayExperiments).where(and(
+      eq(dayExperiments.id, id),
+      eq(dayExperiments.shiftId, shiftId),
+    )).returning();
     if (!deleted) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ ok: true });
   },
@@ -1200,7 +1203,7 @@ export const updateForumSettings = async (req: AdminRequest, res: Response): Pro
       return;
     }
     body.exchangeLimits = normalized;
-    await syncExchangePointsToLevelsConfig(normalized);
+    await syncExchangePointsToLevelsConfig(normalized, shiftId);
   }
   const shiftPatch = pickShiftOpPatch(body);
   const updated = Object.keys(shiftPatch).length
@@ -2088,21 +2091,23 @@ export const crudTasks = {
       await db.update(tasks).set({ isHidden: false }).where(inArray(tasks.id, ids));
     } else if (action === 'publish') {
       const beforeRows = await db.select().from(tasks).where(inArray(tasks.id, ids));
-      await db.update(tasks).set({ status: 'published', isHidden: false }).where(inArray(tasks.id, ids));
+      const publishedRows = await db.update(tasks).set({ status: 'published', isHidden: false }).where(inArray(tasks.id, ids)).returning();
       const now = new Date();
       const { pushCopy } = await import('../services/pushCopy.js');
       const { fireTaskPublishTrigger } = await import('../services/pushTriggerRunner.js');
-      for (const before of beforeRows) {
-        if (before.status === 'published') continue;
-        if (before.pushOnPublish) {
+      const beforeById = new Map(beforeRows.map(row => [row.id, row]));
+      for (const updated of publishedRows) {
+        const before = beforeById.get(updated.id);
+        if (before?.status === 'published') continue;
+        if (updated.pushOnPublish) {
           await notifyAllParticipants(
-            pushCopy.taskPublished(before.title),
-            `task_publish_${before.id}`,
-            before.shiftId,
+            pushCopy.taskPublished(updated.title),
+            `task_publish_${updated.id}`,
+            updated.shiftId,
           );
         }
         try {
-          await fireTaskPublishTrigger(before.id, now);
+          await fireTaskPublishTrigger(updated.id, now);
         } catch {
           // tables may not exist yet
         }
@@ -2581,7 +2586,9 @@ export const moderateExchange = async (req: AdminRequest, res: Response): Promis
   ) {
     const { awardPoints } = await import('../services/pointsService.js');
     const { getExchangeLimitsConfig } = await import('../services/exchangeLimits.js');
-    const exchangeCfg = await getExchangeLimitsConfig();
+    const [author] = await db.select({ shiftId: participants.shiftId })
+      .from(participants).where(eq(participants.id, updated.participantId)).limit(1);
+    const exchangeCfg = await getExchangeLimitsConfig(author?.shiftId);
     await awardPoints(
       updated.participantId,
       'exchange_question',
@@ -2845,9 +2852,11 @@ export const listExchangeAnswers = async (req: AdminRequest, res: Response): Pro
   });
 };
 
-export const getLevelsActionCatalog = async (_req: AdminRequest, res: Response): Promise<void> => {
+export const getLevelsActionCatalog = async (req: AdminRequest, res: Response): Promise<void> => {
   const { mergeCatalogWithDb, ACTION_CATALOG, LEVEL_THRESHOLD_ACTION_TYPES } = await import('../services/levelsActionCatalog.js');
-  const config = await db.select().from(levelsConfig);
+  const { levelsRowsForShift } = await import('../services/shiftContext.js');
+  const shiftId = await resolveAdminShiftId(req);
+  const config = levelsRowsForShift(await db.select().from(levelsConfig), shiftId);
   const categories = await db.select().from(taskCategories).orderBy(asc(taskCategories.sortOrder));
   const catNames = categories.map(c => c.name);
   const catalog = mergeCatalogWithDb(config, catNames);
@@ -2864,11 +2873,16 @@ export const getLevelsActionCatalog = async (_req: AdminRequest, res: Response):
 };
 
 export const crudLevels = {
-  list: async (_req: AdminRequest, res: Response) => res.json({ config: await db.select().from(levelsConfig) }),
+  list: async (req: AdminRequest, res: Response) => {
+    const { levelsRowsForShift } = await import('../services/shiftContext.js');
+    const shiftId = await resolveAdminShiftId(req);
+    res.json({ config: levelsRowsForShift(await db.select().from(levelsConfig), shiftId) });
+  },
   upsert: async (req: AdminRequest, res: Response) => {
     const { actionType, pointsPerUnit, maxAccruals, levelThresholds, track, displayName } = req.body;
+    const shiftId = await resolveAdminShiftId(req);
     const [existing] = await db.select().from(levelsConfig)
-      .where(eq(levelsConfig.actionType, actionType)).limit(1);
+      .where(and(eq(levelsConfig.actionType, actionType), eq(levelsConfig.shiftId, shiftId))).limit(1);
     const payload = {
       actionType,
       pointsPerUnit,
@@ -2876,6 +2890,7 @@ export const crudLevels = {
       levelThresholds,
       track: track ?? null,
       displayName: displayName ?? null,
+      shiftId,
     };
     if (existing) {
       const [updated] = await db.update(levelsConfig)
@@ -2889,11 +2904,12 @@ export const crudLevels = {
   },
   batchUpsert: async (req: AdminRequest, res: Response) => {
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const shiftId = await resolveAdminShiftId(req);
     const out = [];
     for (const item of items) {
       if (!item?.actionType) continue;
       const [existing] = await db.select().from(levelsConfig)
-        .where(eq(levelsConfig.actionType, item.actionType)).limit(1);
+        .where(and(eq(levelsConfig.actionType, item.actionType), eq(levelsConfig.shiftId, shiftId))).limit(1);
       const payload = {
         actionType: item.actionType,
         pointsPerUnit: item.pointsPerUnit,
@@ -2901,6 +2917,7 @@ export const crudLevels = {
         levelThresholds: item.levelThresholds,
         track: item.track ?? null,
         displayName: item.displayName ?? null,
+        shiftId,
       };
       if (existing) {
         const [updated] = await db.update(levelsConfig).set(payload).where(eq(levelsConfig.id, existing.id)).returning();
@@ -2916,7 +2933,8 @@ export const crudLevels = {
 
 export const triggerRatingRecalcAll = async (req: AdminRequest, res: Response): Promise<void> => {
   const { recalculateAllParticipantTotals } = await import('../services/ratingRecalcService.js');
-  const result = await recalculateAllParticipantTotals(req.adminId);
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const result = await recalculateAllParticipantTotals(req.adminId, await resolveAdminShiftId(req));
   const { logAdminAction } = await import('../services/adminActionsLog.js');
   await logAdminAction({
     req,
@@ -3504,7 +3522,8 @@ export const sendManualPush = async (req: AdminRequest, res: Response): Promise<
   if (participantId) {
     await sendPushNotification([Number(participantId)], text, 'manual');
   } else {
-    await notifyAllParticipants(text, 'manual');
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    await notifyAllParticipants(text, 'manual', await resolveAdminShiftId(req));
   }
   const { logAdminAction } = await import('../services/adminActionsLog.js');
   await logAdminAction({

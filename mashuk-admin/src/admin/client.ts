@@ -30,7 +30,7 @@ export function setAdminEditingShiftId(id: number | null): void {
   }
 }
 
-function adminAuthHeaders(extra?: HeadersInit): Record<string, string> {
+export function adminAuthHeaders(extra?: HeadersInit): Record<string, string> {
   const token = getAdminToken();
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token || ''}`,

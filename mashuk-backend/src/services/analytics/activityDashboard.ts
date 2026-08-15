@@ -23,7 +23,7 @@ function startOfTodayUtc(): Date {
 }
 
 export async function buildActivityDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(filters.shiftId);
   const days = resolveDayRange(filters, settings.currentDay ?? 1);
   const cohort = await loadCohortParticipants(filters, req);
   const ids = cohort.map(p => p.id);

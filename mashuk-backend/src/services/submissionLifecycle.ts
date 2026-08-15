@@ -201,7 +201,7 @@ export async function completeSubmissionRewards(
   } = {},
 ): Promise<{ pointsLogId: number | null; userMedalId: number | null; lifecycleStage: LifecycleStage }> {
   const pts = await resolveTaskAwardPoints(task);
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(task.shiftId);
   const forumDay = resolveTaskAwardForumDay(task, resolveEffectiveCurrentDay(settings));
   const leaderId = participantIds[0];
   let pointsLogId: number | null = null;

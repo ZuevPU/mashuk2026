@@ -63,7 +63,11 @@ async function runJob(row: typeof exportHistory.$inferSelect): Promise<void> {
     const result = await writeFinalProfilesZipToFile(filePath, onProgress);
     byteSize = result.byteSize;
   } else if (row.source === 'shift_summary_pdf') {
-    const result = await writeShiftSummaryPdfToFile(filePath, onProgress);
+    const result = await writeShiftSummaryPdfToFile(
+      filePath,
+      onProgress,
+      params.shiftId != null ? Number(params.shiftId) : null,
+    );
     byteSize = result.byteSize;
   } else {
     throw new Error(`Unsupported export job source: ${row.source}`);

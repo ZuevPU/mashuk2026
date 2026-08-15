@@ -29,7 +29,7 @@ function reactionScore(reactions: unknown): { likes: number; discuss: number } {
  * Аналитика «Обмен опытом»: модерация по дням, авторы по направлениям, топ вопросов и вовлечённость.
  */
 export async function buildExchangeAnalytics(filters: AnalyticsFilters, req?: AdminRequest) {
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(filters.shiftId);
   const currentDay = settings.currentDay ?? 1;
   const totalDays = settings.totalDays ?? 8;
   const startDate = settings.startDate ? new Date(settings.startDate) : null;

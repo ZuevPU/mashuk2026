@@ -14,7 +14,6 @@ import {
   TOUCHPOINT_BLOCKS,
   isTouchpointQuestionForForumDay,
 } from './touchpointProgress.js';
-import { resolveActiveShiftId } from './shiftService.js';
 import { backfillPathPointsForAnswers } from './pointsService.js';
 import {
   computeAbProgressPercent,
@@ -136,7 +135,7 @@ export async function gatherProfileBundle(participantId: number) {
   const [p] = await db.select().from(participants).where(eq(participants.id, participantId)).limit(1);
   if (!p) return null;
 
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(p.shiftId);
   const currentDay = resolveEffectiveCurrentDay(settings);
   const weights = resolveProfileProgressWeights((settings as { profileProgressWeights?: unknown }).profileProgressWeights);
   const shiftLabel = (settings as { shiftLabel?: string }).shiftLabel || 'Смена 1';
@@ -243,7 +242,7 @@ export async function gatherProfileBundle(participantId: number) {
   const [pFresh] = await db.select().from(participants).where(eq(participants.id, p.id)).limit(1);
   if (pFresh) Object.assign(p, pFresh);
 
-  const shiftId = await resolveActiveShiftId();
+  const shiftId = p.shiftId;
   const touchpointQuestions = await loadPublishedTouchpointQuestions(currentDay, shiftId);
   // Include answered touchpoint questions even if from another shift / older twin
   for (const q of answerQuestions) {

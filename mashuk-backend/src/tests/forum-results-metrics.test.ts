@@ -117,3 +117,51 @@ describe('forumResultsMetrics', () => {
     ), true);
   });
 });
+
+describe('forumResultsPeople', () => {
+  it('aggregates unique people and latest scale scores', async () => {
+    const { buildForumResultsPeople } = await import('../services/analytics/forumResultsPeople.js');
+    const people = buildForumResultsPeople(
+      [
+        {
+          participantId: 1,
+          dayNumber: 6,
+          ratings: { housing: 3 },
+          filledAt: new Date('2026-08-14T20:00:00Z'),
+          direction: 'Педагогика',
+          group: 'А1',
+          firstName: 'Анна',
+          lastName: 'Иванова',
+        },
+        {
+          participantId: 1,
+          dayNumber: 7,
+          ratings: { housing: 5 },
+          filledAt: new Date('2026-08-15T20:00:00Z'),
+          direction: 'Педагогика',
+          group: 'А1',
+          firstName: 'Анна',
+          lastName: 'Иванова',
+        },
+        {
+          participantId: 2,
+          dayNumber: 7,
+          ratings: { housing: 4 },
+          filledAt: new Date('2026-08-15T21:00:00Z'),
+          direction: 'IT',
+          group: 'Б2',
+          firstName: 'Борис',
+          lastName: 'Петров',
+        },
+      ],
+      [{ key: 'housing', ratingKey: 'housing', label: 'Быт', max: 5, days: [6, 7] }],
+    );
+    assert.equal(people.rows.length, 2);
+    const anna = people.rows.find(r => r.participantId === 1);
+    assert.ok(anna);
+    assert.equal(anna!.name, 'Анна Иванова');
+    assert.equal(anna!.lastDay, 7);
+    assert.equal(anna!.heat[0].v, 5);
+    assert.equal(anna!.index, 5);
+  });
+});

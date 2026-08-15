@@ -44,8 +44,8 @@ async function loadCommunityQueueCounts(shiftId: number | null) {
 }
 
 export async function buildAnalyticsMeta(req: AdminRequest) {
-  const settings = await getForumSettings();
   const shiftId = await resolveAdminShiftId(req);
+  const settings = await getForumSettings(shiftId);
   const filters = await listFilterOptions(shiftId);
   const roleTaxonomy = await getRoleTaxonomyPayload();
   const currentForumDay = settings.currentDay ?? 1;

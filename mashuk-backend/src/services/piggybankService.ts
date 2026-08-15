@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, inArray, isNull, lte } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { piggybank, pointsLog } from '../db/schema.js';
+import { participants, piggybank, pointsLog } from '../db/schema.js';
 import { getForumSettings, resolveEffectiveCurrentDay } from './helpers.js';
 import {
   normalizePiggybankTags,
@@ -34,8 +34,8 @@ export function filterPiggybankEntries<T extends { source?: string | null; text:
   });
 }
 
-export async function resolveForumDayForNewEntry(): Promise<number> {
-  const settings = await getForumSettings();
+export async function resolveForumDayForNewEntry(shiftId?: number | null): Promise<number> {
+  const settings = await getForumSettings(shiftId);
   return resolveEffectiveCurrentDay(settings);
 }
 
@@ -64,7 +64,13 @@ export async function createPiggybankEntry(input: {
     throw new Error('source required');
   }
 
-  const forumDay = input.forumDay ?? await resolveForumDayForNewEntry();
+  const [owner] = input.forumDay != null
+    ? [null]
+    : await db.select({ shiftId: participants.shiftId })
+      .from(participants)
+      .where(eq(participants.id, input.participantId))
+      .limit(1);
+  const forumDay = input.forumDay ?? await resolveForumDayForNewEntry(owner?.shiftId);
 
   const [entry] = await db.insert(piggybank).values({
     participantId: input.participantId,

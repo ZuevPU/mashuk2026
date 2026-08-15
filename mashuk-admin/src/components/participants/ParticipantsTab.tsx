@@ -40,10 +40,19 @@ type ParticipantRow = {
   isBlocked?: boolean | null;
   selfDeletedAt?: string | null;
   avatarUrl?: string | null;
+  onboardingCompletedAt?: string | null;
 };
 
 type ParticipantListMode = 'active' | 'hidden';
-type ShiftOption = { id: number; name: string; code: string; status: string };
+type ShiftOption = { id: number; name: string; code: string; status: string; isPublished?: boolean };
+
+function pickCopyTargetShift(options: ShiftOption[], currentId: number | null): ShiftOption | undefined {
+  const others = options.filter(s => s.id !== currentId);
+  return others.find(s => s.status === 'active')
+    ?? others.find(s => s.isPublished)
+    ?? others.find(s => s.status !== 'draft' && s.status !== 'archived')
+    ?? others[0];
+}
 
 function buildListQuery(params: {
   page: number;
@@ -77,11 +86,17 @@ function formatHiddenAt(iso?: string | null): string {
   return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: ParticipantsTabProps) {
+function canEditSettings(role?: string) {
+  return role === 'admin' || role === 'superadmin';
+}
+
+export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard, adminRole }: ParticipantsTabProps) {
+  const canSettings = canEditSettings(adminRole);
   const [loading, setLoading] = useState(true);
   const [participants, setParticipants] = useState<ParticipantRow[]>([]);
   const [participantsPage, setParticipantsPage] = useState(1);
   const [participantsTotal, setParticipantsTotal] = useState(0);
+  const [incompleteCount, setIncompleteCount] = useState(0);
   const [participantSearch, setParticipantSearch] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [directionFilter, setDirectionFilter] = useState<number[]>([]);
@@ -135,6 +150,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
       const res = await adminFetch(`/participants?${listQuery}`);
       setParticipants(res.participants || []);
       setParticipantsTotal(res.totalCount || 0);
+      setIncompleteCount(Number(res.incompleteCount) || 0);
       setCurrentShiftId(res.shiftId ?? null);
       if (listMode === 'hidden') {
         setHardDeleteCount(Number(res.hardDeleteCount) || 0);
@@ -253,7 +269,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
   const openTransfer = (ids?: number[]) => {
     const participantIds = ids?.length ? ids : [...selected];
     if (!participantIds.length) return;
-    const target = shiftOptions.find(s => s.id !== currentShiftId);
+    const target = pickCopyTargetShift(shiftOptions, currentShiftId);
     if (!target) {
       alert('Нет другой смены для переноса участников');
       return;
@@ -298,7 +314,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
         <AdminPageHero
           title={isHiddenList
             ? `Удалили профиль · ${participantsTotal}`
-            : `Участники · ${participantsTotal} в программе`}
+            : `Участники · ${participantsTotal} в программе${incompleteCount > 0 ? ` · ${incompleteCount} без регистрации` : ''}`}
           hint={isHiddenList
             ? 'Мягкое удаление: данные сохранены, можно восстановить.'
             : 'Поиск и фильтры. Клик по строке — карточка. Действия — меню ⋮.'}
@@ -435,8 +451,12 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
             <div className="adm-kb-bulk" style={{ marginTop: 12 }}>
               <span className="adm-kb-bulk-count">Выбрано: {selected.size}</span>
               <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => exportList([...selected])}>Выгрузить</button>
-              <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setPushModal({ ids: [...selected] })}>Пуш</button>
-              <button type="button" className="adm-btn adm-btn-sm adm-btn-primary" onClick={openTransfer}>В смену…</button>
+              {canSettings && (
+                <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setPushModal({ ids: [...selected] })}>Пуш</button>
+              )}
+              {canSettings && (
+                <button type="button" className="adm-btn adm-btn-sm adm-btn-primary" onClick={() => openTransfer()}>В смену…</button>
+              )}
               <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => setSelected(new Set())}>Снять выбор</button>
             </div>
           )}
@@ -527,14 +547,21 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
                       />
                     </td>
                     <td><VkProfileLink vkId={p.vkId} /></td>
-                    <td>{p.firstName} {p.lastName}{!isHiddenList && p.isBlocked ? ' · заблок.' : ''}</td>
+                    <td>
+                      {p.firstName} {p.lastName}
+                      {!isHiddenList && p.isBlocked ? ' · заблок.' : ''}
+                      {!isHiddenList && !p.onboardingCompletedAt ? ' · не завершил регистрацию' : ''}
+                    </td>
                     <td onClick={e => e.stopPropagation()}>
                       <select
                         className="adm-input adm-input-narrow"
                         value={p.directionId ?? directions.find(d => d.name === p.direction)?.id ?? ''}
-                        onChange={e => adminFetch(`/participants/${p.id}/direction`, {
-                          method: 'PATCH', body: JSON.stringify({ directionId: Number(e.target.value) }),
-                        }).then(reloadPage)}
+                        onChange={e => act(
+                          () => adminFetch(`/participants/${p.id}/direction`, {
+                            method: 'PATCH', body: JSON.stringify({ directionId: Number(e.target.value) }),
+                          }).then(reloadPage),
+                          'Направление сохранено',
+                        )}
                       >
                         {directions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                       </select>
@@ -597,8 +624,10 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
                         { label: 'Открыть карточку', onClick: () => onOpenCard(p.id) },
                         { label: 'Скорректировать роль', onClick: () => onOpenCard(p.id, 'profile') },
                         { label: 'Выгрузить данные (PDF)', onClick: () => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF') },
-                        { label: 'Отправить пуш', onClick: () => setPushModal({ ids: [p.id] }) },
-                        { label: 'Копировать в смену', onClick: () => openTransfer([p.id]) },
+                        ...(canSettings ? [
+                          { label: 'Отправить пуш', onClick: () => setPushModal({ ids: [p.id] }) },
+                          { label: 'Копировать в смену', onClick: () => openTransfer([p.id]) },
+                        ] : []),
                         ...(p.isBlocked
                           ? [{ label: 'Разблокировать', onClick: () => act(() => adminFetch(`/participants/${p.id}/unblock`, { method: 'POST' }).then(reloadPage), 'Разблокирован') }]
                           : [{

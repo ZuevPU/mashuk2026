@@ -207,7 +207,7 @@ export async function buildPulseDashboard(
   req?: AdminRequest,
   opts?: PulseDashboardOptions,
 ) {
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(filters.shiftId);
   const currentDay = settings.currentDay ?? 1;
   const days = resolveDayRange(filters, currentDay);
   const cohort = await loadCohortParticipants(filters, req);

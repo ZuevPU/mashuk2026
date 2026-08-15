@@ -1,35 +1,41 @@
 # Multi-shift (мультисмены)
 
-## Правило active
+## Active, published, live
 
-После первой активации в продукте **ровно одна** смена со статусом `active` (partial unique index `shifts_one_active_idx`). Участнический API всегда резолвит active shift прозрачно — клиенту `shiftId` не обязателен.
+- **`status === 'active'`** — смена идёт. Несколько active разрешены (уникальный индекс одной active снят в `0064_shift_publish_multi`).
+- **`isPublished`** — смена видна для регистрации.
+- **`listLiveShifts()`** — `active` и не sandbox. Так работают пуши и планировщик точек.
+- `resolveActiveShift()` — одна строка, только fallback для легаси. Участникские начисления, день форума и медали берут `participant.shiftId`.
 
-## Backfill (миграция `0038_forum_shifts`)
-
-1. Создаётся таблица `shifts`.
-2. Из текущего `forum_settings` создаётся **Смена 0 · песочница** (`code=sandbox`, `is_sandbox=true`, `status=active`) с переносом operational-полей.
-3. Создаются пустые **Смена 1** / **Смена 2** (`draft`).
-4. Весь существующий контент и участники получают `shift_id` активной (песочницы).
-5. `participants.vk_id` больше не глобально уникален → unique `(vk_id, shift_id)`.
+Участник: заголовок `X-Shift-Id` (localStorage `mashuk-shift-id`). Админ: `X-Admin-Shift-Id`.
 
 ## Что scoped по shift_id
 
-| Per-shift | Global |
-|-----------|--------|
-| events, schedule_days, day_focus, day_experiments | directions, thematic_tags |
-| questions (+options), tasks, materials | pedagogical_roles, admins |
-| participant_groups, participants | program_speakers, places, block_types |
-| forum ops (currentDay, evening, KB unlock, onboarding config на смене) | medals / levels_config (каталог) |
-| admin_push_notifications (кампании) | consent_texts |
+| Per-shift | Global (пока общее) |
+|-----------|---------------------|
+| events, schedule_days, day_focus, day_experiments, home_notices | pedagogical_roles, admins |
+| questions, tasks, materials | task_categories, exchange_categories, exchange_tags |
+| directions, thematic_tags, program_speakers, places, block_types | rating_bonus_rules, consent_texts |
+| participant_groups, participants | |
+| medals, levels_config (свои строки смены, иначе легаси `shift_id IS NULL`) | |
+| forum ops на строке `shifts` (currentDay, evening, KB, onboarding) | `forum_settings` — зеркало при activate, не источник для живых путей |
+| admin_push_notifications, push_queue.shift_id | |
 
-Персональные данные (answers, submissions, piggybank, points_log, user_medals) живут у participant row → автоматически в контексте смены.
+Персональные данные (answers, submissions, piggybank, points_log, user_medals) живут у participant → в контексте его смены.
+
+Обмен опытом без колонки `shift_id`: изоляция через автора `participants.shift_id`.
+
+## Регистрация
+
+- Смена 1 (code `shift1` / имя «смена 1»): вход или дорегистрация.
+- Копия в другую смену при завершённой смене 1 → `registrationAction: choose`.
+- Новый VK без смены 1 → регистрация на смену 2.
+- Третья опубликованная смена в этом маршруте не участвует.
+
+Копия участника — оболочка: VK и имя, без онбординга, QR и прогресса.
 
 ## Admin
 
-- Вкладка **Смены**: CRUD дат, activate / archive / copy / clear sandbox.
-- Контекст редактирования: header `X-Admin-Shift-Id` (sessionStorage в админке).
-- Активация: settings/admin; очистка песочницы: delete + `confirm: CLEAR_SANDBOX` + critical log.
-
-## Копирование
-
-Копирует структуру программы без PII. Новая смена в `draft`, даты задаёт админ.
+- Селектор смены пишет `X-Admin-Shift-Id`.
+- Activate / publish / archive / copy / sandbox — вкладка «Смены».
+- Копирование структуры без PII. Новая смена `draft`, контент неопубликован, пока админ не выпустит.

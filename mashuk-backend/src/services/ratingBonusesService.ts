@@ -35,15 +35,29 @@ const PATH_ACTIVITY_ACTIONS = new Set([
 const TARGET_DAY_COMPLETE_POINTS = 25;
 const TARGET_REGULARITY_POINTS = 60;
 
-async function forumDayCap(): Promise<number> {
-  const settings = await getForumSettings();
+async function forumDayCap(shiftId?: number | null): Promise<number> {
+  const settings = await getForumSettings(shiftId);
   const total = Number(settings?.totalDays) || 8;
   return Math.min(Math.max(1, total), 14);
 }
 
+async function participantShiftId(participantId: number): Promise<number | null> {
+  const [row] = await db.select({ shiftId: participants.shiftId })
+    .from(participants)
+    .where(eq(participants.id, participantId))
+    .limit(1);
+  return row?.shiftId ?? null;
+}
+
 type QRow = typeof questions.$inferSelect;
 
-async function loadPublishedQuestions(): Promise<QRow[]> {
+async function loadPublishedQuestions(shiftId?: number | null): Promise<QRow[]> {
+  if (shiftId != null) {
+    return db.select().from(questions).where(and(
+      eq(questions.status, 'published'),
+      eq(questions.shiftId, shiftId),
+    ));
+  }
   return db.select().from(questions).where(eq(questions.status, 'published'));
 }
 
@@ -54,7 +68,7 @@ async function touchpointsDoneForDay(
   answeredIds?: Set<number>,
   eveningDoneDays?: Set<number>,
 ): Promise<boolean> {
-  const allQs = published ?? await loadPublishedQuestions();
+  const allQs = published ?? await loadPublishedQuestions(await participantShiftId(participantId));
   const dayQs = allQs.filter(q => isTouchpointQuestionForForumDay(q, dayNumber));
   if (dayQs.length === 0) return false;
 
@@ -113,7 +127,7 @@ export async function tryDayCompleteBonus(
 ): Promise<boolean> {
   const rule = rules?.get('day_complete_bonus') ?? await getBonusRuleByCode('day_complete_bonus');
   if (!bonusRuleEnabled(rule)) return false;
-  const maxDay = ctx?.maxDay ?? await forumDayCap();
+  const maxDay = ctx?.maxDay ?? await forumDayCap(await participantShiftId(participantId));
   if (dayNumber < 1 || dayNumber > maxDay) return false;
   if (!(await touchpointsDoneForDay(
     participantId,
@@ -151,7 +165,7 @@ async function fullTouchpointForumDays(
     rows.map(r => r.forumDay).filter((d): d is number => d != null && d >= 1),
   );
 
-  const maxDay = ctx?.maxDay ?? await forumDayCap();
+  const maxDay = ctx?.maxDay ?? await forumDayCap(await participantShiftId(participantId));
   for (let d = 1; d <= maxDay; d++) {
     if (fromBonus.has(d)) continue;
     if (await touchpointsDoneForDay(
@@ -451,14 +465,16 @@ export type BonusBackfillResult = {
  * Пересчитать бонусы: начислить «полный день» тем, кто закрыл все точки,
  * и «регулярность 6 дней» при серии полных дней. Затем пересобрать суммы.
  */
-export async function backfillRatingBonusesForAll(): Promise<BonusBackfillResult> {
+export async function backfillRatingBonusesForAll(shiftId?: number | null): Promise<BonusBackfillResult> {
   await ensureBonusPointsRates();
   const amountFix = await normalizeExistingBonusLogAmounts();
 
   const rulesMap = await loadBonusRulesByCode();
-  const maxDay = await forumDayCap();
-  const published = await loadPublishedQuestions();
-  const allParticipants = await db.select({ id: participants.id }).from(participants);
+  const maxDay = await forumDayCap(shiftId);
+  const published = await loadPublishedQuestions(shiftId);
+  const allParticipants = shiftId != null
+    ? await db.select({ id: participants.id }).from(participants).where(eq(participants.shiftId, shiftId))
+    : await db.select({ id: participants.id }).from(participants);
 
   let dayCompleteAwarded = 0;
   let regularityAwarded = 0;
@@ -502,8 +518,9 @@ export async function backfillRatingBonusesForParticipant(participantId: number)
 }> {
   await ensureBonusPointsRates();
   const rulesMap = await loadBonusRulesByCode();
-  const maxDay = await forumDayCap();
-  const published = await loadPublishedQuestions();
+  const shiftId = await participantShiftId(participantId);
+  const maxDay = await forumDayCap(shiftId);
+  const published = await loadPublishedQuestions(shiftId);
   const ans = await db.select({ questionId: answers.questionId }).from(answers)
     .where(eq(answers.participantId, participantId));
   const answeredIds = new Set(ans.map(a => a.questionId));

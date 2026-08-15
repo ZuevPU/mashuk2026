@@ -62,7 +62,7 @@ function pct(n: number, d: number): number {
  * Requires filters.direction; otherwise returns empty-state payload.
  */
 export async function buildDirectionDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(filters.shiftId);
   const currentForumDay = settings.currentDay ?? 1;
   const days = resolveDayRange(filters, currentForumDay);
   const dayFilter = days.length === 1 ? days[0] : null;

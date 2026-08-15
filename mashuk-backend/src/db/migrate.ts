@@ -280,6 +280,19 @@ async function ensureAfterBlocksConfigSchema(pool: ReturnType<typeof createPool>
   await pool.query(sql);
 }
 
+async function ensurePushQueueShiftIdSchema(pool: ReturnType<typeof createPool>): Promise<void> {
+  const { rows } = await pool.query<{ ok: number }>(
+    `SELECT 1 AS ok FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'push_queue' AND column_name = 'shift_id'
+     LIMIT 1`,
+  );
+  if (rows.length > 0) return;
+  const sqlPath = path.join(__dirname, '../../drizzle/0069_push_queue_shift_id.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  console.warn('Repair: applying 0069_push_queue_shift_id.sql');
+  await pool.query(sql);
+}
+
 export async function runMigrations(): Promise<void> {
   const pool = createPool(process.env.DATABASE_URL!);
   const db = drizzle(pool);
@@ -303,6 +316,7 @@ export async function runMigrations(): Promise<void> {
     await ensureForumWrapQuestionnaireSchema(pool);
     await ensureAfterBlocksConfigSchema(pool);
     await ensureShiftScopedCatalogsSchema(pool);
+    await ensurePushQueueShiftIdSchema(pool);
     await pool.end();
   }
 }

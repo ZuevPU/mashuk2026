@@ -93,7 +93,7 @@ function sampleTitle(opts: {
 }
 
 export async function buildParticipantProfileDashboard(filters: AnalyticsFilters, req?: AdminRequest) {
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(filters.shiftId);
   const currentDay = settings.currentDay ?? 1;
   const days = resolveDayRange(filters, currentDay);
   const cohort = await loadCohortParticipants(filters, req);

@@ -395,11 +395,16 @@ export async function enqueueExportJob(
     shift_summary_pdf: 'PDF итога смены',
   };
   const title = body.title?.trim() || titles[body.kind];
+  const { resolveAdminShiftId } = await import('../shiftService.js');
+  const params = {
+    ...(body.params ?? {}),
+    shiftId: (body.params?.shiftId as number | undefined) ?? await resolveAdminShiftId(req),
+  };
   const [pending] = await db.insert(exportHistory).values({
     adminId: req.adminId ?? null,
     title,
     source: body.kind,
-    params: body.params ?? {},
+    params,
     columns: [],
     status: 'pending',
     progress: 0,

@@ -125,8 +125,14 @@ export const App = () => {
         if (!appliedDefaultTabRef.current) {
           if (me.defaultTab && tabs.includes(me.defaultTab as Tab)) {
             setTab(me.defaultTab as Tab);
+          } else if (tabs.length && !tabs.includes('participants')) {
+            setTab(tabs[0]);
           }
           appliedDefaultTabRef.current = true;
+        } else {
+          setTab(current => (tabs.includes(current) ? current : (me.defaultTab && tabs.includes(me.defaultTab as Tab)
+            ? me.defaultTab as Tab
+            : tabs[0] ?? current)));
         }
         setAnalyticsDashboardAllowlist(me.analyticsDashboards ?? null);
       })
@@ -214,6 +220,7 @@ export const App = () => {
             adminFetch={adminFetch}
             act={act}
             roleOptions={ROLE_OPTIONS}
+            adminRole={adminRole}
           />
         )}
         {toast && (
@@ -434,6 +441,7 @@ export const App = () => {
           adminFetch={adminFetch}
           act={act}
           roleOptions={ROLE_OPTIONS}
+          adminRole={adminRole}
         />
       )}
       {toast && (

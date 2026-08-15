@@ -196,6 +196,7 @@ export function ParticipantCardModal({
   act,
 
   roleOptions,
+  adminRole,
 
 }: {
 
@@ -214,8 +215,10 @@ export function ParticipantCardModal({
   act: (fn: () => Promise<unknown>, msg?: string) => void;
 
   roleOptions: { key: string; name: string }[];
+  adminRole?: string;
 
 }) {
+  const canSettings = adminRole === 'admin' || adminRole === 'superadmin';
 
   const p = card.participant!;
   const [taskCatalog, setTaskCatalog] = useState<{ id: number; title?: string }[]>([]);
@@ -224,6 +227,13 @@ export function ParticipantCardModal({
   const [shiftOptions, setShiftOptions] = useState<Array<{ id: number; name: string; code: string; status: string }>>([]);
   const [currentShiftId, setCurrentShiftId] = useState<number | null>(null);
   const [copyTargetId, setCopyTargetId] = useState<number | null>(null);
+
+  const pickCopyTarget = () => {
+    const others = shiftOptions.filter(s => s.id !== currentShiftId);
+    return others.find(s => s.status === 'active')
+      ?? others.find(s => s.status !== 'draft' && s.status !== 'archived')
+      ?? others[0];
+  };
 
   useEffect(() => {
     adminFetch('/shifts')
@@ -414,9 +424,9 @@ export function ParticipantCardModal({
         : 'https://zuevpu-mashuk2026-ae82.twc1.net/api')
       : String(import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
     const base = apiBase ? `${apiBase}/admin` : '/api/admin';
-    const token = sessionStorage.getItem('mashuk_admin_token');
+    const { adminAuthHeaders } = await import('../admin/client');
     const res = await fetch(`${base}/participants/${p.id}/pdf-preview`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: adminAuthHeaders(),
     });
     if (!res.ok) throw new Error(await res.text());
     const blob = await res.blob();
@@ -452,11 +462,11 @@ export function ParticipantCardModal({
           </button>
           <h2 className="adm-pc-topbar-title" id="adm-pc-dialog-title">{displayName}</h2>
           <span className="adm-pc-topbar-id">ID {p.id}</span>
-          <RowActionsMenu actions={[
+          <RowActionsMenu actions={canSettings ? [
             {
               label: 'Копировать в смену',
               onClick: () => {
-                const target = shiftOptions.find(s => s.id !== currentShiftId);
+                const target = pickCopyTarget();
                 if (!target) {
                   alert('Нет другой смены');
                   return;
@@ -475,7 +485,7 @@ export function ParticipantCardModal({
                 return res.deliveryStatusHint || res.deliveryStatus || 'Пуш отправлен';
               }, 'Пуш отправлен');
             } },
-          ]} />
+          ] : []} />
         </header>
 
         <div className="adm-pc-header">
@@ -519,7 +529,7 @@ export function ParticipantCardModal({
           <div className="adm-pc-toolbar adm-forum-toolbar">
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setTab('profile')}>Скорректировать роль</button>
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setTab('points')}>Начислить/снять баллы</button>
-            <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => {
+            {canSettings && <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => {
               const text = prompt('Текст пуша');
               if (!text?.trim()) return;
               act(async () => {
@@ -529,12 +539,12 @@ export function ParticipantCardModal({
                 }) as { deliveryStatusHint?: string; deliveryStatus?: string };
                 return res.deliveryStatusHint || res.deliveryStatus || 'Пуш отправлен';
               }, 'Пуш отправлен');
-            }}>Отправить пуш</button>
-            <button
+            }}>Отправить пуш</button>}
+            {canSettings && <button
               type="button"
               className="adm-btn adm-btn-sm adm-btn-secondary"
               onClick={() => {
-                const target = shiftOptions.find(s => s.id !== currentShiftId);
+                const target = pickCopyTarget();
                 if (!target) {
                   alert('Нет другой смены');
                   return;
@@ -543,7 +553,7 @@ export function ParticipantCardModal({
               }}
             >
               Копировать в смену
-            </button>
+            </button>}
             <button
               type="button"
               className="adm-btn adm-btn-sm adm-btn-secondary"
@@ -1108,11 +1118,28 @@ export function ParticipantCardModal({
                 className="adm-btn adm-btn-primary"
                 disabled={!manualTaskId}
                 onClick={() => act(
-                  () => adminFetch(`/participants/${p.id}/tasks/${manualTaskId}/complete`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ comment: 'Отмечено в карточке участника' }),
-                  }).then(() => { onReloadCard(); }),
+                  async () => {
+                    const path = `/participants/${p.id}/tasks/${manualTaskId}/complete`;
+                    const body = { comment: 'Отмечено в карточке участника' };
+                    try {
+                      await adminFetch(path, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                      });
+                    } catch (err) {
+                      const msg = String(err);
+                      if (!msg.includes('уже отмечено') || !confirm(`${msg}\n\nНачислить ещё раз?`)) {
+                        throw err;
+                      }
+                      await adminFetch(path, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...body, force: true }),
+                      });
+                    }
+                    onReloadCard();
+                  },
                   'Задание отмечено',
                 )}
               >

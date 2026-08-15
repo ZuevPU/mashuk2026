@@ -136,7 +136,7 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
   const [p] = await db.select().from(participants).where(eq(participants.id, participantId)).limit(1);
   if (!p) return null;
 
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(p.shiftId);
   const currentDay = resolveEffectiveCurrentDay(settings);
   const totalDays = Math.min(8, Math.max(1, Number(settings.totalDays) || 8));
   const shiftLabel = (settings as { shiftLabel?: string }).shiftLabel || 'Смена';

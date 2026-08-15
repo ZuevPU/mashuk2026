@@ -112,9 +112,7 @@ export function filterAdviceList<T extends { dayNumber: number; roleKey: string;
   return sortAdviceList(out);
 }
 
-export async function upsertDayAdvice(data: DayAdviceRow) {
-  const { resolveActiveShiftId } = await import('./shiftService.js');
-  const shiftId = await resolveActiveShiftId();
+export async function upsertDayAdvice(data: DayAdviceRow, shiftId: number) {
   const [existing] = await db.select().from(dayExperiments)
     .where(and(
       eq(dayExperiments.dayNumber, data.dayNumber),
@@ -228,7 +226,7 @@ export function parseAdviceCsv(text: string): { rows: Record<string, string>[]; 
   return { rows, errors };
 }
 
-export async function importAdviceCsv(text: string): Promise<{ created: number; updated: number; errors: string[] }> {
+export async function importAdviceCsv(text: string, shiftId: number): Promise<{ created: number; updated: number; errors: string[] }> {
   const { rows, errors: parseErrors } = parseAdviceCsv(text);
   let created = 0;
   let updated = 0;
@@ -246,7 +244,7 @@ export async function importAdviceCsv(text: string): Promise<{ created: number; 
       errors.push(`Line ${line}: ${validated.error}`);
       continue;
     }
-    const result = await upsertDayAdvice(validated.data);
+    const result = await upsertDayAdvice(validated.data, shiftId);
     if (result.created) created++;
     else updated++;
   }
@@ -258,7 +256,10 @@ export async function listDayAdviceFromDb(opts: {
   roleKey?: string;
   status?: string;
   q?: string;
+  shiftId: number;
 }) {
-  const list = await db.select().from(dayExperiments).orderBy(asc(dayExperiments.dayNumber), asc(dayExperiments.roleKey));
+  const list = await db.select().from(dayExperiments)
+    .where(eq(dayExperiments.shiftId, opts.shiftId))
+    .orderBy(asc(dayExperiments.dayNumber), asc(dayExperiments.roleKey));
   return filterAdviceList(list, opts);
 }

@@ -17,18 +17,34 @@ export function normalizeLevelThresholds(raw: unknown): number[] {
     .sort((a, b) => a - b);
 }
 
-export async function backfillMissingForumDays(): Promise<number> {
-  const settings = await getForumSettings();
-  const startDate = settings.startDate ? new Date(settings.startDate) : null;
-  if (!startDate || Number.isNaN(startDate.getTime())) return 0;
-  const totalDays = Number(settings.totalDays) || 8;
+export async function backfillMissingForumDays(shiftId?: number | null): Promise<number> {
   const rows = await db.select({
     id: pointsLog.id,
     createdAt: pointsLog.createdAt,
-  }).from(pointsLog).where(isNull(pointsLog.forumDay));
+    shiftId: participants.shiftId,
+  }).from(pointsLog)
+    .innerJoin(participants, eq(pointsLog.participantId, participants.id))
+    .where(shiftId != null
+      ? and(isNull(pointsLog.forumDay), eq(participants.shiftId, shiftId))
+      : isNull(pointsLog.forumDay));
+
+  const settingsByShift = new Map<number, { startDate: Date | null; totalDays: number }>();
   let updated = 0;
   for (const row of rows) {
-    const day = inferForumDayFromTimestamp(row.createdAt ?? new Date(), startDate, totalDays);
+    const sid = row.shiftId;
+    if (sid == null) continue;
+    let cal = settingsByShift.get(sid);
+    if (!cal) {
+      const settings = await getForumSettings(sid);
+      const startDate = settings.startDate ? new Date(settings.startDate) : null;
+      cal = {
+        startDate: startDate && !Number.isNaN(startDate.getTime()) ? startDate : null,
+        totalDays: Number(settings.totalDays) || 8,
+      };
+      settingsByShift.set(sid, cal);
+    }
+    if (!cal.startDate) continue;
+    const day = inferForumDayFromTimestamp(row.createdAt ?? new Date(), cal.startDate, cal.totalDays);
     if (day == null) continue;
     await db.update(pointsLog).set({ forumDay: day }).where(eq(pointsLog.id, row.id));
     updated += 1;
@@ -36,7 +52,7 @@ export async function backfillMissingForumDays(): Promise<number> {
   return updated;
 }
 
-export async function recalculateAllParticipantTotals(adminId?: number): Promise<{
+export async function recalculateAllParticipantTotals(adminId?: number, shiftId?: number | null): Promise<{
   runId: number;
   participantsProcessed: number;
   bonuses?: {
@@ -52,12 +68,14 @@ export async function recalculateAllParticipantTotals(adminId?: number): Promise
   }).returning();
 
   try {
-    await backfillMissingForumDays();
+    await backfillMissingForumDays(shiftId);
     // Сначала доначислить бонусы «полный день» / «регулярность», выровнять тарифы
     const { backfillRatingBonusesForAll } = await import('./ratingBonusesService.js');
-    const bonusResult = await backfillRatingBonusesForAll();
+    const bonusResult = await backfillRatingBonusesForAll(shiftId);
 
-    const allParticipants = await db.select({ id: participants.id }).from(participants);
+    const allParticipants = shiftId != null
+      ? await db.select({ id: participants.id }).from(participants).where(eq(participants.shiftId, shiftId))
+      : await db.select({ id: participants.id }).from(participants);
     let processed = 0;
     for (const { id } of allParticipants) {
       const rows = await db.select({

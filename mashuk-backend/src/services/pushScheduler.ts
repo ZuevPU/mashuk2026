@@ -74,7 +74,10 @@ async function processPushQueue(now: Date): Promise<number> {
       if (item.target === 'ids' && Array.isArray(item.participantIds)) {
         await sendPushNotification(item.participantIds as number[], item.text, `queue_${item.id}`);
       } else {
-        await notifyAllParticipants(item.text, `queue_${item.id}`);
+        if (item.shiftId == null) {
+          console.warn(`push_queue ${item.id}: no shiftId, broadcasting to all live shifts`);
+        }
+        await notifyAllParticipants(item.text, `queue_${item.id}`, item.shiftId);
       }
       await db.update(pushQueue)
         .set({ status: 'sent', sentAt: now })
@@ -93,7 +96,8 @@ async function sendSlotToUnsent(
   dayStart: Date,
   audienceIds?: number[],
 ): Promise<boolean> {
-  const allIds = audienceIds ?? await resolveBroadcastParticipantIds();
+  if (!audienceIds?.length) return false;
+  const allIds = audienceIds;
   const already = await participantIdsSentTriggerToday(trigger, dayStart);
   const need = filterUnsentParticipantIds(allIds, already);
   if (need.length === 0) return false;

@@ -303,7 +303,7 @@ export const crudScheduleDays = {
       calendarDate,
       isPublished: false,
     }).returning();
-    const settings = await getForumSettings();
+    const settings = await getForumSettings(shiftId);
     if (dayNumber > (settings.totalDays ?? 8)) {
       await updateShift(shiftId, { totalDays: dayNumber });
     }
@@ -356,7 +356,7 @@ export const crudScheduleDays = {
       .where(eq(scheduleDays.shiftId, shiftId))
       .orderBy(asc(scheduleDays.dayNumber));
     const maxDay = remaining.length ? Math.max(...remaining.map(d => d.dayNumber)) : 0;
-    const settings = await getForumSettings();
+    const settings = await getForumSettings(shiftId);
     if ((settings.totalDays ?? 8) > maxDay && maxDay > 0) {
       await updateShift(shiftId, { totalDays: maxDay });
     }
@@ -614,6 +614,7 @@ export const enqueuePush = async (req: AdminRequest, res: Response): Promise<voi
   }
   if (!body?.trim()) { res.status(400).json({ error: 'text or templateId required' }); return; }
   const when = scheduledAt ? new Date(scheduledAt) : new Date();
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
   const [row] = await db.insert(pushQueue).values({
     templateId: templateId ? Number(templateId) : null,
     text: body.trim(),
@@ -622,6 +623,7 @@ export const enqueuePush = async (req: AdminRequest, res: Response): Promise<voi
     target: target || 'all',
     participantIds: participantIds || null,
     createdByAdminId: req.adminId ?? null,
+    shiftId: await resolveAdminShiftId(req),
   }).returning();
   res.json({ item: row });
 };
@@ -722,7 +724,10 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
       actionType: pointsLog.actionType,
       createdAt: pointsLog.createdAt,
     }).from(pointsLog).where(eq(pointsLog.participantId, id)),
-    db.select().from(medals).where(eq(medals.isActive, true)).orderBy(asc(medals.name)),
+    db.select().from(medals).where(and(
+      eq(medals.isActive, true),
+      p.shiftId != null ? eq(medals.shiftId, p.shiftId) : isNull(medals.shiftId),
+    )).orderBy(asc(medals.name)),
   ]);
 
   const filteredAnswers = userAnswers.filter(r => {
@@ -731,7 +736,7 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
     return true;
   });
 
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(p.shiftId);
   const byDay: Record<string, number> = {};
   for (const row of allPointsRows) {
     if (row.revokedAt) continue;
@@ -1088,8 +1093,10 @@ export const generateAndDownloadQr = async (req: AdminRequest, res: Response): P
 export const getExpandedDashboards = async (req: AdminRequest, res: Response): Promise<void> => {
   const mode = (req.query.mode as string) || 'today';
   const day = req.query.day ? Number(req.query.day) : null;
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
 
-  const allP = await db.select().from(participants);
+  const allP = await db.select().from(participants).where(eq(participants.shiftId, shiftId));
   const registered = allP.filter(p => p.onboardingCompletedAt).length;
   const roleDist: Record<string, number> = {};
   const directionDist: Record<string, number> = {};
@@ -1103,11 +1110,14 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
     groupDist[g] = (groupDist[g] || 0) + 1;
   }
 
-  const ans = await db.select().from(answers);
+  const pids = allP.map(p => p.id);
+  const ans = pids.length
+    ? await db.select().from(answers).where(inArray(answers.participantId, pids))
+    : [];
   const { isPublishedStatus } = await import('../services/publishStatus.js');
   const depths: Record<string, number> = {};
   const energySeries: { day: number; avg: number; n: number }[] = [];
-  const dayQsAll = await db.select().from(questions);
+  const dayQsAll = await db.select().from(questions).where(eq(questions.shiftId, shiftId));
   const dayQs = dayQsAll.filter(q => isPublishedStatus(q.status));
   const publishedQuestionIds = new Set(dayQs.map(q => q.id));
   for (const a of ans) {
@@ -1131,22 +1141,36 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
     energySeries.push({ day: d, avg: n ? Math.round((sum / n) * 10) / 10 : 0, n });
   }
 
-  const pig = await db.select().from(piggybank);
+  const pig = pids.length
+    ? await db.select().from(piggybank).where(inArray(piggybank.participantId, pids))
+    : [];
   const pigTags: Record<string, number> = {};
   for (const e of pig) {
     const t = e.tag || 'прочее';
     pigTags[t] = (pigTags[t] || 0) + 1;
   }
 
-  const approvedTasks = await db.select().from(taskSubmissions).where(eq(taskSubmissions.status, 'approved'));
-  const pendingModeration = await db.select().from(taskSubmissions).where(eq(taskSubmissions.status, 'pending'));
-  const pendingTeam = await db.select().from(taskSubmissions).where(eq(taskSubmissions.status, 'pending_team'));
-  const revokedPointsRows = await db.select().from(pointsLog).where(isNotNull(pointsLog.revokedAt));
-  const programEvents = await db.select().from(events);
-  const allMats = await db.select().from(materials);
+  const approvedTasks = pids.length
+    ? await db.select().from(taskSubmissions).where(and(eq(taskSubmissions.status, 'approved'), inArray(taskSubmissions.participantId, pids)))
+    : [];
+  const pendingModeration = pids.length
+    ? await db.select().from(taskSubmissions).where(and(eq(taskSubmissions.status, 'pending'), inArray(taskSubmissions.participantId, pids)))
+    : [];
+  const pendingTeam = pids.length
+    ? await db.select().from(taskSubmissions).where(and(eq(taskSubmissions.status, 'pending_team'), inArray(taskSubmissions.participantId, pids)))
+    : [];
+  const revokedPointsRows = pids.length
+    ? await db.select().from(pointsLog).where(and(isNotNull(pointsLog.revokedAt), inArray(pointsLog.participantId, pids)))
+    : [];
+  const programEvents = await db.select().from(events).where(eq(events.shiftId, shiftId));
+  const allMats = await db.select().from(materials).where(eq(materials.shiftId, shiftId));
   const { published: matsInAnalytics, excludedCount: materialsExcludedFromAnalytics } = (await import('../services/publishStatus.js')).materialCountsForAnalytics(allMats);
-  const attendance = await db.select().from(eventAttendance);
-  const dayStates = await db.select().from(participantDayState);
+  const attendance = pids.length
+    ? await db.select().from(eventAttendance).where(inArray(eventAttendance.participantId, pids))
+    : [];
+  const dayStates = pids.length
+    ? await db.select().from(participantDayState).where(inArray(participantDayState.participantId, pids))
+    : [];
 
   const SCALE_LABELS: Record<string, string> = {
     direction: 'Направление',
@@ -1236,7 +1260,7 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
   const { synthesizeSemanticLayers } = await import('../services/gigachatService.js');
   const semantic = await synthesizeSemanticLayers({ depths, sampleTexts, day });
 
-  const forumSettingsResolved = await getForumSettings();
+  const forumSettingsResolved = await getForumSettings(shiftId);
   const kbThreshold = forumSettingsResolved.kbUnlockThreshold ?? 4;
   const kbDisabled = forumSettingsResolved.kbUnlockDisabled === true;
   const schedulePublishCount = (await db.select().from(scheduleDayVersions)).length;
@@ -1329,8 +1353,13 @@ export const getExpandedDashboards = async (req: AdminRequest, res: Response): P
 
 // ─── Club matching + medals eval ─────────────────────────────
 
-export const getDeparturePortrait = async (_req: AdminRequest, res: Response): Promise<void> => {
-  const allP = await db.select().from(participants).where(isNotNull(participants.onboardingCompletedAt));
+export const getDeparturePortrait = async (req: AdminRequest, res: Response): Promise<void> => {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
+  const allP = await db.select().from(participants).where(and(
+    isNotNull(participants.onboardingCompletedAt),
+    eq(participants.shiftId, shiftId),
+  ));
   const rows = allP.map(p => {
     const goal = p.goalAnswers;
     const pointB = p.pointBAnswers;
@@ -1377,7 +1406,8 @@ export const adminCompleteParticipantTaskHandler = async (req: AdminRequest, res
   const taskId = Number(req.params.taskId);
   const comment = typeof req.body?.comment === 'string' ? req.body.comment : undefined;
   const { adminCompleteParticipantTask } = await import('../services/adminManualTaskService.js');
-  const result = await adminCompleteParticipantTask(participantId, taskId, comment);
+  const force = req.body?.force === true || req.query.force === '1';
+  const result = await adminCompleteParticipantTask(participantId, taskId, comment, { force });
   if (!result.ok) {
     res.status(result.status).json({ error: result.error });
     return;

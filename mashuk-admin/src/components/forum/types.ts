@@ -26,6 +26,10 @@ export type EveningField = {
   audienceDirectionIds?: number[];
   /** Вопрос относится к итоговой анкете форума (дашборд «Итоги форума»). */
   forumFinal?: boolean;
+  /** Точка Б — финальный вопрос смены. */
+  pointB?: boolean;
+  /** Точка Ж — промежуточный вопрос смены. */
+  pointZh?: boolean;
   /**
    * Show when parent matches. `equals` is one value or several (OR):
    * `{ field: 'pick', equals: ['1', '2', '3'] }` → show if answer is 1 or 2 or 3.

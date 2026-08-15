@@ -399,11 +399,15 @@ export const exportActivityHandler = async (req: AdminRequest, res: Response) =>
   });
 };
 export const exportPointABHandler = (_req: AdminRequest, res: Response) => writePointABSummaryExport(res);
-export const exportDelayedMeasureHandler = (_req: AdminRequest, res: Response) => writeDelayedMeasureTemplate(res);
+export const exportDelayedMeasureHandler = async (req: AdminRequest, res: Response) => {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  await writeDelayedMeasureTemplate(res, await resolveAdminShiftId(req));
+};
 export const exportFinalProfilesZipHandler = (_req: AdminRequest, res: Response) => writeFinalProfilesZip(res);
-export async function exportShiftSummaryPdfHandler(_req: AdminRequest, res: Response): Promise<void> {
+export async function exportShiftSummaryPdfHandler(req: AdminRequest, res: Response): Promise<void> {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
   const { writeShiftSummaryPdf } = await import('../services/exports/shiftSummaryPdfBuilder.js');
-  await writeShiftSummaryPdf(res);
+  await writeShiftSummaryPdf(res, await resolveAdminShiftId(req));
 }
 
 export async function exportHubGroupsHandler(req: AdminRequest, res: Response): Promise<void> {

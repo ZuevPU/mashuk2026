@@ -7,15 +7,15 @@ import { db } from '../../db/index.js';
 import {
   participants, taskSubmissions, userMedals,
 } from '../../db/schema.js';
-import { resolveActiveShift } from '../shiftService.js';
+import { getShiftById } from '../shiftService.js';
 import { computeLeaderboardScores } from '../leaderboardService.js';
 import { COLORS, paintPageBackground, resolvePdfFonts } from '../profilePdfLayout.js';
 import { fullName } from './exportCommon.js';
 import { contentDispositionAttachment } from './workbook.js';
 import type { ArchiveProgress } from './participantArchiveExport.js';
 
-async function gatherShiftSummaryAggregates() {
-  const shift = await resolveActiveShift();
+async function gatherShiftSummaryAggregates(shiftId?: number | null) {
+  const shift = shiftId != null ? await getShiftById(shiftId) : null;
   const conditions = [isNull(participants.selfDeletedAt)];
   conditions.push(ne(sql`LOWER(${participants.direction})`, 'организатор форума'));
   if (shift?.id != null) {
@@ -128,9 +128,10 @@ function renderShiftSummaryPdf(
 export async function writeShiftSummaryPdfToFile(
   filePath: string,
   onProgress?: (p: ArchiveProgress) => void | Promise<void>,
+  shiftId?: number | null,
 ): Promise<{ byteSize: number; total: number }> {
   await onProgress?.({ done: 0, total: 1, progress: 10 });
-  const data = await gatherShiftSummaryAggregates();
+  const data = await gatherShiftSummaryAggregates(shiftId);
   await onProgress?.({ done: 0, total: 1, progress: 40 });
 
   await new Promise<void>((resolve, reject) => {
@@ -152,8 +153,8 @@ export async function writeShiftSummaryPdfToFile(
   return { byteSize: stat.size, total: 1 };
 }
 
-export async function writeShiftSummaryPdf(res: Response): Promise<void> {
-  const data = await gatherShiftSummaryAggregates();
+export async function writeShiftSummaryPdf(res: Response, shiftId?: number | null): Promise<void> {
+  const data = await gatherShiftSummaryAggregates(shiftId);
   const fonts = resolvePdfFonts();
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', contentDispositionAttachment('shift_summary.pdf'));

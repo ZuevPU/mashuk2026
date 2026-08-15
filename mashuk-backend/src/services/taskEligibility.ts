@@ -206,6 +206,16 @@ export async function assertTaskSubmissionAllowed(
   return { ok: true };
 }
 
+/** Task from another shift must look like a missing task — do not leak titles. */
+export function taskBelongsToParticipantShift(
+  task: { shiftId?: number | null },
+  participantShiftId: number | null | undefined,
+): boolean {
+  if (participantShiftId == null || !Number.isFinite(participantShiftId)) return false;
+  if (task.shiftId == null) return true;
+  return task.shiftId === participantShiftId;
+}
+
 export async function assertPostUrlUnique(
   postUrl: string,
   participantId: number,

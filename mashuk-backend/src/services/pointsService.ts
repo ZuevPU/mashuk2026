@@ -4,6 +4,7 @@ import { pointsLog, levelsConfig, participants, answers, questions } from '../db
 import { env } from '../config/env.js';
 import { ACTION_CATALOG } from './levelsActionCatalog.js';
 import { getForumSettings, resolveEffectiveCurrentDay } from './helpers.js';
+import { loadLevelsConfig } from './shiftContext.js';
 
 export type PointTrack = 'path' | 'experience';
 
@@ -11,11 +12,14 @@ export function isActivePointsLogAction(actionType: string | null | undefined): 
   return !(actionType || '').endsWith('_revoke');
 }
 
-export async function resolveAwardForumDay(explicit?: number | null): Promise<number> {
+export async function resolveAwardForumDay(
+  explicit?: number | null,
+  shiftId?: number | null,
+): Promise<number> {
   if (explicit != null && Number.isFinite(explicit) && explicit >= 1) {
     return Math.floor(explicit);
   }
-  const settings = await getForumSettings();
+  const settings = await getForumSettings(shiftId);
   return resolveEffectiveCurrentDay(settings);
 }
 
@@ -379,23 +383,23 @@ export async function awardPoints(
   forumDay?: number,
   opts?: { submissionId?: number; ignoreMaxAccruals?: boolean },
 ): Promise<{ awarded: number; track: PointTrack | 'bonus'; logId: number } | null> {
-  const [config] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, actionType)).limit(1);
+  const [beforeRow] = await db.select({
+    pathPoints: participants.pathPoints,
+    experiencePoints: participants.experiencePoints,
+    shiftId: participants.shiftId,
+  }).from(participants).where(eq(participants.id, participantId)).limit(1);
+  const config = await loadLevelsConfig(actionType, beforeRow?.shiftId);
   const catalog = ACTION_CATALOG.find(a => a.actionType === actionType);
   // Explicit override 0 must mean «no award» — `??` would treat 0 as missing and use catalog (e.g. 10).
   const points = overridePoints !== undefined
     ? overridePoints
     : (config?.pointsPerUnit ?? catalog?.pointsPerUnit ?? 0);
-
-  const [beforeRow] = await db.select({
-    pathPoints: participants.pathPoints,
-    experiencePoints: participants.experiencePoints,
-  }).from(participants).where(eq(participants.id, participantId)).limit(1);
   const pointsBefore = {
     path: beforeRow?.pathPoints ?? 0,
     experience: beforeRow?.experiencePoints ?? 0,
   };
   const trackEarly = pointsTrackForAction(actionType);
-  const stampedDay = await resolveAwardForumDay(forumDay);
+  const stampedDay = await resolveAwardForumDay(forumDay, beforeRow?.shiftId);
 
   /** Даже при 0 XP / капе — проверить бонус «полный день» и серии. */
   const runBonusHooks = async () => {
@@ -507,9 +511,9 @@ export async function syncForumPoints(participantId: number): Promise<void> {
     .where(eq(participants.id, participantId));
 }
 
-export async function getLevelThresholds(track: PointTrack): Promise<number[]> {
+export async function getLevelThresholds(track: PointTrack, shiftId?: number | null): Promise<number[]> {
   const actionType = track === 'path' ? 'path_level' : 'exp_level';
-  const [config] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, actionType)).limit(1);
+  const config = await loadLevelsConfig(actionType, shiftId);
   const { normalizeLevelThresholds } = await import('./ratingRecalcService.js');
   return normalizeLevelThresholds(config?.levelThresholds);
 }
@@ -629,7 +633,7 @@ export async function revokePointsForQuestionAnswers(
   const forumDay = question.dayNumber ?? null;
   // Catalog fallback used when question.points was 0 (the farm bug).
   const catalog = ACTION_CATALOG.find(a => a.actionType === actionType);
-  const [levelRow] = await db.select().from(levelsConfig).where(eq(levelsConfig.actionType, actionType)).limit(1);
+  const levelRow = await loadLevelsConfig(actionType, question.shiftId);
   const typicalAward = (typeof question.points === 'number' && question.points > 0)
     ? question.points
     : (levelRow?.pointsPerUnit ?? catalog?.pointsPerUnit ?? null);
