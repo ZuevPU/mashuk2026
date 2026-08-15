@@ -1,15 +1,20 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  assemblePointB,
+  buildProfileAiCopy,
   classifyPiggyThemes,
+  classifyPiggyThemesDetailed,
+  classifyPointBItem,
+  emptyFinalProfile,
   extractCriterionTarget,
   filterProfilePiggy,
   isKopilkaTrash,
+  isSubstantiveReflection,
   mapExperimentResult,
   pickCriterionAnswer,
   profileDensity,
   resolveExpRank,
-  type FinalProfile,
 } from '../services/participantFinalProfileLogic.js';
 import { renderFinalProfileHtml } from '../services/participantFinalProfileBuild.js';
 import { isAutoBookmark } from '../services/analytics/piggybankHubMetrics.js';
@@ -93,38 +98,68 @@ describe('participantFinalProfileLogic', () => {
       stateDays: 0, reflectionTotal: 0, kopilkaTotal: 0, contributionAnswers: 0,
     }).mode, 'trace');
   });
+
+  it('filters impression-only reflections', () => {
+    assert.equal(isSubstantiveReflection('класс'), false);
+    assert.equal(isSubstantiveReflection('очень интересно'), false);
+    assert.equal(isSubstantiveReflection('Я бы хотела попробовать ввести игры с детективным сюжетом'), true);
+  });
+
+  it('classifies point B slots and assembles them', () => {
+    assert.equal(classifyPointBItem('Что произошло с вашей целью за время программы?', 'Достиг(ла) цели'), 'goalOutcome');
+    assert.equal(classifyPointBItem('Какой ролью вам было естественно действовать?', 'Реализатор практики'), 'roleNatural');
+    const pb = assemblePointB([
+      { q: 'Что произошло с вашей целью за время программы?', a: 'Цель изменилась' },
+      { q: 'Когда планируете сделать этот шаг?', a: 'Ближайшие 14 дней' },
+    ]);
+    assert.equal(pb.completed, true);
+    assert.equal(pb.goalOutcome, 'Цель изменилась');
+    assert.equal(pb.planWhen, 'Ближайшие 14 дней');
+  });
+
+  it('builds detailed piggy themes and universal AI copy', () => {
+    const pack = classifyPiggyThemesDetailed([
+      { text: 'Формат открытого урока заберу в школу', tags: ['идея'] },
+      { text: 'Мастер-класс как формат занятия с классом', tags: ['идея'] },
+      { text: 'Игра Соображариум на площадке', tags: ['идея'] },
+    ], 3);
+    assert.ok(pack.themes.length >= 1);
+    const ai = buildProfileAiCopy({
+      roleComments: 2,
+      reflectionCount: 3,
+      thesisCount: 4,
+      touchDone: 16,
+      touchTotal: 24,
+      roles: ['Реализатор практики', 'Проводник коммуникации'],
+      kopilkaTotal: 21,
+      toWork: 1,
+      themeNames: ['Форматы занятий и мастер-классов'],
+      pointBDone: false,
+    });
+    assert.match(ai.closing, /16 из 24/);
+    assert.match(ai.roles, /ваши слова/i);
+  });
 });
 
 describe('renderFinalProfileHtml', () => {
-  it('injects profile json and keeps template shell', () => {
-    const profile: FinalProfile = {
-      person: {
-        name: 'Тест Участник',
-        direction: 'Флагманы',
-        shift: 'Смена 1',
-        group: '1А',
-        from: '8 августа',
-        to: '15 августа',
-        days: 8,
-      },
-      pointA: [{ q: 'Зачем?', a: 'Учиться' }],
-      pointB: [null],
-      criterion: null,
-      participation: Array.from({ length: 8 }, (_, i) => ({ day: i + 1, done: null, total: null })),
-      state: Array.from({ length: 8 }, (_, i) => ({ day: i + 1 })),
-      roles: [],
-      kopilka: {
-        total: 0, thought: 0, idea: 0, toWork: 0, later: 0, contacts: 0, picked: [], themes: [],
-      },
-      reflection: { total: 0, transfer: 0, self: 0, thesis: 0, reaction: 0, best: [] },
-      contribution: { answers: 0, questions: 0, peopleReached: 0, expRank: '', bestAnswer: '' },
-      context: { dirName: 'Флагманы', dirPoints: null, dirOwn: null, dirKop: null },
-      nextStep: null,
-      nextStepWhen: null,
+  it('injects profile json and keeps etalon blocks', () => {
+    const profile = emptyFinalProfile();
+    profile.person = {
+      name: 'Тест Участник',
+      direction: 'Флагманы',
+      shift: 'Смена 1',
+      group: '1А',
+      from: '8 августа',
+      to: '15 августа',
+      days: 8,
     };
+    profile.pointA = [{ q: 'Зачем?', a: 'Учиться', kind: 'open' }];
     const html = renderFinalProfileHtml(profile);
     assert.ok(html.includes('Тест Участник'));
     assert.ok(html.includes('const PROFILE = {'));
+    assert.ok(html.includes('Твой Машук за 20 секунд'));
+    assert.ok(html.includes('Ролевые эксперименты'));
+    assert.ok(html.includes('Итог смены'));
     assert.ok(!html.includes('__PROFILE_JSON__'));
     assert.ok(!html.includes('<script>alert'));
   });

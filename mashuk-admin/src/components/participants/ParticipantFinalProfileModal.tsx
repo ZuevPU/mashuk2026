@@ -52,8 +52,8 @@ export function ParticipantFinalProfileModal({
   if (!open) return null;
 
   const title = participantName
-    ? `Профиль участника · ${participantName}`
-    : 'Профиль участника';
+    ? `Итоговый профиль · ${participantName}`
+    : 'Итоговый профиль участника';
 
   const printProfile = () => {
     const win = iframeRef.current?.contentWindow;
@@ -80,7 +80,7 @@ export function ParticipantFinalProfileModal({
           <div>
             <div className="adm-final-profile-title">{title}</div>
             <div className="adm-muted" style={{ fontSize: 12, marginTop: 2 }}>
-              HTML-профиль для печати · только штаб
+              Эталонный итоговый профиль · блоки как в макете v2.6
             </div>
           </div>
           <div className="adm-final-profile-actions">

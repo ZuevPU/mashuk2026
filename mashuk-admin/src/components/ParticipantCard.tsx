@@ -559,7 +559,7 @@ export function ParticipantCardModal({
               className="adm-btn adm-btn-sm adm-btn-secondary"
               onClick={() => setFinalProfileOpen(true)}
             >
-              Профиль участника
+              Итоговый профиль
             </button>
             <button
               type="button"

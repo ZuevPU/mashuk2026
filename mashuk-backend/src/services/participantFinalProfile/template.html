@@ -26,7 +26,6 @@ p{margin:0 0 3mm}
 .meta{font-family:"Inter",Arial,sans-serif;font-size:9.5pt;color:var(--dim);margin-top:2mm}
 .sec{margin-top:8mm}
 .three{display:grid;grid-template-columns:repeat(3,1fr);gap:6mm}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:6mm}
 .num{font-size:30pt;font-weight:600;line-height:1;letter-spacing:-.02em}
 .num small{font-size:12pt;font-weight:400;color:var(--dim)}
 .cap{font-family:"Inter",Arial,sans-serif;font-size:8.5pt;color:var(--dim);margin-top:2mm;line-height:1.4}
@@ -36,6 +35,9 @@ p{margin:0 0 3mm}
 .pill{display:inline-block;font-family:"Inter",Arial,sans-serif;font-size:8pt;padding:.8mm 2.5mm;border-radius:6mm;
  background:var(--pine-soft);color:var(--pine);font-weight:600}
 .pill.o{background:var(--ochre-soft);color:#8a5f16}
+.ai{border:1px solid var(--ochre);background:var(--ochre-soft);border-radius:3mm;padding:4.5mm;margin:3mm 0}
+.ai-label{font-family:"Inter",Arial,sans-serif;font-size:7.5pt;letter-spacing:.14em;text-transform:uppercase;
+ color:#8a5f16;font-weight:700;margin-bottom:2mm}
 table{width:100%;border-collapse:collapse;font-size:10.5pt}
 td,th{padding:2.2mm 2mm;border-bottom:1px solid var(--rule);vertical-align:top;text-align:left}
 th{font-family:"Inter",Arial,sans-serif;font-size:8pt;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-weight:600}
@@ -44,303 +46,265 @@ th{font-family:"Inter",Arial,sans-serif;font-size:8pt;letter-spacing:.08em;text-
  font-family:"Inter",Arial,sans-serif;font-size:7.5pt;color:var(--faint);border-top:1px solid var(--rule);padding-top:2mm}
 .legend{display:flex;gap:5mm;flex-wrap:wrap;font-family:"Inter",Arial,sans-serif;font-size:8pt;color:var(--dim);margin-top:3mm}
 .legend i{display:inline-block;width:2.6mm;height:2.6mm;border-radius:.6mm;margin-right:1.5mm}
-.arc{display:flex;align-items:center;gap:3mm;flex-wrap:wrap;font-size:11pt;margin:2mm 0 3mm}
-.arc b{font-weight:600}
-.arc span.sep{color:var(--faint)}
-.stage{display:grid;grid-template-columns:26mm 1fr;gap:4mm;padding:3mm 0;border-bottom:1px solid var(--rule)}
-.stage:last-child{border-bottom:0}
-.stage .n{font-family:"Inter",Arial,sans-serif;font-size:8pt;letter-spacing:.1em;text-transform:uppercase;color:var(--pine);padding-top:1mm}
+.choice{display:inline-block;border:1px solid var(--rule);border-radius:6mm;padding:1.2mm 3mm;margin:0 1.5mm 2mm 0;
+ font-family:"Inter",Arial,sans-serif;font-size:8.5pt;color:var(--dim)}
+.choice.on{background:var(--pine-soft);border-color:var(--pine);color:var(--pine);font-weight:600}
+.timeline{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm;margin:3mm 0}
+.timeline .n{font-family:"Inter",Arial,sans-serif;font-size:8pt;letter-spacing:.1em;text-transform:uppercase;color:var(--pine)}
 @media print{html,body{background:#fff}
  .page{margin:0;box-shadow:none;width:auto;min-height:auto;padding:0}
  .page+.page{page-break-before:always}}
 </style></head><body>
 <div id="doc"></div>
 <script>
-/* =============================================================
-   ИТОГОВЫЙ ПРОФИЛЬ УЧАСТНИКА · шаблон под 1000 профилей
-   Логика: считаем плотность данных → выбираем режим →
-   собираем только те блоки, для которых есть материал.
-   Все нарративные абзацы ветвятся по фактам, а не зашиты.
-   ============================================================= */
 const PROFILE = __PROFILE_JSON__;
-
-/* ---------- 1. ПОДГОТОВКА: плотность, режим, помощники ---------- */
 const P=PROFILE, D=document.getElementById('doc');
 const esc=s=>String(s==null?'':s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
-const el=h=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild};
 const clamp=(s,n=320)=>{s=String(s||'').trim();return s.length<=n?s:s.slice(0,n).replace(/\s+\S*$/,'')+'…'};
 const plural=(n,a,b,c)=>{const m=n%100,k=n%10;return n+' '+(m>=11&&m<=14?c:k===1?a:k>=2&&k<=4?b:c)};
 const ZC={"Подъём":"#2f6b54","Включение":"#4b7c93","Нейтраль":"#9aa1ab","Усталость":"#c0862e","Риск":"#b4544c"};
-
-const K=P.kopilka||{}, R=P.reflection||{}, C=P.contribution||{};
-const kopN=(K.picked||[]).length, kopTotal=K.total||0;
-const pDone=(P.participation||[]).filter(d=>d.done!==null&&d.done!==undefined);
-const doneSum=pDone.reduce((a,d)=>a+d.done,0), totalSum=pDone.reduce((a,d)=>a+d.total,0);
-const fullness=totalSum?Math.round(doneSum/totalSum*100):null;
-const refTotal=R.total||0, own=refTotal?Math.round(((R.transfer||0)+(R.self||0))/refTotal*100):null;
+const K=P.kopilka||{}, R=P.reflection||{}, S=P.snapshot||{}, B=P.pointB||{}, AI=P.ai||{};
 const toWork=(K.toWork||0)+(K.later||0);
-const stateDays=(P.state||[]).filter(s=>s.morning||s.day_||s.evening);
 const rolesDone=(P.roles||[]).filter(r=>r.result&&r.result!=="Не получилось попробовать").length;
-const hasContrib=(C.answers||0)>0;
 const uniqRoles=[...new Set((P.roles||[]).map(r=>r.role))];
+const openA=(P.pointA||[]).filter(x=>x.kind!=='closed');
+const closedA=(P.pointA||[]).filter(x=>x.kind==='closed');
+const emptyA=!(P.pointA||[]).length;
 
-/* плотность: сколько источников дали материал */
-const density=[stateDays.length>0, refTotal>0, kopTotal>0, hasContrib].filter(Boolean).length;
-const MODE = density>=3?'full' : density===2?'short' : density===1?'brief' : 'trace';
-
-/* ---------- 2. ВЕТВЯЩИЕСЯ ФОРМУЛИРОВКИ ---------- */
-/* Каждый абзац выбирается по факту, а не зашит под один сценарий. */
-const NARR={
- roleArc(){
+function aiBox(text, src){
+  if(!text) return '';
+  return `<div class="ai"><div class="ai-label">AI-сводка</div>
+   <p style="margin:0 0 2mm;font-size:11pt">${esc(text)}</p>
+   <div class="tiny">${esc(src||'Универсальный текст · можно править')}</div></div>`;
+}
+function qaList(items){
+  if(!(items||[]).length) return '<p class="tiny">Ответа пока нет</p>';
+  return items.map(x=>`<div style="margin-bottom:4mm"><div class="tiny" style="margin-bottom:1.5mm">${esc(x.q)}</div>
+   <div class="quote">${esc(clamp(x.a,300))}</div></div>`).join('');
+}
+function zoneCell(v){
+  return v
+    ? `<span style="display:inline-block;width:100%;height:5mm;border-radius:1mm;background:${ZC[v]}"></span>`
+    : `<span style="display:inline-block;width:100%;height:5mm;border-radius:1mm;background:repeating-linear-gradient(45deg,transparent,transparent 1mm,#e2ded5 1mm,#e2ded5 2mm)"></span>`;
+}
+function energySvg(){
+  const pts=(P.energy||[]).map((e,i)=>({x:i,y:e.value}));
+  const has=pts.some(p=>p.y!=null);
+  const w=420,h=92,pad=10;
+  const ys=pts.map(p=>p.y==null?null:Number(p.y));
+  const max=has?Math.max(10,...ys.filter(v=>v!=null)):10;
+  const line=pts.filter(p=>p.y!=null).map((p,i,a)=>{
+    const x=pad+p.x*((w-pad*2)/Math.max(pts.length-1,1));
+    const y=h-pad-(Number(p.y)/max)*(h-pad*2);
+    return (i?'L':'M')+x.toFixed(1)+','+y.toFixed(1);
+  }).join(' ');
+  const labels=(P.energy||[]).map((e,i)=>{
+    const x=pad+i*((w-pad*2)/Math.max(pts.length-1,1));
+    return `<text x="${x}" y="${h-1}" text-anchor="middle" font-size="8" fill="#9aa1ab">Д${e.day}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="28mm" role="img" aria-label="Энергия">
+   <text x="0" y="10" font-size="8" fill="#9aa1ab">Подъём</text>
+   <text x="0" y="${h-14}" font-size="8" fill="#9aa1ab">Риск</text>
+   ${has?`<path d="${line}" fill="none" stroke="#4b7c93" stroke-width="2"/>`:''}
+   ${labels}
+  </svg>
+  ${has?'':'<p class="tiny">Отдельного значения энергии в этой выгрузке ещё нет — линия появится, когда участник отметит энергию в проверках состояния.</p>'}`;
+}
+function roleArc(){
   const n=(P.roles||[]).length;
-  if(!n) return null;
-  if(uniqRoles.length===1&&n===1) return {t:'Одна роль',
-    p:`Вы взяли роль «${esc(uniqRoles[0])}» и остались в ней. Это не меньше, чем смена ролей: удержать одну рамку целый день сложнее, чем попробовать три.`};
-  if(uniqRoles.length===1) return {t:'Одна роль, взятая несколько раз',
-    p:`«${esc(uniqRoles[0])}» — ${plural(n,'день','дня','дней')} подряд. Повтор роли даёт то, чего не даёт перебор: со второго раза видно не саму роль, а то, что она меняет вокруг.`};
-  if(uniqRoles.length===n) return {t:'Каждый день — новая роль',
-    p:`${uniqRoles.map(esc).join(' → ')}. Вы ни разу не повторились: за неделю вы примерили ${plural(n,'рамку','рамки','рамок')}. Стоит вернуться к той, в которой было неудобнее всего, — обычно рост именно там.`};
-  return {t:'Ваша траектория ролей',
-    p:`${uniqRoles.map(esc).join(' → ')}. Рамка менялась — и та, к которой вы пришли, отличается от той, с которой начали. Это не «правильнее»: это другой способ смотреть, и вы выбрали его сами.`};
- },
- kopPattern(){
-  if(!kopTotal) return null;
-  const share=toWork/kopTotal;
-  if(share<0.2) return {t:'Ваш способ работать',
-    p:`Вы замечаете заметно больше, чем успеваете превратить в решение: ${plural(kopTotal,'запись','записи','записей')} и ${plural(toWork,'помечена','помечены','помечено')} к переносу.`,
-    s:'Это не про объём и не про лень — про переход. Правило на сентябрь: каждая пятая запись заканчивается глаголом. «Спроектировать», «показать», «спросить». Одно слово меняет статус мысли.'};
-  if(share<0.45) return {t:'Ваш способ работать',
-    p:`Примерно каждая третья ваша запись доходит до намерения, остальные остаются наблюдением.`,
-    s:'Рабочий баланс: замечать шире, чем берёшь, — нормально. Важно, чтобы отобранное не потерялось: перечитайте эти записи в первую неделю сентября, а не в декабре.'};
-  return {t:'Ваш способ работать',
-    p:`Почти каждая ваша запись — это уже решение, а не наблюдение.`,
-    s:'Такой переход даётся немногим: за ним привычка доводить замеченное до формулировки. Обратная сторона — можно не заметить то, что не укладывается в план. Оставляйте место для записей «просто так».'};
- },
- reflDepth(){
-  if(!refTotal) return null;
-  if((R.transfer||0)===0&&(R.self||0)===0) return 'Ваши тексты после блоков — это точная передача содержания. Следующий шаг простой: в конце каждой записи добавлять одну фразу, начинающуюся с «я». Не «наставничество важно», а «мне не хватает наставника».';
-  if(own>=25) return 'В каждом четвёртом вашем тексте появляется «я» — вы не пересказывали услышанное, а примеряли. Это редко: у большинства участников такие тексты единичны.';
-  return 'Пересказ содержания — самый частый уровень у всех, и это не упрёк: так отвечают, когда вопрос звучит как «о чём было». Ценность — в тех текстах, где появилось «я».';
- },
- stateHint(){
-  if(!stateDays.length) return null;
-  const w=v=>({"Подъём":2,"Включение":1,"Нейтраль":0,"Усталость":-1,"Риск":-2})[v];
-  let m=0,e=0,mc=0,ec=0;
-  stateDays.forEach(s=>{if(s.morning){m+=w(s.morning);mc++} if(s.evening){e+=w(s.evening);ec++}});
-  const risk=stateDays.filter(s=>[s.morning,s.day_,s.evening].includes('Риск')).length;
-  if(risk>=2) return 'В вашей неделе есть дни, отмеченные как риск. Это нормальная часть плотной смены, но если то же состояние повторится в сентябре без форума — это сигнал, а не характер.';
-  if(mc&&ec&&(m/mc)<(e/ec)-0.4) return 'Ваше утро стабильно тяжелее вечера. Это рабочая гипотеза на сентябрь: не «мало сил», а «поздно ложусь». Проверяется одной неделей.';
-  if(mc&&ec&&(m/mc)>(e/ec)+0.4) return 'Вы начинали дни лучше, чем заканчивали: ресурс расходовался по ходу дня. Стоит посмотреть, на чём именно — программа или разговоры после неё.';
-  return 'Ваша неделя прошла ровно: резких провалов между утром и вечером не было.';
- },
- criterionResult(){
-  if(!P.criterion||!P.criterion.target) return null;
-  const f=(P.criterion.found||[]).length, t=P.criterion.target;
-  if(f>=t) return 'Задача, которую вы поставили себе на входе, закрыта. Это важнее любой нашей метрики: критерий был ваш, и вы его выполнили.';
-  if(f>0) return `До заявленного числа не хватило ${plural(t-f,'позиции','позиций','позиций')} — но список открытый. Допишите недостающее от руки: неделя закончилась, а память ещё свежая.`;
-  return 'Мы не нашли в ваших записях того, что подходит под этот критерий. Возможно, найденное осталось в голове — тогда впишите его сюда сами, пока помните.';
- }
-};
+  if(!n) return '';
+  const names=uniqRoles.map(esc).join(' → ');
+  let p='';
+  if(uniqRoles.length===1) p=`«${esc(uniqRoles[0])}» — ${plural(n,'день','дня','дней')}. Повтор роли даёт то, чего не даёт перебор: со второго раза видно не саму роль, а то, что она меняет вокруг.`;
+  else p=`${names}. Рамка менялась — и та, к которой вы пришли, отличается от той, с которой начали. Это не «правильнее»: это другой способ смотреть, и вы выбрали его сами.`;
+  return `<div class="box soft" style="margin-top:4mm"><h3>Ваша траектория ролей</h3><p style="margin:0;font-size:11pt">${p}</p></div>`;
+}
+function kopPattern(){
+  if(!K.total) return '';
+  const share=toWork/(K.total||1);
+  const picked=(K.picked||[])[0];
+  const extra=picked?` — «${esc(clamp(picked.text,120))}»`:'';
+  if(share<0.2) return `<div class="box" style="margin-top:3mm;border-color:var(--ochre)"><h3>Ваш способ работать</h3>
+   <p style="margin:0;font-size:11pt">Вы замечаете заметно больше, чем успеваете превратить в решение: ${plural(K.total,'запись','записи','записей')} и ${plural(toWork,'помечена','помечены','помечено')} к переносу${extra}. Это не про объём и не про лень — про переход. Правило на сентябрь: каждая пятая запись заканчивается глаголом.</p></div>`;
+  if(share<0.45) return `<div class="box" style="margin-top:3mm;border-color:var(--ochre)"><h3>Ваш способ работать</h3>
+   <p style="margin:0;font-size:11pt">Примерно каждая третья ваша запись доходит до намерения, остальные остаются наблюдением. Важно, чтобы отобранное не потерялось в первую неделю после форума.</p></div>`;
+  return `<div class="box" style="margin-top:3mm;border-color:var(--ochre)"><h3>Ваш способ работать</h3>
+   <p style="margin:0;font-size:11pt">Почти каждая ваша запись — уже решение, а не только наблюдение. Оставляйте место и для записей «просто так».</p></div>`;
+}
+function riskHint(){
+  const days=(P.state||[]).filter(s=>[s.morning,s.day_,s.evening].includes('Риск')).length;
+  if(!days) return `<div class="box soft" style="margin-top:4mm"><p style="margin:0;font-size:11pt">Ваша неделя прошла без отметок «риск». Пустые клетки означают, что данных за эти дни нет, а не что вы чего-то не сделали.</p></div>`;
+  return `<div class="box soft" style="margin-top:4mm"><p style="margin:0;font-size:11pt">В вашей неделе есть дни, отмеченные как риск. Это нормальная часть плотной смены, но если то же состояние повторится в сентябре без форума — это сигнал, а не характер.</p></div>`;
+}
+function choiceRow(options, selected){
+  const sel=String(selected||'').toLowerCase();
+  return options.map(o=>`<span class="choice ${sel&&sel.includes(o.toLowerCase().slice(0,10))?'on':''}">${esc(o)}</span>`).join('');
+}
 
-/* ---------- 3. БЛОКИ. Каждый возвращает HTML или null ---------- */
-const B={};
-B.lede=()=>{
- const txt={
-  full:'Это не отчёт и не оценка. Это след недели: с чем вы приехали, как прожили дни, что забрали с собой и что решили делать дальше. Цифры здесь нужны только затем, чтобы вам было на что опереться, когда форум закончится и начнётся обычный сентябрь.',
-  short:'Это след вашей недели — то, что осталось в записях и ответах. Часть инструментов форума вы почти не использовали, поэтому документ короче обычного: мы показываем только то, что есть, и не придумываем остального.',
-  brief:'Это короткий след вашей недели. В приложении форума осталось немного ваших записей — значит, основное прожито не в нём, а в залах, разговорах и на площадках. Здесь мы собрали то, что сохранилось, и оставили место для того, что помните только вы.',
-  trace:'Ваша неделя прошла почти без следа в приложении форума — и это ничего не говорит о самой неделе. Она была: в разговорах, на площадках, в дороге. Этот лист нужен, чтобы вы записали её сами, пока помните.'
- }[MODE];
- return `<div class="sec"><p class="lede">${txt}</p></div>`;
-};
-B.numbers=()=>{
- const cards=[];
- if(fullness!==null) cards.push(`<div><div class="num">${fullness}<small>%</small></div>
-  <div class="cap"><b>Полнота пути.</b> Из ${totalSum} точек программы, открытых за прожитые дни, вы закрыли ${doneSum}. Это про присутствие в контуре, а не про качество.</div></div>`);
- if(own!==null) cards.push(`<div><div class="num">${own}<small>%</small></div>
-  <div class="cap"><b>Присвоение.</b> Доля ваших текстов, где вы связали услышанное с собой или своей работой, а не пересказали содержание.${P.context&&P.context.dirOwn?` По направлению — ${P.context.dirOwn}%.`:''}</div></div>`);
- if(kopTotal) cards.push(`<div><div class="num">${toWork}</div>
-  <div class="cap"><b>Взято к переносу.</b> Записей, помеченных «в работу» или «на будущее», из ${plural(kopTotal,'сделанной','сделанных','сделанных')}.</div></div>`);
- if(!cards.length) return null;
- return `<div class="sec"><h2>Путь в ${cards.length===3?'трёх числах':cards.length===2?'двух числах':'одном числе'}</h2>
-  <div class="three" style="grid-template-columns:repeat(${cards.length},1fr)">${cards.join('')}</div></div>`;
-};
-B.pointA=()=>{
- if(!(P.pointA||[]).length) return null;
- return `<div class="sec"><h2>Точка А · с чем вы приехали</h2>
-  ${P.pointA.map(x=>`<div style="margin-bottom:4mm"><div class="tiny" style="margin-bottom:1.5mm">${esc(x.q)}</div>
-   <div class="quote">${esc(clamp(x.a,300))}</div></div>`).join('')}</div>`;
-};
-B.criterion=()=>{
- if(!P.criterion||!P.criterion.target) return null;
- const f=P.criterion.found||[], t=P.criterion.target;
- const rows=f.slice(0,8).map((x,i)=>`<tr><td style="width:8mm;color:var(--pine);font-weight:600">${i+1}</td>
-   <td>${esc(clamp(x.name,140))}</td><td style="width:38mm;text-align:right;color:var(--dim);font-size:9.5pt">${esc(x.src)}</td></tr>`).join('');
- const gaps=Math.max(0,t-f.length);
- return `<div class="sec"><h2>Вы просили ${t} — вот что нашли</h2>
-  <p class="muted" style="font-size:11pt">Критерий вы придумали сами в первый день. Мы собрали по вашим записям то, что под него подходит: ${plural(f.length,'позиция','позиции','позиций')}.</p>
-  <table style="margin-top:2mm">${rows}
-   ${Array.from({length:Math.min(gaps,3)},(_,i)=>`<tr><td style="color:var(--faint)">${f.length+i+1}</td><td colspan="2"><div class="hand" style="margin:1mm 0"></div></td></tr>`).join('')}</table>
-  <p class="tiny" style="margin-top:3mm">${NARR.criterionResult()}</p></div>`;
-};
-B.days=()=>{
- if(!stateDays.length&&!pDone.length) return null;
- const cell=v=>v?`<span style="display:inline-block;width:100%;height:5mm;border-radius:1mm;background:${ZC[v]}"></span>`
-  :`<span style="display:inline-block;width:100%;height:5mm;border-radius:1mm;background:repeating-linear-gradient(45deg,transparent,transparent 1mm,#e2ded5 1mm,#e2ded5 2mm)"></span>`;
- const hint=NARR.stateHint();
- return `<div class="sec"><h2>Дни смены</h2>
-  <p class="muted" style="font-size:11pt">Три отметки состояния в день и точки программы, которые вы закрыли.
-  Уровень энергии мы намеренно не показываем числом: шкала ползунка искажает картину, зона состояния — нет.</p>
-  <table style="margin-top:3mm">
-   <tr><th style="width:20mm">День</th><th>Утро</th><th>День</th><th>Вечер</th><th style="width:26mm">Точки</th><th style="width:44mm">Роль дня</th></tr>
-   ${(P.state||[]).map((s,i)=>{const pp=(P.participation||[])[i], rr=(P.roles||[]).find(r=>r.day===s.day);
-    return `<tr><td style="font-weight:600">${s.day}</td><td>${cell(s.morning)}</td><td>${cell(s.day_)}</td><td>${cell(s.evening)}</td>
-     <td>${pp&&pp.done!=null?`${pp.done} из ${pp.total}`:'<span class="tiny">—</span>'}</td>
-     <td>${rr?esc(rr.role):'<span class="tiny">—</span>'}</td></tr>`}).join('')}
-  </table>
-  <div class="legend">${Object.entries(ZC).map(([k,v])=>`<span><i style="background:${v}"></i>${k}</span>`).join('')}<span><i style="background:#e2ded5"></i>нет отметки</span></div>
-  ${hint?`<div class="box soft" style="margin-top:4mm"><p style="margin:0;font-size:11pt">${hint}</p></div>`:''}</div>`;
-};
-B.roles=()=>{
- if(!(P.roles||[]).length) return null;
- const arc=NARR.roleArc();
- return `<div class="sec"><h2>Ролевые эксперименты</h2>
-  <p class="muted" style="font-size:11pt">Роль — не звание, а рамка на один день: попробовать вести себя иначе, чем обычно.</p>
-  <table style="margin-top:2mm">
-   <tr><th style="width:20mm">День</th><th>Роль</th><th style="width:60mm">Что вышло</th></tr>
-   ${P.roles.map(r=>`<tr><td style="font-weight:600">${r.day}</td><td>${esc(r.role)}</td>
-    <td>${r.result?`<span class="pill ${/Получилось/.test(r.result)?'':'o'}">${esc(r.result)}</span>`:'<span class="tiny">ещё не отмечено</span>'}</td></tr>`).join('')}</table>
-  ${arc?`<div class="box soft" style="margin-top:4mm"><h3>${arc.t}</h3><p style="margin:0;font-size:11pt">${arc.p}</p></div>`:''}
-  <p class="tiny" style="margin-top:3mm">Доведены до результата ${rolesDone} из ${P.roles.length}.
-  Незавершённое мы показываем намеренно: попытка, оставшаяся попыткой, всё равно сдвигает — вы уже посмотрели на день из другой роли, даже если не успели её отыграть.</p></div>`;
-};
-B.funnel=()=>{
- if(!kopTotal) return null;
- const f=[["Замечено · «мысль», «вопрос»",K.thought||0,"#9aa1ab"],["Задумано · «идея»",K.idea||0,"#c0862e"],["К переносу · «в работу», «на будущее»",toWork,"#2f6b54"]];
- const mx=Math.max(...f.map(x=>x[1]),1), pat=NARR.kopPattern();
- return `<div class="sec"><h2>Что вы забираете</h2>
-  <p class="muted" style="font-size:11pt">Копилка — ${plural(kopTotal,'запись','записи','записей')} за смену. Ниже — путь от беглой мысли до того, что вы отметили к переносу.</p>
-  <div style="margin-top:4mm">${f.map(x=>`<div style="display:grid;grid-template-columns:62mm 1fr 12mm;gap:3mm;align-items:center;margin-bottom:3mm">
-    <div style="font-size:11pt">${x[0]}</div>
-    <div style="height:6mm;background:#efece5;border-radius:1mm;overflow:hidden"><div style="width:${Math.max(x[1]/mx*100,2)}%;height:100%;background:${x[2]}"></div></div>
-    <div style="text-align:right;font-weight:600">${x[1]}</div></div>`).join('')}</div>
-  ${pat?`<div class="box" style="margin-top:2mm;border-color:var(--ochre)"><h3>${pat.t}</h3>
-   <p style="margin-bottom:2mm;font-size:11pt">${pat.p}</p><p class="tiny" style="margin:0">${pat.s}</p></div>`:''}</div>`;
-};
-B.picked=()=>{
- if(!kopTotal) return null;
- if(!kopN) return `<div class="sec"><h2>Отмечено к переносу</h2><div class="box">
-  <p style="margin:0">За смену вы не отметили ни одной записи как «в работу». Это не пробел: часть решений живёт в голове и не требует тега.
-  Но если хотя бы одно наблюдение стоит того, чтобы дожить до сентября — впишите его на последней странице.</p></div></div>`;
- return `<div class="sec"><h2>Отмечено к переносу</h2>
-  ${K.picked.slice(0,6).map(x=>`<div style="margin-bottom:4mm"><div class="quote">${esc(clamp(x.text,260))}</div>
-   <div class="tiny" style="margin-top:1.5mm">${esc(x.src)} · <span class="pill">${esc(x.tag)}</span></div></div>`).join('')}</div>`;
-};
-B.themes=()=>{
- if(!(K.themes||[]).length) return null;
- return `<div class="sec"><h2>Ваши темы</h2>
-  <p class="muted" style="font-size:11pt">О чём вы писали чаще всего — по вашим же формулировкам.</p>
-  <table style="margin-top:2mm">${K.themes.slice(0,3).map((t,i)=>`<tr><td style="width:9mm;font-weight:600;color:var(--pine)">${i+1}</td>
-   <td>${esc(t.name)}</td><td style="width:26mm;text-align:right;color:var(--dim)">${plural(t.n,'запись','записи','записей')}</td></tr>`).join('')}</table>
-  <p class="tiny" style="margin-top:3mm">Три темы — это, как правило, и есть ваш профессиональный запрос на ближайший год. Не форум их придумал: вы приехали с ними, а здесь они проявились.</p></div>`;
-};
-B.reflection=()=>{
- if(!refTotal) return null;
- const lv=[["Перенос в практику",R.transfer||0,"#2f6b54"],["Связь с собой",R.self||0,"#4b7c93"],["Тезис",R.thesis||0,"#9aa1ab"],["Реакция",R.reaction||0,"#c0862e"]];
- const tot=lv.reduce((a,l)=>a+l[1],0)||1;
- return `<div class="sec"><h2>Как вы осмысляли</h2>
-  <p class="muted" style="font-size:11pt">${plural(refTotal,'текст','текста','текстов')} после блоков программы. Мы разметили их по глубине — от короткой реакции до конкретного переноса в свою работу.</p>
-  <div style="display:flex;height:9mm;border-radius:1.5mm;overflow:hidden;margin:4mm 0 3mm">${lv.map(l=>`<div style="width:${l[1]/tot*100}%;background:${l[2]}"></div>`).join('')}</div>
-  <table>${lv.map(l=>`<tr><td style="width:6mm"><span style="display:inline-block;width:3mm;height:3mm;border-radius:.6mm;background:${l[2]}"></span></td>
-   <td>${l[0]}</td><td style="width:18mm;text-align:right;font-weight:600">${l[1]}</td>
-   <td style="width:16mm;text-align:right;color:var(--dim)">${Math.round(l[1]/tot*100)}%</td></tr>`).join('')}</table>
-  <p class="tiny" style="margin-top:3mm">${NARR.reflDepth()}</p></div>`;
-};
-B.best=()=>{
- if(!(R.best||[]).length) return null;
- return `<div class="sec"><h2>Ваши сильные формулировки</h2>
-  ${R.best.slice(0,3).map(b=>`<div style="margin-bottom:4mm"><div class="quote">${esc(clamp(b.text,300))}</div>
-   <div class="tiny" style="margin-top:1.5mm">${esc(b.event)}</div></div>`).join('')}
-  <p class="tiny">Это ваши слова, не наши. Их стоит перечитать в тот день, когда покажется, что неделя в горах ничего не изменила.</p></div>`;
-};
-B.contribution=()=>{
- if(!hasContrib) return null;
- const cells=[[C.answers,'ответов коллегам в «Обмене опытом»'],
-   [C.peopleReached,'человек прочитали ваш ответ на свой вопрос'],[C.questions,'вопроса задали сами']].filter(x=>x[0]);
- return `<div class="sec"><h2>Что вы дали другим</h2>
-  <div class="three" style="grid-template-columns:repeat(${cells.length},1fr)">
-   ${cells.map(c=>`<div><div class="num" style="font-size:24pt">${c[0]}</div><div class="cap">${c[1]}</div></div>`).join('')}</div>
-  ${C.bestAnswer?`<div class="quote" style="margin-top:4mm">${esc(clamp(C.bestAnswer,240))}</div>
-   <div class="tiny" style="margin-top:1.5mm">ваш ответ, который собрал больше всего откликов</div>`:''}
-  <p class="tiny" style="margin-top:3mm">Почти половина участников не заходила в обмен опытом ни разу.${C.expRank?` Вы — в ${esc(C.expRank)} тех, на ком площадка держалась.`:''}
-  Форум существует не только потому, что его организовали, но и потому, что кто-то отвечал.</p></div>`;
-};
-B.contacts=()=>{
- if(!K.contacts) return null;
- return `<div class="sec"><h2>Сохранённые знакомства</h2><div class="box soft">
-  <p style="margin:0">За смену вы сохранили ${plural(K.contacts,'контакт','контакта','контактов')}.</p>
-  <p class="tiny" style="margin:2mm 0 0">Сами контакты остались в приложении и в этот документ не переносятся: это данные других людей, и распоряжаться ими можете только вы.</p></div></div>`;
-};
-B.pointB=()=>{
- if(!(P.pointA||[]).length) return null;
- const hasB=(P.pointB||[]).some(x=>x);
- return `<div class="sec"><h2>Точка Б · с чем вы уезжаете</h2>
-  ${P.pointA.map((x,i)=>`<div style="margin-bottom:5mm"><div class="tiny" style="margin-bottom:1.5mm">${esc(x.q)}</div>
-   <div class="two"><div><div class="tiny" style="margin-bottom:1mm">Было · ${esc(P.person.from)}</div>
-     <div style="font-size:10.5pt;line-height:1.45;color:#3a4048">${esc(clamp(x.a,240))}</div></div>
-    <div><div class="tiny" style="margin-bottom:1mm">Стало · ${esc(P.person.to)}</div>
-     ${(P.pointB||[])[i]?`<div style="font-size:10.5pt;line-height:1.45">${esc(clamp(P.pointB[i],240))}</div>`:'<div class="hand"></div><div class="hand"></div>'}</div></div></div>`).join('')}
-  ${hasB?'':'<p class="tiny">Ответы на выходе вы пока не заполняли. Мы намеренно оставили место для руки: написанное своим почерком помнится лучше набранного, а этот лист останется у вас.</p>'}</div>`;
-};
-B.step=()=>`<div class="sec"><h2>Один шаг на тридцать дней</h2>
- <div class="box" style="border-color:var(--pine)">
-  <p style="margin-bottom:2mm">Из всего, что вы забрали, выберите одно. Не список — одно. То, что можно начать в первую неделю сентября и что не требует ничьего разрешения.</p>
-  <p class="tiny" style="margin-bottom:3mm">Формулируйте не намерением, а ситуацией: не «буду применять», а «когда — тогда». Намерение забывается к третьей неделе, привязка к моменту срабатывает сама.</p>
-  ${P.nextStep?`<div class="quote"><b>Когда</b> ${esc(P.nextStepWhen||'…')} — <b>я</b> ${esc(P.nextStep)}</div>`
-   :`<div style="font-size:11pt;margin-bottom:1mm"><b>Когда</b></div><div class="hand"></div>
-     <div style="font-size:11pt;margin:3mm 0 1mm"><b>я</b></div><div class="hand"></div><div class="hand" style="width:60%"></div>
-     <div class="tiny" style="margin-top:2mm">Например: «Когда на первом педсовете зайдёт речь про открытые уроки — я предложу провести один в нашем формате».</div>`}</div></div>`;
-B.trace=()=>`<div class="sec"><h2>След недели</h2>
- <p class="muted" style="font-size:11pt">Заполните сами — по памяти, пока она свежая. Это займёт десять минут и переживёт любой автоматический отчёт.</p>
- ${['Главное, что я увёз с форума','Человек, с которым стоит остаться на связи','Одна вещь, которую попробую в сентябре']
-  .map(q=>`<div style="margin-top:5mm"><div style="font-size:11pt;margin-bottom:1mm"><b>${q}</b></div>
-   <div class="hand"></div><div class="hand"></div></div>`).join('')}</div>`;
-B.method=()=>`<div class="sec"><h2>Как это устроено</h2><div class="box">
- <p style="margin-bottom:2mm">Профиль собран из анкет дня, проверок состояния, осмыслений после блоков, копилки, ролевых экспериментов и вашей активности в приложении.</p>
- <p class="tiny" style="margin:0">Мы не сравниваем вас с другими участниками и не выставляем баллов. Число по направлению, если оно встречается, — только ориентир.
- Пустые места означают, что данных за эти дни нет, а не что вы чего-то не сделали.</p></div></div>`;
-B.closing=()=>`<div style="margin-top:10mm;padding-top:4mm;border-top:1px solid var(--rule);display:flex;justify-content:space-between;align-items:flex-end">
- <div style="max-width:105mm"><p style="font-size:11pt;margin:0">Спасибо за неделю. Дальше — ваша работа, и она интереснее любого форума.</p></div>
- <div class="tiny" style="text-align:right">Сформировано в мини-приложении<br>образовательного форума «Машук»</div></div>`;
-
-/* ---------- 4. СБОРКА: композиция страниц по режиму ---------- */
 const HEAD=`<div style="margin-top:8mm"><h1>${esc(P.person.name)}</h1>
  <div class="meta">${esc(P.person.direction)} · ${esc(P.person.shift)} · группа ${esc(P.person.group)} · ${esc(P.person.from)} — ${esc(P.person.to)}</div></div>`;
 
-const LAYOUT={
- full:[[HEAD,B.lede,B.numbers,B.pointA,B.criterion],
-       [B.days,B.roles],
-       [B.funnel,B.picked,B.themes,B.contacts],
-       [B.reflection,B.best,B.contribution],
-       [B.pointB,B.step,B.method,B.closing]],
- short:[[HEAD,B.lede,B.numbers,B.pointA,B.criterion],
-        [B.days,B.roles,B.funnel,B.picked,B.themes,B.contacts],
-        [B.reflection,B.best,B.contribution,B.method],
-        [B.pointB,B.step,B.closing]],
- brief:[[HEAD,B.lede,B.numbers,B.pointA,B.criterion,B.days,B.roles],
-        [B.funnel,B.picked,B.themes,B.reflection,B.best,B.contribution,B.contacts,B.method],
-        [B.pointB,B.step,B.closing]],
- trace:[[HEAD,B.lede,B.pointA,B.days,B.trace,B.step,B.method,B.closing]]
-}[MODE];
+const lede=`<div class="sec"><p class="lede">Это не отчёт и не оценка. Это след недели: с чем вы приехали, как прожили дни, что забрали с собой и что решили делать дальше.</p></div>`;
 
-const pages=LAYOUT.map(list=>list.map(x=>typeof x==='function'?x():x).filter(Boolean).join(''))
-                  .filter(html=>html.replace(/\s/g,'').length>0);
+const snap=`<div class="sec"><h2>Твой Машук за 20 секунд</h2>
+ <div class="three">
+  <div><div class="num">${S.touchpointsDone||0}<small> / ${S.touchpointsTotal||0}</small></div><div class="cap">точек маршрута закрыто</div></div>
+  <div><div class="num">${S.reflections||0}</div><div class="cap">осмыслений после блоков</div></div>
+  <div><div class="num">${S.roleTries||0}</div><div class="cap">ролевые пробы · ${S.roleDone||0} завершены</div></div>
+ </div>
+ <p class="tiny" style="margin-top:3mm">Точки маршрута — про присутствие в контуре форума, а не про качество.</p></div>`;
+
+const pointA=`<div class="sec"><h2>Точка А · с чем вы приехали</h2>
+ ${emptyA?'<p class="tiny">Входная анкета ещё не заполнена.</p>':''}
+ ${openA.length?`<div class="tiny" style="margin-bottom:2mm">Открытый вопрос — своими словами</div>${qaList(openA)}`:''}
+ ${closedA.length?`<div class="tiny" style="margin:3mm 0 2mm">Закрытые вопросы — выбор из списка</div>${qaList(closedA)}`:''}
+</div>`;
+
+const rhythm=`<div class="sec"><h2>Ритм смены</h2>
+ <p class="muted" style="font-size:11pt">Настроение и энергия показаны раздельно, как участник их и отмечал. Уровень настроения — зона, а не число: шкала ползунка искажает картину. Энергия — динамика, поэтому показана линией.</p>
+ ${P.startRole?`<div class="box soft" style="margin:3mm 0"><p style="margin:0;font-size:11pt">Стартовая роль по диагностике: <b>${esc(P.startRole)}</b> — определена до начала смены, по результатам входного теста.</p></div>`:''}
+ <p class="tiny" style="margin:2mm 0">Настроение, точки маршрута, роль дня</p>
+ <table>
+  <tr><th style="width:16mm">День</th><th>Утро</th><th>День</th><th>Вечер</th><th style="width:24mm">Точки</th><th style="width:46mm">Роль дня</th></tr>
+  ${(P.state||[]).map((s,i)=>{const pp=(P.participation||[])[i], rr=(P.roles||[]).find(r=>r.day===s.day);
+   return `<tr><td style="font-weight:600">${s.day}</td><td>${zoneCell(s.morning)}</td><td>${zoneCell(s.day_)}</td><td>${zoneCell(s.evening)}</td>
+    <td>${pp&&pp.done!=null?`${pp.done} из ${pp.total}`:'<span class="tiny">—</span>'}</td>
+    <td>${rr?esc(rr.role):'<span class="tiny">—</span>'}</td></tr>`}).join('')}
+ </table>
+ <div class="legend">${Object.entries(ZC).map(([k,v])=>`<span><i style="background:${v}"></i>${k}</span>`).join('')}<span><i style="background:#e2ded5"></i>нет отметки</span></div>
+ <h3 style="margin-top:5mm">Энергия</h3>
+ ${energySvg()}
+ ${riskHint()}
+</div>`;
+
+const roles=`<div class="sec"><h2>Ролевые эксперименты</h2>
+ <p class="muted" style="font-size:11pt">Роль — не звание, а рамка на один день: попробовать вести себя иначе, чем обычно.</p>
+ ${aiBox(AI.roles, (P.roles||[]).filter(r=>r.comment).length
+   ? `Сгенерировано на основе ${plural((P.roles||[]).filter(r=>r.comment).length,'комментария','комментариев','комментариев')} к ролям · слова участника, не наши`
+   : 'Универсальный текст · можно править')}
+ ${(P.roles||[]).length?P.roles.map(r=>`<div style="margin:4mm 0 5mm">
+   <div style="display:flex;justify-content:space-between;gap:4mm;align-items:baseline">
+    <div><b>День ${r.day}</b> · ${esc(r.role)}</div>
+    ${r.result?`<span class="pill ${/Получилось/.test(r.result)?'':'o'}">${esc(r.result)}</span>`:'<span class="tiny">ещё не отмечено</span>'}
+   </div>
+   ${r.comment?`<div class="quote" style="margin-top:2mm">${esc(clamp(r.comment,280))}</div>`:''}
+  </div>`).join(''):'<p class="tiny">Ролевых проб за смену пока нет.</p>'}
+ <div class="tiny" style="margin:4mm 0 2mm">Какой ролью вам было естественно действовать во время программы?</div>
+ ${B.roleNatural?`<div class="quote">${esc(B.roleNatural)}</div>`:'<div class="hand"></div>'}
+ <div class="tiny" style="margin:4mm 0 2mm">Что вы поняли о своём способе действовать?</div>
+ ${B.roleInsight?`<div class="quote">${esc(B.roleInsight)}</div>`:'<p class="tiny">Из финальной анкеты (Точка Б) — появится после ответа.</p>'}
+ ${roleArc()}
+ <p class="tiny" style="margin-top:3mm">Доведены до результата ${rolesDone} из ${(P.roles||[]).length}.</p>
+</div>`;
+
+const funnel=`<div class="sec"><h2>Что вы забираете</h2>
+ <p class="muted" style="font-size:11pt">Копилка — ${plural(K.total||0,'запись','записи','записей')} за смену, по статусам.</p>
+ ${(()=>{const f=[["Замечено · «мысль», «вопрос»",K.thought||0,"#9aa1ab"],["Задумано · «идея»",K.idea||0,"#c0862e"],["К переносу · «в работу», «на будущее»",toWork,"#2f6b54"]];
+  const mx=Math.max(...f.map(x=>x[1]),1);
+  return f.map(x=>`<div style="display:grid;grid-template-columns:62mm 1fr 12mm;gap:3mm;align-items:center;margin-bottom:3mm">
+   <div style="font-size:11pt">${x[0]}</div>
+   <div style="height:6mm;background:#efece5;border-radius:1mm;overflow:hidden"><div style="width:${Math.max(x[1]/mx*100,2)}%;height:100%;background:${x[2]}"></div></div>
+   <div style="text-align:right;font-weight:600">${x[1]}</div></div>`).join('')})()}
+ ${kopPattern()}
+</div>`;
+
+const themes=`<div class="sec"><h2>Ваши темы</h2>
+ <p class="muted" style="font-size:11pt">Темы — это не отдельный вопрос анкеты, а группировка записей копилки: чем чаще вы сохраняли записи об одном и том же формате, приёме или предмете, тем выше он в списке.</p>
+ ${(K.themes||[]).length?(K.themes.map((t,i)=>`<div style="margin:4mm 0 5mm">
+   <div style="display:flex;justify-content:space-between;gap:4mm"><h3 style="margin:0">${i+1} ${esc(t.name)}</h3>
+    <div class="tiny">${plural(t.n,'запись','записи','записей')}</div></div>
+   ${t.quote?`<div class="quote" style="margin-top:2mm">${esc(t.quote)}</div>`:''}
+   ${t.note?`<p class="tiny" style="margin:2mm 0 0">${esc(t.note)}</p>`:''}
+  </div>`).join('')):'<p class="tiny">Тем пока недостаточно: тема появляется, если есть хотя бы две близкие записи.</p>'}
+ ${(K.otherCount||0)?`<div style="margin-top:3mm"><h3>Другое</h3>
+  <p class="tiny">Остальные записи копилки, не сгруппированные в отдельную тему (меньше 2 совпадений по формулировке) — показаны только общим счётчиком.</p>
+  <div class="tiny">${plural(K.otherCount,'запись','записи','записей')}</div></div>`:''}
+ <p class="tiny" style="margin-top:3mm">Три темы — это, как правило, и есть ваш профессиональный запрос на ближайший год. Не форум их придумал: вы приехали с ними, а здесь они проявились.</p>
+ ${P.criterion&&P.criterion.note?`<div class="box soft" style="margin-top:3mm"><p style="margin:0;font-size:11pt">${esc(P.criterion.note)}</p></div>`:''}
+</div>`;
+
+const reflection=`<div class="sec"><h2>Как вы осмысляли</h2>
+ <p class="muted" style="font-size:11pt">Комментарии из работы по осмыслению направлений, из «Уроков о важном» и из открытых уроков после блоков программы.</p>
+ <div class="box soft" style="margin-bottom:3mm">
+  <h3>Правило отбора — фильтр содержательности</h3>
+  <p style="margin:0;font-size:11pt">В этот блок попадают только содержательные записи. Запись остаётся, если в ней есть хотя бы одно из двух: конкретный предмет (приём, тема, идея) или личное действие / обязательство. Запись отсеивается, если это только оценка впечатления без содержания — «класс», «интересно», «понравилось».</p>
+ </div>
+ ${aiBox(AI.reflection, R.total?`Сгенерировано на основе ${plural(R.total,'текста','текстов','текстов')} после блоков`:'Универсальный текст · можно править')}
+ ${(R.items||[]).length?R.items.map(it=>`<div style="margin:4mm 0">
+   <div class="tiny" style="margin-bottom:1mm">${esc(it.event)}</div>
+   <div class="quote">${esc(clamp(it.text,280))}</div>
+  </div>`).join(''):'<p class="tiny">Содержательных осмыслений после блоков пока нет.</p>'}
+</div>`;
+
+const theses=`<div class="sec"><h3>Лучшие тезисы дня</h3>
+ <p class="muted" style="font-size:11pt">Каждый вечер — главный тезис дня. Со второго дня добавляется вопрос «Как изменилось твоё понимание темы или твоей деятельности после сегодняшней работы?».</p>
+ ${(R.theses||[]).length?R.theses.map(t=>`<div style="margin:5mm 0">
+   <div class="tiny" style="letter-spacing:.08em">ДЕНЬ ${t.day} · ГЛАВНЫЙ ТЕЗИС ДНЯ</div>
+   ${t.thesis?`<div class="quote" style="margin:2mm 0">${esc(t.thesis)}</div>`:'<p class="tiny">Тезиса за этот день нет</p>'}
+   <div class="tiny" style="margin:2mm 0 1mm">«Как изменилось твоё понимание темы или твоей деятельности после сегодняшней работы?»</div>
+   ${t.change?`<p style="margin:0;font-size:11pt">${esc(t.change)}</p>`:'<p class="tiny">Ответа нет</p>'}
+  </div>`).join(''):'<p class="tiny">Вечерних тезисов за смену пока нет.</p>'}
+ ${aiBox(AI.theses, (R.theses||[]).length?`Сводка по ${plural(R.theses.length,'ответу','ответам','ответам')} за смену`:'Универсальный текст · можно править')}
+</div>`;
+
+const goalMid=`<div class="sec"><h2>Траектория цели</h2>
+ <p class="muted" style="font-size:11pt">Промежуточный срез: изменилась/уточнилась ли цель, на какой отметке шкалы вы сейчас, что уже произошло по отношению к цели.</p>
+ ${P.goalMid?`<div class="box soft">
+   ${P.goalMid.changed?`<p style="margin:0 0 2mm"><b>Срез.</b> ${esc(P.goalMid.changed)}</p>`:''}
+   ${P.goalMid.scale!=null?`<p style="margin:0 0 2mm">${esc(P.goalMid.scale)} из 10 по шкале</p>`:''}
+   ${P.goalMid.note?`<p class="tiny" style="margin:0">${esc(P.goalMid.note)}</p>`:''}
+  </div>`:'<p class="tiny">Данных по промежуточному срезу пока нет — блок появится, когда будет заполнена точка Ж.</p>'}
+</div>`;
+
+const pointB=`<div class="sec"><h2>Точка Б · с чем вы уезжаете</h2>
+ <p class="muted" style="font-size:11pt">Вопрос о результате — закрытый, дальше — один открытый вопрос, который зависит от ответа. Вопросы про роль перенесены в «Ролевые эксперименты» выше.</p>
+ <div class="tiny" style="margin:2mm 0">Что произошло с вашей целью за время программы?</div>
+ ${choiceRow(['Достиг(ла) цели','Цель изменилась','Понял(а), что цель уже не так важна','Не достиг(ла) результата'], B.goalOutcome)}
+ ${B.goalFollowup?`<div class="quote" style="margin-top:3mm">${esc(B.goalFollowup)}</div>`
+  :`<p class="tiny" style="margin-top:3mm">${B.completed?'Открытый ответ к выбранному варианту ещё не заполнен.':'Финальная анкета ещё не пройдена — при выборе варианта здесь появится соответствующий открытый вопрос.'}</p>`}
+ ${!B.completed?`<div class="box soft" style="margin-top:4mm"><p style="margin:0;font-size:11pt">Итоговый профиль формируется после того, как вы ответите на вопросы точки Б — это последний шаг перед сборкой.</p></div>`:''}
+</div>`;
+
+const step=`<div class="sec"><h2>Один шаг на 30 дней</h2>
+ <div class="timeline">
+  <div><div class="n">Старт</div><p style="margin:1mm 0 0;font-size:11pt">${esc(P.person.from)} · цель зафиксирована</p></div>
+  <div><div class="n">Срез</div><p style="margin:1mm 0 0;font-size:11pt">${P.goalMid&&P.goalMid.changed?esc(P.goalMid.changed):'цель не менялась'}${P.goalMid&&P.goalMid.scale!=null?` · ${P.goalMid.scale} из 10`:''}</p></div>
+  <div><div class="n">Финиш</div><p style="margin:1mm 0 0;font-size:11pt">${esc(P.person.to)}</p></div>
+ </div>
+ <div class="tiny" style="margin:3mm 0 2mm">Как вы планируете использовать результаты программы? С какого первого шага готовы начать?</div>
+ ${P.nextStep?`<div class="quote">${esc(P.nextStep)}</div>`:'<p class="tiny">Финальная анкета ещё не пройдена</p>'}
+ <div class="tiny" style="margin:3mm 0 2mm">Когда планируете сделать этот шаг?</div>
+ ${choiceRow(['Первые 48 часов','Ближайшие 14 дней','Ближайшие 3 месяца'], P.nextStepWhen)}
+ <p class="tiny" style="margin-top:2mm">Например: «Когда на первом педсовете зайдёт речь про открытые уроки — я предложу провести один в нашем формате».</p>
+</div>`;
+
+const closing=`<div class="sec"><h2>Итог смены</h2>
+ <p class="muted" style="font-size:11pt">Общий вывод по всей неделе — собирается последним, когда остальные блоки уже посчитаны.</p>
+ ${aiBox(AI.closing, 'Сводка по всем блокам профиля · универсальный текст, можно править')}
+</div>
+<div class="sec"><h2>Как это устроено</h2><div class="box">
+ <p style="margin-bottom:2mm">Профиль собран из стартовой и финальной анкет, ежедневных чек-инов настроения и энергии, обратной связи после блоков программы, копилки и ролевых экспериментов. Мы не сравниваем вас с другими участниками и не выставляем баллов. Пустые места означают, что данных за эти дни нет, а не что вы чего-то не сделали. AI-сводки помечены отдельно и всегда ссылаются на исходные записи.</p>
+</div></div>
+<div style="margin-top:10mm;padding-top:4mm;border-top:1px solid var(--rule);display:flex;justify-content:space-between;align-items:flex-end">
+ <div style="max-width:105mm"><p style="font-size:11pt;margin:0">Спасибо за неделю. Дальше — ваша работа, и она интереснее любого форума.</p></div>
+ <div class="tiny" style="text-align:right">Сформировано в мини-приложении<br>образовательного форума «Машук»${P.updatedAt?`<br>обновлено ${esc(P.updatedAt)}`:''}</div>
+</div>`;
+
+const pages=[
+  [HEAD,lede,snap,pointA],
+  [rhythm],
+  [roles],
+  [funnel,themes],
+  [reflection],
+  [theses],
+  [goalMid,pointB,step],
+  [closing]
+].map(list=>list.join(''));
+
 D.innerHTML=pages.map((inner,i)=>`<div class="page">
  <div class="brand"><span class="m">МАШУК</span><span class="r">Итоговый профиль участника</span></div>
  ${inner}
  <div class="foot"><span>${esc(P.person.name)} · ${esc(P.person.direction)} · ${esc(P.person.group)}</span>
   <span>${i+1} / ${pages.length}</span></div></div>`).join('');
-
-/* режим доступен снаружи — админке удобно логировать, каким собрался документ */
-window.PROFILE_MODE=MODE; window.PROFILE_PAGES=pages.length;
+window.PROFILE_MODE='etalon'; window.PROFILE_PAGES=pages.length;
 </script></body></html>

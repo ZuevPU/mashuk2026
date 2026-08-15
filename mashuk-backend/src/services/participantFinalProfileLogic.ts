@@ -5,6 +5,20 @@
 
 export type ProfileZone = 'Подъём' | 'Включение' | 'Нейтраль' | 'Усталость' | 'Риск';
 
+export type FinalProfileQa = {
+  q: string;
+  a: string;
+  kind?: 'open' | 'closed';
+};
+
+export type FinalProfileTheme = {
+  name: string;
+  n: number;
+  quote: string | null;
+  note: string | null;
+  tag: string | null;
+};
+
 export type FinalProfile = {
   person: {
     name: string;
@@ -15,16 +29,37 @@ export type FinalProfile = {
     to: string;
     days: number;
   };
-  pointA: { q: string; a: string }[];
-  pointB: (string | null)[];
+  updatedAt: string;
+  startRole: string | null;
+  snapshot: {
+    touchpointsDone: number;
+    touchpointsTotal: number;
+    reflections: number;
+    roleTries: number;
+    roleDone: number;
+  };
+  pointA: FinalProfileQa[];
+  pointB: {
+    completed: boolean;
+    items: FinalProfileQa[];
+    goalOutcome: string | null;
+    goalFollowup: string | null;
+    roleNatural: string | null;
+    roleInsight: string | null;
+    plan: string | null;
+    planWhen: string | null;
+  };
   criterion: {
     text: string;
     target: number | null;
     found: { name: string; src: string }[];
+    met: boolean;
+    note: string | null;
   } | null;
   participation: { day: number; done: number | null; total: number | null }[];
   state: { day: number; morning?: ProfileZone; day_?: ProfileZone; evening?: ProfileZone }[];
-  roles: { day: number; role: string; result: string | null }[];
+  energy: { day: number; value: number | null }[];
+  roles: { day: number; role: string; result: string | null; comment: string | null }[];
   kopilka: {
     total: number;
     thought: number;
@@ -33,7 +68,8 @@ export type FinalProfile = {
     later: number;
     contacts: number;
     picked: { text: string; src: string; tag: string }[];
-    themes: { name: string; n: number }[];
+    themes: FinalProfileTheme[];
+    otherCount: number;
   };
   reflection: {
     total: number;
@@ -42,22 +78,22 @@ export type FinalProfile = {
     thesis: number;
     reaction: number;
     best: { event: string; text: string }[];
+    items: { event: string; text: string }[];
+    theses: { day: number; thesis: string | null; change: string | null }[];
   };
-  contribution: {
-    answers: number;
-    questions: number;
-    peopleReached: number;
-    expRank: string;
-    bestAnswer: string;
-  };
-  context: {
-    dirName: string;
-    dirPoints: number | null;
-    dirOwn: number | null;
-    dirKop: number | null;
-  };
+  goalMid: {
+    changed: string | null;
+    scale: number | null;
+    note: string | null;
+  } | null;
   nextStep: string | null;
   nextStepWhen: string | null;
+  ai: {
+    roles: string;
+    reflection: string;
+    theses: string;
+    closing: string;
+  };
 };
 
 export type ProfileMode = 'full' | 'short' | 'brief' | 'trace';
@@ -331,4 +367,234 @@ export function emptyParticipation(days = 8): FinalProfile['participation'] {
 
 export function emptyState(days = 8): FinalProfile['state'] {
   return Array.from({ length: days }, (_, i) => ({ day: i + 1 }));
+}
+
+export function emptyEnergy(days = 8): FinalProfile['energy'] {
+  return Array.from({ length: days }, (_, i) => ({ day: i + 1, value: null }));
+}
+
+const REACTION_ONLY = /^(очень\s+)?(класс|круто|супер|интересно|понравилось|спасибо|ок|хорошо|отлично|норм|вау)[!.,\s]*$/i;
+const HAS_SUBJECT = /игр|практик|формат|приём|прием|метод|роль|дет|урок|занят|ценност|идея|подход|инструмент|квиз|мастер/i;
+const HAS_ACTION = /сделаю|попробую|внедрю|хочу|буду|планирую|возьму|перенес|применю|введ/i;
+const HAS_SELF = /\bя\b|мне |мой |моя |моё |мое /i;
+
+/** Правило отбора содержательных осмыслений из макета v2.6. */
+export function isSubstantiveReflection(text: string | null | undefined): boolean {
+  const t = String(text || '').trim();
+  if (t.length < 20) return false;
+  const compact = t.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (REACTION_ONLY.test(compact)) return false;
+  if (/^(очень\s+)?(класс|интересно|понравилось|круто)/i.test(t) && t.length < 40 && !HAS_SUBJECT.test(t)) {
+    return false;
+  }
+  if (HAS_ACTION.test(t) || (HAS_SUBJECT.test(t) && t.length >= 30)) return true;
+  if (HAS_SELF.test(t) && t.length >= 40) return true;
+  return t.length >= 50;
+}
+
+export function classifyPiggyThemesDetailed(
+  rows: { text: string; tags: string[] }[],
+  limit = 3,
+): { themes: FinalProfileTheme[]; otherCount: number } {
+  const buckets = new Map<string, { texts: string[]; tags: string[] }>();
+  let assigned = 0;
+  for (const row of rows) {
+    const t = row.text.toLowerCase();
+    const hit = PROFILE_PIGGY_THEMES.find(theme => theme.keywords.some(k => t.includes(k)));
+    if (!hit) continue;
+    const b = buckets.get(hit.name) || { texts: [], tags: [] };
+    b.texts.push(row.text);
+    b.tags.push(...row.tags);
+    buckets.set(hit.name, b);
+    assigned += 1;
+  }
+  const themes = [...buckets.entries()]
+    .map(([name, b]) => {
+      const quote = b.texts.slice().sort((a, c) => c.length - a.length)[0] || null;
+      const tagCounts = new Map<string, number>();
+      for (const tag of b.tags) {
+        const k = tag.trim().toLowerCase();
+        if (!k) continue;
+        tagCounts.set(k, (tagCounts.get(k) || 0) + 1);
+      }
+      const tag = [...tagCounts.entries()].sort((a, c) => c[1] - a[1])[0]?.[0] || null;
+      return {
+        name,
+        n: b.texts.length,
+        quote: quote ? clampText(quote, 180) : null,
+        note: themeNote(name, b.texts.length, tag),
+        tag,
+      };
+    })
+    .filter(t => t.n >= 2)
+    .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, 'ru'))
+    .slice(0, limit);
+  const shown = themes.reduce((s, t) => s + t.n, 0);
+  return { themes, otherCount: Math.max(0, rows.length - shown) };
+}
+
+function themeNote(name: string, n: number, tag: string | null): string {
+  const tagBit = tag ? ` чаще с тегом «${tag}»` : '';
+  return `${n === 1 ? 'Одна запись' : `${n} записи`} темы «${name}»${tagBit}. Тема собрана по вашим формулировкам копилки, а не по отдельному вопросу анкеты.`;
+}
+
+export type PointBSlot =
+  | 'goalOutcome'
+  | 'goalFollowup'
+  | 'roleNatural'
+  | 'roleInsight'
+  | 'plan'
+  | 'planWhen'
+  | 'other';
+
+export function classifyPointBItem(q: string, a: string): PointBSlot {
+  const qn = String(q || '').toLowerCase();
+  const an = String(a || '').toLowerCase();
+  if (/когда планир|48 час|14 дн|3 месяц|первых 48|ближайшие/.test(qn) || (/^(первые 48|ближайшие 14|ближайшие 3)/.test(an) && an.length < 80)) {
+    return 'planWhen';
+  }
+  if (/перв(ого|ый) шаг|планируете использовать|как вы планир/.test(qn)) return 'plan';
+  if (/естественн.*роль|ролью вам было|какой ролью/.test(qn)) return 'roleNatural';
+  if (/способ.*действов|поняли о своём|поняли о своем|что вы поняли/.test(qn)) return 'roleInsight';
+  if (/произошл.*цел|достиг\S* цел|цель изменил|уже не так важн/.test(qn)) return 'goalOutcome';
+  if (/как звучит цель|что стало важнее|какой результат вы получили/.test(qn)) return 'goalFollowup';
+  if (/достиг|цель изменилась|не так важна|не достиг/.test(an) && an.length < 90) return 'goalOutcome';
+  return 'other';
+}
+
+export function assemblePointB(items: FinalProfileQa[]): FinalProfile['pointB'] {
+  const out: FinalProfile['pointB'] = {
+    completed: items.some(x => x.a.trim()),
+    items,
+    goalOutcome: null,
+    goalFollowup: null,
+    roleNatural: null,
+    roleInsight: null,
+    plan: null,
+    planWhen: null,
+  };
+  for (const item of items) {
+    const slot = classifyPointBItem(item.q, item.a);
+    if (slot === 'other') continue;
+    if (!out[slot]) out[slot] = clampText(item.a, 320);
+  }
+  return out;
+}
+
+export function buildProfileAiCopy(input: {
+  roleComments: number;
+  reflectionCount: number;
+  thesisCount: number;
+  touchDone: number;
+  touchTotal: number;
+  roles: string[];
+  kopilkaTotal: number;
+  toWork: number;
+  themeNames: string[];
+  pointBDone: boolean;
+}): FinalProfile['ai'] {
+  const roleArc = input.roles.length
+    ? input.roles.join(' → ')
+    : 'роль дня';
+  const themes = input.themeNames.length
+    ? input.themeNames.join(', ')
+    : 'темы, которые вы поднимали чаще всего';
+  return {
+    roles: input.roleComments
+      ? `За смену вы оставляли комментарии к ролевым пробам. Где-то рамка садилась сразу, где-то требовала усилия или смены. Ниже — ваши слова, не наша оценка.`
+      : `Роль — рамка на один день, а не звание. Если комментариев к пробам ещё нет, здесь остаётся только то, какие роли вы брали и чем день закончился.`,
+    reflection: input.reflectionCount
+      ? `По текстам после блоков видно и пересказ содержания, и собственные формулировки. В профиль подняты только содержательные записи: где есть предмет (приём, тема, идея) или личное действие.`
+      : `Содержательных осмыслений после блоков пока нет — в профиль не поднимаются короткие оценки без предмета: «класс», «интересно», «понравилось».`,
+    theses: input.thesisCount
+      ? `Вечерние тезисы и ответы «как изменилось понимание» складываются в одну линию: от того, что вы заметили снаружи, к тому, как вы сами действуете.`
+      : `Когда появятся вечерние тезисы и ответы «как изменилось понимание», здесь будет короткая линия смены фокуса — без оценки и без сравнения с другими.`,
+    closing: [
+      input.touchTotal
+        ? `За неделю вы закрыли ${input.touchDone} из ${input.touchTotal} точек маршрута и держались в контуре форума в те дни, когда ставили отметки.`
+        : `Точки маршрута в этом профиле — про присутствие в контуре форума, а не про качество.`,
+      input.roles.length
+        ? `В ролевых экспериментах ваш путь: ${roleArc}. Это смена рамки, а не оценка «правильнее / хуже».`
+        : `Ролевые пробы, если они были, показывают, какую рамку вы выбирали на день.`,
+      input.kopilkaTotal
+        ? `В копилке — ${input.kopilkaTotal} ${pluralRu(input.kopilkaTotal, 'запись', 'записи', 'записей')}, к переносу отмечено ${input.toWork}. Частые темы: ${themes}.`
+        : `Копилка ещё не дала достаточно записей, чтобы собрать темы.`,
+      input.pointBDone
+        ? `Финальная анкета (точка Б) заполнена — к выводу добавлены цель и первый шаг.`
+        : `Финальная анкета (точка Б) пока не пройдена — как только вы её заполните, этот вывод дополнится тем, что произошло с целью и какой первый шаг вы выбрали.`,
+    ].join(' '),
+  };
+}
+
+function pluralRu(n: number, a: string, b: string, c: string): string {
+  const m = n % 100;
+  const k = n % 10;
+  if (m >= 11 && m <= 14) return c;
+  if (k === 1) return a;
+  if (k >= 2 && k <= 4) return b;
+  return c;
+}
+
+export function emptyFinalProfile(): FinalProfile {
+  return {
+    person: {
+      name: '',
+      direction: '—',
+      shift: 'Смена',
+      group: '—',
+      from: 'день 1',
+      to: 'день 8',
+      days: 8,
+    },
+    updatedAt: '',
+    startRole: null,
+    snapshot: {
+      touchpointsDone: 0,
+      touchpointsTotal: 0,
+      reflections: 0,
+      roleTries: 0,
+      roleDone: 0,
+    },
+    pointA: [],
+    pointB: {
+      completed: false,
+      items: [],
+      goalOutcome: null,
+      goalFollowup: null,
+      roleNatural: null,
+      roleInsight: null,
+      plan: null,
+      planWhen: null,
+    },
+    criterion: null,
+    participation: emptyParticipation(8),
+    state: emptyState(8),
+    energy: emptyEnergy(8),
+    roles: [],
+    kopilka: {
+      total: 0,
+      thought: 0,
+      idea: 0,
+      toWork: 0,
+      later: 0,
+      contacts: 0,
+      picked: [],
+      themes: [],
+      otherCount: 0,
+    },
+    reflection: {
+      total: 0,
+      transfer: 0,
+      self: 0,
+      thesis: 0,
+      reaction: 0,
+      best: [],
+      items: [],
+      theses: [],
+    },
+    goalMid: null,
+    nextStep: null,
+    nextStepWhen: null,
+    ai: { roles: '', reflection: '', theses: '', closing: '' },
+  };
 }

@@ -1,13 +1,11 @@
 /**
  * Сборка PROFILE для итогового HTML-профиля участника.
  */
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { PARTICIPANT_FINAL_PROFILE_TEMPLATE } from './participantFinalProfile/templateHtml.js';
 import {
   answers,
-  exchangeAnswers,
-  exchangeQuestions,
   participantDayState,
   participants,
   piggybank,
@@ -21,11 +19,11 @@ import { classifyReflection } from './analytics/afterBlocksHubMetrics.js';
 import { ZONE_RU, type ZoneKey } from './analytics/stateDashboardMetrics.js';
 import { parseAfterBlocksPicks } from './exports/nestedPickParse.js';
 import { roleLabel } from './exports/exportLabels.js';
-import { isOrganizerDirection } from './leaderboardQuery.js';
 import { participantAnswerSummary } from './participantAnswerFormat.js';
 import {
   goalQuestionTexts,
   normalizeOnboardingConfig,
+  type GoalQuestion,
 } from './roleService.js';
 import { stateCheckPhaseForAnswer } from './analytics/touchpointMetrics.js';
 import {
@@ -35,17 +33,22 @@ import {
 } from './touchpointProgress.js';
 import { questionMatchesDay } from './questionAdminHelpers.js';
 import {
+  assemblePointB,
+  buildProfileAiCopy,
   clampText,
-  classifyPiggyThemes,
+  classifyPiggyThemesDetailed,
+  emptyEnergy,
   emptyParticipation,
   emptyState,
   filterProfilePiggy,
+  formatRuDayMonth,
+  isSubstantiveReflection,
   mapExperimentResult,
   pickCriterionAnswer,
   profileDensity,
-  resolveExpRank,
   shiftDateRange,
   type FinalProfile,
+  type FinalProfileQa,
   type ProfileZone,
 } from './participantFinalProfileLogic.js';
 
@@ -91,25 +94,67 @@ function humanizeAnswer(raw: unknown): string {
   return participantAnswerSummary(raw).trim();
 }
 
-function pointBList(raw: unknown, len: number): (string | null)[] {
-  const out: (string | null)[] = Array.from({ length: len }, () => null);
+function parseEnergy(answerData: unknown): number | null {
+  if (!answerData || typeof answerData !== 'object') return null;
+  const e = (answerData as { energy?: unknown }).energy;
+  const n = typeof e === 'number' ? e : Number(e);
+  if (!Number.isFinite(n) || n < 0 || n > 10) return null;
+  return Math.round(n * 10) / 10;
+}
+
+function flattenUnknownAnswers(raw: unknown): FinalProfileQa[] {
+  const items: FinalProfileQa[] = [];
   if (Array.isArray(raw)) {
-    for (let i = 0; i < len; i++) {
-      const v = humanizeAnswer(raw[i]);
-      out[i] = v || null;
-    }
-    return out;
+    raw.forEach((row, i) => {
+      if (row && typeof row === 'object' && !Array.isArray(row)) {
+        const o = row as Record<string, unknown>;
+        const q = String(o.q || o.question || o.label || `Вопрос ${i + 1}`);
+        const a = humanizeAnswer(o.a ?? o.answer ?? o.value ?? o);
+        if (a) items.push({ q, a: clampText(a, 320) });
+        return;
+      }
+      const a = humanizeAnswer(row);
+      if (a) items.push({ q: `Вопрос ${i + 1}`, a: clampText(a, 320) });
+    });
+    return items;
   }
   if (raw && typeof raw === 'object') {
     const obj = raw as Record<string, unknown>;
-    const keys = Object.keys(obj).sort();
-    keys.forEach((k, i) => {
-      if (i >= len) return;
-      const v = humanizeAnswer(obj[k]);
-      out[i] = v || null;
-    });
+    for (const [k, v] of Object.entries(obj)) {
+      const a = humanizeAnswer(v);
+      if (!a) continue;
+      items.push({ q: k, a: clampText(a, 320) });
+    }
   }
-  return out;
+  return items;
+}
+
+function ratingsText(ratings: Record<string, unknown>, key: string): string | null {
+  const v = ratings[key];
+  if (typeof v === 'string' && v.trim()) return clampText(v.trim(), 320);
+  return null;
+}
+
+function pickGoalMid(states: Array<{ eveningRatings: unknown }>): FinalProfile['goalMid'] {
+  for (const s of states) {
+    const r = (s.eveningRatings && typeof s.eveningRatings === 'object')
+      ? s.eveningRatings as Record<string, unknown>
+      : null;
+    if (!r) continue;
+    const changed = ratingsText(r, 'goalChanged')
+      || ratingsText(r, 'goalMidChanged')
+      || ratingsText(r, 'pointZhChanged');
+    const note = ratingsText(r, 'goalMidNote')
+      || ratingsText(r, 'pointZhNote')
+      || ratingsText(r, 'goalNote');
+    const scaleRaw = r.goalScale ?? r.goalMidScale ?? r.pointZhScale;
+    const scale = typeof scaleRaw === 'number' ? scaleRaw : Number(scaleRaw);
+    const scaleOk = Number.isFinite(scale) ? Math.round(scale) : null;
+    if (changed || note || scaleOk != null) {
+      return { changed, scale: scaleOk, note };
+    }
+  }
+  return null;
 }
 
 function nextStepFromParticipant(p: typeof participants.$inferSelect): {
@@ -145,37 +190,55 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
   const onboarding = normalizeOnboardingConfig(
     (settings as { roleDiagnosticsConfig?: unknown }).roleDiagnosticsConfig,
   );
-  const goalQs = goalQuestionTexts(onboarding.goalQuestions);
+  const goalDefs: GoalQuestion[] = onboarding.goalQuestions || [];
+  const goalQs = goalQuestionTexts(goalDefs);
 
   const goals = Array.isArray(p.goalAnswers) ? (p.goalAnswers as unknown[]) : [];
-  const pointA = goalQs
-    .map((q, i) => {
-      const a = humanizeAnswer(goals[i]);
-      if (!a) return null;
-      return { q, a: clampText(a, 300) };
-    })
-    .filter((x): x is { q: string; a: string } => Boolean(x));
+  const pointA: FinalProfileQa[] = [];
+  for (let i = 0; i < goalDefs.length; i++) {
+    const a = humanizeAnswer(goals[i]);
+    if (!a) continue;
+    const q = goalDefs[i];
+    pointA.push({
+      q: q.text || goalQs[i] || `Вопрос ${i + 1}`,
+      a: clampText(a, 300),
+      kind: q.type === 'open' ? 'open' : 'closed',
+    });
+  }
 
-  // If goals shorter than answers stored without config texts
   if (!pointA.length && goals.length) {
     for (let i = 0; i < goals.length; i++) {
       const a = humanizeAnswer(goals[i]);
       if (!a) continue;
-      pointA.push({ q: goalQs[i] || `Вопрос ${i + 1}`, a: clampText(a, 300) });
+      const def = goalDefs[i];
+      pointA.push({
+        q: goalQs[i] || `Вопрос ${i + 1}`,
+        a: clampText(a, 300),
+        kind: def && def.type !== 'open' ? 'closed' : 'open',
+      });
     }
   }
 
-  let pointBRaw = p.pointBAnswers ?? null;
   const userAnswers = await db.select().from(answers).where(eq(answers.participantId, p.id));
-  if (!pointBRaw) {
+  const pointBItems: FinalProfileQa[] = flattenUnknownAnswers(p.pointBAnswers);
+  if (!pointBItems.length) {
     const pointBQs = await db.select().from(questions).where(eq(questions.block, 'Точка Б'));
     const pbIds = new Set(pointBQs.map(q => q.id));
+    const qById = new Map(pointBQs.map(q => [q.id, q]));
     const pbAnswers = userAnswers
       .filter(a => pbIds.has(a.questionId))
       .sort((a, b) => a.questionId - b.questionId);
-    if (pbAnswers.length) pointBRaw = pbAnswers.map(a => a.answerData);
+    for (const a of pbAnswers) {
+      const q = qById.get(a.questionId);
+      const text = humanizeAnswer(a.answerData);
+      if (!text) continue;
+      pointBItems.push({
+        q: q?.text || q?.title || 'Точка Б',
+        a: clampText(text, 320),
+      });
+    }
   }
-  const pointB = pointBList(pointBRaw, Math.max(pointA.length, 1));
+  const pointB = assemblePointB(pointBItems);
 
   const answerQuestionIds = [...new Set(userAnswers.map(a => a.questionId))];
   const answerQuestions = answerQuestionIds.length
@@ -183,8 +246,10 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
     : [];
   const questionById = new Map(answerQuestions.map(q => [q.id, q]));
 
-  // State by day/phase
+  // State by day/phase + energy
   const state = emptyState(8);
+  const energy = emptyEnergy(8);
+  const energyAcc = Array.from({ length: 8 }, () => ({ sum: 0, n: 0, evening: null as number | null }));
   for (const a of userAnswers) {
     const q = questionById.get(a.questionId);
     if (!q) continue;
@@ -197,14 +262,28 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
       : (q.dayNumber != null && q.dayNumber >= 1 && q.dayNumber <= 8 ? [q.dayNumber] : []);
     if (!days.length) continue;
     const zone = parseCheckinZone(a.answerData);
-    if (!zone) continue;
+    const energyVal = parseEnergy(a.answerData);
     const phase = resolvePhase(q.timePoint, a.createdAt);
     for (const day of days) {
       const slot = state[day - 1];
-      if (phase === 'morning') slot.morning = zone;
-      else if (phase === 'day') slot.day_ = zone;
-      else slot.evening = zone;
+      if (zone) {
+        if (phase === 'morning') slot.morning = zone;
+        else if (phase === 'day') slot.day_ = zone;
+        else slot.evening = zone;
+      }
+      if (energyVal != null) {
+        const acc = energyAcc[day - 1];
+        acc.sum += energyVal;
+        acc.n += 1;
+        if (phase === 'evening') acc.evening = energyVal;
+      }
     }
+  }
+  for (let i = 0; i < 8; i++) {
+    const acc = energyAcc[i];
+    energy[i].value = acc.evening != null
+      ? acc.evening
+      : (acc.n ? Math.round((acc.sum / acc.n) * 10) / 10 : null);
   }
 
   // After-blocks reflections
@@ -248,13 +327,14 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
     });
   }
 
+  const substantive = reflections.filter(r => isSubstantiveReflection(r.text));
   const reflection = {
     total: reflections.length,
     transfer: reflections.filter(r => r.level === 'Перенос в практику').length,
     self: reflections.filter(r => r.level === 'Связь с собой').length,
     thesis: reflections.filter(r => r.level === 'Тезис').length,
     reaction: reflections.filter(r => r.level === 'Реакция').length,
-    best: [...reflections]
+    best: [...substantive]
       .filter(r => r.level === 'Перенос в практику' || r.level === 'Связь с собой' || r.text.length >= 60)
       .sort((a, b) => {
         const rank = (l: string) => (l === 'Перенос в практику' ? 2 : l === 'Связь с собой' ? 1 : 0);
@@ -262,6 +342,12 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
       })
       .slice(0, 3)
       .map(r => ({ event: r.event, text: clampText(r.text, 300) })),
+    items: substantive
+      .slice()
+      .sort((a, b) => a.at - b.at)
+      .slice(0, 8)
+      .map(r => ({ event: r.event, text: clampText(r.text, 300) })),
+    theses: [] as { day: number; thesis: string | null; change: string | null }[],
   };
 
   // Piggybank
@@ -277,7 +363,10 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
     forumDay: e.forumDay,
   }));
   const piggy = filterProfilePiggy(piggyMapped, isAutoBookmark);
-  const themes = classifyPiggyThemes(piggy.usable.map(r => r.text), 3);
+  const themePack = classifyPiggyThemesDetailed(
+    piggy.usable.map(r => ({ text: r.text, tags: r.tags })),
+    3,
+  );
 
   // Criterion
   const critPick = pickCriterionAnswer(pointA);
@@ -311,7 +400,18 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
       uniq.push({ name: f.name, src: f.src });
       if (uniq.length >= 8) break;
     }
-    criterion = { text: clampText(critPick.text, 240), target: critPick.target, found: uniq };
+    const ideaN = piggy.idea;
+    const met = critPick.target != null ? uniq.length >= critPick.target : ideaN > 0;
+    const note = ideaN > 0
+      ? `Есть след по критерию из Точки А. Критерий «${clampText(critPick.text, 80)}» — ${ideaN} из ${piggy.total || ideaN} записей копилки помечены как «идея».`
+      : null;
+    criterion = {
+      text: clampText(critPick.text, 240),
+      target: critPick.target,
+      found: uniq,
+      met,
+      note,
+    };
   }
 
   // Participation (touchpoints per day)
@@ -340,133 +440,77 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
     participation[d - 1] = { day: d, done: completed, total: expected };
   }
 
-  // Roles
+  // Roles + evening theses
   const roles: FinalProfile['roles'] = [];
+  const theses: { day: number; thesis: string | null; change: string | null }[] = [];
   for (const s of dayStates) {
+    const ratings = (s.eveningRatings && typeof s.eveningRatings === 'object')
+      ? s.eveningRatings as Record<string, unknown>
+      : {};
+    const thesis = ratingsText(ratings, 'mainThesis');
+    const change = ratingsText(ratings, 'understandingChange');
+    if ((thesis || change) && s.dayNumber >= 2 && s.dayNumber <= 8) {
+      theses.push({ day: s.dayNumber, thesis, change });
+    }
     if (!s.activeRoleKey) continue;
     if (s.dayNumber < 1 || s.dayNumber > 8) continue;
-    const ratings = (s.eveningRatings || {}) as { experimentResult?: string };
+    const rawComment = typeof ratings.experimentResult === 'string'
+      ? ratings.experimentResult.trim()
+      : '';
+    const result = mapExperimentResult(s.experimentStatus, rawComment);
+    const comment = rawComment.length >= 16 && rawComment !== result
+      ? clampText(rawComment, 320)
+      : null;
     roles.push({
       day: s.dayNumber,
       role: roleLabel(s.activeRoleKey) || s.activeRoleKey,
-      result: mapExperimentResult(s.experimentStatus, ratings.experimentResult),
+      result,
+      comment,
     });
   }
   roles.sort((a, b) => a.day - b.day);
+  theses.sort((a, b) => a.day - b.day);
+  reflection.theses = theses;
 
-  // Exchange contribution
-  const myAnswers = await db.select().from(exchangeAnswers)
-    .where(eq(exchangeAnswers.participantId, p.id))
-    .orderBy(desc(exchangeAnswers.createdAt));
-  const myQuestions = await db.select({ id: exchangeQuestions.id })
-    .from(exchangeQuestions)
-    .where(eq(exchangeQuestions.participantId, p.id));
-
-  let peopleReached = 0;
-  let bestAnswer = '';
-  let bestScore = -1;
-  if (myAnswers.length) {
-    const qIds = [...new Set(myAnswers.map(a => a.questionId))];
-    const qRows = qIds.length
-      ? await db.select({
-        id: exchangeQuestions.id,
-        authorId: exchangeQuestions.participantId,
-      }).from(exchangeQuestions).where(inArray(exchangeQuestions.id, qIds))
-      : [];
-    peopleReached = new Set(qRows.map(q => q.authorId).filter(id => id !== p.id)).size;
-    for (const a of myAnswers) {
-      const reactions = (a.reactions || {}) as Record<string, unknown>;
-      const score = typeof reactions === 'object'
-        ? Object.values(reactions).reduce((sum: number, v) => sum + (typeof v === 'number' ? v : 0), 0)
-        : 0;
-      if (score > bestScore && (a.text || '').trim().length >= 8) {
-        bestScore = score;
-        bestAnswer = clampText(a.text, 240);
+  if (!pointB.items.length) {
+    const extra: FinalProfileQa[] = [];
+    for (const s of dayStates) {
+      const ratings = (s.eveningRatings && typeof s.eveningRatings === 'object')
+        ? s.eveningRatings as Record<string, unknown>
+        : null;
+      if (!ratings) continue;
+      for (const [k, v] of Object.entries(ratings)) {
+        if (['mainThesis', 'understandingChange', 'experimentResult', 'likedMost', 'improveTomorrow', 'freeNote'].includes(k)) continue;
+        const a = humanizeAnswer(v);
+        if (!a || a.length < 2) continue;
+        extra.push({ q: k, a: clampText(a, 320) });
       }
     }
-    if (!bestAnswer && myAnswers[0]?.text) bestAnswer = clampText(myAnswers[0].text, 240);
+    if (extra.length) Object.assign(pointB, assemblePointB(extra));
   }
 
-  // Direction cohort context + exp rank
-  const dirName = p.direction || '—';
-  const cohortFilter = p.shiftId != null
-    ? and(eq(participants.shiftId, p.shiftId), eq(participants.direction, dirName))
-    : eq(participants.direction, dirName);
-  const cohort = await db.select({
-    id: participants.id,
-    experiencePoints: participants.experiencePoints,
-    onboardingCompletedAt: participants.onboardingCompletedAt,
-    direction: participants.direction,
-  }).from(participants).where(cohortFilter);
-
-  const cohortPeers = cohort.filter(
-    c => c.onboardingCompletedAt && !isOrganizerDirection(c.direction) && c.id !== p.id,
-  );
-  const expRank = resolveExpRank(
-    p.experiencePoints ?? 0,
-    [p.experiencePoints ?? 0, ...cohortPeers.map(c => c.experiencePoints ?? 0)],
-  );
-
-  // Lightweight direction averages (own / points / kop)
-  let dirOwn: number | null = null;
-  let dirPoints: number | null = null;
-  let dirKop: number | null = null;
-  const peerIds = cohortPeers.map(c => c.id).slice(0, 400);
-  if (peerIds.length >= 5) {
-    const peerPiggy = await db.select({
-      participantId: piggybank.participantId,
-    }).from(piggybank).where(and(
-      inArray(piggybank.participantId, peerIds),
-      isNull(piggybank.deletedAt),
-    ));
-    const kopByPid = new Map<number, number>();
-    for (const row of peerPiggy) {
-      kopByPid.set(row.participantId, (kopByPid.get(row.participantId) || 0) + 1);
-    }
-    const kopVals = peerIds.map(id => kopByPid.get(id) || 0);
-    dirKop = Math.round((kopVals.reduce((a, b) => a + b, 0) / kopVals.length) * 10) / 10;
-
-    // Appropriation proxy: share of after_blocks answers with transfer/self among peers is expensive;
-    // use participant's own reflection appropriation as context only when we have peer after-blocks sample.
-    const afterQs = await db.select({ id: questions.id }).from(questions).where(
-      sql`(${questions.questionKind} = 'after_blocks' OR lower(coalesce(${questions.block}, '')) LIKE '%точки осмысления%')`,
-    );
-    const afterIds = afterQs.map(q => q.id);
-    if (afterIds.length) {
-      const peerAnswers = await db.select({
-        participantId: answers.participantId,
-        answerData: answers.answerData,
-      }).from(answers).where(and(
-        inArray(answers.participantId, peerIds),
-        inArray(answers.questionId, afterIds),
-      )).limit(2000);
-      let ownN = 0;
-      let totN = 0;
-      for (const row of peerAnswers) {
-        const picks = parseAfterBlocksPicks(row.answerData);
-        const texts = picks.length
-          ? picks.map(x => x.text || '').filter(Boolean)
-          : [participantAnswerSummary(row.answerData)].filter(Boolean);
-        for (const t of texts) {
-          if (String(t).trim().length < 8) continue;
-          totN += 1;
-          const level = classifyReflection(String(t));
-          if (level === 'Перенос в практику' || level === 'Связь с собой') ownN += 1;
-        }
-      }
-      if (totN >= 10) dirOwn = Math.round((ownN / totN) * 1000) / 10;
-    }
-
-    // Average closed touchpoints / day as "dirPoints" orientir (нейтральный)
-    const filled = participation.filter(d => d.done != null && d.total);
-    if (filled.length) {
-      const avg = filled.reduce((s, d) => s + (d.done! / (d.total || 1)), 0) / filled.length;
-      dirPoints = Math.round(avg * 10 * 10) / 10; // scale-ish 0–10 feel from ratio*10
-    }
-  }
-
+  const goalMid = pickGoalMid(dayStates);
   const { nextStep, nextStepWhen } = nextStepFromParticipant(p);
   const name = [p.firstName, p.lastName].filter(Boolean).join(' ').trim() || `Участник ${p.id}`;
+  const dirName = p.direction || '—';
+  const startRole = roleLabel(p.strongRole) || p.strongRole || null;
+  const touchDone = participation.reduce((s, d) => s + (d.done || 0), 0);
+  const touchTotal = participation.reduce((s, d) => s + (d.total || 0), 0);
+  const roleDone = roles.filter(r => r.result && r.result !== 'Не получилось попробовать').length;
+  const roleComments = roles.filter(r => r.comment).length;
+  const toWork = piggy.toWork + piggy.later;
+  const ai = buildProfileAiCopy({
+    roleComments,
+    reflectionCount: reflection.items.length,
+    thesisCount: theses.filter(t => t.thesis || t.change).length,
+    touchDone,
+    touchTotal,
+    roles: [...new Set(roles.map(r => r.role))],
+    kopilkaTotal: piggy.total,
+    toWork,
+    themeNames: themePack.themes.map(t => t.name),
+    pointBDone: pointB.completed,
+  });
 
   const profile: FinalProfile = {
     person: {
@@ -478,11 +522,21 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
       to: range.to,
       days: range.days,
     },
+    updatedAt: formatRuDayMonth(new Date()),
+    startRole,
+    snapshot: {
+      touchpointsDone: touchDone,
+      touchpointsTotal: touchTotal,
+      reflections: reflection.total,
+      roleTries: roles.length,
+      roleDone,
+    },
     pointA,
     pointB,
     criterion,
     participation,
     state,
+    energy,
     roles,
     kopilka: {
       total: piggy.total,
@@ -492,33 +546,15 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
       later: piggy.later,
       contacts: piggy.contacts,
       picked: piggy.picked,
-      themes,
+      themes: themePack.themes,
+      otherCount: themePack.otherCount,
     },
     reflection,
-    contribution: {
-      answers: myAnswers.length,
-      questions: myQuestions.length,
-      peopleReached,
-      expRank,
-      bestAnswer,
-    },
-    context: {
-      dirName,
-      dirPoints,
-      dirOwn,
-      dirKop,
-    },
-    nextStep,
-    nextStepWhen,
+    goalMid,
+    nextStep: nextStep || pointB.plan,
+    nextStepWhen: nextStepWhen || pointB.planWhen,
+    ai,
   };
-
-  // density logged by caller via profileDensity
-  void profileDensity({
-    stateDays: state.filter(s => s.morning || s.day_ || s.evening).length,
-    reflectionTotal: reflection.total,
-    kopilkaTotal: piggy.total,
-    contributionAnswers: myAnswers.length,
-  });
 
   return profile;
 }
@@ -544,10 +580,10 @@ export async function buildFinalProfileHtml(participantId: number): Promise<{
     stateDays: profile.state.filter(s => s.morning || s.day_ || s.evening).length,
     reflectionTotal: profile.reflection.total,
     kopilkaTotal: profile.kopilka.total,
-    contributionAnswers: profile.contribution.answers,
+    contributionAnswers: profile.roles.length,
   });
   const html = renderFinalProfileHtml(profile);
-  const pagesHint = mode === 'full' ? 5 : mode === 'short' ? 4 : mode === 'brief' ? 3 : 1;
+  const pagesHint = 8;
   console.info('[participant-profile]', {
     participantId,
     mode,
