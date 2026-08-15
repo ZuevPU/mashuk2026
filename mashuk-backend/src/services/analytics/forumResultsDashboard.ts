@@ -9,7 +9,7 @@ import { getForumSettings } from '../helpers.js';
 import { hideOrganizerName } from '../leaderboardQuery.js';
 import { getForumDayDateLabel } from '../timePhase.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
-import { loadCohortParticipants } from './cohort.js';
+import { loadCohortParticipants, restrictToCohort } from './cohort.js';
 import {
   buildDirectionDayRatings,
   deviation,
@@ -172,7 +172,8 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
     })
     : { rows: [] as EveningExportRow[] };
 
-  const eveningSubmitted = evening.rows.filter(r =>
+  const allowed = new Set(cohort.map(p => p.id));
+  const eveningSubmitted = restrictToCohort(evening.rows, allowed, r => r.participantId).filter(r =>
     r.status === 'сдано' && !hideOrganizerName(filters.organizers, r.directionName || r.p.direction),
   );
 

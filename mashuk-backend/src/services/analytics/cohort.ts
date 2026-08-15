@@ -6,6 +6,9 @@ import type { AnalyticsFilters } from './analyticsQuery.js';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { matchesActivity, matchesAgeCategory, AGE_CATEGORY_BUCKETS } from './cohortFilters.js';
 import { isOrganizerParticipant } from '../leaderboardQuery.js';
+import { filterAnswersByCohort, restrictToCohort } from './cohortRestrict.js';
+
+export { filterAnswersByCohort, restrictToCohort };
 
 const COHORT_CACHE_TTL_MS = 45_000;
 const COHORT_CACHE_MAX = 12;
@@ -168,9 +171,6 @@ export async function listFilterOptions(shiftId?: number | null) {
       : Promise.resolve([] as Array<{ name: string; isOrganizer: boolean | null }>),
   ]);
   const sortRu = (a: string, b: string) => a.localeCompare(b, 'ru');
-  const catalogDirections = catalog
-    .map(d => String(d.name || '').trim())
-    .filter(Boolean);
   const organizerDirections = catalog
     .filter(d => d.isOrganizer === true)
     .map(d => String(d.name || '').trim())
@@ -186,7 +186,7 @@ export async function listFilterOptions(shiftId?: number | null) {
   const activities = [...new Set(rows.map(r => r.position).filter(Boolean))] as string[];
   activities.sort(sortRu);
   return {
-    directions: regularDirections.length ? regularDirections : catalogDirections,
+    directions: regularDirections,
     organizerDirections,
     groups,
     roles,
@@ -195,9 +195,3 @@ export async function listFilterOptions(shiftId?: number | null) {
   };
 }
 
-export function filterAnswersByCohort<T extends { participantId: number }>(
-  rows: T[],
-  ids: Set<number>,
-): T[] {
-  return rows.filter(r => ids.has(r.participantId));
-}

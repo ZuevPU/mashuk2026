@@ -9,7 +9,7 @@ import {
 } from '../emotionZones.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import { resolveDayRange } from './analyticsQuery.js';
-import { loadCohortParticipants } from './cohort.js';
+import { loadCohortParticipants, restrictToCohort } from './cohort.js';
 import {
   collectKindAnswerRows,
   type KindAnswerRow,
@@ -57,8 +57,13 @@ function zoneOf(r: KindAnswerRow): ZoneKey | null {
   return null;
 }
 
-function withoutOrganizers(rows: KindAnswerRow[], organizersSlice: boolean): KindAnswerRow[] {
-  return rows.filter(r => !hideOrganizerName(organizersSlice, r.direction));
+function withoutOrganizers(
+  rows: KindAnswerRow[],
+  organizersSlice: boolean,
+  allowed?: Set<number>,
+): KindAnswerRow[] {
+  const scoped = allowed ? restrictToCohort(rows, allowed, r => r.participantId) : rows;
+  return scoped.filter(r => !hideOrganizerName(organizersSlice, r.direction));
 }
 
 function pct(n: number, d: number): number {
@@ -85,6 +90,7 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
   const dayFilter = days.length === 1 ? days[0] : null;
 
   const cohort = await loadCohortParticipants(filters, req);
+  const allowed = new Set(cohort.map(p => p.id));
   const registered = cohort.filter(
     p => p.onboardingCompletedAt && !hideOrganizerName(filters.organizers, p.direction),
   );
@@ -93,6 +99,7 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
   const rows = withoutOrganizers(
     dayFilter != null ? rawRows.filter(r => r.day === dayFilter) : rawRows,
     filters.organizers,
+    allowed,
   );
 
   /** Путь участника — всегда за смену (1…totalDays), с учётом направления/группы фильтров. */
@@ -107,6 +114,7 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
       })).rows
       : rawRows,
     filters.organizers,
+    allowed,
   );
   const pathAnswersDay = toPathAnswers(rows);
   const pathAnswersShift = toPathAnswers(shiftRows);
@@ -348,7 +356,7 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
       compareDays: [],
     })
     : { rows: rawRows };
-  const allRows = withoutOrganizers(allRaw, filters.organizers);
+  const allRows = withoutOrganizers(allRaw, filters.organizers, allowed);
   const daySeries = [1, 2, 3, 4, 5, 6, 7, 8].map(day => {
     const dayRows = allRows.filter(r => r.day === day);
     const people = new Set(dayRows.map(r => r.participantId)).size;

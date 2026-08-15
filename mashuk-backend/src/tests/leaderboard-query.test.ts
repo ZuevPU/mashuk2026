@@ -121,6 +121,7 @@ describe('hideOrganizerName', () => {
   it('hides organizer names only in the regular slice', () => {
     assert.equal(hideOrganizerName(false, 'Организатор форума'), true);
     assert.equal(hideOrganizerName(true, 'Организатор форума'), false);
+    assert.equal(hideOrganizerName(true, 'Учителя'), false);
   });
 });
 

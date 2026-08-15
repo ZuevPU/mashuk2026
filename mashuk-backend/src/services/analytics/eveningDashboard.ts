@@ -206,13 +206,15 @@ export async function buildEveningDashboard(
       : Promise.resolve(null),
   ]);
 
-  const { rows, fields, diagnostics } = slicePack;
+  const allowed = new Set(cohort.map(p => p.id));
+  const rows = slicePack.rows.filter(r => allowed.has(r.participantId));
+  const { fields, diagnostics } = slicePack;
   const submittedRows = rows.filter(r => r.status === 'сдано');
   const draftRows = rows.filter(r => r.status === 'черновик');
   const submitted = submittedRows.length;
   const drafts = draftRows.length;
   const seriesSubmittedRows = seriesPack
-    ? seriesPack.rows.filter(r => r.status === 'сдано')
+    ? seriesPack.rows.filter(r => r.status === 'сдано' && allowed.has(r.participantId))
     : submittedRows;
   const fillRatePct = cohortSize
     ? Math.round((submitted / cohortSize) * 1000) / 10

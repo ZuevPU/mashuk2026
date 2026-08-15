@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseAnalyticsQuery, resolveDayRange } from '../services/analytics/analyticsQuery.js';
+import { restrictToCohort } from '../services/analytics/cohortRestrict.js';
 import { zonesToPercent, emptyZoneDistribution } from '../services/analytics/zoneDistribution.js';
 import { incrementZone } from '../services/emotionZones.js';
 
@@ -40,6 +41,23 @@ describe('analyticsQuery', () => {
     const q = parseAnalyticsQuery({ query: { mode: 'shift', day: '1' } } as never);
     assert.deepEqual(resolveDayRange(q, 2), [1, 2, 3, 4, 5, 6, 7, 8]);
     assert.deepEqual(resolveDayRange(q, 2, 7), [1, 2, 3, 4, 5, 6, 7]);
+  });
+});
+
+describe('restrictToCohort', () => {
+  it('drops rows outside the organizer slice', () => {
+    const rows = [
+      { participantId: 1, direction: 'Учителя' },
+      { participantId: 2, direction: 'Кураторы групп' },
+      { participantId: 3, direction: 'Организаторы Форума' },
+    ];
+    const kept = restrictToCohort(rows, [2, 3], r => r.participantId);
+    assert.deepEqual(kept.map(r => r.direction), ['Кураторы групп', 'Организаторы Форума']);
+  });
+
+  it('returns no rows when the organizer cohort is empty', () => {
+    const rows = [{ participantId: 1, direction: 'Учителя' }];
+    assert.deepEqual(restrictToCohort(rows, [], r => r.participantId), []);
   });
 });
 

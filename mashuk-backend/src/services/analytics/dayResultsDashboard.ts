@@ -14,7 +14,7 @@ import { buildPracticeRecommendNps, extractPracticeScores } from './practiceReco
 import { buildGoalProgressByDirection, isGoalProgressField } from './goalProgressByDirection.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import { resolveDayRange } from './analyticsQuery.js';
-import { loadCohortParticipants } from './cohort.js';
+import { loadCohortParticipants, restrictToCohort } from './cohort.js';
 import {
   buildDirectionDayRatings,
   countNamed,
@@ -522,11 +522,13 @@ export async function assembleHubResultsFromRows(input: {
     fetchAllDaysForSeries, skipDaySeries, directionDays, exportPath,
   } = input;
 
+  const allowed = new Set(cohort.map(p => p.id));
   const cohortSize = cohort.filter(
     p => p.onboardingCompletedAt && !hideOrganizerName(filters.organizers, p.direction),
   ).length;
 
-  const nonOrgRows = rows.filter(r => !hideOrganizerName(filters.organizers, r.directionName || r.p.direction));
+  const nonOrgRows = restrictToCohort(rows, allowed, r => r.participantId)
+    .filter(r => !hideOrganizerName(filters.organizers, r.directionName || r.p.direction));
   const submittedRows = nonOrgRows.filter(r => r.status === 'сдано');
   const draftRows = nonOrgRows.filter(r => r.status === 'черновик');
 
@@ -643,7 +645,7 @@ export async function assembleHubResultsFromRows(input: {
       activityQ: filters.activity ?? undefined,
       includeDrafts: false,
     });
-    allSubmitted = all.rows.filter(
+    allSubmitted = restrictToCohort(all.rows, allowed, r => r.participantId).filter(
       r => r.status === 'сдано' && !hideOrganizerName(filters.organizers, r.directionName || r.p.direction),
     );
     allFields = all.fields;

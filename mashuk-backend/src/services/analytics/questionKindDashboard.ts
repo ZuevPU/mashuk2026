@@ -316,8 +316,10 @@ export async function collectKindAnswerRows(
     });
   }
 
+  const cohort = await loadCohortParticipants(filters);
+  const allowed = new Set(cohort.map(p => p.id));
   return {
-    rows,
+    rows: rows.filter(r => allowed.has(r.participantId)),
     questionMeta: kindQs.map(q => ({
       id: q.id,
       title: q.title || q.text || `Вопрос #${q.id}`,
