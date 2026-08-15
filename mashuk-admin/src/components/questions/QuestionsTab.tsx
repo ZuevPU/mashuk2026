@@ -13,6 +13,7 @@ import { QuestionForm } from './QuestionForm';
 import { QuestionParticipantPreview } from './QuestionParticipantPreview';
 import { QuestionsListTable } from './QuestionsListTable';
 import { PracticesResultsModal } from './PracticesResultsModal';
+import { QuestionDashboardModal } from './QuestionDashboardModal';
 import {
   KIND_TABS,
   type AdminQuestion,
@@ -110,6 +111,7 @@ export function QuestionsTab({
   const [participants, setParticipants] = useState<{ id: number; firstName?: string | null; lastName?: string | null; direction?: string | null }[]>([]);
   const [practicesResultsId, setPracticesResultsId] = useState<number | null>(null);
   const [practicesResultsTitle, setPracticesResultsTitle] = useState('');
+  const [dashboardOpen, setDashboardOpen] = useState(false);
 
   useEffect(() => {
     if (!focusKind || !focusNonce) return;
@@ -687,7 +689,8 @@ export function QuestionsTab({
             setPracticesResultsId(editingId);
             setPracticesResultsTitle(draft.title || 'Практики');
           }}
-          onCancel={() => { setView('list'); setEditingId(null); }}
+          onOpenDashboard={() => setDashboardOpen(true)}
+          onCancel={() => { setView('list'); setEditingId(null); setDashboardOpen(false); }}
           showPreview={showPreview}
           onTogglePreview={() => setShowPreview(v => !v)}
           onReorderOption={(from, to) => {
@@ -1013,6 +1016,15 @@ export function QuestionsTab({
           adminFetch={adminFetch}
           act={act}
           onClose={() => setPracticesResultsId(null)}
+        />
+      )}
+
+      {dashboardOpen && editingId != null && (
+        <QuestionDashboardModal
+          questionId={editingId}
+          title={draft.title || 'Вопрос'}
+          adminFetch={adminFetch}
+          onClose={() => setDashboardOpen(false)}
         />
       )}
     </HubLensLayout>

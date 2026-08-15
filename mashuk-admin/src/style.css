@@ -4467,6 +4467,17 @@ h3 { margin: 16px 0 8px; font-size: 14px; }
 }
 .adm-narr-actions li { margin: 6px 0; }
 .adm-hub-quotes-card { margin-top: 14px; }
+.adm-q-dash-modal .adm-narr-card { margin: 16px 0; }
+.adm-q-heat-wrap { overflow-x: auto; }
+.adm-q-heat th,
+.adm-q-heat td {
+  text-align: center;
+  white-space: nowrap;
+}
+.adm-q-heat th:first-child,
+.adm-q-heat td:first-child {
+  text-align: left;
+}
 .adm-dir-chip {
   padding: 7px 14px;
   border: 1px solid var(--m-border);

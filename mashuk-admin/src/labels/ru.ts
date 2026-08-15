@@ -62,6 +62,7 @@ const LABELS: Record<string, string> = {
 
   // Типы действий (баллы)
   question_answer: 'Ответ на вопрос',
+  question_answer_depth_bonus: 'Бонус за развёрнутый ответ',
   task_complete: 'Выполнение задания',
   exchange_answer: 'Ответ участнику в «Общении»',
   exchange_question: 'Вопрос в «Общении»',

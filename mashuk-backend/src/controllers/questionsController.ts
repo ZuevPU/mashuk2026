@@ -926,7 +926,9 @@ export const submitAnswer = async (req: ParticipantRequest, res: Response): Prom
 
     let reflectionBonus = 0;
     if (depthLabel === 'Личный вывод' || depthLabel === 'Перенос в практику') {
-      const bonus = await awardPoints(req.participant!.id, 'question_answer', 3, forumDay);
+      const bonus = await awardPoints(req.participant!.id, 'question_answer', 3, forumDay, {
+        relatedLogId: pointsResult?.logId,
+      });
       reflectionBonus = bonus?.awarded ?? 0;
     }
 

@@ -32,6 +32,7 @@ type Props = {
   onUnpublish?: () => void;
   onRevokePoints?: () => void;
   onViewPracticesResults?: () => void;
+  onOpenDashboard?: () => void;
   onCancel: () => void;
   showPreview: boolean;
   onTogglePreview: () => void;
@@ -66,6 +67,7 @@ export function QuestionForm({
   onUnpublish,
   onRevokePoints,
   onViewPracticesResults,
+  onOpenDashboard,
   onCancel,
   showPreview,
   onTogglePreview,
@@ -100,6 +102,11 @@ export function QuestionForm({
           <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={onTogglePreview}>
             👁 {showPreview ? 'Скрыть превью' : 'Посмотреть как участник'}
           </button>
+          {!isNew && onOpenDashboard && (
+            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={onOpenDashboard}>
+              Дашборд
+            </button>
+          )}
           <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onCancel}>К списку</button>
         </div>
       </div>

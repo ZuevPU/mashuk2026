@@ -2259,6 +2259,7 @@ export const crudTasks = {
 export {
   crudQuestions,
   copyQuestionsSelected,
+  getQuestionDashboard,
   getPracticesResults,
   publishPracticesResults,
   unpublishPracticesResults,

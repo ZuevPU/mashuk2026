@@ -828,6 +828,23 @@ export const revokeQuestionPoints = async (req: AdminRequest, res: Response): Pr
   res.json({ ...result, reason });
 };
 
+export const getQuestionDashboard = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: 'Invalid question id' });
+    return;
+  }
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const { buildQuestionDashboard } = await import('../services/analytics/questionDashboard.js');
+  const adminShiftId = await resolveAdminShiftId(req);
+  const dash = await buildQuestionDashboard(id, adminShiftId);
+  if (!dash) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+  res.json(dash);
+};
+
 export const getPracticesResults = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
   const [question] = await db.select().from(questions).where(eq(questions.id, id)).limit(1);

@@ -384,7 +384,7 @@ export async function awardPoints(
   actionType: string,
   overridePoints?: number,
   forumDay?: number,
-  opts?: { submissionId?: number; ignoreMaxAccruals?: boolean },
+  opts?: { submissionId?: number; ignoreMaxAccruals?: boolean; relatedLogId?: number },
 ): Promise<{ awarded: number; track: PointTrack | 'bonus'; logId: number } | null> {
   const [beforeRow] = await db.select({
     pathPoints: participants.pathPoints,
@@ -445,6 +445,7 @@ export async function awardPoints(
     points,
     forumDay: stampedDay,
     submissionId: opts?.submissionId ?? null,
+    relatedLogId: opts?.relatedLogId ?? null,
   }).returning({ id: pointsLog.id });
 
   const track = pointsTrackForAction(actionType);

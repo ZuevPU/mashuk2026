@@ -57,6 +57,7 @@ export function formatAnswerPreview(data: unknown): string {
     if (o.emotionZoneLabel) parts.push(String(o.emotionZoneLabel));
     else if (o.emotion) parts.push(String(o.emotion));
     if (o.energy != null) parts.push(`энергия ${o.energy}/10`);
+    if (typeof o.reason === 'string' && o.reason.trim()) parts.push(o.reason.trim());
     if (parts.length) return parts.join(' · ');
   }
 

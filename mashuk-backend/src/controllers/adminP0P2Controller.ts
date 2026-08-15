@@ -815,6 +815,8 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
     answers: filteredAnswers.map(r => ({
       id: r.a.id,
       questionTitle: r.q?.title,
+      questionText: r.q?.text,
+      questionSubtitle: r.q?.subtitle,
       block: r.q?.block,
       reflectionKind: r.q?.reflectionKind,
       dayNumber: r.q?.dayNumber,

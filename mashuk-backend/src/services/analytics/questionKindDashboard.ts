@@ -88,7 +88,7 @@ function isAfterBlocksQuestion(q: typeof questions.$inferSelect): boolean {
   return false;
 }
 
-function isStateCheckQuestion(q: typeof questions.$inferSelect): boolean {
+export function isStateCheckQuestion(q: typeof questions.$inferSelect): boolean {
   if (q.questionKind === 'state_check' || q.reflectionKind === 'state_check') return true;
   if (q.type === 'checkin') return true;
   if (reflectionKindFromQuestion(q) === 'state_check') return true;

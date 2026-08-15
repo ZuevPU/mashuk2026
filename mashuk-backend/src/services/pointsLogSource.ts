@@ -14,7 +14,20 @@ export type PointsLogSource = {
   sourceDescription: string | null;
   answerPreview: string | null;
   track: PointTrack | 'bonus';
+  awardReason?: string | null;
+  isReflectionBonus?: boolean;
 };
+
+export const REFLECTION_BONUS_REASON =
+  'Бонус за развёрнутый ответ (личный вывод или перенос в практику). Это не отдельный вопрос, а надбавка к той же проверке состояния.';
+
+const QUESTION_ACTIONS = new Set([
+  'question_answer',
+  'state_check_morning',
+  'state_check_day',
+  'state_check_evening',
+  'point_b_complete',
+]);
 
 const PIGGY_ACTIONS = new Set([
   'piggybank_idea',
@@ -64,7 +77,68 @@ type LogLike = {
   actionType?: string | null;
   submissionId?: number | null;
   createdAt?: Date | string | null;
+  points?: number | null;
+  relatedLogId?: number | null;
 };
+
+function emptySource(actionType: string | null | undefined): PointsLogSource {
+  return {
+    sourceKind: null,
+    sourceId: null,
+    sourceTitle: null,
+    sourceDescription: null,
+    answerPreview: null,
+    track: pointsTrackForAction(actionType || ''),
+    awardReason: null,
+    isReflectionBonus: false,
+  };
+}
+
+export function isReflectionBonusLog(log: { actionType?: string | null; points?: number | null }): boolean {
+  return actionBase(log.actionType) === 'question_answer' && Number(log.points) === 3;
+}
+
+/** Attach +3 depth-bonus rows to the same question as the primary award. */
+export function attachReflectionBonusSources(
+  logs: LogLike[],
+  sources: Map<number, PointsLogSource>,
+): void {
+  const WINDOW_MS = 15_000;
+  for (const log of logs) {
+    if (!isReflectionBonusLog(log)) continue;
+    const current = sources.get(log.id);
+
+    let parent = log.relatedLogId != null ? sources.get(log.relatedLogId) : undefined;
+    if (!parent?.sourceKind) {
+      const at = ts(log.createdAt);
+      const pid = log.participantId;
+      let best: PointsLogSource | undefined;
+      let bestDelta = Infinity;
+      for (const other of logs) {
+        if (other.id === log.id) continue;
+        if (isReflectionBonusLog(other)) continue;
+        if (pid != null && other.participantId != null && other.participantId !== pid) continue;
+        const src = sources.get(other.id);
+        if (src?.sourceKind !== 'question') continue;
+        const delta = Math.abs(ts(other.createdAt) - at);
+        if (delta > WINDOW_MS) continue;
+        if (delta < bestDelta) {
+          best = src;
+          bestDelta = delta;
+        }
+      }
+      parent = best;
+    }
+    const src = parent?.sourceKind ? parent : current;
+    if (!src?.sourceKind) continue;
+    sources.set(log.id, {
+      ...src,
+      track: pointsTrackForAction(log.actionType || 'question_answer'),
+      awardReason: REFLECTION_BONUS_REASON,
+      isReflectionBonus: true,
+    });
+  }
+}
 
 function ts(raw: Date | string | null | undefined): number {
   if (!raw) return 0;
@@ -80,14 +154,7 @@ export async function resolvePointsLogSources(
 ): Promise<Map<number, PointsLogSource>> {
   const out = new Map<number, PointsLogSource>();
   for (const log of logs) {
-    out.set(log.id, {
-      sourceKind: null,
-      sourceId: null,
-      sourceTitle: null,
-      sourceDescription: null,
-      answerPreview: null,
-      track: pointsTrackForAction(log.actionType || ''),
-    });
+    out.set(log.id, emptySource(log.actionType));
   }
   if (!logs.length) return out;
 
@@ -135,6 +202,7 @@ export async function resolvePointsLogSources(
     text: questions.text,
     subtitle: questions.subtitle,
     dayNumber: questions.dayNumber,
+    questionType: questions.type,
   }).from(answers)
     .leftJoin(questions, eq(answers.questionId, questions.id))
     .where(and(
@@ -151,13 +219,13 @@ export async function resolvePointsLogSources(
       row.subtitle,
       row.text,
     ].filter(Boolean).join(' · ').trim();
-    const preview = participantAnswerSummary(row.answerData);
+    const preview = participantAnswerSummary(row.answerData, row.questionType);
     out.set(row.pointsLogId, {
       sourceKind: 'question',
       sourceId: row.questionId ?? null,
       sourceTitle: row.title || null,
       sourceDescription: desc || null,
-      answerPreview: preview ? clip(preview) : null,
+      answerPreview: preview ? clip(preview, 400) : null,
       track: pointsTrackForAction(
         logs.find(l => l.id === row.pointsLogId)?.actionType || 'question_answer',
       ),
@@ -434,6 +502,70 @@ export async function resolvePointsLogSources(
     }
   }
 
+  // Primary awards without answers.points_log_id: nearest answer in a 15-minute window.
+  const unresolvedQuestionLogs = logs.filter(l =>
+    QUESTION_ACTIONS.has(actionBase(l.actionType)) && !out.get(l.id)?.sourceKind,
+  );
+  if (unresolvedQuestionLogs.length) {
+    const participantIds = [...new Set(
+      unresolvedQuestionLogs.map(l => l.participantId).filter((id): id is number => id != null && id > 0),
+    )];
+    if (participantIds.length) {
+      const answerPool = await db.select({
+        answerId: answers.id,
+        participantId: answers.participantId,
+        createdAt: answers.createdAt,
+        pointsLogId: answers.pointsLogId,
+        answerData: answers.answerData,
+        questionId: questions.id,
+        title: questions.title,
+        text: questions.text,
+        subtitle: questions.subtitle,
+        dayNumber: questions.dayNumber,
+        questionType: questions.type,
+      }).from(answers)
+        .leftJoin(questions, eq(answers.questionId, questions.id))
+        .where(inArray(answers.participantId, participantIds));
+
+      const usedAnswers = new Set<number>();
+      const WINDOW_MS = 15 * 60 * 1000;
+      for (const log of unresolvedQuestionLogs) {
+        const pid = log.participantId;
+        if (pid == null) continue;
+        const at = ts(log.createdAt);
+        let best: (typeof answerPool)[number] | null = null;
+        let bestDelta = Infinity;
+        for (const row of answerPool) {
+          if (row.participantId !== pid || usedAnswers.has(row.answerId)) continue;
+          if (row.pointsLogId != null && row.pointsLogId !== log.id) continue;
+          const delta = Math.abs(ts(row.createdAt) - at);
+          if (delta > WINDOW_MS) continue;
+          if (delta < bestDelta) {
+            best = row;
+            bestDelta = delta;
+          }
+        }
+        if (!best?.title && !best?.text) continue;
+        usedAnswers.add(best.answerId);
+        const desc = [
+          best.dayNumber != null ? `День ${best.dayNumber}` : null,
+          best.subtitle,
+          best.text,
+        ].filter(Boolean).join(' · ').trim();
+        const preview = participantAnswerSummary(best.answerData, best.questionType);
+        out.set(log.id, {
+          sourceKind: 'question',
+          sourceId: best.questionId ?? null,
+          sourceTitle: best.title || null,
+          sourceDescription: desc || null,
+          answerPreview: preview ? clip(preview, 400) : null,
+          track: pointsTrackForAction(log.actionType || 'question_answer'),
+        });
+      }
+    }
+  }
+
+  attachReflectionBonusSources(logs, out);
   return out;
 }
 
@@ -443,14 +575,7 @@ export async function enrichPointsLogRows<T extends LogLike>(
   const sources = await resolvePointsLogSources(logs);
   return logs.map(log => ({
     ...log,
-    ...(sources.get(log.id) || {
-      sourceKind: null,
-      sourceId: null,
-      sourceTitle: null,
-      sourceDescription: null,
-      answerPreview: null,
-      track: pointsTrackForAction(log.actionType || ''),
-    }),
+    ...(sources.get(log.id) || emptySource(log.actionType)),
   }));
 }
 

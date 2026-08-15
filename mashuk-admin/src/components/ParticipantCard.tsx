@@ -133,9 +133,16 @@ function pointsContentLabel(kind: string | null | undefined): string {
   return 'Текст';
 }
 
+function pointsActionLabel(pt: { actionType?: string; isReflectionBonus?: boolean; points?: number }): string {
+  if (pt.isReflectionBonus || (pt.actionType === 'question_answer' && Number(pt.points) === 3)) {
+    return label('question_answer_depth_bonus');
+  }
+  return label(pt.actionType || '');
+}
+
 function pointsSortValue(pt: any, key: PointsSortKey): string | number {
   if (key === 'track') return pointsTrackLabel(pt.track);
-  if (key === 'type') return label(pt.actionType || '');
+  if (key === 'type') return pointsActionLabel(pt);
   if (key === 'source') {
     return [pt.sourceTitle, pt.sourceDescription, pt.answerPreview].filter(Boolean).join(' ');
   }
@@ -1097,13 +1104,21 @@ export function ParticipantCardModal({
 
                   <tr key={a.id}>
 
-                    <td>{a.questionTitle}</td>
+                    <td style={{ maxWidth: 360 }}>
+                      <div style={{ fontWeight: 700 }}>{a.questionTitle || 'Вопрос'}</div>
+                      {a.questionSubtitle && (
+                        <div className="adm-muted" style={{ marginTop: 2 }}>{a.questionSubtitle}</div>
+                      )}
+                      {a.questionText && a.questionText !== a.questionTitle && (
+                        <div style={{ marginTop: 4, whiteSpace: 'pre-wrap', lineHeight: 1.35 }}>{a.questionText}</div>
+                      )}
+                    </td>
 
                     <td>{a.block ? label(a.block) : '—'}</td>
 
                     <td>{a.dayNumber ?? '—'}</td>
 
-                    <td style={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis' }} title={formatAnswerPreview(a.answerData)}>
+                    <td style={{ maxWidth: 420, whiteSpace: 'pre-wrap', lineHeight: 1.35 }}>
                       {formatAnswerPreview(a.answerData)}
                     </td>
 
@@ -1637,11 +1652,16 @@ export function ParticipantCardModal({
 
                     <td>{pointsTrackLabel(pt.track)}</td>
 
-                    <td>{label(pt.actionType)}</td>
+                    <td>{pointsActionLabel(pt)}</td>
 
                     <td style={{ maxWidth: 420, fontSize: 12 }}>
-                      {pt.sourceTitle || pt.answerPreview || pt.sourceDescription ? (
+                      {pt.awardReason || pt.sourceTitle || pt.answerPreview || pt.sourceDescription ? (
                         <>
+                          {pt.awardReason && (
+                            <div style={{ marginBottom: 4, color: '#6b4f1d', fontWeight: 600 }}>
+                              {pt.awardReason}
+                            </div>
+                          )}
                           {pt.sourceTitle && (
                             <div style={{ fontWeight: 700 }}>
                               {pt.sourceKind === 'piggybank'
