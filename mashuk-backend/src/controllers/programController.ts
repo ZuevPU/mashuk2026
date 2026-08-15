@@ -193,9 +193,7 @@ export async function evaluateKbDayAccess(
   }
 
   let lockReason: string | null = null;
-  if (day === 8 && !unlockDisabled) {
-    lockReason = 'point_b';
-  } else if (!dayReached && !unlockDisabled) {
+  if (!dayReached && !unlockDisabled) {
     lockReason = 'future_day';
   } else if (!unlocked) {
     lockReason = 'touchpoints';
@@ -671,9 +669,7 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
 
     let lockMessage: string | null = null;
     if (!access.unlocked) {
-      if (access.lockReason === 'point_b') {
-        lockMessage = 'Заполни Точку Б — финальную рефлексию смены';
-      } else if (access.lockReason === 'future_day') {
+      if (access.lockReason === 'future_day') {
         lockMessage = opensOn
           ? `День ещё не наступил. Откроется ${opensOn} после прохождения ≥${access.requiredTouchpoints} из ${access.touchpointsTotal || 7} точек`
           : `День ещё не наступил. Откроется, когда наступит день ${day}`;

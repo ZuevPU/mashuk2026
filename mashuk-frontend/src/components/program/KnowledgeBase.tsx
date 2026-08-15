@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { Checkbox, CustomSelect, Button } from '@vkontakte/vkui';
 import { openExternalUrl } from '../../utils/openUrl';
 import { apiPost } from '../../api/client';
@@ -99,7 +98,6 @@ export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [sectionFilter, setSectionFilter] = useState<string>('all');
   const { openCourses, sheet: coursesSheet } = useMashukCourses();
-  const routeNavigator = useRouteNavigator();
 
   const catalog = kb?.sections?.length ? kb.sections : KB_SECTIONS.map(s => ({
     key: s.key,
@@ -182,28 +180,6 @@ export function KnowledgeBasePanel({ kb }: KnowledgeBaseProps) {
   }, [visible, catalog]);
 
   if (!kb) return null;
-
-  if (kb.lockReason === 'point_b' || kb.day === 8) {
-    return (
-      <>
-        <div className="kb-lock">
-          <div className="kb-lock-icon">🎯</div>
-          <div className="kb-lock-t">Заключительный день</div>
-          <div className="kb-lock-s">{kb.lockMessage || 'Заполни Точку Б — финальную рефлексию смены'}</div>
-          <button
-            type="button"
-            className="m-prio-btn"
-            style={{ marginTop: 12 }}
-            onClick={() => routeNavigator.push('/questions')}
-          >
-            Перейти к Точке Б →
-          </button>
-          <MashukCoursesButton onOpen={openCourses} />
-        </div>
-        {coursesSheet}
-      </>
-    );
-  }
 
   if (!kb.unlocked) {
     const req = kb.requiredTouchpoints ?? 4;
