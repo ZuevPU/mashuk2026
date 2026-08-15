@@ -41,7 +41,46 @@ type ParticipantRow = {
   selfDeletedAt?: string | null;
   avatarUrl?: string | null;
   onboardingCompletedAt?: string | null;
+  profileAiConsent?: boolean | null;
 };
+
+type ListSortKey = 'id' | 'vkId' | 'name' | 'direction' | 'group' | 'region' | 'role' | 'path' | 'experience' | 'rating' | 'activity' | 'consent';
+type ListSort = { key: ListSortKey; dir: 'asc' | 'desc' };
+
+const TEXT_SORT_KEYS: ListSortKey[] = ['name', 'direction', 'group', 'region', 'role'];
+const CONSENT_QUESTION = 'Я даю согласие на автоматизированную обработку моих текстовых ответов (включая использование технологий искусственного интеллекта) для формирования моего итогового профиля участия в форуме';
+
+function sortMark(sort: ListSort | null, key: ListSortKey): string {
+  if (!sort || sort.key !== key) return '';
+  return sort.dir === 'asc' ? ' ↑' : ' ↓';
+}
+
+function SortTh({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  title,
+}: {
+  label: string;
+  sortKey: ListSortKey;
+  sort: ListSort | null;
+  onSort: (key: ListSortKey) => void;
+  title?: string;
+}) {
+  return (
+    <th title={title}>
+      <button
+        type="button"
+        className="adm-link"
+        style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer', fontWeight: 650 }}
+        onClick={() => onSort(sortKey)}
+      >
+        {label}{sortMark(sort, sortKey)}
+      </button>
+    </th>
+  );
+}
 
 type ParticipantListMode = 'active' | 'hidden';
 type ShiftOption = { id: number; name: string; code: string; status: string; isPublished?: boolean };
@@ -64,6 +103,7 @@ function buildListQuery(params: {
   activity: string;
   listMode: ParticipantListMode;
   allShifts: boolean;
+  sort: ListSort | null;
 }): string {
   const sp = new URLSearchParams({ page: String(params.page), limit: '50' });
   if (params.listMode === 'hidden') {
@@ -78,6 +118,10 @@ function buildListQuery(params: {
   if (params.strongRole) sp.set('strongRole', params.strongRole);
   // activity не шлём для hidden — бэкенд тоже игнорирует
   if (params.listMode !== 'hidden' && params.activity) sp.set('activity', params.activity);
+  if (params.sort) {
+    sp.set('sort', params.sort.key);
+    sp.set('dir', params.sort.dir);
+  }
   return sp.toString();
 }
 
@@ -122,6 +166,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard, adminR
   const [pushModal, setPushModal] = useState<{ ids: number[] } | null>(null);
   const [pushText, setPushText] = useState('');
   const [newParticipant, setNewParticipant] = useState({ vkId: '', firstName: '', lastName: '', directionId: '' });
+  const [listSort, setListSort] = useState<ListSort | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(participantSearch), 350);
@@ -142,7 +187,8 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard, adminR
     activity: activityFilter,
     listMode,
     allShifts: hiddenAllShifts,
-  }), [participantsPage, debouncedQ, directionFilter, groupFilter, roleFilter, strongRoleFilter, activityFilter, listMode, hiddenAllShifts]);
+    sort: listSort,
+  }), [participantsPage, debouncedQ, directionFilter, groupFilter, roleFilter, strongRoleFilter, activityFilter, listMode, hiddenAllShifts, listSort]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -218,6 +264,16 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard, adminR
 
   const toggleDir = (id: number) => {
     setDirectionFilter(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleSort = (key: ListSortKey) => {
+    setParticipantsPage(1);
+    setListSort(prev => {
+      if (prev?.key === key) {
+        return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, dir: TEXT_SORT_KEYS.includes(key) ? 'asc' : 'desc' };
+    });
   };
 
   const toggleSelect = (id: number) => {
@@ -317,7 +373,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard, adminR
             : `Участники · ${participantsTotal} в программе${incompleteCount > 0 ? ` · ${incompleteCount} без регистрации` : ''}`}
           hint={isHiddenList
             ? 'Мягкое удаление: данные сохранены, можно восстановить.'
-            : 'Поиск и фильтры. Клик по строке — карточка. Действия — меню ⋮.'}
+            : 'Поиск, фильтры и сортировка по заголовкам. Зелёная строка — согласие на ИИ-профиль, красная — отказ.'}
         >
           <div className="adm-forum-seg">
             <button
@@ -488,8 +544,12 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard, adminR
         <div className="card adm-forum-block adm-kb-panel">
           <div className="adm-kb-panel-head">
             <h3>Список</h3>
-            <p className="adm-kb-panel-sub">Клик по строке открывает карточку участника.</p>
+            <p className="adm-kb-panel-sub">Клик по строке открывает карточку. Клик по заголовку сортирует весь список.</p>
           </div>
+          <p className="adm-consent-legend">
+            <span><span className="adm-consent-swatch adm-consent-swatch-yes" />Да — согласие на ИИ-профиль</span>
+            <span><span className="adm-consent-swatch adm-consent-swatch-no" />Нет — отказ в итоговой анкете</span>
+          </p>
           <div className="adm-kb-table-scroll">
             <table className="adm-table adm-kb-inline-table">
               <thead>
@@ -500,25 +560,37 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard, adminR
                       else setSelected(new Set(participants.map(p => p.id)));
                     }} aria-label="Выбрать все" />
                   </th>
-                  {showIdColumn && <th>ID</th>}
+                  {showIdColumn && <SortTh label="ID" sortKey="id" sort={listSort} onSort={toggleSort} />}
                   <th aria-label="Аватар" />
-                  <th>VK ID</th>
-                  <th>ФИО</th>
-                  <th>Направление</th>
-                  <th>Группа</th>
-                  <th>Регион</th>
-                  <th>Роль</th>
-                  <th>Путь</th>
-                  <th>Опыт</th>
-                  <th>Рейтинг</th>
-                  <th>{isHiddenList ? 'Скрыт с' : 'Активность'}</th>
+                  <SortTh label="VK ID" sortKey="vkId" sort={listSort} onSort={toggleSort} />
+                  <SortTh label="ФИО" sortKey="name" sort={listSort} onSort={toggleSort} />
+                  <SortTh label="Направление" sortKey="direction" sort={listSort} onSort={toggleSort} />
+                  <SortTh label="Группа" sortKey="group" sort={listSort} onSort={toggleSort} />
+                  <SortTh label="Регион" sortKey="region" sort={listSort} onSort={toggleSort} />
+                  <SortTh label="Роль" sortKey="role" sort={listSort} onSort={toggleSort} />
+                  <SortTh label="Путь" sortKey="path" sort={listSort} onSort={toggleSort} />
+                  <SortTh label="Опыт" sortKey="experience" sort={listSort} onSort={toggleSort} />
+                  <SortTh label="Рейтинг" sortKey="rating" sort={listSort} onSort={toggleSort} />
+                  <SortTh
+                    label={isHiddenList ? 'Скрыт с' : 'Активность'}
+                    sortKey="activity"
+                    sort={listSort}
+                    onSort={toggleSort}
+                  />
+                  <SortTh
+                    label="ИИ-профиль"
+                    sortKey="consent"
+                    sort={listSort}
+                    onSort={toggleSort}
+                    title={CONSENT_QUESTION}
+                  />
                   <th>Действия</th>
                 </tr>
               </thead>
               <tbody>
                 {participants.length === 0 && (
                   <tr>
-                    <td colSpan={showIdColumn ? 14 : 13} className="adm-muted" style={{ padding: 24, textAlign: 'center' }}>
+                    <td colSpan={showIdColumn ? 15 : 14} className="adm-muted" style={{ padding: 24, textAlign: 'center' }}>
                       {isHiddenList ? 'Никто не удалял профиль' : 'Участники не найдены'}
                     </td>
                   </tr>
@@ -526,8 +598,18 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard, adminR
                 {participants.map(p => (
                   <tr
                     key={p.id}
-                    className="adm-table-row-click"
-                    style={!isHiddenList && p.isBlocked ? { opacity: 0.85, background: 'rgba(255, 59, 48, 0.06)' } : isHiddenList ? { opacity: 0.92 } : undefined}
+                    className={[
+                      'adm-table-row-click',
+                      p.profileAiConsent === true ? 'adm-row-consent-yes' : '',
+                      p.profileAiConsent === false ? 'adm-row-consent-no' : '',
+                    ].filter(Boolean).join(' ')}
+                    style={
+                      p.profileAiConsent != null
+                        ? undefined
+                        : !isHiddenList && p.isBlocked
+                          ? { opacity: 0.85, background: 'rgba(255, 59, 48, 0.06)' }
+                          : isHiddenList ? { opacity: 0.92 } : undefined
+                    }
                     onClick={e => {
                       const t = e.target as HTMLElement;
                       if (t.closest('button, select, input, a, .adm-row-menu')) return;
@@ -600,6 +682,9 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard, adminR
                     <td>{p.experiencePoints ?? 0}</td>
                     <td>{p.totalRating ?? ((p.pathPoints ?? 0) + (p.experiencePoints ?? 0))}</td>
                     <td>{isHiddenList ? formatHiddenAt(p.selfDeletedAt) : formatParticipantActivity(p.lastActiveAt)}</td>
+                    <td title={CONSENT_QUESTION}>
+                      {p.profileAiConsent === true ? 'Да' : p.profileAiConsent === false ? 'Нет' : '—'}
+                    </td>
                     <td onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
                         {isHiddenList && (

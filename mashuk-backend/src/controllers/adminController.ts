@@ -69,6 +69,10 @@ import { resolveDayPublishedForEvent } from '../services/eventPublishFlags.js';
 import { parseParticipantListQuery, queryParticipants } from '../services/participantsList.js';
 import { enrichParticipantsWithAvatarUrls } from '../services/participantAvatarSync.js';
 import {
+  collectProfileAiConsentFieldKeys,
+  loadProfileAiConsentMap,
+} from '../services/profileAiConsent.js';
+import {
   getShiftById,
   pickShiftOpPatch,
   resolveAdminShiftId,
@@ -85,8 +89,18 @@ export const listParticipants = async (req: AdminRequest, res: Response): Promis
   } else if (parsed.shiftId == null || Number.isNaN(parsed.shiftId)) {
     parsed.shiftId = await resolveAdminShiftId(req);
   }
+  const settings = await loadForumSettings(allShiftsDeleted ? null : parsed.shiftId);
+  parsed.consentFieldKeys = collectProfileAiConsentFieldKeys(settings);
   const result = await queryParticipants(parsed);
-  const participants = await enrichParticipantsWithAvatarUrls(result.participants, { preferStored: false });
+  const withAvatars = await enrichParticipantsWithAvatarUrls(result.participants, { preferStored: false });
+  const consentMap = await loadProfileAiConsentMap(
+    withAvatars.map(p => p.id),
+    parsed.consentFieldKeys,
+  );
+  const participants = withAvatars.map(p => ({
+    ...p,
+    profileAiConsent: consentMap.get(p.id) ?? null,
+  }));
 
   let hardDeleteCount: number | undefined;
   let selfDeleteLogCount: number | undefined;

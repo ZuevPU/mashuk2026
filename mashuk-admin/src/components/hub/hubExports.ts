@@ -24,6 +24,7 @@ type HubExportScope = {
   group?: string;
   ageCategory?: string;
   activity?: string;
+  organizers?: boolean;
 };
 
 function scopeQs(scope: HubExportScope, extra: Record<string, string | number | undefined | null> = {}) {
@@ -53,6 +54,19 @@ export function forumExportItems(scope: HubExportScope | string): HubExportItem[
   const s: HubExportScope = typeof scope === 'string' ? { day: scope } : scope;
   const { day } = s;
   return [
+    {
+      id: 'registration',
+      label: 'Регистрация',
+      path: `/exports/registration${qs({
+        format: 'xlsx',
+        direction: s.direction || undefined,
+        group: s.group || undefined,
+        ageCategory: s.ageCategory || undefined,
+        activity: s.activity || undefined,
+        organizers: s.organizers ? 1 : undefined,
+      })}`,
+      filename: 'registraciya.xlsx',
+    },
     {
       id: 'state',
       label: 'Состояние',

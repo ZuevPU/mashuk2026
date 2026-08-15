@@ -49,4 +49,16 @@ describe('participantsList deleted/hidden filters', () => {
     });
     assert.ok(where);
   });
+
+  it('parses list sort and direction', () => {
+    const q = parseParticipantListQuery({ query: { sort: 'name', dir: 'asc' } });
+    assert.equal(q.sort, 'name');
+    assert.equal(q.dir, 'asc');
+  });
+
+  it('ignores unknown sort keys', () => {
+    const q = parseParticipantListQuery({ query: { sort: 'drop_table', dir: 'up' } });
+    assert.equal(q.sort, undefined);
+    assert.equal(q.dir, undefined);
+  });
 });

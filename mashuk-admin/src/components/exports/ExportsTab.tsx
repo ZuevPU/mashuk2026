@@ -646,6 +646,9 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadXlsx(`/exports/participants?format=xlsx${filterQs.replace('?', '&')}`, 'participants_full.xlsx')}>
             База участников (профиль)
           </button>
+          <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadXlsx(`/exports/registration?format=xlsx${filterQs.replace('?', '&')}`, 'registraciya.xlsx')}>
+            Регистрация (по шаблону)
+          </button>
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadXlsx('/exports/roles-experiments?format=xlsx', 'roles_experiments.xlsx')}>
             Роли и эксперименты
           </button>

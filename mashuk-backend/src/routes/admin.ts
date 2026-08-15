@@ -246,6 +246,7 @@ router.get('/exports/day', P('exports', 'export'), wrap(exportsCtrl.exportDayWor
 router.get('/exports/day/stats', P('exports', 'export'), wrap(exportsCtrl.exportDayStatsHandler));
 router.get('/exports/daily-summary', P('exports', 'export'), wrap(exportsCtrl.exportDailySummaryHandler));
 router.get('/exports/evening-summary', P('exports', 'export'), wrap(exportsCtrl.exportEveningSummaryHandler));
+router.get('/exports/registration', P('exports', 'export'), wrap(exportsCtrl.exportRegistrationHandler));
 router.get('/exports/after-blocks', P('exports', 'export'), wrap(exportsCtrl.exportAfterBlocksHandler));
 router.get('/exports/state-checks', P('exports', 'export'), wrap(exportsCtrl.exportStateChecksHandler));
 router.get('/exports/direction-pack', P('exports', 'export'), wrap(exportsCtrl.exportDirectionPackHandler));

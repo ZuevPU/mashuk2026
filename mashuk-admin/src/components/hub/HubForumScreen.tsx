@@ -344,8 +344,11 @@ export function HubForumScreen({
 
   const exportScope = {
     day: String(selectedDay),
+    direction: direction || undefined,
+    group: group || undefined,
     ageCategory: ageCategory || undefined,
     activity: activity || undefined,
+    organizers: organizers || undefined,
   };
   const exports = forumExportItems(exportScope);
   const openDirection = (nextDirection: string) => {

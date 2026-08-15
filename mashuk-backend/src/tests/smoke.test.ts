@@ -349,6 +349,7 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   it('Hub Forum exports return real XLSX (ZIP/PK), not CSV/JSON', async () => {
     const token = await getAdminBearerToken(app);
     const paths = [
+      '/api/admin/exports/registration?format=xlsx',
       '/api/admin/exports/state-checks?mode=day&day=1',
       '/api/admin/exports/evening-summary?mode=day&day=1',
       '/api/admin/exports/after-blocks?mode=day&day=1',

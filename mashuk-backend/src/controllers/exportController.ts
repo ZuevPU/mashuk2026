@@ -5,6 +5,7 @@ import { computeDayExportStats } from '../services/exports/dayStats.js';
 import { writeParticipantsFullExport } from '../services/exports/participantsExport.js';
 import { writeDailySummaryExport } from '../services/exports/dailySummaryExport.js';
 import { writeEveningSummaryExport } from '../services/exports/eveningSummaryExport.js';
+import { writeRegistrationExport } from '../services/exports/registrationExport.js';
 import { writeRolesExperimentsExport } from '../services/exports/rolesExperimentsExport.js';
 import { writeReflectionsExport, writeParticipantAnswersExport } from '../services/exports/reflectionsExport.js';
 import {
@@ -195,6 +196,19 @@ export const exportDailySummaryHandler = async (req: AdminRequest, res: Response
 };
 
 /** Отдельная аналитическая таблица по вопросам «Итоги дня». */
+export const exportRegistrationHandler = async (req: AdminRequest, res: Response) => {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const shiftId = await resolveAdminShiftId(req);
+  await writeRegistrationExport(res, {
+    shiftId,
+    direction: typeof req.query.direction === 'string' ? req.query.direction : undefined,
+    group: typeof req.query.group === 'string' ? req.query.group : undefined,
+    ageCategory: typeof req.query.ageCategory === 'string' ? req.query.ageCategory : undefined,
+    activity: typeof req.query.activity === 'string' ? req.query.activity : undefined,
+    organizers: req.query.organizers === '1' || req.query.organizers === 'true',
+  });
+};
+
 export const exportEveningSummaryHandler = async (req: AdminRequest, res: Response) => {
   const { resolveAdminShiftId } = await import('../services/shiftService.js');
   const shiftId = await resolveAdminShiftId(req);
