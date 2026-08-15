@@ -43,11 +43,12 @@ export function OnboardingTab({ adminFetch, act, reloadKey, setTab }: AdminTabPr
   const [interestGroups, setInterestGroups] = useState(
     () => DEFAULT_INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] })),
   );
-  const [interestMin, setInterestMin] = useState(5);
+  const [interestMin, setInterestMin] = useState(1);
   const [interestMax, setInterestMax] = useState(8);
   const [diagQuestions, setDiagQuestions] = useState(() => cloneDiagQuestions(DEFAULT_DIAG_QUESTIONS));
   const [diagMatrix, setDiagMatrix] = useState<string[][]>(() => DEFAULT_DIAG_MATRIX.map(r => [...r]));
   const [savedConfigJson, setSavedConfigJson] = useState('');
+  const [needsReview, setNeedsReview] = useState(false);
 
   const [roles, setRoles] = useState<AdminRole[]>([]);
   const [adviceRoleFilter, setAdviceRoleFilter] = useState('');
@@ -79,7 +80,7 @@ export function OnboardingTab({ adminFetch, act, reloadKey, setTab }: AdminTabPr
     try {
       const saved = JSON.parse(savedConfigJson) as RoleDiagnosticsConfig;
       return JSON.stringify(saved.interestGroups) !== JSON.stringify(interestGroups)
-        || (saved.interestMin ?? 5) !== interestMin
+        || (saved.interestMin ?? 1) !== interestMin
         || (saved.interestMax ?? 8) !== interestMax;
     } catch {
       return configDirty;
@@ -130,7 +131,7 @@ export function OnboardingTab({ adminFetch, act, reloadKey, setTab }: AdminTabPr
         : DEFAULT_INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] }));
       let imin = Number(cfg.interestMin);
       let imax = Number(cfg.interestMax);
-      if (!Number.isFinite(imin)) imin = 5;
+      if (!Number.isFinite(imin)) imin = 1;
       if (!Number.isFinite(imax)) imax = 8;
       imin = Math.max(1, Math.min(20, Math.floor(imin)));
       imax = Math.max(1, Math.min(30, Math.floor(imax)));
@@ -142,6 +143,7 @@ export function OnboardingTab({ adminFetch, act, reloadKey, setTab }: AdminTabPr
       setInterestGroups(ig);
       setInterestMin(imin);
       setInterestMax(imax);
+      setNeedsReview(cfg.needsReview === true);
       setSavedConfigJson(snapshotConfig({
         goalQuestions: gq,
         interestGroups: ig,
@@ -198,6 +200,7 @@ export function OnboardingTab({ adminFetch, act, reloadKey, setTab }: AdminTabPr
         body: JSON.stringify({ roleDiagnosticsConfig: payload }),
       });
       setGoalQuestions(payload.goalQuestions);
+      setNeedsReview(false);
       setSavedConfigJson(snapshotConfig(payload));
     }, msg);
 
@@ -227,6 +230,11 @@ export function OnboardingTab({ adminFetch, act, reloadKey, setTab }: AdminTabPr
           title="Регистрация"
           hint="Порядок для участника: регистрация → цели → интересы → диагностика роли → приложение."
         >
+          {needsReview && (
+            <p className="adm-muted" style={{ margin: '8px 0 0', color: '#B8621A' }}>
+              Скопировано с другой смены — проверьте цели, интересы и диагностику, затем сохраните.
+            </p>
+          )}
           <div className="adm-forum-seg">
             {ONBOARDING_STEPS.map(s => (
               <button

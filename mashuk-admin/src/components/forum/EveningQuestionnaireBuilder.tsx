@@ -674,7 +674,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
       <div className="adm-forum-toolbar" style={{ flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
         <span className="adm-muted" style={{ fontSize: 12 }}>
           {forceUnpublished
-            ? 'Снята с публикации — участники не видят анкету.'
+            ? 'Скопировано или снято с публикации — участники не видят анкету. Проверьте и снимите с черновика после проверки.'
             : scheduleDayPublished === false
               ? 'День скрыт в программе — участники не видят анкету, пока день не опубликуют.'
               : forcePublished

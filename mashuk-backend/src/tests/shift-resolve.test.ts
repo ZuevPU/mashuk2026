@@ -5,7 +5,9 @@ import {
   pickParticipantForVk,
   pickLiveShifts,
   resolveRegistrationRoute,
+  requestedAdminShiftId,
 } from '../services/shiftService.js';
+import type { Request } from 'express';
 
 describe('shiftOpsToForumShape', () => {
   it('exposes currentDay and shiftId for participant API compat', () => {
@@ -197,5 +199,18 @@ describe('live shifts for push planner', () => {
       { status: 'active', isSandbox: true, id: 4 },
     ]);
     assert.deepEqual(live.map(s => s.id), [1, 2]);
+  });
+});
+
+describe('requestedAdminShiftId', () => {
+  it('reads the admin header and does not invent a shift', () => {
+    assert.equal(requestedAdminShiftId({
+      headers: { 'x-admin-shift-id': '12' },
+      query: {},
+    } as unknown as Request), 12);
+    assert.equal(requestedAdminShiftId({
+      headers: {},
+      query: {},
+    } as unknown as Request), null);
   });
 });

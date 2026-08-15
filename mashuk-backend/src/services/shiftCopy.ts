@@ -19,6 +19,13 @@ import {
   tasks,
 } from '../db/schema.js';
 import { unpublishClonedQuestionnaire } from './eveningQuestionnaireConfig.js';
+
+export function markOnboardingCopiedForReview(raw: unknown): Record<string, unknown> {
+  const base = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? { ...(raw as Record<string, unknown>) }
+    : {};
+  return { ...base, needsReview: true };
+}
 import {
   generateUniqueShiftCode,
   getShiftById,
@@ -378,7 +385,7 @@ export async function copyShiftModules(opts: {
         recommendationTemplates: source.recommendationTemplates,
         programRecEmptyNoMatchText: source.programRecEmptyNoMatchText,
         programRecEmptyNoEventsText: source.programRecEmptyNoEventsText,
-        roleDiagnosticsConfig: source.roleDiagnosticsConfig,
+        roleDiagnosticsConfig: markOnboardingCopiedForReview(source.roleDiagnosticsConfig),
         leaderboardScopes: source.leaderboardScopes,
         totalDays: source.totalDays,
         currentDay: 1,

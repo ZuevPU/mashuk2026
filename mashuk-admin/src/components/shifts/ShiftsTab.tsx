@@ -322,7 +322,7 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       await load();
       setSelectedId(target.id);
       setEditingContext(target.id);
-      return res.message;
+      return `${res.message || 'Структура скопирована'}. Онбординг и вечерняя анкета скопированы — проверьте их перед публикацией.`;
     }, 'Структура смены скопирована');
   };
 
@@ -353,6 +353,7 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         setSelectedId(res.shift.id);
         setEditingContext(res.shift.id);
       }
+      return `${res.message || 'Смена скопирована'}. Онбординг и вечерняя анкета скопированы — проверьте их перед публикацией.`;
     }, 'Смена скопирована');
   };
 

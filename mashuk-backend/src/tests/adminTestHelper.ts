@@ -5,10 +5,13 @@ import assert from 'node:assert/strict';
 export function interestsFromOnboardingMeta(meta: {
   interestGroups?: Array<{ tags?: string[] }>;
   interestMin?: number;
+  interestMax?: number;
 }): string[] {
   const tags = [...new Set((meta.interestGroups || []).flatMap(g => g.tags || []).filter(Boolean))];
-  const min = typeof meta.interestMin === 'number' && meta.interestMin > 0 ? meta.interestMin : 5;
-  const picked = tags.slice(0, Math.max(min, 5));
+  const min = typeof meta.interestMin === 'number' && meta.interestMin > 0 ? meta.interestMin : 1;
+  const max = typeof meta.interestMax === 'number' && meta.interestMax > 0 ? meta.interestMax : Math.max(min, 8);
+  const need = Math.min(max, Math.max(min, 1));
+  const picked = tags.slice(0, need);
   assert.ok(picked.length >= min, `onboarding-meta has ${picked.length} interest tags, need ${min}`);
   return picked;
 }

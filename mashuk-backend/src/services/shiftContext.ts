@@ -21,7 +21,7 @@ export function pickLevelsConfigRow<T extends { shiftId?: number | null }>(
     const exact = rows.find(r => r.shiftId === shiftId);
     if (exact) return exact;
   }
-  return rows.find(r => r.shiftId == null) ?? rows[0];
+  return rows.find(r => r.shiftId == null);
 }
 
 export async function loadLevelsConfig(actionType: string, shiftId?: number | null) {

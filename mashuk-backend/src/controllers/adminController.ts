@@ -78,10 +78,20 @@ import {
   getShiftById,
   pickShiftOpPatch,
   resolveAdminShiftId,
+  requireSelectedAdminShiftId,
   shiftOpsToForumShape,
   updateShift,
   clearShiftCaches,
 } from '../services/shiftService.js';
+
+async function selectedAdminShiftOr400(req: AdminRequest, res: Response): Promise<number | null> {
+  const shiftId = await requireSelectedAdminShiftId(req);
+  if (shiftId == null) {
+    res.status(400).json({ error: 'Выберите смену' });
+    return null;
+  }
+  return shiftId;
+}
 
 export const listParticipants = async (req: AdminRequest, res: Response): Promise<void> => {
   const parsed = parseParticipantListQuery(req);
@@ -1283,7 +1293,8 @@ export const crudProgramSpeakers = {
 
 export const updateForumSettings = async (req: AdminRequest, res: Response): Promise<void> => {
   const body = { ...req.body } as Record<string, unknown>;
-  const shiftId = await resolveAdminShiftId(req);
+  const shiftId = await selectedAdminShiftOr400(req, res);
+  if (shiftId == null) return;
   const current = await getShiftById(shiftId);
   if (!current) {
     res.status(404).json({ error: 'Shift not found' });
@@ -1300,6 +1311,7 @@ export const updateForumSettings = async (req: AdminRequest, res: Response): Pro
     body.roleDiagnosticsConfig = {
       ...merged,
       interestGroups: applyInterestCatalogToGroups(merged.interestGroups, catalog),
+      needsReview: false,
     };
   }
   if (body.exchangeLimits !== undefined) {
@@ -1356,7 +1368,8 @@ export const getAdminEveningQuestionnaire = async (req: AdminRequest, res: Respo
 
 export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Response): Promise<void> => {
   const day = Math.max(1, Math.min(7, Number(req.query.day) || 1));
-  const shiftId = await resolveAdminShiftId(req);
+  const shiftId = await selectedAdminShiftOr400(req, res);
+  if (shiftId == null) return;
   const current = await getShiftById(shiftId);
   if (!current) {
     res.status(404).json({ error: 'Shift not found' });
@@ -1495,7 +1508,8 @@ export const copyAdminEveningQuestionnaire = async (req: AdminRequest, res: Resp
     res.status(400).json({ error: 'Выберите другой день — копировать день сам в себя нельзя' });
     return;
   }
-  const shiftId = await resolveAdminShiftId(req);
+  const shiftId = await selectedAdminShiftOr400(req, res);
+  if (shiftId == null) return;
   const current = await getShiftById(shiftId);
   if (!current) {
     res.status(404).json({ error: 'Shift not found' });
@@ -1521,7 +1535,8 @@ export const copyAdminEveningQuestionnaire = async (req: AdminRequest, res: Resp
 
 export const resetAdminEveningQuestionnaire = async (req: AdminRequest, res: Response): Promise<void> => {
   const day = Math.max(1, Math.min(7, Number(req.query.day) || 1));
-  const shiftId = await resolveAdminShiftId(req);
+  const shiftId = await selectedAdminShiftOr400(req, res);
+  if (shiftId == null) return;
   const current = await getShiftById(shiftId);
   if (!current) {
     res.status(404).json({ error: 'Shift not found' });
@@ -2992,7 +3007,8 @@ export const crudLevels = {
   },
   upsert: async (req: AdminRequest, res: Response) => {
     const { actionType, pointsPerUnit, maxAccruals, levelThresholds, track, displayName } = req.body;
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const [existing] = await db.select().from(levelsConfig)
       .where(and(eq(levelsConfig.actionType, actionType), eq(levelsConfig.shiftId, shiftId))).limit(1);
     const payload = {
@@ -3016,7 +3032,8 @@ export const crudLevels = {
   },
   batchUpsert: async (req: AdminRequest, res: Response) => {
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const out = [];
     for (const item of items) {
       if (!item?.actionType) continue;

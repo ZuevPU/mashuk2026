@@ -71,7 +71,7 @@ export function InterestsReselectGate({
           Первый заход с регистрацией здесь не нужен.
         </p>
         <p style={{ margin: '0 0 16px', fontSize: 13, color: '#666' }}>
-          Выбери {interestMin === interestMax ? interestMin : `${interestMin}–${interestMax}`} интерес(ов).
+          Можно выбрать от {interestMin} до {interestMax} интерес(ов).
         </p>
       </Div>
       {groups.map(group => (
@@ -105,8 +105,8 @@ export function InterestsReselectGate({
       ))}
       <Div style={{ fontSize: 12, color: canSave ? '#2F855A' : '#C53030' }}>
         {canSave
-          ? `✓ Выбрано ${picked.length}${interestMax > interestMin ? ` (макс. ${interestMax})` : ''}`
-          : `Выбрано ${picked.length} — нужно минимум ${interestMin}`}
+          ? `✓ Выбрано ${picked.length} из ${interestMax}`
+          : `Выбрано ${picked.length} — можно от ${interestMin} до ${interestMax}`}
       </Div>
       {error && (
         <Div style={{ fontSize: 13, color: '#C53030' }}>{error}</Div>

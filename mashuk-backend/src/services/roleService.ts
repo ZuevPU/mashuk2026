@@ -71,7 +71,7 @@ export type OnboardingConfig = {
   optionToRole: RoleKey[][];
 };
 
-export const DEFAULT_INTEREST_MIN = 5;
+export const DEFAULT_INTEREST_MIN = 1;
 export const DEFAULT_INTEREST_MAX = 8;
 export const MIN_GOAL_QUESTIONS = 1;
 export const MAX_GOAL_QUESTIONS = 24;
@@ -491,6 +491,28 @@ export function normalizeInterestPickLimits(raw: unknown): { interestMin: number
   max = Math.max(1, Math.min(30, Math.floor(max)));
   if (min > max) [min, max] = [max, min];
   return { interestMin: min, interestMax: max };
+}
+
+/** Участник выбирает от 1 до максимума из админки «Регистрация → Интересы». */
+export function resolveParticipantInterestLimits(
+  raw: unknown,
+  tagCount = 0,
+): { interestMin: number; interestMax: number } {
+  const { interestMax } = normalizeInterestPickLimits(raw);
+  let max = interestMax;
+  if (tagCount > 0) max = Math.min(max, tagCount);
+  return { interestMin: 1, interestMax: Math.max(1, max) };
+}
+
+export function interestPickCountError(
+  count: number,
+  limits: { interestMin: number; interestMax: number },
+): string | null {
+  if (count >= limits.interestMin && count <= limits.interestMax) return null;
+  if (limits.interestMin === limits.interestMax) {
+    return `Выберите ${limits.interestMin} интерес(ов)`;
+  }
+  return `Выберите от ${limits.interestMin} до ${limits.interestMax} интересов`;
 }
 
 export function normalizeInterestGroups(raw: unknown): Array<{ title: string; tags: string[] }> {

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Textarea, Button, Checkbox, Radio, Slider, Div, FormItem } from '@vkontakte/vkui';
 import {
-  GOAL_QUESTIONS,
   ROLE_CATALOG,
   coerceGoalQuestions,
   visibleGoalQuestionsFilled,
@@ -9,7 +8,7 @@ import {
   type GoalQuestion,
 } from '../../data/onboarding';
 import { GoalQuestionsFields } from '../onboarding/GoalQuestionsFields';
-import { apiGet } from '../../api/client';
+import { apiGet, getStoredShiftId } from '../../api/client';
 import { isPointBQuestion } from '../../utils/eveningSummaryQuestion';
 import { PracticesVoteForm, type PracticesVoteConfig } from './PracticesVoteForm';
 
@@ -133,10 +132,9 @@ function formatStoredAnswer(
 }
 
 const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ onSubmit }) => {
-  const [goalQuestions, setGoalQuestions] = useState<GoalQuestion[]>(() => (
-    GOAL_QUESTIONS.map(q => ({ ...q, options: [...q.options] }))
-  ));
-  const [answers, setAnswers] = useState<string[]>(GOAL_QUESTIONS.map(() => ''));
+  const [goalQuestions, setGoalQuestions] = useState<GoalQuestion[]>([]);
+  const [answers, setAnswers] = useState<string[]>([]);
+  const [goalsReady, setGoalsReady] = useState(false);
   const [strongRole, setStrongRole] = useState('');
   const [growthRole, setGrowthRole] = useState('');
   const [growthWhy, setGrowthWhy] = useState('');
@@ -145,15 +143,32 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
   const [step, setStep] = useState(0);
 
   useEffect(() => {
-    apiGet<{ goalQuestions?: unknown }>('/auth/onboarding-meta')
+    const shiftId = getStoredShiftId();
+    const url = shiftId != null
+      ? `/auth/onboarding-meta?shiftId=${shiftId}`
+      : '/auth/onboarding-meta';
+    let cancelled = false;
+    setGoalsReady(false);
+    setGoalQuestions([]);
+    setAnswers([]);
+    apiGet<{ goalQuestions?: unknown; activeShiftId?: number | null }>(url)
       .then(data => {
+        if (cancelled) return;
+        if (shiftId != null && data.activeShiftId != null && data.activeShiftId !== shiftId) {
+          setGoalsReady(true);
+          return;
+        }
         if (Array.isArray(data.goalQuestions) && data.goalQuestions.length) {
           const gq = coerceGoalQuestions(data.goalQuestions);
           setGoalQuestions(gq);
           setAnswers(gq.map(() => ''));
         }
+        setGoalsReady(true);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) setGoalsReady(true);
+      });
+    return () => { cancelled = true; };
   }, []);
 
   const canNextAnswers = visibleGoalQuestionsFilled(goalQuestions, answers);
@@ -187,13 +202,19 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
 
       {step === 0 && (
         <>
-          <GoalQuestionsFields
-            questions={goalQuestions}
-            answers={answers}
-            onChange={setAnswers}
-            openPlaceholder="Ответ на выходе…"
-          />
-          <Button size="l" stretched disabled={!canNextAnswers} onClick={() => setStep(1)}>Далее</Button>
+          {!goalsReady || goalQuestions.length === 0 ? (
+            <p style={{ margin: '0 0 12px', fontSize: 14, color: '#888' }}>
+              {goalsReady ? 'Не удалось загрузить вопросы этой смены.' : 'Загружаем вопросы этой смены…'}
+            </p>
+          ) : (
+            <GoalQuestionsFields
+              questions={goalQuestions}
+              answers={answers}
+              onChange={setAnswers}
+              openPlaceholder="Ответ на выходе…"
+            />
+          )}
+          <Button size="l" stretched disabled={!goalsReady || !canNextAnswers} onClick={() => setStep(1)}>Далее</Button>
         </>
       )}
 

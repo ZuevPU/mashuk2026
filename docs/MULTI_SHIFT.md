@@ -5,7 +5,7 @@
 - **`status === 'active'`** — смена идёт. Несколько active разрешены (уникальный индекс одной active снят в `0064_shift_publish_multi`).
 - **`isPublished`** — смена видна для регистрации.
 - **`listLiveShifts()`** — `active` и не sandbox. Так работают пуши и планировщик точек.
-- `resolveActiveShift()` — одна строка, только fallback для легаси. Участникские начисления, день форума и медали берут `participant.shiftId`.
+- `resolveActiveShift()` — одна строка, только легаси для запросов **без** смены. Если `shiftId` уже передан и строки нет — `null`, не подменять первой active. Участникские начисления, день форума и медали берут `participant.shiftId`. Новые пути `resolveActiveShift()` не зовут.
 
 Участник: заголовок `X-Shift-Id` (localStorage `mashuk-shift-id`). Админ: `X-Admin-Shift-Id`.
 

@@ -1,6 +1,4 @@
 import { Request, Response } from 'express';
-import { db } from '../db/index.js';
-import { shifts } from '../db/schema.js';
 import { listDirectionsForShift } from '../services/shiftCatalogs.js';
 import {
   listPublishedShiftsForParticipants,
@@ -8,16 +6,16 @@ import {
 } from '../services/shiftService.js';
 
 async function resolveDirectionsShiftId(req: Request): Promise<number | null> {
-  const fromQuery = Number(req.query.shiftId);
-  if (Number.isInteger(fromQuery) && fromQuery > 0) return fromQuery;
+  const hasQuery = req.query.shiftId != null && String(req.query.shiftId).trim() !== '';
+  if (hasQuery) {
+    const fromQuery = Number(req.query.shiftId);
+    return Number.isInteger(fromQuery) && fromQuery > 0 ? fromQuery : null;
+  }
   const fromHeader = requestedShiftIdFromReq(req);
   if (fromHeader) return fromHeader;
   const published = await listPublishedShiftsForParticipants();
-  if (published.length) {
-    return published.find(s => s.status === 'active')?.id ?? published[0].id;
-  }
-  const [first] = await db.select({ id: shifts.id }).from(shifts).orderBy(shifts.id).limit(1);
-  return first?.id ?? null;
+  if (published.length === 1) return published[0].id;
+  return null;
 }
 
 export const listDirections = async (req: Request, res: Response): Promise<void> => {

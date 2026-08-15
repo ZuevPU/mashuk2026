@@ -70,7 +70,7 @@ export function InterestsStepEditor({
         </label>
       </div>
       <p className="adm-muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 12 }}>
-        Сейчас участник должен выбрать от {interestMin} до {interestMax} интересов.
+        Участник может выбрать от 1 до {interestMax} интересов — столько, сколько указано в максимуме.
         В каталоге {tagCount}.
       </p>
 

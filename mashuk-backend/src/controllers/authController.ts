@@ -11,6 +11,8 @@ import {
   interestTagsFromConfig,
   validateGoalAnswers,
   pruneHiddenGoalAnswers,
+  resolveParticipantInterestLimits,
+  interestPickCountError,
 } from '../services/roleService.js';
 import { normalizeRegion } from '../data/regions.js';
 import { getActiveConsentVersions } from './consentsController.js';
@@ -37,7 +39,10 @@ async function getForumOnboardingConfig(shiftId?: number | null) {
     await syncInterestCatalogToOnboarding(shiftId);
   }
   const settings = await getForumSettings(shiftId);
-  return normalizeOnboardingConfig(settings?.roleDiagnosticsConfig);
+  const config = normalizeOnboardingConfig(settings?.roleDiagnosticsConfig);
+  const tagCount = config.interestGroups.reduce((n, g) => n + g.tags.length, 0);
+  const limits = resolveParticipantInterestLimits(config, tagCount);
+  return { ...config, interestMin: limits.interestMin, interestMax: limits.interestMax };
 }
 
 async function resolvePublishedShiftId(req: VkAuthRequest, explicit?: number | null): Promise<number | null> {
@@ -257,13 +262,12 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       res.status(400).json({ error: goalErr });
       return;
     }
-    if (
-      data.interests.length < onboardingConfig.interestMin
-      || data.interests.length > onboardingConfig.interestMax
-    ) {
-      res.status(400).json({
-        error: `Выберите от ${onboardingConfig.interestMin} до ${onboardingConfig.interestMax} интересов`,
-      });
+    const interestErr = interestPickCountError(data.interests.length, {
+      interestMin: onboardingConfig.interestMin,
+      interestMax: onboardingConfig.interestMax,
+    });
+    if (interestErr) {
+      res.status(400).json({ error: interestErr });
       return;
     }
     if (data.roleAnswers.length !== onboardingConfig.questions.length) {

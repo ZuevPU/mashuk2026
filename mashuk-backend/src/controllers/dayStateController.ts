@@ -207,9 +207,7 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
     const eveningConfig = resolveEveningConfigForDay(settings, dayNumber);
     const scheduleDayPublished = await getScheduleDayPublished(
       dayNumber,
-      typeof (settings as { shiftId?: number }).shiftId === 'number'
-        ? (settings as { shiftId: number }).shiftId
-        : undefined,
+      typeof settings?.shiftId === 'number' ? settings.shiftId : undefined,
     );
     if (
       !isEveningOpenForDay(eveningConfig, dayNumber, new Date(), {
@@ -329,7 +327,8 @@ export async function loadDayContext(
       .from(participants)
       .where(eq(participants.id, participantId))
       .limit(1);
-    return getForumSettings(owner?.shiftId);
+    if (owner?.shiftId == null) return null;
+    return getForumSettings(owner.shiftId);
   })();
   const [state] = await db.select().from(participantDayState)
     .where(and(
@@ -345,9 +344,7 @@ export async function loadDayContext(
 
   let experiment = null;
   if (dayNumber >= 2 && dayNumber <= 7 && activeRoleKey) {
-    const expShiftId = typeof (settings as { shiftId?: number }).shiftId === 'number'
-      ? (settings as { shiftId: number }).shiftId
-      : null;
+    const expShiftId = typeof settings?.shiftId === 'number' ? settings.shiftId : null;
     const [exp] = await db.select().from(dayExperiments)
       .where(and(
         eq(dayExperiments.dayNumber, dayNumber),
@@ -386,9 +383,7 @@ export async function loadDayContext(
   const scheduleDayPublished = dayNumber >= 1 && dayNumber <= 7
     ? await getScheduleDayPublished(
       dayNumber,
-      typeof (settings as { shiftId?: number }).shiftId === 'number'
-        ? (settings as { shiftId: number }).shiftId
-        : undefined,
+      typeof settings?.shiftId === 'number' ? settings.shiftId : undefined,
     )
     : null;
   const eveningOpen = dayNumber >= 1 && dayNumber <= 7 && isEveningOpenForDay(config, dayNumber, now, {
@@ -407,9 +402,7 @@ export async function loadDayContext(
     emptyReason: 'none' | 'none_in_program';
   }> = {};
   if (programEventFieldDefs.length > 0) {
-    const shiftId = typeof (settings as { shiftId?: number }).shiftId === 'number'
-      ? (settings as { shiftId: number }).shiftId
-      : null;
+    const shiftId = typeof settings?.shiftId === 'number' ? settings.shiftId : null;
     // Load whole shift: nested sub-events sometimes inherit day visually but may
     // miss day_number; tree builder still anchors roots to the survey day.
     const shiftEv = shiftId != null

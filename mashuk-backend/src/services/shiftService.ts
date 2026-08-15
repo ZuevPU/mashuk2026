@@ -124,20 +124,32 @@ export function clearShiftCaches(): void {
   clearCache('events_day_');
 }
 
-/** Admin editing context: X-Admin-Shift-Id header or ?shiftId=, else active */
-export async function resolveAdminShiftId(req: Request): Promise<number> {
+export function requestedAdminShiftId(req: Request): number | null {
   const headerRaw = req.headers['x-admin-shift-id'];
   const headerVal = Array.isArray(headerRaw) ? headerRaw[0] : headerRaw;
   const fromHeader = headerVal ? Number(headerVal) : NaN;
   const fromQuery = req.query.shiftId != null ? Number(req.query.shiftId) : NaN;
-  const candidate = !Number.isNaN(fromHeader) && fromHeader > 0
-    ? fromHeader
-    : (!Number.isNaN(fromQuery) && fromQuery > 0 ? fromQuery : null);
+  if (!Number.isNaN(fromHeader) && fromHeader > 0) return fromHeader;
+  if (!Number.isNaN(fromQuery) && fromQuery > 0) return fromQuery;
+  return null;
+}
+
+/** Admin editing context: X-Admin-Shift-Id header or ?shiftId=, else active */
+export async function resolveAdminShiftId(req: Request): Promise<number> {
+  const candidate = requestedAdminShiftId(req);
   if (candidate != null) {
     const [row] = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.id, candidate)).limit(1);
     if (row) return row.id;
   }
   return resolveActiveShiftId();
+}
+
+/** Write paths: no silent fallback to the first active shift. */
+export async function requireSelectedAdminShiftId(req: Request): Promise<number | null> {
+  const candidate = requestedAdminShiftId(req);
+  if (candidate == null) return null;
+  const [row] = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.id, candidate)).limit(1);
+  return row?.id ?? null;
 }
 
 export function shiftOpsToForumShape(shift: ShiftRow) {

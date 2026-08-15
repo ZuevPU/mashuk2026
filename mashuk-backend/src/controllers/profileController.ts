@@ -5,7 +5,13 @@ import {
   piggybank, answers, taskSubmissions, tasks, questions, participants, directions, pointsLog,
 } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
-import { getRoleMeta, interestTagsFromConfig, normalizeOnboardingConfig } from '../services/roleService.js';
+import {
+  getRoleMeta,
+  interestPickCountError,
+  interestTagsFromConfig,
+  normalizeOnboardingConfig,
+  resolveParticipantInterestLimits,
+} from '../services/roleService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { generateQrToken } from '../services/qrService.js';
 import { getLevel, participantRatingScore, isUnifiedRatingEnabled } from '../services/pointsService.js';
@@ -391,10 +397,10 @@ export const updateParticipantInterests = async (req: ParticipantRequest, res: R
     }
     const config = normalizeOnboardingConfig((await getForumSettings(me.shiftId))?.roleDiagnosticsConfig);
     const picked = normalizeInterestList(req.body?.interests);
-    if (picked.length < config.interestMin || picked.length > config.interestMax) {
-      res.status(400).json({
-        error: `Выберите от ${config.interestMin} до ${config.interestMax} интересов`,
-      });
+    const limits = resolveParticipantInterestLimits(config, interestTagsFromConfig(config).size);
+    const interestErr = interestPickCountError(picked.length, limits);
+    if (interestErr) {
+      res.status(400).json({ error: interestErr });
       return;
     }
     const allowed = interestTagsFromConfig(config);

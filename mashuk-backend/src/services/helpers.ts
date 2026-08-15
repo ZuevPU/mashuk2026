@@ -18,6 +18,7 @@ export async function getForumSettings(shiftId?: number | null) {
       cache.set(cacheKey, result);
       return result;
     }
+    return null;
   }
 
   const active = await resolveActiveShift();

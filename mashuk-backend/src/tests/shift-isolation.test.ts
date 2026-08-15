@@ -48,6 +48,13 @@ describe('pickLevelsConfigRow', () => {
   it('falls back to the global row', () => {
     assert.equal(pickLevelsConfigRow(rows, 1)?.pointsPerUnit, 5);
   });
+
+  it('does not take another shift row when this shift has no config', () => {
+    const onlyShift1 = [
+      { id: 1, actionType: 'task_complete', shiftId: 1, pointsPerUnit: 5 },
+    ];
+    assert.equal(pickLevelsConfigRow(onlyShift1, 2), undefined);
+  });
 });
 
 describe('requireForumSettings', () => {

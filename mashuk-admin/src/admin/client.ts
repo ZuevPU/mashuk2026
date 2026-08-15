@@ -79,6 +79,7 @@ function mediaOriginFromApiBase(apiBase: string): string {
 export function resolvePublicMediaUrl(url: string): string {
   const raw = String(url || '').trim();
   if (!raw) return '';
+  if (raw.startsWith('data:image/')) return raw;
   const origin = mediaOriginFromApiBase(API_BASE);
   const fromUploadsPath = (pathname: string) => {
     const marker = '/uploads/';
@@ -86,7 +87,7 @@ export function resolvePublicMediaUrl(url: string): string {
     const name = (idx >= 0 ? pathname.slice(idx + marker.length) : pathname.replace(/^\/uploads\//, ''))
       .split(/[?#]/)[0];
     if (!/^[a-zA-Z0-9._-]+$/.test(name)) return raw;
-    return origin ? `${origin}/uploads/${name}` : `/uploads/${name}`;
+    return origin ? `${origin}/api/uploads/${name}` : `/api/uploads/${name}`;
   };
   if (raw.includes('/uploads/')) {
     try {
@@ -163,6 +164,13 @@ function parseAdminErrorResponse(status: number, text: string): string {
   return `HTTP ${status}`;
 }
 
+function adminWriteNeedsShift(path: string, method: string): boolean {
+  const verb = method.toUpperCase();
+  if (verb === 'GET' || verb === 'HEAD') return false;
+  if (path.startsWith('/login') || path.startsWith('/shifts')) return false;
+  return true;
+}
+
 export async function adminFetch(path: string, options: RequestInit = {}) {
   const base = getAdminApiBase();
   if (import.meta.env.PROD && !API_BASE) {
@@ -170,6 +178,9 @@ export async function adminFetch(path: string, options: RequestInit = {}) {
   }
   const token = getAdminToken();
   if (!token) throw new Error('Не авторизован');
+  if (adminWriteNeedsShift(path, String(options.method || 'GET')) && getAdminEditingShiftId() == null) {
+    throw new Error('Выберите смену в шапке');
+  }
   const res = await fetchWithRetry(`${base}${path}`, {
     ...options,
     headers: adminAuthHeaders({

@@ -9,8 +9,6 @@ import { apiGet, apiPost, getStoredShiftId, setShiftChoiceDone, setStoredShiftId
 import { bridge, isVkEnvironment, withTimeout } from '../utils/vkBridgeClient';
 import { requestVkPushPermission } from '../utils/pushNotifications';
 import {
-  GOAL_QUESTIONS,
-  DIAGNOSTIC_QUESTIONS,
   ROLE_CATALOG,
   scoreRoleClient,
   coerceGoalQuestions,
@@ -65,6 +63,17 @@ type PublishedShift = {
 
 type WizardStep = 0 | 1 | 2 | 3 | 4 | 'result' | 'confirm';
 
+function parseInterestLimits(
+  raw: { interestMin?: unknown; interestMax?: unknown },
+  tagCount = 0,
+): { interestMin: number; interestMax: number } {
+  const parsedMax = Number(raw.interestMax);
+  let max = Number.isFinite(parsedMax) && parsedMax >= 1 ? Math.floor(parsedMax) : 8;
+  max = Math.max(1, Math.min(30, max));
+  if (tagCount > 0) max = Math.min(max, tagCount);
+  return { interestMin: 1, interestMax: Math.max(1, max) };
+}
+
 export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   id, fetchedUser, isRegistered, onRegistered,
 }) => {
@@ -92,24 +101,20 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
     directionId?: number | null;
   }[]>([]);
   const [groupId, setGroupId] = useState<number | null>(null);
-  const [goalAnswers, setGoalAnswers] = useState<string[]>(['', '', '', '', '']);
+  const [goalAnswers, setGoalAnswers] = useState<string[]>([]);
   const [interests, setInterests] = useState<string[]>([]);
-  const [roleAnswers, setRoleAnswers] = useState<(number | null)[]>(
-    () => DIAGNOSTIC_QUESTIONS.map(() => null),
-  );
+  const [roleAnswers, setRoleAnswers] = useState<(number | null)[]>([]);
   const [diagIndex, setDiagIndex] = useState(0);
   const [diagIntro, setDiagIntro] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [goalQuestions, setGoalQuestions] = useState<GoalQuestion[]>(() => (
-    GOAL_QUESTIONS.map(q => ({ ...q, options: [...q.options] }))
-  ));
+  const [goalQuestions, setGoalQuestions] = useState<GoalQuestion[]>([]);
   const [interestGroups, setInterestGroups] = useState<Array<{ title: string; tags: string[] }>>([]);
-  const [interestMin, setInterestMin] = useState(5);
+  const [interestMin, setInterestMin] = useState(1);
   const [interestMax, setInterestMax] = useState(8);
-  const [diagQuestions, setDiagQuestions] = useState<Array<{ text: string; options: string[] }>>(
-    DIAGNOSTIC_QUESTIONS.map(q => ({ text: q.text, options: [...q.options] })),
-  );
+  const [interestLimitsReady, setInterestLimitsReady] = useState(false);
+  const [onboardingStepsReady, setOnboardingStepsReady] = useState(false);
+  const [diagQuestions, setDiagQuestions] = useState<Array<{ text: string; options: string[] }>>([]);
   const [diagOptionToRole, setDiagOptionToRole] = useState<RoleKey[][] | null>(null);
   const [apiRoles, setApiRoles] = useState<ApiRole[] | null>(null);
 
@@ -135,7 +140,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   }, [hasRealName]);
 
   const scoredRole = useMemo(() => {
-    if (roleAnswers.some(a => a === null)) return null;
+    if (!roleAnswers.length || roleAnswers.some(a => a === null)) return null;
     return scoreRoleClient(roleAnswers as number[], diagOptionToRole ?? undefined);
   }, [roleAnswers, diagOptionToRole]);
 
@@ -248,6 +253,19 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   useEffect(() => {
     if (!selectedShiftId) return;
     let cancelled = false;
+    setInterestLimitsReady(false);
+    setOnboardingStepsReady(false);
+    setInterestGroups([]);
+    setInterests([]);
+    setInterestMin(1);
+    setInterestMax(8);
+    setGoalQuestions([]);
+    setGoalAnswers([]);
+    setDiagQuestions([]);
+    setRoleAnswers([]);
+    setDiagOptionToRole(null);
+    setDiagIndex(0);
+    setDiagIntro(true);
     apiGet<{
       activeShiftId?: number | null;
       groupAssignMode?: string;
@@ -273,14 +291,14 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
           setGoalQuestions(gq);
           setGoalAnswers(gq.map(() => ''));
         }
-        setInterestGroups((data.interestGroups || []).map(g => ({ title: g.title, tags: [...g.tags] })));
+        const groups = (data.interestGroups || []).map(g => ({ title: g.title, tags: [...g.tags] }));
+        const tagCount = groups.reduce((n, g) => n + g.tags.length, 0);
+        const limits = parseInterestLimits(data, tagCount);
+        setInterestGroups(groups);
         setInterests([]);
-        if (typeof data.interestMin === 'number' && data.interestMin >= 1) {
-          setInterestMin(data.interestMin);
-        }
-        if (typeof data.interestMax === 'number' && data.interestMax >= 1) {
-          setInterestMax(data.interestMax);
-        }
+        setInterestMin(limits.interestMin);
+        setInterestMax(limits.interestMax);
+        setInterestLimitsReady(true);
         if (data.diagnostics?.questions?.length) {
           setDiagQuestions(data.diagnostics.questions.map(q => ({
             text: q.text,
@@ -292,8 +310,14 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
           setDiagOptionToRole(data.diagnostics.optionToRole);
         }
         if (data.roles?.length) setApiRoles(data.roles);
+        setOnboardingStepsReady(true);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) {
+          setInterestLimitsReady(true);
+          setOnboardingStepsReady(true);
+        }
+      });
     return () => { cancelled = true; };
   }, [selectedShiftId]);
 
@@ -321,9 +345,15 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
     && workplace.trim() && position.trim() && region
     && (groupAssignMode !== 'list' || groupsForDirection.length === 0 || groupId),
   );
-  const canGoStep2 = visibleGoalQuestionsFilled(goalQuestions, goalAnswers);
-  const canGoStep3 = interests.length >= interestMin && interests.length <= interestMax;
-  const canGoStep4 = roleAnswers[diagIndex] !== null;
+  const canGoStep2 = onboardingStepsReady
+    && goalQuestions.length > 0
+    && visibleGoalQuestionsFilled(goalQuestions, goalAnswers);
+  const canGoStep3 = interestLimitsReady
+    && interests.length >= interestMin
+    && interests.length <= interestMax;
+  const canGoStep4 = onboardingStepsReady
+    && diagQuestions.length > 0
+    && roleAnswers[diagIndex] !== null;
 
   const toggleInterest = (tag: string) => {
     setInterests(prev => {
@@ -337,6 +367,14 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
     if (!directionId || !scoredRole || roleAnswers.some(a => a === null)) return;
     if (!hasRealName) {
       setError('Не удалось получить имя из ВКонтакте. Закройте мини-приложение и откройте снова.');
+      return;
+    }
+    if (interests.length < interestMin || interests.length > interestMax) {
+      setError(
+        interestMin === interestMax
+          ? `Выберите ${interestMin} интерес(ов)`
+          : `Выберите от ${interestMin} до ${interestMax} интересов`,
+      );
       return;
     }
     setLoading(true);
@@ -412,6 +450,12 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                     setStoredShiftId(s.id);
                     setInterests([]);
                     setInterestGroups([]);
+                    setGoalQuestions([]);
+                    setGoalAnswers([]);
+                    setDiagQuestions([]);
+                    setRoleAnswers([]);
+                    setOnboardingStepsReady(false);
+                    setInterestLimitsReady(false);
                   }}
                   after={on ? '✓' : undefined}
                   subtitle={`${start} — ${end}${enrolled ? ' · профиль есть' : ' · нужна регистрация'}`}
@@ -562,11 +606,21 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 Эти же вопросы мы зададим на последний день, чтобы ты увидел, как изменился за смену.
               </p>
             </Div>
-            <GoalQuestionsFields
-              questions={goalQuestions}
-              answers={goalAnswers}
-              onChange={setGoalAnswers}
-            />
+            {!onboardingStepsReady || goalQuestions.length === 0 ? (
+              <Div>
+                <p style={{ margin: 0, fontSize: 14, color: '#888' }}>
+                  {onboardingStepsReady
+                    ? 'Не удалось загрузить цели этой смены.'
+                    : 'Загружаем цели выбранной смены…'}
+                </p>
+              </Div>
+            ) : (
+              <GoalQuestionsFields
+                questions={goalQuestions}
+                answers={goalAnswers}
+                onChange={setGoalAnswers}
+              />
+            )}
             <Button size="l" stretched disabled={!canGoStep2} onClick={() => setStep(3)}>
               Дальше → Интересы
             </Button>
@@ -581,8 +635,9 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
             <Div>
               <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>Твои интересы</h2>
               <p style={{ margin: 0, fontSize: 13, color: '#666' }}>
-                Выбери {interestMin === interestMax ? interestMin : `${interestMin}–${interestMax}`} тег(ов)
-                этой смены — по ним бот будет подбирать события и материалы.
+                {interestLimitsReady
+                  ? `Можно выбрать от ${interestMin} до ${interestMax} интерес(ов) этой смены — по ним бот будет подбирать события и материалы.`
+                  : 'Загружаем лимит интересов выбранной смены…'}
               </p>
             </Div>
             {interestGroups.length === 0 && (
@@ -621,10 +676,10 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 </div>
               </Div>
             ))}
-            <Div style={{ fontSize: 12, color: interests.length >= interestMin ? '#2F855A' : '#C53030' }}>
-              {interests.length >= interestMin
-                ? `✓ Выбрано ${interests.length}${interestMax > interestMin ? ` (макс. ${interestMax})` : ''}`
-                : `Выбрано ${interests.length} — нужно минимум ${interestMin}`}
+            <Div style={{ fontSize: 12, color: canGoStep3 ? '#2F855A' : '#C53030' }}>
+              {canGoStep3
+                ? `✓ Выбрано ${interests.length} из ${interestMax}`
+                : `Выбрано ${interests.length} — можно от ${interestMin} до ${interestMax}`}
             </Div>
             <Button size="l" stretched disabled={!canGoStep3} onClick={() => { setDiagIndex(0); setDiagIntro(true); setStep(4); }}>
               Дальше → Диагностика роли
@@ -646,7 +701,21 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 можно начать исследование себя или попробовать новые способы действия на программе.
               </p>
             </Div>
-            <Button size="l" stretched onClick={() => setDiagIntro(false)}>
+            {!onboardingStepsReady || diagQuestions.length === 0 ? (
+              <Div>
+                <p style={{ margin: '0 0 12px', fontSize: 14, color: '#888' }}>
+                  {onboardingStepsReady
+                    ? 'Не удалось загрузить диагностику этой смены.'
+                    : 'Загружаем диагностику выбранной смены…'}
+                </p>
+              </Div>
+            ) : null}
+            <Button
+              size="l"
+              stretched
+              disabled={!onboardingStepsReady || diagQuestions.length === 0}
+              onClick={() => setDiagIntro(false)}
+            >
               Начать диагностику →
             </Button>
             <Button size="l" stretched mode="secondary" style={{ marginTop: 8 }} onClick={() => setStep(3)}>

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { remapEveningLinkedEvents, remapLinkedIds } from '../services/shiftCopy.js';
+import { markOnboardingCopiedForReview, remapEveningLinkedEvents, remapLinkedIds } from '../services/shiftCopy.js';
 import { remapAudienceDirectionTree } from '../services/shiftCatalogs.js';
 import { unpublishClonedQuestionnaire } from '../services/eveningQuestionnaireConfig.js';
 
@@ -63,5 +63,16 @@ describe('shift copy id remap', () => {
     assert.equal(cloned.forcePublished, undefined);
     assert.equal(cloned.forceUnpublished, true);
     assert.deepEqual(cloned.steps[0].fields[0].linkedEventIds, [50]);
+  });
+
+  it('marks copied onboarding as needing review', () => {
+    const marked = markOnboardingCopiedForReview({
+      interestMin: 1,
+      interestMax: 8,
+      goalQuestions: [{ text: 'Цель' }],
+    });
+    assert.equal(marked.needsReview, true);
+    assert.equal(marked.interestMax, 8);
+    assert.equal(markOnboardingCopiedForReview(null).needsReview, true);
   });
 });

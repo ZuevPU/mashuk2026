@@ -7,6 +7,8 @@ import {
   normalizeGoalQuestions,
   getDefaultOnboardingConfig,
   validateGoalAnswers,
+  resolveParticipantInterestLimits,
+  interestPickCountError,
   GOAL_MULTI_SEP,
 } from '../services/roleService.js';
 
@@ -18,7 +20,7 @@ describe('normalizeOnboardingConfig', () => {
     assert.equal(cfg.questions.length, 8);
     assert.equal(cfg.optionToRole.length, 8);
     assert.equal(cfg.optionToRole[0].length, 6);
-    assert.equal(cfg.interestMin, 5);
+    assert.equal(cfg.interestMin, 1);
     assert.equal(cfg.interestMax, 8);
     assert.ok(cfg.interestGroups.length > 0);
   });
@@ -58,6 +60,30 @@ describe('normalizeOnboardingConfig', () => {
     const cfg = normalizeOnboardingConfig({ interestMin: 3, interestMax: 10 });
     assert.equal(cfg.interestMin, 3);
     assert.equal(cfg.interestMax, 10);
+  });
+
+  it('lets a participant pick from 1 to the admin maximum', () => {
+    const limits = resolveParticipantInterestLimits({ interestMin: 5, interestMax: 10 }, 20);
+    assert.equal(limits.interestMin, 1);
+    assert.equal(limits.interestMax, 10);
+    assert.equal(interestPickCountError(1, limits), null);
+    assert.equal(interestPickCountError(10, limits), null);
+    assert.match(interestPickCountError(0, limits) || '', /от 1 до 10/);
+    assert.match(interestPickCountError(11, limits) || '', /от 1 до 10/);
+  });
+
+  it('does not let the catalog size raise the admin maximum', () => {
+    const limits = resolveParticipantInterestLimits({ interestMin: 1, interestMax: 5 }, 12);
+    assert.equal(limits.interestMin, 1);
+    assert.equal(limits.interestMax, 5);
+    assert.equal(interestPickCountError(5, limits), null);
+    assert.match(interestPickCountError(10, limits) || '', /от 1 до 5/);
+  });
+
+  it('caps the maximum by how many tags exist', () => {
+    const limits = resolveParticipantInterestLimits({ interestMin: 1, interestMax: 20 }, 7);
+    assert.equal(limits.interestMin, 1);
+    assert.equal(limits.interestMax, 7);
   });
 
   it('preserves custom diagnostic question text', () => {

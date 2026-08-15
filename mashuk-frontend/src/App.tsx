@@ -175,11 +175,16 @@ export const App = () => {
           setStoredShiftId(auth.user.shiftId);
         }
         if (auth.needsInterestsReselection && auth.interestsCatalog?.interestGroups?.length) {
+          const groups = auth.interestsCatalog.interestGroups;
+          const tagCount = groups.reduce((n, g) => n + (g.tags?.length ?? 0), 0);
+          const parsedMax = Number(auth.interestsCatalog.interestMax);
+          let max = Number.isFinite(parsedMax) && parsedMax >= 1 ? Math.floor(parsedMax) : 8;
+          if (tagCount > 0) max = Math.min(max, tagCount);
           setInterestsGate({
             current: Array.isArray(auth.user?.interests) ? auth.user.interests : [],
-            groups: auth.interestsCatalog.interestGroups,
-            interestMin: auth.interestsCatalog.interestMin ?? 5,
-            interestMax: auth.interestsCatalog.interestMax ?? 8,
+            groups,
+            interestMin: 1,
+            interestMax: Math.max(1, max),
           });
         } else {
           setInterestsGate(null);
