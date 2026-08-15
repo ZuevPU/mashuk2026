@@ -281,6 +281,8 @@ export const crudQuestions = {
     if (q.status === 'published') {
       await notifyQuestionOnPublish(q, { wasPublished: false });
     }
+    const { syncQuestionPointsToLevels } = await import('../services/questionStakesSync.js');
+    await syncQuestionPointsToLevels(q);
     res.json({ question: serializeAdminQuestion(q, 0) });
   },
 
@@ -369,6 +371,8 @@ export const crudQuestions = {
         oldValue: { id, title: before.title }, newValue: { id: created.id, parentQuestionId: id, answerCount },
         comment: `Новая версия: уже было ${answerCount} ответов`, isCritical: true,
       });
+      const { syncQuestionPointsToLevels } = await import('../services/questionStakesSync.js');
+      await syncQuestionPointsToLevels(created);
       res.json({
         question: serializeAdminQuestion(created, 0),
         versioned: true,
@@ -414,6 +418,10 @@ export const crudQuestions = {
     const isPublished = updated?.status === 'published';
     if (updated && isPublished) {
       await notifyQuestionOnPublish(updated, { wasPublished });
+    }
+    if (updated) {
+      const { syncQuestionPointsToLevels } = await import('../services/questionStakesSync.js');
+      await syncQuestionPointsToLevels(updated);
     }
     res.json({ question: serializeAdminQuestion(updated!, Number(answerCount)), versioned: false });
   },

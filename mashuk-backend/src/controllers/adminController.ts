@@ -3009,9 +3009,18 @@ export const getLevelsActionCatalog = async (req: AdminRequest, res: Response): 
   const categories = await db.select().from(taskCategories).orderBy(asc(taskCategories.sortOrder));
   const catNames = categories.map(c => c.name);
   const catalog = mergeCatalogWithDb(config, catNames);
+  const { overlayCatalogStakes, stakesFromQuestions, upsertLevelsStake } = await import('../services/questionStakesSync.js');
+  const fromQuestions = await stakesFromQuestions(shiftId);
+  for (const [actionType, points] of fromQuestions) {
+    const row = config.find(c => c.actionType === actionType);
+    if ((!row || row.pointsPerUnit == null || row.pointsPerUnit === 0) && points > 0) {
+      await upsertLevelsStake(shiftId, actionType, points);
+    }
+  }
+  const aligned = overlayCatalogStakes(catalog, fromQuestions);
   const levelRows = config.filter(c => LEVEL_THRESHOLD_ACTION_TYPES.has(c.actionType));
   res.json({
-    catalog,
+    catalog: aligned,
     levelConfig: levelRows,
     catalogMeta: ACTION_CATALOG.filter(d => !LEVEL_THRESHOLD_ACTION_TYPES.has(d.actionType)).map(d => ({
       actionType: d.actionType,
@@ -3080,6 +3089,8 @@ export const crudLevels = {
     }
     const { syncLevelsExchangeToSettings } = await import('../services/exchangeLimits.js');
     await syncLevelsExchangeToSettings(shiftId, items);
+    const { syncLevelsStakesToQuestions } = await import('../services/questionStakesSync.js');
+    await syncLevelsStakesToQuestions(shiftId, items);
     res.json({ config: out });
   },
 };
