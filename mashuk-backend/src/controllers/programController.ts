@@ -24,7 +24,7 @@ import {
   touchpointCompletionRatio,
 } from '../services/touchpointProgress.js';
 import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
-import { getShiftById, isShiftLive, resolveActiveShiftId } from '../services/shiftService.js';
+import { getShiftById, isShiftLive } from '../services/shiftService.js';
 import { clusterOverlappingTimedItems, formatSlotLabel } from '../services/programSlots.js';
 import { eventVisibleForParticipantDirection } from '../services/eventAudience.js';
 
@@ -66,7 +66,8 @@ export async function countTouchpointsForDay(participantId: number, dayNumber: n
     .from(participants)
     .where(eq(participants.id, participantId))
     .limit(1);
-  const shiftId = owner?.shiftId || await resolveActiveShiftId();
+  const shiftId = owner?.shiftId;
+  if (shiftId == null) return { completed: 0, total: 0 };
   // Include all published day questions (even future windows) so answered twins still count
   const published = await db.select().from(questions)
     .where(and(

@@ -3,7 +3,7 @@ import { and, desc, eq, gt, isNull, lte, or, ne } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { homeNotices } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
-import { resolveActiveShiftId, resolveAdminShiftId } from '../services/shiftService.js';
+import { resolveAdminShiftId } from '../services/shiftService.js';
 
 const STATUSES = new Set(['draft', 'published', 'archived']);
 
@@ -52,7 +52,8 @@ async function archiveOtherPublished(shiftId: number, keepId?: number) {
 }
 
 export async function getActiveHomeNotice(shiftId?: number, now = new Date()) {
-  const sid = shiftId ?? await resolveActiveShiftId();
+  if (shiftId == null || !Number.isFinite(shiftId)) return null;
+  const sid = shiftId;
   const [row] = await db.select().from(homeNotices)
     .where(and(
       eq(homeNotices.shiftId, sid),

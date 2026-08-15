@@ -1,7 +1,6 @@
-import { and, eq, gte, inArray, isNotNull, isNull, or } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { directions, participants } from '../db/schema.js';
-import { resolveActiveShiftId } from './shiftService.js';
 
 export type AudienceType = 'all' | 'direction' | 'group' | 'ids' | 'rule';
 
@@ -36,10 +35,12 @@ const onboarded = and(
 
 /** Базовый фильтр broadcast: онбординг + смена + не заблокирован */
 export async function broadcastAudienceWhere(shiftId?: number | null) {
-  const sid = shiftId ?? await resolveActiveShiftId();
+  if (shiftId == null || !Number.isFinite(shiftId)) {
+    return and(onboarded, sql`false`);
+  }
   return and(
     onboarded,
-    eq(participants.shiftId, sid),
+    eq(participants.shiftId, shiftId),
     eq(participants.isBlocked, false),
   );
 }

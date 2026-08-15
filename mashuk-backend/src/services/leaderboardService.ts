@@ -2,7 +2,7 @@ import { and, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { participants, pointsLog, userMedals, tasks, taskSubmissions } from '../db/schema.js';
 import { pointsTrackForAction, totalRatingScore, isUnifiedRatingEnabled, participantRatingScore } from './pointsService.js';
-import { getShiftById, resolveActiveShift } from './shiftService.js';
+import { getShiftById } from './shiftService.js';
 import { FORUM_RATING_MAX_DAY } from './leaderboardQuery.js';
 import { forumDayWindowMsk } from './timePhase.js';
 
@@ -124,7 +124,7 @@ export async function computeLeaderboardScores(
   ];
   if (opts.scope === 'day' && opts.day) {
     const shiftId = await resolveCohortShiftId(participantIds, opts.shiftId);
-    const shift = shiftId != null ? await getShiftById(shiftId) : await resolveActiveShift();
+    const shift = shiftId != null ? await getShiftById(shiftId) : null;
     if (shift?.startDate) {
       const dayWindow = forumDayWindowMsk(new Date(shift.startDate), opts.day);
       conditions.push(or(
@@ -176,7 +176,7 @@ async function forumDayTimeBounds(
   day: number,
   shiftId?: number | null,
 ): Promise<{ start: Date; end: Date } | null> {
-  const shift = shiftId != null ? await getShiftById(shiftId) : await resolveActiveShift();
+  const shift = shiftId != null ? await getShiftById(shiftId) : null;
   if (!shift?.startDate) return null;
   return forumDayWindowMsk(new Date(shift.startDate), day);
 }
@@ -248,7 +248,7 @@ export async function computeMedalCountLeaderboard(
     }
   } else if (scope === 'shift') {
     const shiftId = await resolveCohortShiftId(participantIds, opts.shiftId);
-    const shift = shiftId != null ? await getShiftById(shiftId) : await resolveActiveShift();
+    const shift = shiftId != null ? await getShiftById(shiftId) : null;
     if (shift?.startDate) {
       const start = new Date(shift.startDate);
       start.setUTCHours(0, 0, 0, 0);

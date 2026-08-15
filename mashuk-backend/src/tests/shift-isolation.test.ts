@@ -4,6 +4,7 @@ import { taskBelongsToParticipantShift } from '../services/taskEligibility.js';
 import { taskPublishFireKey } from '../services/pushTriggerRunner.js';
 import { pickLevelsConfigRow, requireForumSettings } from '../services/shiftContext.js';
 import { getScheduleDayPublished } from '../services/eveningScheduleGate.js';
+import { getActiveHomeNotice } from '../controllers/homeNoticeController.js';
 
 describe('taskBelongsToParticipantShift', () => {
   it('rejects another shift', () => {
@@ -60,5 +61,11 @@ describe('getScheduleDayPublished', () => {
   it('does not guess the active shift when shiftId is missing', async () => {
     assert.equal(await getScheduleDayPublished(3), null);
     assert.equal(await getScheduleDayPublished(3, null), null);
+  });
+});
+
+describe('getActiveHomeNotice', () => {
+  it('does not guess the active shift when shiftId is missing', async () => {
+    assert.equal(await getActiveHomeNotice(undefined), null);
   });
 });
