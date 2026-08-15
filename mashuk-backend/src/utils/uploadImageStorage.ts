@@ -35,6 +35,26 @@ export function publicUploadUrl(filename: string): string {
   return `${publicUploadBaseUrl()}/uploads/${filename}`;
 }
 
+/** Rewrite relative or localhost /uploads URLs to the current public host. */
+export function resolveStoredUploadUrl(raw: string): string {
+  const t = String(raw || '').trim();
+  if (!t) return '';
+  if (t.startsWith('/uploads/')) {
+    const name = t.slice('/uploads/'.length);
+    return /^[a-zA-Z0-9._-]+$/.test(name) ? publicUploadUrl(name) : t;
+  }
+  try {
+    const u = new URL(t);
+    if (u.pathname.startsWith('/uploads/')) {
+      const name = u.pathname.slice('/uploads/'.length);
+      if (/^[a-zA-Z0-9._-]+$/.test(name)) return publicUploadUrl(name);
+    }
+  } catch {
+    // keep original
+  }
+  return t;
+}
+
 /** True if URL points at our /uploads/ tree (same origin as PUBLIC_URL / local API). */
 export function isOwnUploadUrl(raw: string): boolean {
   try {

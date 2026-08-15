@@ -19,7 +19,7 @@ import { DelayedSurveyPanel } from './panels/DelayedSurvey';
 import { ScanPanel } from './panels/Scan';
 import { OpenInVkScreen } from './components/OpenInVkScreen';
 import { hasUsableLaunchParams, peekPendingTaskQr, setPendingTaskQr } from './utils/launchParams';
-import { apiGet, getHashSearchParams, initAuth, setStoredShiftId } from './api/client';
+import { apiGet, getHashSearchParams, getStoredShiftId, initAuth, setStoredShiftId } from './api/client';
 
 export const ModalContext = createContext<{ setModal: (modal: ReactNode | null) => void }>({ setModal: () => {} });
 export const useAppModal = () => useContext(ModalContext);
@@ -139,7 +139,7 @@ export const App = () => {
         const qr = pending.get('qr');
         const task = pending.get('task');
         if (qr) setPendingTaskQr(qr, task ? Number(task) : undefined);
-        if (auth.registrationTargetShiftId) {
+        if (auth.registrationTargetShiftId && getStoredShiftId() == null) {
           setStoredShiftId(auth.registrationTargetShiftId);
         }
         if (!window.location.hash.includes('registration')) {

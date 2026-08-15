@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { and, eq, gt, isNull, or } from 'drizzle-orm';
-import { env } from '../config/env.js';
+import { publicUploadUrl } from '../utils/uploadImageStorage.js';
 import { db } from '../db/index.js';
 import { participantPushDeliveries } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
@@ -108,8 +108,7 @@ export const adminUploadImage = async (req: AdminRequest, res: Response): Promis
     const filename = `${crypto.randomUUID()}.${ext}`;
     fs.writeFileSync(path.join(UPLOAD_DIR, filename), buffer);
 
-    const baseUrl = env.PUBLIC_URL || `http://localhost:${env.PORT}`;
-    res.json({ url: `${baseUrl}/uploads/${filename}` });
+    res.json({ url: publicUploadUrl(filename) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Upload failed' });

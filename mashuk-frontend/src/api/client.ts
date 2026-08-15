@@ -248,6 +248,35 @@ export function getApiUrl(): string {
   return API_URL;
 }
 
+function mediaOriginFromApiBase(apiBase: string): string {
+  const base = String(apiBase || '').replace(/\/$/, '');
+  if (!base || base.startsWith('/')) return '';
+  return base.replace(/\/api$/i, '');
+}
+
+/** Makes /uploads and localhost upload URLs load from the live API host. */
+export function resolvePublicMediaUrl(url: string): string {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  const origin = mediaOriginFromApiBase(API_URL);
+  const fromUploadsPath = (pathname: string) => {
+    const name = pathname.replace(/^\/uploads\//, '');
+    if (!/^[a-zA-Z0-9._-]+$/.test(name)) return raw;
+    return origin ? `${origin}/uploads/${name}` : `/uploads/${name}`;
+  };
+  if (raw.startsWith('/uploads/')) return fromUploadsPath(raw);
+  try {
+    const parsed = new URL(raw);
+    if (parsed.pathname.startsWith('/uploads/')) {
+      const local = /localhost|127\.0\.0\.1/i.test(parsed.hostname);
+      if (local || origin) return fromUploadsPath(parsed.pathname);
+    }
+  } catch {
+    // keep original
+  }
+  return raw;
+}
+
 const SHIFT_ID_KEY = 'mashuk-shift-id';
 
 export function getStoredShiftId(): number | null {

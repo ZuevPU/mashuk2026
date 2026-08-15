@@ -1,4 +1,5 @@
 import type { MouseEvent } from 'react';
+import { resolvePublicMediaUrl } from '../../api/client';
 import { normalizeExternalUrl, openExternalUrl } from '../../utils/openUrl';
 
 export type HomeNoticeItem = {
@@ -23,7 +24,8 @@ function noticeCtaLabel(notice: HomeNoticeItem): string {
 
 function noticeImages(notice: HomeNoticeItem): string[] {
   const raw = notice.imageUrls ?? notice.image_urls;
-  return Array.isArray(raw) ? raw.filter(Boolean) : [];
+  if (!Array.isArray(raw)) return [];
+  return raw.map(u => resolvePublicMediaUrl(String(u || ''))).filter(Boolean);
 }
 
 type CardProps = {
@@ -32,12 +34,26 @@ type CardProps = {
 };
 
 export function HomeNoticeCard({ notice, onOpen }: CardProps) {
+  const images = noticeImages(notice);
+  const cover = images[0] || null;
+
   return (
     <div className="m-home-notice">
-      <div className="m-home-notice__title">{notice.title}</div>
-      <button type="button" className="m-home-notice__btn" onClick={onOpen}>
-        Посмотреть
-      </button>
+      {cover && (
+        <img
+          className="m-home-notice__cover"
+          src={cover}
+          alt=""
+          loading="lazy"
+          decoding="async"
+        />
+      )}
+      <div className="m-home-notice__main">
+        <div className="m-home-notice__title">{notice.title}</div>
+        <button type="button" className="m-home-notice__btn" onClick={onOpen}>
+          Посмотреть
+        </button>
+      </div>
     </div>
   );
 }
@@ -57,7 +73,6 @@ export function HomeNoticeModalBody({ notice, onAfterOpenLink }: ModalBodyProps)
     e.preventDefault();
     e.stopPropagation();
     if (!ctaHref) return;
-    // Open while the user gesture is still active, then close the sheet.
     openExternalUrl(ctaHref);
     onAfterOpenLink?.();
   };

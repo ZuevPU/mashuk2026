@@ -310,11 +310,25 @@ export type RegistrationRoute = {
   shiftId: number | null;
 };
 
-/** Смена 1 — вход; копия в другую смену — выбор; иначе регистрация на смену 2. */
+/** Смена 1 — вход; копия в другую смену — выбор; иначе регистрация на смену 2.
+ *  Явный X-Shift-Id (переход из профиля) важнее дефолта: регистрируем/входим туда. */
 export function resolveRegistrationRoute(
   published: Array<{ id: number; code: string; name: string }>,
   enrollments: Array<{ shiftId: number | null; onboardingCompleted: boolean }>,
+  preferredShiftId?: number | null,
 ): RegistrationRoute {
+  const preferred = preferredShiftId
+    && published.some(s => s.id === preferredShiftId)
+    ? preferredShiftId
+    : null;
+  if (preferred) {
+    const enrollment = enrollments.find(e => e.shiftId === preferred);
+    return {
+      action: enrollment?.onboardingCompleted ? 'enter' : 'register',
+      shiftId: preferred,
+    };
+  }
+
   const shift1 = findPublishedShiftBySlot(published, 1);
   const shift2 = findPublishedShiftBySlot(published, 2)
     ?? published.find(s => s.id !== shift1?.id)

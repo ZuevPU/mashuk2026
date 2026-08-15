@@ -4,6 +4,7 @@ import { db } from '../db/index.js';
 import { homeNotices } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { resolveAdminShiftId } from '../services/shiftService.js';
+import { resolveStoredUploadUrl } from '../utils/uploadImageStorage.js';
 
 const STATUSES = new Set(['draft', 'published', 'archived']);
 
@@ -18,7 +19,7 @@ function parseOptionalDate(value: unknown): Date | null | undefined {
 function normalizeImageUrls(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map(u => String(u ?? '').trim())
+    .map(u => resolveStoredUploadUrl(String(u ?? '').trim()))
     .filter(u => /^https?:\/\//.test(u) || u.startsWith('/uploads/'));
 }
 
@@ -38,7 +39,9 @@ function toPublicNotice(row: typeof homeNotices.$inferSelect) {
     body: row.body ?? '',
     ctaUrl: row.ctaUrl ?? null,
     ctaLabel: row.ctaLabel ?? null,
-    imageUrls: Array.isArray(row.imageUrls) ? row.imageUrls : [],
+    imageUrls: Array.isArray(row.imageUrls)
+      ? row.imageUrls.map(u => resolveStoredUploadUrl(String(u))).filter(Boolean)
+      : [],
   };
 }
 

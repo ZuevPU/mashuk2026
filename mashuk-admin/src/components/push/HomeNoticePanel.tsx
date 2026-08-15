@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { resolvePublicMediaUrl } from '../../admin/client';
 import { confirmDelete } from '../../admin/confirmDelete';
 import type { AdminTabProps } from '../admin/types';
 
@@ -40,7 +41,9 @@ function rowToDraft(row: HomeNoticeRow): Draft {
     body: row.body || '',
     ctaUrl: row.ctaUrl || '',
     ctaLabel: row.ctaLabel || 'Открыть',
-    imageUrls: Array.isArray(row.imageUrls) ? row.imageUrls : [],
+    imageUrls: Array.isArray(row.imageUrls)
+      ? row.imageUrls.map(resolvePublicMediaUrl).filter(Boolean)
+      : [],
   };
 }
 
@@ -129,28 +132,28 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
     setDraft(rowToDraft(row));
   };
 
-  const payload = (status?: string) => ({
-    title: draft.title.trim(),
-    body: draft.body,
-    ctaUrl: normalizeCtaUrl(draft.ctaUrl) || null,
-    ctaLabel: draft.ctaLabel.trim() || null,
-    imageUrls: draft.imageUrls,
-    ...(status ? { status } : {}),
-  });
-
-  const persist = async (status?: string) => {
-    if (!draft.title.trim()) throw new Error('Укажите заголовок');
+  const persist = async (status?: string, nextDraft?: Draft) => {
+    const d = nextDraft ?? draft;
+    if (!d.title.trim()) throw new Error('Укажите заголовок');
+    const body = {
+      title: d.title.trim(),
+      body: d.body,
+      ctaUrl: normalizeCtaUrl(d.ctaUrl) || null,
+      ctaLabel: d.ctaLabel.trim() || null,
+      imageUrls: d.imageUrls,
+      ...(status ? { status } : {}),
+    };
     if (editingId) {
       const res = await adminFetch(`/home-notices/${editingId}`, {
         method: 'PATCH',
-        body: JSON.stringify(payload(status)),
+        body: JSON.stringify(body),
       }) as { notice: HomeNoticeRow };
       setEditingId(res.notice.id);
       setDraft(rowToDraft(res.notice));
     } else {
       const res = await adminFetch('/home-notices', {
         method: 'POST',
-        body: JSON.stringify(payload(status ?? 'draft')),
+        body: JSON.stringify({ ...body, status: status ?? 'draft' }),
       }) as { notice: HomeNoticeRow };
       setEditingId(res.notice.id);
       setDraft(rowToDraft(res.notice));
@@ -178,9 +181,14 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
         method: 'POST',
         body: JSON.stringify({ dataUrl }),
       }) as { url: string };
-      urls.push(up.url);
+      if (up?.url) urls.push(up.url);
     }
-    setDraft(d => ({ ...d, imageUrls: [...d.imageUrls, ...urls] }));
+    if (!urls.length) throw new Error('Не удалось загрузить картинку');
+    const next: Draft = { ...draft, imageUrls: [...draft.imageUrls, ...urls] };
+    if (!next.title.trim()) next.title = 'Объявление';
+    setDraft(next);
+    setPreviewMode('modal');
+    await persist(undefined, next);
   };
 
   const published = notices.find(n => n.status === 'published');
@@ -196,7 +204,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
           <div>
             <h3 style={{ margin: 0, fontSize: 16 }}>Плашка главного экрана</h3>
             <p className="adm-muted" style={{ margin: '4px 0 0', fontSize: 12 }}>
-              Участник видит компактную карточку под шапкой и модалку «Посмотреть».
+              На главной — карточка с фото и кнопкой «Посмотреть». Внутри модалки — текст, ссылка и все картинки.
               На смене может быть только одна опубликованная плашка.
             </p>
           </div>
@@ -266,7 +274,8 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
         <div className="adm-forum-block" style={{ marginTop: 12 }}>
           <span className="adm-label">Картинки</span>
           <p className="adm-muted" style={{ margin: '0 0 6px', fontSize: 11 }}>
-            Перед загрузкой уменьшаем в 2 раза — так они чётче смотрятся на телефоне.
+            Первая картинка сразу видна на карточке главной. Остальные — в модалке.
+            После загрузки сохраняем автоматически.
           </p>
           <input
             type="file"
@@ -289,7 +298,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
               {draft.imageUrls.map((url, i) => (
                 <div key={`${url}-${i}`} style={{ position: 'relative' }}>
                   <img
-                    src={url}
+                    src={resolvePublicMediaUrl(url)}
                     alt=""
                     style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8, border: '1px solid #ddd' }}
                   />
@@ -396,29 +405,41 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
               style={{
                 background: 'linear-gradient(135deg, #F5F0E8 0%, #E8F0EC 100%)',
                 borderRadius: 16,
-                padding: '14px 16px',
+                padding: '12px 14px',
                 boxShadow: '0 4px 16px rgba(45, 106, 79, 0.12)',
                 border: '1px solid rgba(61, 139, 122, 0.22)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
               }}
             >
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#1A1714', lineHeight: 1.3 }}>
-                {draft.title || 'Заголовок плашки'}
+              {draft.imageUrls[0] && (
+                <img
+                  src={resolvePublicMediaUrl(draft.imageUrls[0])}
+                  alt=""
+                  style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 14, flexShrink: 0 }}
+                />
+              )}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: '#1A1714', lineHeight: 1.3 }}>
+                  {draft.title || 'Заголовок плашки'}
+                </div>
+                <button
+                  type="button"
+                  style={{
+                    marginTop: 10,
+                    border: 'none',
+                    background: '#2D6A4F',
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: 12,
+                    borderRadius: 10,
+                    padding: '8px 14px',
+                  }}
+                >
+                  Посмотреть
+                </button>
               </div>
-              <button
-                type="button"
-                style={{
-                  marginTop: 10,
-                  border: 'none',
-                  background: '#2D6A4F',
-                  color: '#fff',
-                  fontWeight: 700,
-                  fontSize: 12,
-                  borderRadius: 10,
-                  padding: '8px 14px',
-                }}
-              >
-                Посмотреть
-              </button>
             </div>
           ) : (
             <div
@@ -438,7 +459,12 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
               {draft.imageUrls.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
                   {draft.imageUrls.map((url, i) => (
-                    <img key={`${url}-${i}`} src={url} alt="" style={{ width: '100%', borderRadius: 10 }} />
+                    <img
+                      key={`${url}-${i}`}
+                      src={resolvePublicMediaUrl(url)}
+                      alt=""
+                      style={{ width: '100%', borderRadius: 10 }}
+                    />
                   ))}
                 </div>
               )}

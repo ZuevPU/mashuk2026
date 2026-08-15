@@ -175,15 +175,27 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         const list = data.shifts || [];
         setPublishedShifts(list);
         setEnrollments(data.enrollments || []);
-        if (data.registrationAction === 'choose') {
+        const stored = getStoredShiftId();
+        const storedOk = stored != null && list.some(s => s.id === stored);
+        if (data.registrationAction === 'choose' && !storedOk) {
           setAllowShiftPick(true);
           return;
         }
-        const target = data.registrationTargetShiftId
-          ?? (list.length === 1 ? list[0].id : null);
+        const target = storedOk
+          ? stored
+          : (data.registrationTargetShiftId
+            ?? (list.length === 1 ? list[0].id : null));
         if (target && list.some(s => s.id === target)) {
           setSelectedShiftId(target);
           setStoredShiftId(target);
+          const enrolled = (data.enrollments || []).some(
+            e => e.shiftId === target && e.onboardingCompleted,
+          );
+          if (enrolled) {
+            setAllowShiftPick(list.length > 1);
+            return;
+          }
+          setAllowShiftPick(list.length > 1);
           setStep(prev => (prev === 0 ? 1 : prev));
           return;
         }
@@ -390,6 +402,9 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
               <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>Привет! Давай знакомиться</h2>
               <p style={{ margin: 0, fontSize: 13, color: '#666' }}>
                 Заполни базовые поля — это займёт пару минут.
+                {selectedShiftId
+                  ? ` Регистрация в смену «${publishedShifts.find(s => s.id === selectedShiftId)?.name || selectedShiftId}».`
+                  : ''}
               </p>
             </Div>
             <Cell subtitle="ФИО из ВКонтакте">{firstName} {lastName}</Cell>

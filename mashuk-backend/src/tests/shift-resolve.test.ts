@@ -158,6 +158,34 @@ describe('resolveRegistrationRoute', () => {
     ]);
     assert.deepEqual(route, { action: 'choose', shiftId: null });
   });
+
+  it('honors explicit switch from shift 2 to shift 1 without a profile', () => {
+    const route = resolveRegistrationRoute(published, [
+      { shiftId: 20, onboardingCompleted: true },
+    ], 10);
+    assert.deepEqual(route, { action: 'register', shiftId: 10 });
+  });
+
+  it('enters preferred shift when that profile already exists', () => {
+    const route = resolveRegistrationRoute(published, [
+      { shiftId: 10, onboardingCompleted: true },
+      { shiftId: 20, onboardingCompleted: true },
+    ], 10);
+    assert.deepEqual(route, { action: 'enter', shiftId: 10 });
+  });
+
+  it('stays on preferred shift 2 even for shift-1 alumni', () => {
+    const route = resolveRegistrationRoute(published, [
+      { shiftId: 10, onboardingCompleted: true },
+      { shiftId: 20, onboardingCompleted: true },
+    ], 20);
+    assert.deepEqual(route, { action: 'enter', shiftId: 20 });
+  });
+
+  it('ignores preferred id that is not published', () => {
+    const route = resolveRegistrationRoute(published, [], 99);
+    assert.deepEqual(route, { action: 'register', shiftId: 20 });
+  });
 });
 
 describe('live shifts for push planner', () => {

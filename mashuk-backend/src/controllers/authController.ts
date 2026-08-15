@@ -113,7 +113,7 @@ export const listPublishedShifts = async (req: VkAuthRequest, res: Response): Pr
     const vkUserId = req.vkUserId;
     const published = await listPublishedShiftsForParticipants();
     const enrollments = vkUserId ? await listVkEnrollments(vkUserId) : [];
-    const route = resolveRegistrationRoute(published, enrollments);
+    const route = resolveRegistrationRoute(published, enrollments, requestedShiftIdFromReq(req));
     res.json({
       shifts: published.map(publicShiftCard),
       enrollments,
@@ -138,7 +138,7 @@ export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> =>
     const published = await listPublishedShiftsForParticipants();
     const publishedShifts = published.map(publicShiftCard);
     const enrollments = await listVkEnrollments(vkUserId);
-    const route = resolveRegistrationRoute(published, enrollments);
+    const route = resolveRegistrationRoute(published, enrollments, preferredShiftId);
     let user = await findParticipantForVk(vkUserId, preferredShiftId, {
       fallback: preferredShiftId == null,
     });
