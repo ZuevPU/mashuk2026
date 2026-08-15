@@ -63,6 +63,19 @@ export function remapLinkedIds(ids: unknown, map: Map<number, number>): number[]
   return out;
 }
 
+type ShowWhen = { questionId: number; optionValues: string[] };
+
+/** Remap a question visibility rule onto the copied shift. Drop it if the source id is unknown. */
+export function remapCopiedShowWhen(
+  showWhen: ShowWhen | null | undefined,
+  questionIdMap: Map<number, number>,
+): ShowWhen | null {
+  if (!showWhen || typeof showWhen !== 'object' || !showWhen.questionId) return null;
+  const mapped = questionIdMap.get(showWhen.questionId);
+  if (!mapped) return null;
+  return { ...showWhen, questionId: mapped };
+}
+
 export function remapEveningLinkedEvents(config: unknown, eventIdMap: Map<number, number>): unknown {
   if (!config || typeof config !== 'object') return config;
   const src = config as { steps?: Array<{ fields?: Array<Record<string, unknown>> }> };
@@ -455,14 +468,7 @@ export async function copyShiftModules(opts: {
         const mappedGroup = rest.audienceGroupId && groupIdMap.has(rest.audienceGroupId)
           ? groupIdMap.get(rest.audienceGroupId)!
           : null;
-        const showWhen = rest.showWhen && typeof rest.showWhen === 'object'
-          ? {
-            ...rest.showWhen,
-            questionId: rest.showWhen.questionId && questionIdMap.has(rest.showWhen.questionId)
-              ? questionIdMap.get(rest.showWhen.questionId)!
-              : undefined,
-          }
-          : rest.showWhen;
+        const showWhen = remapCopiedShowWhen(rest.showWhen, questionIdMap);
         const [created] = await tx.insert(questions).values({
           ...rest,
           shiftId: target.id,

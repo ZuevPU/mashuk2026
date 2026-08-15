@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { markOnboardingCopiedForReview, remapEveningLinkedEvents, remapLinkedIds } from '../services/shiftCopy.js';
+import { markOnboardingCopiedForReview, remapCopiedShowWhen, remapEveningLinkedEvents, remapLinkedIds } from '../services/shiftCopy.js';
 import { remapAudienceDirectionTree } from '../services/shiftCatalogs.js';
 import { unpublishClonedQuestionnaire } from '../services/eveningQuestionnaireConfig.js';
 
@@ -63,6 +63,16 @@ describe('shift copy id remap', () => {
     assert.equal(cloned.forcePublished, undefined);
     assert.equal(cloned.forceUnpublished, true);
     assert.deepEqual(cloned.steps[0].fields[0].linkedEventIds, [50]);
+  });
+
+  it('remaps showWhen onto the copied question or drops the source link', () => {
+    const map = new Map<number, number>([[7, 70]]);
+    assert.deepEqual(
+      remapCopiedShowWhen({ questionId: 7, optionValues: ['a'] }, map),
+      { questionId: 70, optionValues: ['a'] },
+    );
+    assert.equal(remapCopiedShowWhen({ questionId: 99, optionValues: ['a'] }, map), null);
+    assert.equal(remapCopiedShowWhen(null, map), null);
   });
 
   it('marks copied onboarding as needing review', () => {
