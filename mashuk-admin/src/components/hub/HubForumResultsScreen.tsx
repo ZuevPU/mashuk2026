@@ -722,7 +722,7 @@ export function HubForumResultsScreen() {
             <DayResultsSection
               id="hub-forum-people"
               title="Кто заполнил"
-              note="ФИО, направление, группа и тепловая полоса оценок. Нажмите строку, чтобы открыть анкету."
+              note="Сначала 10 строк. Заголовки вопросов сверху — по ним можно сортировать. Нажмите строку, чтобы открыть анкету."
             >
               <ForumResultsPeopleTable
                 columns={data.people!.columns}

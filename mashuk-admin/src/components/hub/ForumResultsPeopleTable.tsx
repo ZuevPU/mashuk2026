@@ -22,7 +22,7 @@ export type ForumPeopleRow = {
   index: number | null;
 };
 
-type SortKey = 'name' | 'direction' | 'group' | 'index';
+type SortKey = 'name' | 'direction' | 'group' | 'index' | `heat:${string}`;
 
 type Props = {
   columns: ForumPeopleColumn[];
@@ -30,6 +30,8 @@ type Props = {
   adminFetch: (path: string, init?: RequestInit) => Promise<unknown>;
   onSaved: () => void;
 };
+
+const PAGE = 10;
 
 function heatStyle(v: number | null, max: number): { background: string; color: string } {
   if (v == null || !Number.isFinite(v)) {
@@ -41,16 +43,13 @@ function heatStyle(v: number | null, max: number): { background: string; color: 
   return { background: 'rgba(52, 199, 89, 0.18)', color: '#1B7A3A' };
 }
 
-function shortLabel(label: string): string {
-  const words = label.trim().split(/\s+/);
-  if (label.length <= 16) return label;
-  if (words.length === 1) return `${label.slice(0, 14)}…`;
-  return words.slice(0, 2).join(' ');
+function heatValue(row: ForumPeopleRow, key: string): number | null {
+  return row.heat.find(c => c.key === key)?.v ?? null;
 }
 
 export function ForumResultsPeopleTable({ columns, rows, adminFetch, onSaved }: Props) {
   const [query, setQuery] = useState('');
-  const [limit, setLimit] = useState<10 | 50 | 100>(10);
+  const [limit, setLimit] = useState(PAGE);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [openId, setOpenId] = useState<number | null>(null);
@@ -63,15 +62,26 @@ export function ForumResultsPeopleTable({ columns, rows, adminFetch, onSaved }: 
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...list].sort((a, b) => {
       if (sortKey === 'index') {
-        const av = a.index ?? -1;
-        const bv = b.index ?? -1;
+        return ((a.index ?? -1) - (b.index ?? -1)) * dir;
+      }
+      if (sortKey.startsWith('heat:')) {
+        const key = sortKey.slice(5);
+        const av = heatValue(a, key);
+        const bv = heatValue(b, key);
+        if (av == null && bv == null) return a.name.localeCompare(b.name, 'ru');
+        if (av == null) return 1;
+        if (bv == null) return -1;
         return (av - bv) * dir;
       }
-      return a[sortKey].localeCompare(b[sortKey], 'ru') * dir;
+      return a[sortKey as 'name' | 'direction' | 'group'].localeCompare(
+        b[sortKey as 'name' | 'direction' | 'group'],
+        'ru',
+      ) * dir;
     });
   }, [rows, query, sortKey, sortDir]);
 
   const visible = filtered.slice(0, limit);
+  const remaining = Math.max(0, filtered.length - visible.length);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -79,7 +89,7 @@ export function ForumResultsPeopleTable({ columns, rows, adminFetch, onSaved }: 
       return;
     }
     setSortKey(key);
-    setSortDir(key === 'index' ? 'desc' : 'asc');
+    setSortDir(key === 'name' || key === 'direction' || key === 'group' ? 'asc' : 'desc');
   };
 
   const sortMark = (key: SortKey) => (sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '');
@@ -92,31 +102,30 @@ export function ForumResultsPeopleTable({ columns, rows, adminFetch, onSaved }: 
             <span className="adm-frp-search-icon" aria-hidden>⌕</span>
             <input
               value={query}
-              onChange={e => setQuery(e.target.value)}
+              onChange={e => {
+                setQuery(e.target.value);
+                setLimit(PAGE);
+              }}
               placeholder="Поиск по ФИО"
               aria-label="Поиск по ФИО"
             />
           </label>
-          <div className="adm-frp-seg" role="group" aria-label="Сколько строк показать">
-            {([10, 50, 100] as const).map(n => (
+          <div className="adm-frp-toolbar-right">
+            <p className="adm-frp-count">
+              {visible.length} из {filtered.length}
+              {filtered.length !== rows.length ? ` · найдено по «${query.trim()}»` : ''}
+            </p>
+            {remaining > 0 && (
               <button
-                key={n}
                 type="button"
-                className={limit === n ? 'on' : ''}
-                onClick={() => setLimit(n)}
+                className="adm-btn adm-btn-primary adm-btn-sm"
+                onClick={() => setLimit(filtered.length)}
               >
-                {n}
+                Показать всех
               </button>
-            ))}
+            )}
           </div>
         </div>
-
-        <p className="adm-frp-count">
-          {filtered.length === rows.length
-            ? `${rows.length} участников`
-            : `${filtered.length} из ${rows.length}`}
-          {filtered.length > limit ? ` · показаны первые ${limit}` : ''}
-        </p>
 
         {visible.length === 0 ? (
           <p className="adm-muted" style={{ margin: '8px 0 0' }}>Никого не нашли.</p>
@@ -125,7 +134,7 @@ export function ForumResultsPeopleTable({ columns, rows, adminFetch, onSaved }: 
             <table className="adm-frp-table">
               <thead>
                 <tr>
-                  <th>
+                  <th className="adm-frp-sticky">
                     <button type="button" onClick={() => toggleSort('name')}>ФИО{sortMark('name')}</button>
                   </th>
                   <th>
@@ -134,37 +143,38 @@ export function ForumResultsPeopleTable({ columns, rows, adminFetch, onSaved }: 
                   <th>
                     <button type="button" onClick={() => toggleSort('group')}>Группа{sortMark('group')}</button>
                   </th>
-                  <th>
-                    <button type="button" onClick={() => toggleSort('index')}>Оценки{sortMark('index')}</button>
-                  </th>
+                  {columns.map(col => (
+                    <th key={col.key} className="adm-frp-th-score">
+                      <button type="button" onClick={() => toggleSort(`heat:${col.key}`)} title={col.label}>
+                        <span>{col.label}</span>
+                        {sortMark(`heat:${col.key}`)}
+                      </button>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {visible.map(row => (
                   <tr key={row.participantId} onClick={() => setOpenId(row.participantId)}>
-                    <td>
+                    <td className="adm-frp-sticky">
                       <div className="adm-frp-name">{row.name}</div>
                       <div className="adm-frp-sub">день {row.lastDay}</div>
                     </td>
                     <td>{row.direction}</td>
                     <td>{row.group}</td>
-                    <td>
-                      <div className="adm-frp-heat" title={row.index != null ? `Индекс ${row.index}` : 'Нет оценок'}>
-                        {columns.map((col, i) => {
-                          const cell = row.heat[i];
-                          return (
-                            <span
-                              key={col.key}
-                              className="adm-frp-heat-cell"
-                              style={heatStyle(cell?.v ?? null, col.max)}
-                              title={`${col.label}: ${cell?.v ?? '—'}`}
-                            >
-                              {cell?.v == null ? '·' : cell.v}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </td>
+                    {columns.map((col, i) => {
+                      const cell = row.heat[i];
+                      return (
+                        <td key={col.key} className="adm-frp-td-score">
+                          <span
+                            className="adm-frp-heat-cell"
+                            style={heatStyle(cell?.v ?? null, col.max)}
+                          >
+                            {cell?.v == null ? '—' : cell.v}
+                          </span>
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>
@@ -172,11 +182,22 @@ export function ForumResultsPeopleTable({ columns, rows, adminFetch, onSaved }: 
           </div>
         )}
 
-        {columns.length > 0 && (
-          <div className="adm-frp-legend">
-            {columns.map(col => (
-              <span key={col.key}>{shortLabel(col.label)}</span>
-            ))}
+        {remaining > 0 && (
+          <div className="adm-frp-more">
+            <button
+              type="button"
+              className="adm-btn adm-btn-secondary"
+              onClick={() => setLimit(n => n + PAGE)}
+            >
+              Загрузить ещё {Math.min(PAGE, remaining)}
+            </button>
+            <button
+              type="button"
+              className="adm-btn adm-btn-primary"
+              onClick={() => setLimit(filtered.length)}
+            >
+              Показать всех · {filtered.length}
+            </button>
           </div>
         )}
       </DashCard>
