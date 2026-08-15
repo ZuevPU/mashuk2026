@@ -110,7 +110,7 @@ export function RowActionsMenu({ actions }: { actions: RowAction[] }) {
     <div className="adm-row-menu" ref={anchorRef}>
       <button
         type="button"
-        className="adm-btn adm-btn-sm adm-btn-secondary"
+        className="adm-row-menu-trigger"
         onClick={e => {
           e.stopPropagation();
           setOpen(v => !v);
@@ -118,7 +118,7 @@ export function RowActionsMenu({ actions }: { actions: RowAction[] }) {
         aria-label="Действия"
         aria-expanded={open}
       >
-        ⋮
+        ⋯
       </button>
       {popover}
     </div>

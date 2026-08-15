@@ -165,6 +165,8 @@ router.post('/questions/:id/copy-to-day', requireAdminRole('settings'), wrap(adm
 router.post('/questions/copy-selected', requireAdminRole('settings'), wrap(admin.copyQuestionsSelected));
 router.get('/questions/:id/versions', wrap(admin.crudQuestions.listVersions));
 router.get('/questions/:id/answers', wrap(admin.crudQuestions.listAnswers));
+router.delete('/questions/:id/answers/:answerId', requireAdminRole('settings'), wrap(admin.deleteQuestionAnswer));
+router.post('/questions/:id/answers/:answerId/revoke-points', requireAdminRole('settings'), wrap(admin.revokeQuestionAnswerPoints));
 router.get('/questions/:id/wordcloud', wrap(admin.crudQuestions.wordCloud));
 router.get('/questions/:id/options', wrap(admin.crudQuestions.listOptions));
 router.post('/questions/:id/options', requireAdminRole('settings'), wrap(admin.crudQuestions.addOption));

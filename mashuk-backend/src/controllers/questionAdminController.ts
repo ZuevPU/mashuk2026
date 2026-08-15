@@ -607,6 +607,13 @@ export const crudQuestions = {
       .limit(limit)
       .offset(offset);
     const [{ cnt }] = await db.select({ cnt: count() }).from(answers).where(eq(answers.questionId, id));
+    const { awardsForQuestionAnswers } = await import('../services/answerModeration.js');
+    const awards = await awardsForQuestionAnswers(id, rows.map(r => ({
+      id: r.a.id,
+      participantId: r.a.participantId,
+      pointsLogId: r.a.pointsLogId,
+      createdAt: r.a.createdAt,
+    })));
     res.json({
       answers: rows.map(r => ({
         id: r.a.id,
@@ -614,7 +621,9 @@ export const crudQuestions = {
         participantName: participantDisplayName(r.p),
         answerData: r.a.answerData,
         questionTextSnapshot: r.a.questionTextSnapshot,
+        pointsAwarded: r.a.pointsAwarded,
         createdAt: r.a.createdAt,
+        awards: awards.get(r.a.id) || [],
       })),
       total: Number(cnt),
     });
@@ -851,6 +860,57 @@ export const getQuestionDashboard = async (req: AdminRequest, res: Response): Pr
     return;
   }
   res.json(dash);
+};
+
+export const deleteQuestionAnswer = async (req: AdminRequest, res: Response): Promise<void> => {
+  const questionId = Number(req.params.id);
+  const answerId = Number(req.params.answerId);
+  const reason = typeof req.body?.reason === 'string' && req.body.reason.trim()
+    ? req.body.reason.trim()
+    : 'Админ удалил ответ';
+  const { deleteParticipantAnswer } = await import('../services/answerModeration.js');
+  const result = await deleteParticipantAnswer(questionId, answerId, reason);
+  if (!result.ok) {
+    res.status(404).json({ error: result.error });
+    return;
+  }
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req,
+    actionType: 'question_answer_delete',
+    section: 'questions',
+    objectId: String(answerId),
+    newValue: { questionId, ...result, reason },
+    isCritical: true,
+  });
+  res.json(result);
+};
+
+export const revokeQuestionAnswerPoints = async (req: AdminRequest, res: Response): Promise<void> => {
+  const questionId = Number(req.params.id);
+  const answerId = Number(req.params.answerId);
+  const reason = typeof req.body?.reason === 'string' && req.body.reason.trim()
+    ? req.body.reason.trim()
+    : 'Админ снял баллы за ответ';
+  const kind = req.body?.kind === 'bonus' ? 'bonus' : 'all';
+  const logIds = Array.isArray(req.body?.logIds)
+    ? req.body.logIds.map(Number).filter((n: number) => Number.isFinite(n) && n > 0)
+    : undefined;
+  const { revokeAwardsForAnswer } = await import('../services/answerModeration.js');
+  const result = await revokeAwardsForAnswer(questionId, answerId, reason, { kind, logIds });
+  if (!result.ok) {
+    res.status(404).json({ error: result.error });
+    return;
+  }
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req,
+    actionType: 'question_answer_revoke_points',
+    section: 'questions',
+    objectId: String(answerId),
+    newValue: { questionId, kind, logIds, ...result, reason },
+  });
+  res.json(result);
 };
 
 export const getPracticesResults = async (req: AdminRequest, res: Response): Promise<void> => {

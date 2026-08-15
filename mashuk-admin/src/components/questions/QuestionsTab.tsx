@@ -87,8 +87,14 @@ export function QuestionsTab({
 
   const [branchParentOptions, setBranchParentOptions] = useState<Record<number, { label: string; value: string }[]>>({});
 
-  const [answersModal, setAnswersModal] = useState<{ open: boolean; title: string; loading: boolean; rows: any[] }>({
-    open: false, title: '', loading: false, rows: [],
+  const [answersModal, setAnswersModal] = useState<{
+    open: boolean;
+    questionId: number | null;
+    title: string;
+    loading: boolean;
+    rows: any[];
+  }>({
+    open: false, questionId: null, title: '', loading: false, rows: [],
   });
   const [notifyModal, setNotifyModal] = useState<{ q: AdminQuestion; text: string } | null>(null);
   const notifySendingRef = useRef(false);
@@ -422,11 +428,15 @@ export function QuestionsTab({
     }, 'Удалено');
   };
 
-  const viewAnswers = (q: AdminQuestion) => {
-    setAnswersModal({ open: true, title: q.title, loading: true, rows: [] });
-    adminFetch(`/questions/${q.id}/answers?limit=50`)
+  const loadAnswers = (questionId: number, title: string) => {
+    setAnswersModal(m => ({ ...m, open: true, questionId, title, loading: true }));
+    adminFetch(`/questions/${questionId}/answers?limit=80`)
       .then(r => setAnswersModal(m => ({ ...m, loading: false, rows: r.answers || [] })))
       .catch(() => setAnswersModal(m => ({ ...m, loading: false, rows: [] })));
+  };
+
+  const viewAnswers = (q: AdminQuestion) => {
+    loadAnswers(q.id, q.title);
   };
 
   const openNotify = (q: AdminQuestion) => {
@@ -1001,13 +1011,19 @@ export function QuestionsTab({
         </div>
       )}
 
-      <QuestionAnswersModal
-        questionTitle={answersModal.title}
-        open={answersModal.open}
-        loading={answersModal.loading}
-        answers={answersModal.rows}
-        onClose={() => setAnswersModal(m => ({ ...m, open: false }))}
-      />
+      {answersModal.questionId != null && (
+        <QuestionAnswersModal
+          questionId={answersModal.questionId}
+          questionTitle={answersModal.title}
+          open={answersModal.open}
+          loading={answersModal.loading}
+          answers={answersModal.rows}
+          adminFetch={adminFetch}
+          act={act}
+          onReload={() => loadAnswers(answersModal.questionId!, answersModal.title)}
+          onClose={() => setAnswersModal(m => ({ ...m, open: false }))}
+        />
+      )}
 
       {practicesResultsId != null && (
         <PracticesResultsModal

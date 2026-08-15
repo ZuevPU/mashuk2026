@@ -162,6 +162,8 @@ const LABELS: Record<string, string> = {
   points_adjust: 'Ручное начисление баллов',
   task_moderate: 'Модерация задания',
   question_update: 'Изменение вопроса',
+  question_answer_delete: 'Удаление ответа на вопрос',
+  question_answer_revoke_points: 'Снятие баллов за ответ',
   question_delete: 'Удаление вопроса',
   event_delete: 'Удаление события',
   event_update: 'Изменение программы',

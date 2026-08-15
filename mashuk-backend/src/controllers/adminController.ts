@@ -2260,6 +2260,8 @@ export {
   crudQuestions,
   copyQuestionsSelected,
   getQuestionDashboard,
+  deleteQuestionAnswer,
+  revokeQuestionAnswerPoints,
   getPracticesResults,
   publishPracticesResults,
   unpublishPracticesResults,
