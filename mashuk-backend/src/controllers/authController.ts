@@ -25,6 +25,7 @@ import {
   listVkEnrollments,
   publicShiftCard,
   requestedShiftIdFromReq,
+  resolveRegistrationRoute,
 } from '../services/shiftService.js';
 
 async function getForumOnboardingConfig(shiftId?: number | null) {
@@ -112,9 +113,12 @@ export const listPublishedShifts = async (req: VkAuthRequest, res: Response): Pr
     const vkUserId = req.vkUserId;
     const published = await listPublishedShiftsForParticipants();
     const enrollments = vkUserId ? await listVkEnrollments(vkUserId) : [];
+    const route = resolveRegistrationRoute(published, enrollments);
     res.json({
       shifts: published.map(publicShiftCard),
       enrollments,
+      registrationTargetShiftId: route.shiftId,
+      registrationAction: route.action,
     });
   } catch (error) {
     console.error('listPublishedShifts:', error);
@@ -134,15 +138,31 @@ export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> =>
     const published = await listPublishedShiftsForParticipants();
     const publishedShifts = published.map(publicShiftCard);
     const enrollments = await listVkEnrollments(vkUserId);
-    const user = await findParticipantForVk(vkUserId, preferredShiftId, {
+    const route = resolveRegistrationRoute(published, enrollments);
+    let user = await findParticipantForVk(vkUserId, preferredShiftId, {
       fallback: preferredShiftId == null,
     });
+
+    // Участник смены 1 сразу входит туда, если в запрошенной смене профиля ещё нет.
+    if (route.action === 'enter' && route.shiftId) {
+      const preferredCompleted = !!(
+        user?.onboardingCompletedAt
+        && !user.selfDeletedAt
+        && preferredShiftId
+        && user.shiftId === preferredShiftId
+      );
+      if (!preferredCompleted) {
+        user = await findParticipantForVk(vkUserId, route.shiftId, { fallback: false });
+      }
+    }
 
     if (!user || !user.onboardingCompletedAt) {
       res.json({
         status: 'needs_registration',
         vkUserId,
-        shiftId: preferredShiftId,
+        shiftId: route.shiftId ?? preferredShiftId,
+        registrationTargetShiftId: route.shiftId,
+        registrationAction: route.action,
         publishedShifts,
         enrollments,
       });

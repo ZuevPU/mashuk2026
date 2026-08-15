@@ -270,12 +270,50 @@ export function publicShiftCard(s: ShiftRow) {
     : null;
   return {
     id: s.id,
+    code: s.code,
     name: s.name,
     startDate: start,
     endDate,
     totalDays: days,
     isLive: s.status === 'active',
   };
+}
+
+export function findPublishedShiftBySlot(
+  published: Array<{ id: number; code: string; name: string }>,
+  slot: 1 | 2,
+): { id: number; code: string; name: string } | null {
+  const code = slot === 1 ? 'shift1' : 'shift2';
+  const byCode = published.find(s => s.code === code);
+  if (byCode) return byCode;
+  const nameRe = slot === 1 ? /смена\s*1\b/i : /смена\s*2\b/i;
+  return published.find(s => nameRe.test(s.name)) ?? null;
+}
+
+export type RegistrationRoute = {
+  action: 'enter' | 'register';
+  shiftId: number | null;
+};
+
+/** Смена 1 — вход без регистрации; иначе регистрация на смену 2. */
+export function resolveRegistrationRoute(
+  published: Array<{ id: number; code: string; name: string }>,
+  enrollments: Array<{ shiftId: number | null; onboardingCompleted: boolean }>,
+): RegistrationRoute {
+  const shift1 = findPublishedShiftBySlot(published, 1);
+  const shift2 = findPublishedShiftBySlot(published, 2)
+    ?? published.find(s => s.id !== shift1?.id)
+    ?? null;
+  const shift1Enrollment = shift1
+    ? enrollments.find(e => e.shiftId === shift1.id)
+    : undefined;
+  if (shift1 && shift1Enrollment) {
+    return {
+      action: shift1Enrollment.onboardingCompleted ? 'enter' : 'register',
+      shiftId: shift1.id,
+    };
+  }
+  return { action: 'register', shiftId: shift2?.id ?? published[0]?.id ?? null };
 }
 
 export async function listVkEnrollments(vkId: number) {

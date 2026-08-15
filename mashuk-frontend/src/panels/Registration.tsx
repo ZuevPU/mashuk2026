@@ -163,10 +163,21 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         setConsentAnalyticsMeta(data.analytics);
       })
       .catch(() => undefined);
-    apiGet<{ shifts?: PublishedShift[] }>('/auth/shifts')
+    apiGet<{
+      shifts?: PublishedShift[];
+      registrationTargetShiftId?: number | null;
+    }>('/auth/shifts')
       .then(data => {
         const list = data.shifts || [];
         setPublishedShifts(list);
+        const target = data.registrationTargetShiftId
+          ?? (list.length === 1 ? list[0].id : null);
+        if (target && list.some(s => s.id === target)) {
+          setSelectedShiftId(target);
+          setStoredShiftId(target);
+          setStep(prev => (prev === 0 ? 1 : prev));
+          return;
+        }
         setSelectedShiftId(prev => {
           if (prev && list.some(s => s.id === prev)) return prev;
           return list.length === 1 ? list[0].id : prev;

@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { shiftOpsToForumShape, pickParticipantForVk } from '../services/shiftService.js';
+import {
+  shiftOpsToForumShape,
+  pickParticipantForVk,
+  resolveRegistrationRoute,
+} from '../services/shiftService.js';
 
 describe('shiftOpsToForumShape', () => {
   it('exposes currentDay and shiftId for participant API compat', () => {
@@ -118,5 +122,31 @@ describe('pickParticipantForVk', () => {
   it('falls back to latest activity when no preferred shift', () => {
     const rows = [row(1, { last: 100 }), row(2, { last: 500 })];
     assert.equal(pickParticipantForVk(rows, null)?.shiftId, 2);
+  });
+});
+
+describe('resolveRegistrationRoute', () => {
+  const published = [
+    { id: 10, code: 'shift1', name: 'Смена 1' },
+    { id: 20, code: 'shift2', name: 'Смена 2' },
+  ];
+
+  it('sends shift-1 alumni into shift 1', () => {
+    const route = resolveRegistrationRoute(published, [
+      { shiftId: 10, onboardingCompleted: true },
+    ]);
+    assert.deepEqual(route, { action: 'enter', shiftId: 10 });
+  });
+
+  it('starts shift-2 registration when vk id is new', () => {
+    const route = resolveRegistrationRoute(published, []);
+    assert.deepEqual(route, { action: 'register', shiftId: 20 });
+  });
+
+  it('resumes shift-1 registration when an incomplete shift-1 row exists', () => {
+    const route = resolveRegistrationRoute(published, [
+      { shiftId: 10, onboardingCompleted: false },
+    ]);
+    assert.deepEqual(route, { action: 'register', shiftId: 10 });
   });
 });

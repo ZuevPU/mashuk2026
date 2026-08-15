@@ -113,6 +113,7 @@ export const App = () => {
         status: string;
         blockReason?: string;
         user?: { shiftId?: number };
+        registrationTargetShiftId?: number | null;
       }>('/auth/me');
       if (auth.status === 'self_deleted') {
         setSelfDeleted(true);
@@ -124,6 +125,9 @@ export const App = () => {
         setIsRegistered(false);
       } else if (auth.status === 'needs_registration') {
         setIsRegistered(false);
+        if (auth.registrationTargetShiftId) {
+          setStoredShiftId(auth.registrationTargetShiftId);
+        }
         if (!window.location.hash.includes('registration')) {
           routeNavigator.push('/registration');
         }
