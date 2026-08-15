@@ -9,6 +9,17 @@ export type FinalProfileQa = {
   q: string;
   a: string;
   kind?: 'open' | 'closed';
+  key?: string;
+};
+
+export type PointATopic = 'goal' | 'result' | 'criterion' | 'role' | 'request' | 'other';
+
+export type PointCompareRow = {
+  topic: PointATopic;
+  qA: string;
+  aA: string;
+  qB: string | null;
+  aB: string | null;
 };
 
 export type FinalProfileTheme = {
@@ -42,6 +53,7 @@ export type FinalProfile = {
   pointB: {
     completed: boolean;
     items: FinalProfileQa[];
+    leftover: FinalProfileQa[];
     goalOutcome: string | null;
     goalFollowup: string | null;
     roleNatural: string | null;
@@ -49,6 +61,7 @@ export type FinalProfile = {
     plan: string | null;
     planWhen: string | null;
   };
+  compare: PointCompareRow[];
   criterion: {
     text: string;
     target: number | null;
@@ -466,6 +479,7 @@ export function assemblePointB(items: FinalProfileQa[]): FinalProfile['pointB'] 
   const out: FinalProfile['pointB'] = {
     completed: items.some(x => x.a.trim()),
     items,
+    leftover: items,
     goalOutcome: null,
     goalFollowup: null,
     roleNatural: null,
@@ -479,6 +493,103 @@ export function assemblePointB(items: FinalProfileQa[]): FinalProfile['pointB'] 
     if (!out[slot]) out[slot] = clampText(item.a, 320);
   }
   return out;
+}
+
+export function classifyPointATopic(q: string): PointATopic {
+  const t = String(q || '').toLowerCase();
+  if (/критери|признак|пойм[её]шь/.test(t)) return 'criterion';
+  if (/роль|способ.? действ/.test(t)) return 'role';
+  if (/запрос|направлен/.test(t)) return 'request';
+  if (/результат|получить от программ/.test(t)) return 'result';
+  if (/цел[ьи]|зачем|приехал/.test(t)) return 'goal';
+  return 'other';
+}
+
+const SLOT_FOR_TOPIC: Record<PointATopic, PointBSlot[]> = {
+  goal: ['goalFollowup', 'goalOutcome', 'other'],
+  result: ['goalOutcome', 'goalFollowup', 'other'],
+  criterion: ['other', 'goalFollowup'],
+  role: ['roleInsight', 'roleNatural'],
+  request: ['other', 'plan', 'goalFollowup'],
+  other: ['other', 'plan', 'goalFollowup'],
+};
+
+function topicTokens(s: string): Set<string> {
+  return new Set(
+    String(s || '')
+      .toLowerCase()
+      .split(/[^a-zа-яё0-9]+/i)
+      .filter(w => w.length >= 4),
+  );
+}
+
+function tokenOverlap(a: string, b: string): number {
+  const left = topicTokens(a);
+  const right = topicTokens(b);
+  let n = 0;
+  for (const t of left) {
+    if (right.has(t)) n += 1;
+  }
+  return n;
+}
+
+export function pairPointAtoB(
+  pointA: FinalProfileQa[],
+  pointBItems: FinalProfileQa[],
+): { pairs: PointCompareRow[]; leftoverB: FinalProfileQa[] } {
+  const used = new Set<number>();
+  const pairs: PointCompareRow[] = [];
+  for (const a of pointA) {
+    const topic = classifyPointATopic(a.q);
+    const preferred = SLOT_FOR_TOPIC[topic];
+    let best = -1;
+    let bestScore = -1;
+    pointBItems.forEach((b, i) => {
+      if (used.has(i)) return;
+      const slot = classifyPointBItem(b.q, b.a);
+      const pref = preferred.indexOf(slot);
+      const slotScore = pref === -1 ? 0 : (preferred.length - pref) * 10;
+      const textScore = tokenOverlap(`${a.q} ${a.a}`, `${b.q} ${b.a}`);
+      const score = slotScore + textScore;
+      if (score > bestScore) {
+        bestScore = score;
+        best = i;
+      }
+    });
+    if (best >= 0 && bestScore >= 8) {
+      used.add(best);
+      const b = pointBItems[best];
+      pairs.push({ topic, qA: a.q, aA: a.a, qB: b.q, aB: b.a });
+    } else {
+      pairs.push({ topic, qA: a.q, aA: a.a, qB: null, aB: null });
+    }
+  }
+  return {
+    pairs,
+    leftoverB: pointBItems.filter((_, i) => !used.has(i)),
+  };
+}
+
+export function assembleGoalMidFromQa(items: FinalProfileQa[]): FinalProfile['goalMid'] {
+  if (!items.length) return null;
+  let changed: string | null = null;
+  let note: string | null = null;
+  let scale: number | null = null;
+  for (const item of items) {
+    const n = Number(item.a);
+    if (Number.isFinite(n) && n >= 1 && n <= 10 && scale == null) {
+      scale = Math.round(n);
+      continue;
+    }
+    const slot = classifyPointBItem(item.q, item.a);
+    if ((slot === 'goalOutcome' || /изменил|уточн|цел/.test(item.q.toLowerCase())) && !changed) {
+      changed = clampText(item.a, 240);
+      continue;
+    }
+    if (!note && item.a.trim().length >= 8) note = clampText(item.a, 320);
+  }
+  if (!changed && !note && scale == null) return null;
+  return { changed, scale, note };
 }
 
 export function buildProfileAiCopy(input: {
@@ -559,6 +670,7 @@ export function emptyFinalProfile(): FinalProfile {
     pointB: {
       completed: false,
       items: [],
+      leftover: [],
       goalOutcome: null,
       goalFollowup: null,
       roleNatural: null,
@@ -566,6 +678,7 @@ export function emptyFinalProfile(): FinalProfile {
       plan: null,
       planWhen: null,
     },
+    compare: [],
     criterion: null,
     participation: emptyParticipation(8),
     state: emptyState(8),

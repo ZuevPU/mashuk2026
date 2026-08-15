@@ -33,6 +33,7 @@ import {
 } from './touchpointProgress.js';
 import { questionMatchesDay } from './questionAdminHelpers.js';
 import {
+  assembleGoalMidFromQa,
   assemblePointB,
   buildProfileAiCopy,
   clampText,
@@ -44,6 +45,7 @@ import {
   formatRuDayMonth,
   isSubstantiveReflection,
   mapExperimentResult,
+  pairPointAtoB,
   pickCriterionAnswer,
   profileDensity,
   shiftDateRange,
@@ -51,6 +53,13 @@ import {
   type FinalProfileQa,
   type ProfileZone,
 } from './participantFinalProfileLogic.js';
+import {
+  collectPointBEveningFieldDays,
+  collectPointZhEveningFieldDays,
+  type EveningField,
+  type ForumFinalQuestion,
+} from './eveningQuestionnaireConfig.js';
+import { formatEveningFieldValue } from './exports/eveningExportData.js';
 
 function toZoneLabel(zone: string | null | undefined): ProfileZone | undefined {
   if (!zone) return undefined;
@@ -133,6 +142,50 @@ function ratingsText(ratings: Record<string, unknown>, key: string): string | nu
   const v = ratings[key];
   if (typeof v === 'string' && v.trim()) return clampText(v.trim(), 320);
   return null;
+}
+
+function mergeQa(primary: FinalProfileQa[], secondary: FinalProfileQa[]): FinalProfileQa[] {
+  const out = [...primary];
+  const seen = new Set(primary.map(x => `${(x.key || '').toLowerCase()}|${x.q.toLowerCase()}`));
+  for (const item of secondary) {
+    const key = `${(item.key || '').toLowerCase()}|${item.q.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+function collectMarkedEveningQa(
+  questions: ForumFinalQuestion[],
+  states: Array<{
+    dayNumber: number;
+    eveningRatings: unknown;
+    tomorrowRoleKey?: string | null;
+  }>,
+): FinalProfileQa[] {
+  const latest = new Map<string, FinalProfileQa>();
+  const ordered = [...states].sort((a, b) => a.dayNumber - b.dayNumber);
+  for (const q of questions) {
+    for (const s of ordered) {
+      if (!q.days.includes(s.dayNumber)) continue;
+      const ratings = (s.eveningRatings && typeof s.eveningRatings === 'object')
+        ? s.eveningRatings as Record<string, unknown>
+        : null;
+      if (!ratings) continue;
+      const field: EveningField = q.field;
+      const raw = formatEveningFieldValue(field, ratings, s.tomorrowRoleKey ?? null);
+      const a = String(raw ?? '').trim();
+      if (!a) continue;
+      latest.set(q.id || field.key, {
+        q: field.label || field.key,
+        a: clampText(a, 320),
+        kind: field.type === 'text' || field.type === 'experiment_text' ? 'open' : 'closed',
+        key: field.key,
+      });
+    }
+  }
+  return [...latest.values()];
 }
 
 function pickGoalMid(states: Array<{ eveningRatings: unknown }>): FinalProfile['goalMid'] {
@@ -472,24 +525,22 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
   theses.sort((a, b) => a.day - b.day);
   reflection.theses = theses;
 
-  if (!pointB.items.length) {
-    const extra: FinalProfileQa[] = [];
-    for (const s of dayStates) {
-      const ratings = (s.eveningRatings && typeof s.eveningRatings === 'object')
-        ? s.eveningRatings as Record<string, unknown>
-        : null;
-      if (!ratings) continue;
-      for (const [k, v] of Object.entries(ratings)) {
-        if (['mainThesis', 'understandingChange', 'experimentResult', 'likedMost', 'improveTomorrow', 'freeNote'].includes(k)) continue;
-        const a = humanizeAnswer(v);
-        if (!a || a.length < 2) continue;
-        extra.push({ q: k, a: clampText(a, 320) });
-      }
-    }
-    if (extra.length) Object.assign(pointB, assemblePointB(extra));
-  }
-
-  const goalMid = pickGoalMid(dayStates);
+  const markedDays = Array.from({ length: totalDays }, (_, i) => i + 1);
+  const eveningSettings = settings as Parameters<typeof collectPointBEveningFieldDays>[0];
+  const eveningPointB = collectMarkedEveningQa(
+    collectPointBEveningFieldDays(eveningSettings, markedDays).questions,
+    dayStates,
+  );
+  const eveningPointZh = collectMarkedEveningQa(
+    collectPointZhEveningFieldDays(eveningSettings, markedDays).questions,
+    dayStates,
+  );
+  const mergedPointBItems = mergeQa(eveningPointB, pointB.items);
+  Object.assign(pointB, assemblePointB(mergedPointBItems));
+  const paired = pairPointAtoB(pointA, pointB.items);
+  pointB.leftover = paired.leftoverB;
+  const compare = paired.pairs;
+  const goalMid = assembleGoalMidFromQa(eveningPointZh) || pickGoalMid(dayStates);
   const { nextStep, nextStepWhen } = nextStepFromParticipant(p);
   const name = [p.firstName, p.lastName].filter(Boolean).join(' ').trim() || `Участник ${p.id}`;
   const dirName = p.direction || '—';
@@ -533,6 +584,7 @@ export async function buildFinalProfile(participantId: number): Promise<FinalPro
     },
     pointA,
     pointB,
+    compare,
     criterion,
     participation,
     state,

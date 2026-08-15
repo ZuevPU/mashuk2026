@@ -1,7 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { Response } from 'express';
 import { db } from '../../db/index.js';
-import { answers, participants, questions } from '../../db/schema.js';
+import { answers, participants, piggybank, questions } from '../../db/schema.js';
 import { inferReflectionDepth } from '../reflectionDepth.js';
 import { isPublishedStatus } from '../publishStatus.js';
 import {
@@ -118,7 +118,32 @@ export async function writeParticipantAnswersExport(
     });
     const eveningRows = evening.rows;
 
+    const { roleLabel } = await import('./exportLabels.js');
+    const { entryTags } = await import('../piggybankDict.js');
+    const piggyRows = await db.select().from(piggybank).where(and(
+      eq(piggybank.participantId, participantId),
+      isNull(piggybank.deletedAt),
+    ));
+
     const wb = await createWorkbook();
+    const sheetProfile = wb.addWorksheet('Профиль');
+    sheetProfile.addRow(['Поле', 'Значение']);
+    for (const [k, v] of [
+      ['ID', p.id],
+      ['ФИО', fullName(p)],
+      ['Направление', p.direction || ''],
+      ['Группа', p.groupName || ''],
+      ['Регион', p.region || ''],
+      ['Место работы', p.workplace || ''],
+      ['Должность', p.position || ''],
+      ['Стартовая роль', roleLabel(p.strongRole) || p.strongRole || ''],
+      ['Роль роста', roleLabel(p.growthRole) || p.growthRole || ''],
+      ['Путь', p.pathPoints ?? 0],
+      ['Опыт', p.experiencePoints ?? 0],
+    ] as Array<[string, string | number]>) {
+      sheetProfile.addRow([k, v]);
+    }
+
     const ws = wb.addWorksheet('Ответы');
     ws.addRow([...ANSWER_ROW_HEADERS_RU, 'ID вопроса']);
     for (const r of rows) {
@@ -135,6 +160,17 @@ export async function writeParticipantAnswersExport(
         r.filledAt?.toISOString?.() ?? '',
         r.tomorrowRoleKey ?? '',
         ...evening.fields.map(f => formatEveningFieldValue(f, r.ratings, r.tomorrowRoleKey)),
+      ]);
+    }
+    const sheetPiggy = wb.addWorksheet('Копилка');
+    sheetPiggy.addRow(['День', 'Источник', 'Теги', 'Текст', 'Создано']);
+    for (const row of piggyRows) {
+      sheetPiggy.addRow([
+        row.forumDay ?? '',
+        row.source || '',
+        entryTags(row).join(', '),
+        row.text || '',
+        row.createdAt?.toISOString?.() ?? '',
       ]);
     }
     await sendWorkbook(res, wb, `${fname}.xlsx`);

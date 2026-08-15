@@ -575,7 +575,7 @@ export function ParticipantCardModal({
             >
               Профиль участника 3
             </button>
-            <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF')}>Выгрузить всё</button>
+            <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => act(() => adminDownloadBinary(`/exports/participant/${p.id}/answers?format=xlsx`, `participant_${p.id}.xlsx`), 'Excel')}>Выгрузить всё</button>
             {p.isBlocked
               ? (
                 <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => act(async () => {

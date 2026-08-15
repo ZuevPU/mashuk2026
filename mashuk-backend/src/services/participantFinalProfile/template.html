@@ -26,6 +26,7 @@ p{margin:0 0 3mm}
 .meta{font-family:"Inter",Arial,sans-serif;font-size:9.5pt;color:var(--dim);margin-top:2mm}
 .sec{margin-top:8mm}
 .three{display:grid;grid-template-columns:repeat(3,1fr);gap:6mm}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:6mm}
 .num{font-size:30pt;font-weight:600;line-height:1;letter-spacing:-.02em}
 .num small{font-size:12pt;font-weight:400;color:var(--dim)}
 .cap{font-family:"Inter",Arial,sans-serif;font-size:8.5pt;color:var(--dim);margin-top:2mm;line-height:1.4}
@@ -155,6 +156,7 @@ const snap=`<div class="sec"><h2>Твой Машук за 20 секунд</h2>
  <p class="tiny" style="margin-top:3mm">Точки маршрута — про присутствие в контуре форума, а не про качество.</p></div>`;
 
 const pointA=`<div class="sec"><h2>Точка А · с чем вы приехали</h2>
+ <p class="muted" style="font-size:11pt">Стартовые ответы. Сверка с точкой Б — в конце профиля: рядом «было» и «стало».</p>
  ${emptyA?'<p class="tiny">Входная анкета ещё не заполнена.</p>':''}
  ${openA.length?`<div class="tiny" style="margin-bottom:2mm">Открытый вопрос — своими словами</div>${qaList(openA)}`:''}
  ${closedA.length?`<div class="tiny" style="margin:3mm 0 2mm">Закрытые вопросы — выбор из списка</div>${qaList(closedA)}`:''}
@@ -256,13 +258,26 @@ const goalMid=`<div class="sec"><h2>Траектория цели</h2>
   </div>`:'<p class="tiny">Данных по промежуточному срезу пока нет — блок появится, когда будет заполнена точка Ж.</p>'}
 </div>`;
 
+const compareRows=P.compare||[];
+const leftoverB=(B.leftover||[]).filter(it=>!/естественн.*роль|способ.*действов|какой ролью/.test((it.q||'').toLowerCase()));
 const pointB=`<div class="sec"><h2>Точка Б · с чем вы уезжаете</h2>
- <p class="muted" style="font-size:11pt">Вопрос о результате — закрытый, дальше — один открытый вопрос, который зависит от ответа. Вопросы про роль перенесены в «Ролевые эксперименты» выше.</p>
- <div class="tiny" style="margin:2mm 0">Что произошло с вашей целью за время программы?</div>
- ${choiceRow(['Достиг(ла) цели','Цель изменилась','Понял(а), что цель уже не так важна','Не достиг(ла) результата'], B.goalOutcome)}
- ${B.goalFollowup?`<div class="quote" style="margin-top:3mm">${esc(B.goalFollowup)}</div>`
-  :`<p class="tiny" style="margin-top:3mm">${B.completed?'Открытый ответ к выбранному варианту ещё не заполнен.':'Финальная анкета ещё не пройдена — при выборе варианта здесь появится соответствующий открытый вопрос.'}</p>`}
- ${!B.completed?`<div class="box soft" style="margin-top:4mm"><p style="margin:0;font-size:11pt">Итоговый профиль формируется после того, как вы ответите на вопросы точки Б — это последний шаг перед сборкой.</p></div>`:''}
+ <p class="muted" style="font-size:11pt">Сверка со стартом: слева — точка А, справа — ответы из вечерней анкеты, помеченные как точка Б. Вопросы про роль остаются в «Ролевых экспериментах».</p>
+ ${compareRows.length?compareRows.map(row=>`<div style="margin-bottom:5mm">
+   <div class="tiny" style="margin-bottom:1.5mm">${esc(row.qA)}</div>
+   <div class="two">
+    <div><div class="tiny" style="margin-bottom:1mm">Было · ${esc(P.person.from)}</div>
+     <div class="quote">${esc(clamp(row.aA,240))}</div></div>
+    <div><div class="tiny" style="margin-bottom:1mm">Стало · ${esc(P.person.to)}</div>
+     ${row.aB?`<div class="quote">${esc(clamp(row.aB,240))}</div>
+      ${row.qB&&row.qB!==row.qA?`<div class="tiny" style="margin-top:1.5mm">${esc(row.qB)}</div>`:''}`
+      :'<div class="hand"></div><p class="tiny">Точка Б по этому вопросу ещё не заполнена</p>'}</div>
+   </div>
+  </div>`).join(''):''}
+ ${B.goalOutcome||leftoverB.length?`<div class="tiny" style="margin:3mm 0 2mm">Что произошло с вашей целью за время программы?</div>
+  ${choiceRow(['Достиг(ла) цели','Цель изменилась','Понял(а), что цель уже не так важна','Не достиг(ла) результата'], B.goalOutcome)}
+  ${leftoverB.filter(it=>it.a!==B.goalOutcome).map(it=>`<div style="margin-top:3mm"><div class="tiny" style="margin-bottom:1mm">${esc(it.q)}</div>
+   <div class="quote">${esc(clamp(it.a,280))}</div></div>`).join('')}`:''}
+ ${!B.completed?`<div class="box soft" style="margin-top:4mm"><p style="margin:0;font-size:11pt">Итоговый профиль дополнится, когда в вечерней анкете появятся ответы с меткой «Точка Б».</p></div>`:''}
 </div>`;
 
 const step=`<div class="sec"><h2>Один шаг на 30 дней</h2>

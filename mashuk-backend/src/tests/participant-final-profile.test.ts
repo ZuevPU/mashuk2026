@@ -5,7 +5,9 @@ import {
   buildProfileAiCopy,
   classifyPiggyThemes,
   classifyPiggyThemesDetailed,
+  classifyPointATopic,
   classifyPointBItem,
+  pairPointAtoB,
   emptyFinalProfile,
   extractCriterionTarget,
   filterProfilePiggy,
@@ -115,6 +117,24 @@ describe('participantFinalProfileLogic', () => {
     assert.equal(pb.completed, true);
     assert.equal(pb.goalOutcome, 'Цель изменилась');
     assert.equal(pb.planWhen, 'Ближайшие 14 дней');
+  });
+
+  it('pairs point A goal with marked point B follow-up', () => {
+    assert.equal(classifyPointATopic('С какой целью ты приехал на Машук?'), 'goal');
+    assert.equal(classifyPointATopic('По каким признакам поймёшь, что достиг цели?'), 'criterion');
+    const { pairs, leftoverB } = pairPointAtoB(
+      [
+        { q: 'С какой целью ты приехал на Машук?', a: 'Найти новые форматы занятий', kind: 'open' },
+        { q: 'Что ты ожидаешь от других участников?', a: 'Обмен практиками', kind: 'open' },
+      ],
+      [
+        { q: 'Что произошло с вашей целью за время программы?', a: 'Достиг(ла) цели' },
+        { q: 'Какой результат вы получили?', a: 'Забрала три формата открытого урока' },
+      ],
+    );
+    assert.equal(pairs[0].aB, 'Забрала три формата открытого урока');
+    assert.equal(pairs[0].topic, 'goal');
+    assert.ok(leftoverB.some(x => x.a === 'Достиг(ла) цели') || pairs.some(p => p.aB === 'Достиг(ла) цели'));
   });
 
   it('builds detailed piggy themes and universal AI copy', () => {

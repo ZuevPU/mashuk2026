@@ -613,7 +613,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard, adminR
                         )}
                         <RowActionsMenu actions={isHiddenList ? [
                           { label: 'Открыть карточку', onClick: () => onOpenCard(p.id) },
-                          { label: 'Выгрузить данные (PDF)', onClick: () => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF') },
+                          { label: 'Выгрузить всё (Excel)', onClick: () => act(() => adminDownloadBinary(`/exports/participant/${p.id}/answers?format=xlsx`, `participant_${p.id}.xlsx`), 'Excel') },
                           {
                             label: 'Удалить безвозвратно',
                             confirmMessage: CONFIRM_DELETE_PARTICIPANT,
@@ -623,7 +623,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard, adminR
                         ] : [
                         { label: 'Открыть карточку', onClick: () => onOpenCard(p.id) },
                         { label: 'Скорректировать роль', onClick: () => onOpenCard(p.id, 'profile') },
-                        { label: 'Выгрузить данные (PDF)', onClick: () => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF') },
+                        { label: 'Выгрузить всё (Excel)', onClick: () => act(() => adminDownloadBinary(`/exports/participant/${p.id}/answers?format=xlsx`, `participant_${p.id}.xlsx`), 'Excel') },
                         ...(canSettings ? [
                           { label: 'Отправить пуш', onClick: () => setPushModal({ ids: [p.id] }) },
                           { label: 'Копировать в смену', onClick: () => openTransfer([p.id]) },
