@@ -181,7 +181,7 @@ const DIR_DETAIL_NAV: HubNavItem[] = [
  */
 export function HubDirectionScreen() {
   const {
-    adminFetch, direction, setDirection, forumDay, setForumDay, meta, ageCategory, activity,
+    adminFetch, direction, setDirection, forumDay, setForumDay, meta, ageCategory, activity, organizers,
   } = useInsights();
   const [data, setData] = useState<DirData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -194,10 +194,11 @@ export function HubDirectionScreen() {
     const params = hubFilterParams({
       mode: 'day',
       forumDay,
-      direction: isOrganizerDirection(direction) ? '' : direction,
+      direction: !organizers && isOrganizerDirection(direction) ? '' : direction,
       group: '',
       ageCategory,
       activity,
+      organizers,
     });
     adminFetch(`/analytics/hub/direction?${params.toString()}`)
       .then(res => setData(res as DirData))
@@ -205,7 +206,7 @@ export function HubDirectionScreen() {
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить направление');
       })
       .finally(() => setLoading(false));
-  }, [adminFetch, forumDay, direction, ageCategory, activity]);
+  }, [adminFetch, forumDay, direction, ageCategory, activity, organizers]);
 
   const allForum = isAllForumDay(forumDay);
   const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);

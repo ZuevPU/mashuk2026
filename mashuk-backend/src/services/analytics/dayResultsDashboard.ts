@@ -7,7 +7,7 @@ import {
 import { roleLabel } from '../exports/exportLabels.js';
 import type { EveningField } from '../eveningQuestionnaireConfig.js';
 import { getForumSettings } from '../helpers.js';
-import { isOrganizerDirection } from '../leaderboardQuery.js';
+import { hideOrganizerName } from '../leaderboardQuery.js';
 import { getForumDayDateLabel, getMoscowParts } from '../timePhase.js';
 import { EVENING_SCALE_KEYS } from '../touchpointTemplates.js';
 import { buildPracticeRecommendNps, extractPracticeScores } from './practiceRecommendNps.js';
@@ -523,10 +523,10 @@ export async function assembleHubResultsFromRows(input: {
   } = input;
 
   const cohortSize = cohort.filter(
-    p => p.onboardingCompletedAt && !isOrganizerDirection(p.direction),
+    p => p.onboardingCompletedAt && !hideOrganizerName(filters.organizers, p.direction),
   ).length;
 
-  const nonOrgRows = rows.filter(r => !isOrganizerDirection(r.directionName || r.p.direction));
+  const nonOrgRows = rows.filter(r => !hideOrganizerName(filters.organizers, r.directionName || r.p.direction));
   const submittedRows = nonOrgRows.filter(r => r.status === 'сдано');
   const draftRows = nonOrgRows.filter(r => r.status === 'черновик');
 
@@ -619,7 +619,7 @@ export async function assembleHubResultsFromRows(input: {
   const cohortByDir = new Map<string, number>();
   for (const p of cohort) {
     if (!p.onboardingCompletedAt) continue;
-    if (isOrganizerDirection(p.direction)) continue;
+    if (hideOrganizerName(filters.organizers, p.direction)) continue;
     const d = (p.direction || '—').trim() || '—';
     cohortByDir.set(d, (cohortByDir.get(d) || 0) + 1);
   }
@@ -644,7 +644,7 @@ export async function assembleHubResultsFromRows(input: {
       includeDrafts: false,
     });
     allSubmitted = all.rows.filter(
-      r => r.status === 'сдано' && !isOrganizerDirection(r.directionName || r.p.direction),
+      r => r.status === 'сдано' && !hideOrganizerName(filters.organizers, r.directionName || r.p.direction),
     );
     allFields = all.fields;
   }
@@ -667,12 +667,12 @@ export async function assembleHubResultsFromRows(input: {
     ?? { key: 'direction', label: 'Работа в рамках тематического направления', type: 'scale_1_5' as const };
   const dirNames = new Set<string>();
   for (const p of cohort) {
-    if (!p.onboardingCompletedAt || isOrganizerDirection(p.direction)) continue;
+    if (!p.onboardingCompletedAt || hideOrganizerName(filters.organizers, p.direction)) continue;
     dirNames.add((p.direction || '—').trim() || '—');
   }
   for (const r of allSubmitted) {
     const d = dirOf(r);
-    if (!isOrganizerDirection(d)) dirNames.add(d);
+    if (!hideOrganizerName(filters.organizers, d)) dirNames.add(d);
   }
   const directionDayRatings = buildDirectionDayRatings({
     days: directionDays?.length

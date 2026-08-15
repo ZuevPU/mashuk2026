@@ -5,7 +5,7 @@ import {
   exchangeAnswers, exchangeCategories, exchangeQuestions, participants,
 } from '../../db/schema.js';
 import { getForumSettings } from '../helpers.js';
-import { isOrganizerDirection } from '../leaderboardQuery.js';
+import { hideOrganizerName } from '../leaderboardQuery.js';
 import { getCalendarForumDay, getMoscowParts } from '../timePhase.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import { loadCohortParticipants } from './cohort.js';
@@ -34,7 +34,7 @@ export async function buildExchangeHubDashboard(filters: AnalyticsFilters, req?:
 
   const cohort = await loadCohortParticipants(filters, req);
   const registeredRows = cohort.filter(
-    p => p.onboardingCompletedAt && !isOrganizerDirection(p.direction),
+    p => p.onboardingCompletedAt && !hideOrganizerName(filters.organizers, p.direction),
   );
   const registered = registeredRows.length;
   const cohortById = new Map(

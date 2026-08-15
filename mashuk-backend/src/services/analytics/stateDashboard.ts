@@ -1,6 +1,6 @@
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { getForumSettings } from '../helpers.js';
-import { isOrganizerDirection } from '../leaderboardQuery.js';
+import { hideOrganizerName } from '../leaderboardQuery.js';
 import {
   CHECKIN_EMOTION_LABELS,
   emotionIdToLabel,
@@ -57,8 +57,8 @@ function zoneOf(r: KindAnswerRow): ZoneKey | null {
   return null;
 }
 
-function withoutOrganizers(rows: KindAnswerRow[]): KindAnswerRow[] {
-  return rows.filter(r => !isOrganizerDirection(r.direction));
+function withoutOrganizers(rows: KindAnswerRow[], organizersSlice: boolean): KindAnswerRow[] {
+  return rows.filter(r => !hideOrganizerName(organizersSlice, r.direction));
 }
 
 function pct(n: number, d: number): number {
@@ -86,12 +86,13 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
 
   const cohort = await loadCohortParticipants(filters, req);
   const registered = cohort.filter(
-    p => p.onboardingCompletedAt && !isOrganizerDirection(p.direction),
+    p => p.onboardingCompletedAt && !hideOrganizerName(filters.organizers, p.direction),
   );
 
   const { rows: rawRows } = await collectKindAnswerRows('state_check', filters);
   const rows = withoutOrganizers(
     dayFilter != null ? rawRows.filter(r => r.day === dayFilter) : rawRows,
+    filters.organizers,
   );
 
   /** Путь участника — всегда за смену (1…totalDays), с учётом направления/группы фильтров. */
@@ -105,6 +106,7 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
         compareDays: [],
       })).rows
       : rawRows,
+    filters.organizers,
   );
   const pathAnswersDay = toPathAnswers(rows);
   const pathAnswersShift = toPathAnswers(shiftRows);
@@ -167,7 +169,7 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
   const regByDir = new Map<string, number>();
   for (const p of registered) {
     const d = (p.direction || '—').trim() || '—';
-    if (isOrganizerDirection(d)) continue;
+    if (hideOrganizerName(filters.organizers, d)) continue;
     regByDir.set(d, (regByDir.get(d) || 0) + 1);
   }
   const dirBuckets = new Map<string, KindAnswerRow[]>();
@@ -177,7 +179,7 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
     dirBuckets.get(d)!.push(r);
   }
   const dirs = [...new Set([...regByDir.keys(), ...dirBuckets.keys()])]
-    .filter(d => !isOrganizerDirection(d))
+    .filter(d => !hideOrganizerName(filters.organizers, d))
     .map(dir => {
       const slice = dirBuckets.get(dir) ?? [];
       const people = new Set(slice.map(r => r.participantId)).size;
@@ -346,7 +348,7 @@ export async function buildStateDashboard(filters: AnalyticsFilters, req?: Admin
       compareDays: [],
     })
     : { rows: rawRows };
-  const allRows = withoutOrganizers(allRaw);
+  const allRows = withoutOrganizers(allRaw, filters.organizers);
   const daySeries = [1, 2, 3, 4, 5, 6, 7, 8].map(day => {
     const dayRows = allRows.filter(r => r.day === day);
     const people = new Set(dayRows.map(r => r.participantId)).size;

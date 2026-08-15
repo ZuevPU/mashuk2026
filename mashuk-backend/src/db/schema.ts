@@ -6,6 +6,7 @@ export const directions = pgTable('directions', {
   shiftId: integer('shift_id').notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   isHidden: boolean('is_hidden').default(false),
+  isOrganizer: boolean('is_organizer').default(false),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => [
   index('directions_shift_id_idx').on(table.shiftId),

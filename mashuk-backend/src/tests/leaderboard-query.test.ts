@@ -2,8 +2,11 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   clampForumDay,
+  collectOrganizerDirectionIds,
   filterLeaderboardParticipants,
+  hideOrganizerName,
   isOrganizerDirection,
+  isOrganizerParticipant,
   parseLeaderboardQuery,
   participantDisplayName,
 } from '../services/leaderboardQuery.js';
@@ -87,6 +90,48 @@ describe('isOrganizerDirection', () => {
     assert.equal(isOrganizerDirection('  организатор   форума '), true);
     assert.equal(isOrganizerDirection('Учителя', 'Организатор форума'), true);
     assert.equal(isOrganizerDirection('Учителя'), false);
+  });
+});
+
+describe('isOrganizerParticipant', () => {
+  it('uses catalog flag over name', () => {
+    assert.equal(isOrganizerParticipant({
+      isOrganizer: true,
+      directionId: 5,
+      names: ['Кураторы групп'],
+    }), true);
+    assert.equal(isOrganizerParticipant({
+      isOrganizer: false,
+      directionId: 5,
+      names: ['Организатор форума'],
+    }), false);
+  });
+
+  it('falls back to name only without directionId', () => {
+    assert.equal(isOrganizerParticipant({
+      names: ['Организатор форума'],
+    }), true);
+    assert.equal(isOrganizerParticipant({
+      names: ['Кураторы групп'],
+    }), false);
+  });
+});
+
+describe('hideOrganizerName', () => {
+  it('hides organizer names only in the regular slice', () => {
+    assert.equal(hideOrganizerName(false, 'Организатор форума'), true);
+    assert.equal(hideOrganizerName(true, 'Организатор форума'), false);
+  });
+});
+
+describe('collectOrganizerDirectionIds', () => {
+  it('includes flagged and name-matched directions', () => {
+    const ids = collectOrganizerDirectionIds([
+      { id: 1, name: 'Учителя', isOrganizer: false },
+      { id: 2, name: 'Кураторы групп', isOrganizer: true },
+      { id: 3, name: 'Организатор форума', isOrganizer: false },
+    ]);
+    assert.deepEqual([...ids].sort(), [2, 3]);
   });
 });
 

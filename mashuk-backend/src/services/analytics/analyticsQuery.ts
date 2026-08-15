@@ -20,6 +20,8 @@ export type AnalyticsFilters = {
   limit: number;
   /** Active admin shift; set by resolveAnalyticsFilters */
   shiftId: number | null;
+  /** true = only organizer directions; false = hide them from general hub stats */
+  organizers: boolean;
 };
 
 function parseDays(raw: unknown): number[] {
@@ -65,6 +67,7 @@ export function parseAnalyticsQuery(req: AdminRequest): AnalyticsFilters {
     page: Math.max(1, Number(req.query.page) || 1),
     limit: Math.min(200, Math.max(10, Number(req.query.limit) || 50)),
     shiftId: null,
+    organizers: req.query.organizers === '1' || req.query.organizers === 'true',
   };
 }
 

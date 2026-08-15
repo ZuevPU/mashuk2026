@@ -187,7 +187,7 @@ function DigestBody({ digest }: { digest: RoleExperimentDigest }) {
  */
 export function HubRoleExperimentDigest() {
   const {
-    adminFetch, forumDay, meta, ageCategory, activity, direction, group,
+    adminFetch, forumDay, meta, ageCategory, activity, direction, group, organizers,
   } = useInsights();
   const [today, setToday] = useState<DayResultsSlice | null>(null);
   const [prev, setPrev] = useState<DayResultsSlice | null>(null);
@@ -213,6 +213,7 @@ export function HubRoleExperimentDigest() {
           group,
           ageCategory,
           activity,
+          organizers,
         });
         // Для комментария нужен конкретный день (при «весь форум» — текущий)
         if (allForum) {
@@ -232,6 +233,7 @@ export function HubRoleExperimentDigest() {
             group,
             ageCategory,
             activity,
+            organizers,
           });
           const prevRes = await adminFetch(`/analytics/hub/day-results?${prevParams}`) as DayResultsPayload;
           if (cancelled) return;
@@ -252,7 +254,7 @@ export function HubRoleExperimentDigest() {
 
     void load();
     return () => { cancelled = true; };
-  }, [adminFetch, forumDay, selectedDay, allForum, direction, group, ageCategory, activity]);
+  }, [adminFetch, forumDay, selectedDay, allForum, direction, group, ageCategory, activity, organizers]);
 
   const digest = useMemo(() => {
     if (!today) return null;

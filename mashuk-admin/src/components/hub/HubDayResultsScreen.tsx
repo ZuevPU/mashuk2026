@@ -133,7 +133,7 @@ const FORUM_RESULTS_NAV: HubNavItem[] = DAY_RESULTS_NAV.filter(item => item.id !
 
 export function HubDayResultsScreen({ source = 'day' }: { source?: 'day' | 'forum' }) {
   const {
-    adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group,
+    adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group, organizers,
   } = useInsights();
   const [data, setData] = useState<DayResultsData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -151,6 +151,7 @@ export function HubDayResultsScreen({ source = 'day' }: { source?: 'day' | 'foru
       group,
       ageCategory,
       activity,
+      organizers,
     });
     const path = source === 'forum'
       ? `/analytics/hub/forum-results?${params.toString()}`
@@ -163,7 +164,7 @@ export function HubDayResultsScreen({ source = 'day' }: { source?: 'day' | 'foru
           : 'Не удалось загрузить итоги дня');
       })
       .finally(() => setLoading(false));
-  }, [adminFetch, forumDay, direction, group, ageCategory, activity, source]);
+  }, [adminFetch, forumDay, direction, group, ageCategory, activity, organizers, source]);
 
   const allForum = isAllForumDay(forumDay);
   const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);

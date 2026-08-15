@@ -10,6 +10,12 @@ describe('analyticsQuery', () => {
     assert.equal(q.mode, 'shift');
     assert.equal(q.page, 1);
     assert.equal(q.shiftId, null);
+    assert.equal(q.organizers, false);
+  });
+
+  it('parseAnalyticsQuery organizers slice', () => {
+    const q = parseAnalyticsQuery({ query: { organizers: '1' } } as never);
+    assert.equal(q.organizers, true);
   });
 
   it('parseAnalyticsQuery clubId', () => {

@@ -11,7 +11,7 @@ import {
 } from '../../db/schema.js';
 import { emotionIdToZone } from '../emotionZones.js';
 import { getForumSettings } from '../helpers.js';
-import { isOrganizerDirection } from '../leaderboardQuery.js';
+import { hideOrganizerName } from '../leaderboardQuery.js';
 import { getCalendarForumDay, getMoscowParts } from '../timePhase.js';
 import { TOUCHPOINT_SLOTS, windowsForDay } from '../touchpointTemplates.js';
 import { touchpointTypeForQuestion } from '../exports/touchpointFilter.js';
@@ -301,7 +301,7 @@ export async function buildDayStatsHubDashboard(filters: AnalyticsFilters, req?:
 
   const cohort = await loadCohortParticipants(filters, req);
   const registeredRows = cohort.filter(
-    p => p.onboardingCompletedAt && !isOrganizerDirection(p.direction),
+    p => p.onboardingCompletedAt && !hideOrganizerName(filters.organizers, p.direction),
   );
   const registered = registeredRows.length;
   const cohortById = new Map(
@@ -347,7 +347,7 @@ export async function buildDayStatsHubDashboard(filters: AnalyticsFilters, req?:
   const eveningSubmitted = eveningPack.rows.filter(
     r => r.status === 'сдано'
       && allowed.has(r.p.id)
-      && !isOrganizerDirection(r.directionName || r.p.direction),
+      && !hideOrganizerName(filters.organizers, r.directionName || r.p.direction),
   );
 
   const srcRows = stateScoped.length + afterScoped.length + eveningSubmitted.length;

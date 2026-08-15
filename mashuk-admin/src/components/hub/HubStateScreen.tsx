@@ -173,7 +173,7 @@ const STATE_NAV: HubNavItem[] = [
 
 export function HubStateScreen() {
   const {
-    adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group,
+    adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group, organizers,
   } = useInsights();
   const [data, setData] = useState<StateData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -194,6 +194,7 @@ export function HubStateScreen() {
       group,
       ageCategory,
       activity,
+      organizers,
     });
     adminFetch(`/analytics/hub/state?${params.toString()}`)
       .then(res => setData(res as StateData))
@@ -201,7 +202,7 @@ export function HubStateScreen() {
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить состояние');
       })
       .finally(() => setLoading(false));
-  }, [adminFetch, forumDay, direction, group, ageCategory, activity]);
+  }, [adminFetch, forumDay, direction, group, ageCategory, activity, organizers]);
 
   useEffect(() => {
     setQuoteLimit(24);

@@ -5,7 +5,7 @@ import {
   answers, participantDayState, participants, piggybank, pointsLog, questions,
 } from '../../db/schema.js';
 import { getForumSettings } from '../helpers.js';
-import { isOrganizerDirection } from '../leaderboardQuery.js';
+import { hideOrganizerName } from '../leaderboardQuery.js';
 import { isPublishedStatus } from '../publishStatus.js';
 import { getCalendarForumDay, getMoscowParts } from '../timePhase.js';
 import {
@@ -187,7 +187,7 @@ export async function buildActivityHubDashboard(filters: AnalyticsFilters, req?:
 
   const cohort = await loadCohortParticipants(filters, req);
   const registered = cohort.filter(
-    p => p.onboardingCompletedAt && !isOrganizerDirection(p.direction),
+    p => p.onboardingCompletedAt && !hideOrganizerName(filters.organizers, p.direction),
   );
   const ids = registered.map(p => p.id);
 
@@ -244,7 +244,7 @@ export async function buildActivityHubDashboard(filters: AnalyticsFilters, req?:
   // Directions n ≥ 40
   const dirMap = new Map<string, ActivityPerson[]>();
   for (const p of people) {
-    if (isOrganizerDirection(p.direction)) continue;
+    if (hideOrganizerName(filters.organizers, p.direction)) continue;
     if (!dirMap.has(p.direction)) dirMap.set(p.direction, []);
     dirMap.get(p.direction)!.push(p);
   }

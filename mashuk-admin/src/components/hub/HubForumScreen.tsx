@@ -203,7 +203,7 @@ export function HubForumScreen({
 }) {
   const {
     adminFetch, forumDay, setDirection, setGroup, setTab, meta, ageCategory, activity,
-    direction, group,
+    direction, group, organizers,
   } = useInsights();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<any>(null);
@@ -235,6 +235,7 @@ export function HubForumScreen({
       group,
       ageCategory,
       activity,
+      organizers,
     });
     const qs = params.toString();
     try {
@@ -267,7 +268,7 @@ export function HubForumScreen({
       setLoadError('Не удалось загрузить данные. Сервер перегружен или таймаут — обновится автоматически.');
       setLoading(false);
     }
-  }, [adminFetch, forumDay, direction, group, ageCategory, activity, cacheKey]);
+  }, [adminFetch, forumDay, direction, group, ageCategory, activity, organizers, cacheKey]);
 
   useEffect(() => {
     const cached = readForumCache(cacheKey);

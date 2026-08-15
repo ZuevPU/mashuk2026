@@ -93,7 +93,7 @@ export function HubGroupsScreen({
   onLensChange: (lens: HubLens) => void;
 }) {
   const {
-    adminFetch, forumDay, setDirection, setGroup, meta, ageCategory, activity, direction,
+    adminFetch, forumDay, setDirection, setGroup, meta, ageCategory, activity, direction, organizers,
   } = useInsights();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<any>(null);
@@ -113,12 +113,13 @@ export function HubGroupsScreen({
       direction,
       ageCategory,
       activity,
+      organizers,
     });
     adminFetch(`/analytics/hub/groups?${params.toString()}`)
       .then(res => setData(res))
       .catch(() => setData(null))
       .finally(() => setLoading(false));
-  }, [adminFetch, forumDay, direction, ageCategory, activity]);
+  }, [adminFetch, forumDay, direction, ageCategory, activity, organizers]);
 
   const days = (data?.days ?? []) as number[];
   const byGroupRaw = (data?.byGroup ?? []) as GroupRow[];
@@ -314,6 +315,7 @@ export function HubGroupsScreen({
         direction,
         ageCategory,
         activity,
+        organizers,
       });
       await downloadHubExport({
         id: 'hub-groups',

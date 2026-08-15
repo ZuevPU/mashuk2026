@@ -28,7 +28,7 @@ function cellColor(pct: number): string {
 
 /** Heatmap направление × тег копилки — только по кнопке (не грузим при открытии форума). */
 export function PiggybankDirectionMatrix() {
-  const { adminFetch, forumDay, ageCategory, activity } = useInsights();
+  const { adminFetch, forumDay, ageCategory, activity, organizers } = useInsights();
   const [data, setData] = useState<MatrixData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +41,7 @@ export function PiggybankDirectionMatrix() {
       forumDay,
       ageCategory,
       activity,
+      organizers,
     });
     try {
       const res = await adminFetch(`/analytics/hub/piggybank-matrix?${params.toString()}`);

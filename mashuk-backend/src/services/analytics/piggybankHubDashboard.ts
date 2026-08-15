@@ -3,7 +3,7 @@ import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { db } from '../../db/index.js';
 import { piggybank } from '../../db/schema.js';
 import { getForumSettings } from '../helpers.js';
-import { isOrganizerDirection } from '../leaderboardQuery.js';
+import { hideOrganizerName } from '../leaderboardQuery.js';
 import {
   entryTags,
   normalizePiggybankSource,
@@ -124,7 +124,6 @@ function buildDaySlice(rows: Row[], cohortById: Map<number, { direction: string 
   // Направления
   const dirReg = new Map<string, number>();
   for (const [, p] of cohortById) {
-    if (isOrganizerDirection(p.direction)) continue;
     dirReg.set(p.direction, (dirReg.get(p.direction) || 0) + 1);
   }
   const dirPeople = new Map<string, Set<number>>();
@@ -133,7 +132,6 @@ function buildDaySlice(rows: Row[], cohortById: Map<number, { direction: string 
   const dirAct = new Map<string, number>();
   for (const r of rows) {
     const dir = cohortById.get(r.participantId)?.direction || '—';
-    if (isOrganizerDirection(dir)) continue;
     if (!dirPeople.has(dir)) dirPeople.set(dir, new Set());
     dirPeople.get(dir)!.add(r.participantId);
     dirAll.set(dir, (dirAll.get(dir) || 0) + 1);
@@ -219,7 +217,7 @@ export async function buildPiggybankHubDashboard(filters: AnalyticsFilters, req?
 
   const cohort = await loadCohortParticipants(filters, req);
   const registeredRows = cohort.filter(
-    p => p.onboardingCompletedAt && !isOrganizerDirection(p.direction),
+    p => p.onboardingCompletedAt && !hideOrganizerName(filters.organizers, p.direction),
   );
   const ids = registeredRows.map(p => p.id);
   const cohortById = new Map(

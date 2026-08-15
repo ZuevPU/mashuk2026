@@ -18,7 +18,7 @@ import {
   type EmotionZoneKey,
 } from '../emotionZones.js';
 import { getForumSettings } from '../helpers.js';
-import { isOrganizerDirection } from '../leaderboardQuery.js';
+import { hideOrganizerName } from '../leaderboardQuery.js';
 import { entryTags } from '../piggybankDict.js';
 import { getCalendarForumDay, getMoscowParts } from '../timePhase.js';
 import {
@@ -342,7 +342,7 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
   cohortFilters.group = null;
   const cohort = await loadCohortParticipants(cohortFilters, req);
   const people: Person[] = cohort
-    .filter(p => p.onboardingCompletedAt && !isOrganizerDirection(p.direction))
+    .filter(p => p.onboardingCompletedAt && !hideOrganizerName(filters.organizers, p.direction))
     .map(p => ({
       id: p.id,
       direction: dirName(p.direction),
@@ -363,7 +363,7 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
     .sort((a, b) => b[1] - a[1])
     .map(([d]) => d);
 
-  const selectedDir = filters.direction && !isOrganizerDirection(filters.direction)
+  const selectedDir = filters.direction && !hideOrganizerName(filters.organizers, filters.direction)
     ? dirName(filters.direction)
     : (dirs[0] ?? null);
 
@@ -441,9 +441,9 @@ export async function buildDirectionHubDashboard(filters: AnalyticsFilters, req?
     db.select().from(exchangeCategories),
   ]);
 
-  const stateRows = stateAll.filter(r => allowed.has(r.participantId) && !isOrganizerDirection(r.direction));
-  const afterRows = afterAll.filter(r => allowed.has(r.participantId) && !isOrganizerDirection(r.direction));
-  const eveningRows = eveningPack.rows.filter(r => allowed.has(r.p.id) && !isOrganizerDirection(eveningDir(r)));
+  const stateRows = stateAll.filter(r => allowed.has(r.participantId) && !hideOrganizerName(filters.organizers, r.direction));
+  const afterRows = afterAll.filter(r => allowed.has(r.participantId) && !hideOrganizerName(filters.organizers, r.direction));
+  const eveningRows = eveningPack.rows.filter(r => allowed.has(r.p.id) && !hideOrganizerName(filters.organizers, eveningDir(r)));
   const submittedAll = eveningRows.filter(r => r.status === 'сдано');
   const draftsAll = eveningRows.filter(r => r.status !== 'сдано');
 

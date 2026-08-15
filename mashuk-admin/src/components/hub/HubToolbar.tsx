@@ -1,6 +1,6 @@
 import { useInsights } from '../insights/InsightsContext';
 import type { HubLens } from './hubLenses';
-import { HUB_FORUM_DAY_ALL, hubDirections, isAllForumDay, isOrganizerDirection } from './hubQuery';
+import { HUB_FORUM_DAY_ALL, hubDirectionOptions, isAllForumDay } from './hubQuery';
 
 const LENS_LABELS: Record<HubLens, string> = {
   forum: 'Форум',
@@ -41,11 +41,13 @@ export function HubToolbar({
     setAgeCategory,
     activity,
     setActivity,
+    organizers,
+    setOrganizers,
     meta,
   } = useInsights();
 
-  const directionOptions = hubDirections(meta?.filters?.directions);
-  const directionValue = isOrganizerDirection(direction) ? '' : direction;
+  const directionOptions = hubDirectionOptions(meta?.filters, organizers);
+  const directionValue = directionOptions.includes(direction) ? direction : '';
   const dateValue = isAllForumDay(forumDay) ? HUB_FORUM_DAY_ALL : forumDay;
 
   return (
@@ -90,6 +92,14 @@ export function HubToolbar({
           </select>
         </label>
         )}
+        <label className="adm-tasks-check" style={{ marginRight: 8 }}>
+          <input
+            type="checkbox"
+            checked={organizers}
+            onChange={e => setOrganizers(e.target.checked)}
+          />
+          <span>Организаторы форума</span>
+        </label>
         <label className="adm-insights-filter">
           Направление
           <select

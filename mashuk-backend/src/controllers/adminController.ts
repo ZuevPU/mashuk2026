@@ -663,14 +663,22 @@ export const crudDirections = {
     const name = String(req.body.name || '').trim();
     if (!name) { res.status(400).json({ error: 'name required' }); return; }
     const shiftId = await resolveAdminShiftId(req);
-    const [d] = await db.insert(directions).values({ name, shiftId }).returning();
+    const [d] = await db.insert(directions).values({
+      name,
+      shiftId,
+      isOrganizer: req.body.isOrganizer === true,
+    }).returning();
     res.json({ direction: d });
   },
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
     const shiftId = await resolveAdminShiftId(req);
+    const patch: Partial<typeof directions.$inferInsert> = {};
+    if (req.body.name !== undefined) patch.name = String(req.body.name);
+    if (req.body.isHidden !== undefined) patch.isHidden = Boolean(req.body.isHidden);
+    if (req.body.isOrganizer !== undefined) patch.isOrganizer = Boolean(req.body.isOrganizer);
     const [updated] = await db.update(directions)
-      .set({ name: req.body.name, isHidden: req.body.isHidden })
+      .set(patch)
       .where(and(eq(directions.id, id), eq(directions.shiftId, shiftId)))
       .returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }

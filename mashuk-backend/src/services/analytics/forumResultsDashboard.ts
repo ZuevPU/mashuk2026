@@ -6,7 +6,7 @@ import {
   type EveningExportRow,
 } from '../exports/eveningExportData.js';
 import { getForumSettings } from '../helpers.js';
-import { isOrganizerDirection } from '../leaderboardQuery.js';
+import { hideOrganizerName } from '../leaderboardQuery.js';
 import { getForumDayDateLabel } from '../timePhase.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import { loadCohortParticipants } from './cohort.js';
@@ -153,7 +153,7 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
   const dayList = Array.from({ length: totalDays }, (_, i) => i + 1);
   const cohort = await loadCohortParticipants(filters, req);
   const cohortSize = cohort.filter(
-    p => p.onboardingCompletedAt && !isOrganizerDirection(p.direction),
+    p => p.onboardingCompletedAt && !hideOrganizerName(filters.organizers, p.direction),
   ).length;
 
   const marked = collectForumFinalEveningFieldDays(settings as never, dayList);
@@ -173,7 +173,7 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
     : { rows: [] as EveningExportRow[] };
 
   const eveningSubmitted = evening.rows.filter(r =>
-    r.status === 'сдано' && !isOrganizerDirection(r.directionName || r.p.direction),
+    r.status === 'сдано' && !hideOrganizerName(filters.organizers, r.directionName || r.p.direction),
   );
 
   const primaryFields = questions.map(q => q.field);
@@ -212,12 +212,12 @@ export async function buildForumResultsDashboard(filters: AnalyticsFilters, req?
   }));
   const dirNames = new Set<string>();
   for (const p of cohort) {
-    if (!p.onboardingCompletedAt || isOrganizerDirection(p.direction)) continue;
+    if (!p.onboardingCompletedAt || hideOrganizerName(filters.organizers, p.direction)) continue;
     dirNames.add((p.direction || '—').trim() || '—');
   }
   for (const r of eveningSubmitted) {
     const d = dirOf(r);
-    if (!isOrganizerDirection(d)) dirNames.add(d);
+    if (!hideOrganizerName(filters.organizers, d)) dirNames.add(d);
   }
   const directions = [...dirNames].sort((a, b) => a.localeCompare(b, 'ru'));
   const blockDayRatings: DirectionDayRatings[] = scaleQuestions.map(({ q, f }) => {

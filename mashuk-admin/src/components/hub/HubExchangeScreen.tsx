@@ -73,7 +73,7 @@ const EXCHANGE_NAV: HubNavItem[] = [
 
 export function HubExchangeScreen() {
   const {
-    adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group,
+    adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group, organizers,
   } = useInsights();
   const [data, setData] = useState<ExchangeData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -89,6 +89,7 @@ export function HubExchangeScreen() {
       group,
       ageCategory,
       activity,
+      organizers,
     });
     adminFetch(`/analytics/hub/exchange?${params.toString()}`)
       .then(res => setData(res as ExchangeData))
@@ -96,7 +97,7 @@ export function HubExchangeScreen() {
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить обмен опытом');
       })
       .finally(() => setLoading(false));
-  }, [adminFetch, forumDay, direction, group, ageCategory, activity]);
+  }, [adminFetch, forumDay, direction, group, ageCategory, activity, organizers]);
 
   const allForum = isAllForumDay(forumDay);
   const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);

@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { ADMIN_SHIFT_CHANGED_EVENT } from '../../admin/client';
 import type { Tab } from '../../tabs';
 
 export type DashboardId =
@@ -44,6 +45,7 @@ export type InsightsMeta = {
   semanticV2?: boolean;
   filters?: {
     directions: string[];
+    organizerDirections?: string[];
     groups: string[];
     roles: string[];
     ageCategories?: { id: string; label: string }[];
@@ -72,6 +74,8 @@ type InsightsContextValue = {
   setAgeCategory: (v: string) => void;
   activity: string;
   setActivity: (v: string) => void;
+  organizers: boolean;
+  setOrganizers: (v: boolean) => void;
   activeDashboardId: DashboardId;
   setActiveDashboardId: (id: DashboardId | string) => void;
   meta: InsightsMeta | null;
@@ -93,6 +97,7 @@ type StoredFilters = {
   group: string;
   ageCategory: string;
   activity: string;
+  organizers: boolean;
   dash: DashboardId;
 };
 
@@ -102,6 +107,7 @@ const DEFAULT_FILTERS: StoredFilters = {
   group: '',
   ageCategory: '',
   activity: '',
+  organizers: false,
   dash: 'overview',
 };
 
@@ -117,6 +123,7 @@ function readStored(): StoredFilters | null {
       group: String(p.group ?? ''),
       ageCategory: String(p.ageCategory ?? ''),
       activity: String(p.activity ?? ''),
+      organizers: p.organizers === true,
       dash: normalizeDashboardId(p.dash),
     };
   } catch {
@@ -146,6 +153,7 @@ export function InsightsProvider({
   const [group, setGroupState] = useState(initial.group);
   const [ageCategory, setAgeCategoryState] = useState(initial.ageCategory);
   const [activity, setActivityState] = useState(initial.activity);
+  const [organizers, setOrganizersState] = useState(initial.organizers);
   const [activeDashboardId, setActiveDashboardIdState] = useState<DashboardId>(
     normalizeDashboardId(initial.dash),
   );
@@ -159,7 +167,7 @@ export function InsightsProvider({
   const userPickedDay = useRef(false);
 
   const persist = useCallback((patch: Partial<{
-    forumDay: string; direction: string; group: string; ageCategory: string; activity: string; dash: DashboardId;
+    forumDay: string; direction: string; group: string; ageCategory: string; activity: string; organizers: boolean; dash: DashboardId;
   }>) => {
     const next = {
       forumDay,
@@ -167,11 +175,12 @@ export function InsightsProvider({
       group,
       ageCategory,
       activity,
+      organizers,
       dash: activeDashboardId,
       ...patch,
     };
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  }, [forumDay, direction, group, ageCategory, activity, activeDashboardId]);
+  }, [forumDay, direction, group, ageCategory, activity, organizers, activeDashboardId]);
 
   const setForumDay = useCallback((d: string) => {
     userPickedDay.current = true;
@@ -195,6 +204,11 @@ export function InsightsProvider({
     setActivityState(v);
     persist({ activity: v });
   }, [persist]);
+  const setOrganizers = useCallback((v: boolean) => {
+    setOrganizersState(v);
+    setDirectionState('');
+    persist({ organizers: v, direction: '' });
+  }, [persist]);
   const setActiveDashboardId = (id: DashboardId | string) => {
     const next = normalizeDashboardId(id);
     setActiveDashboardIdState(next);
@@ -211,6 +225,18 @@ export function InsightsProvider({
   }, [adminFetch]);
 
   useEffect(() => { reloadMeta(); }, [reloadMeta, reloadKey]);
+
+  useEffect(() => {
+    const onShiftChanged = () => {
+      setDirectionState('');
+      setGroupState('');
+      setActivityState('');
+      setOrganizersState(false);
+      persist({ direction: '', group: '', activity: '', organizers: false });
+    };
+    window.addEventListener(ADMIN_SHIFT_CHANGED_EVENT, onShiftChanged);
+    return () => window.removeEventListener(ADMIN_SHIFT_CHANGED_EVENT, onShiftChanged);
+  }, [persist]);
 
   useEffect(() => {
     if (activeDashboardId === 'semantic' || activeDashboardId === 'clubs') {
@@ -250,6 +276,8 @@ export function InsightsProvider({
     setAgeCategory,
     activity,
     setActivity,
+    organizers,
+    setOrganizers,
     activeDashboardId,
     setActiveDashboardId,
     meta,
@@ -262,6 +290,7 @@ export function InsightsProvider({
   }), [
     forumDay, setForumDay, direction, setDirection, group, setGroup,
     ageCategory, setAgeCategory, activity, setActivity,
+    organizers, setOrganizers,
     activeDashboardId, meta, metaLoading,
     reloadMeta, setTab, activeSection, adminFetch, analyticsDashboardAllowlist,
   ]);

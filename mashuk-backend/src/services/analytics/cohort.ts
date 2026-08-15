@@ -5,7 +5,7 @@ import { buildParticipantWhere, type ParticipantListQuery } from '../participant
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { matchesActivity, matchesAgeCategory, AGE_CATEGORY_BUCKETS } from './cohortFilters.js';
-import { isOrganizerDirection } from '../leaderboardQuery.js';
+import { isOrganizerParticipant } from '../leaderboardQuery.js';
 
 const COHORT_CACHE_TTL_MS = 45_000;
 const COHORT_CACHE_MAX = 12;
@@ -28,6 +28,7 @@ function cohortCacheKey(filters: AnalyticsFilters, req?: AdminRequest): string {
     filters.group ?? '',
     filters.ageCategory ?? '',
     filters.activity ?? '',
+    filters.organizers ? '1' : '0',
     curatorDir,
   ].join('|');
 }
@@ -59,6 +60,7 @@ async function loadCohortUncached(filters: AnalyticsFilters, req?: AdminRequest)
     direction: sql<string | null>`COALESCE(${directions.name}, ${participants.direction})`,
     directionId: participants.directionId,
     directionStored: participants.direction,
+    directionIsOrganizer: directions.isOrganizer,
     groupId: participants.groupId,
     groupName: participants.groupName,
     age: participants.age,
@@ -78,13 +80,22 @@ async function loadCohortUncached(filters: AnalyticsFilters, req?: AdminRequest)
     bonusPoints: participants.bonusPoints,
     forumPoints: participants.forumPoints,
   }).from(participants)
-    .leftJoin(directions, eq(participants.directionId, directions.id))
+    .leftJoin(directions, and(
+      eq(participants.directionId, directions.id),
+      eq(directions.shiftId, participants.shiftId),
+    ))
     .where(where ?? isNull(participants.selfDeletedAt));
 
-  // Исключаем организаторов (и при рассинхроне directionId / direction)
   let rows = loaded
-    .filter(p => !isOrganizerDirection(p.direction, p.directionStored))
-    .map(({ directionStored: _drop, ...rest }) => rest);
+    .filter(p => {
+      const isOrg = isOrganizerParticipant({
+        isOrganizer: p.directionIsOrganizer,
+        directionId: p.directionId,
+        names: [p.direction, p.directionStored],
+      });
+      return filters.organizers ? isOrg : !isOrg;
+    })
+    .map(({ directionStored: _drop, directionIsOrganizer: _flag, ...rest }) => rest);
 
   if (filters.direction) {
     rows = rows.filter(p => p.direction === filters.direction);
@@ -143,19 +154,40 @@ export async function listFilterOptions(shiftId?: number | null) {
   const where = shiftId != null
     ? and(isNull(participants.selfDeletedAt), eq(participants.shiftId, shiftId))
     : isNull(participants.selfDeletedAt);
-  const rows = await db.select({
-    direction: participants.direction,
-    groupName: participants.groupName,
-    role: participants.pedagogicalRole,
-    position: participants.position,
-  }).from(participants).where(where);
-  const directions = [...new Set(rows.map(r => r.direction).filter(Boolean))] as string[];
+  const [rows, catalog] = await Promise.all([
+    db.select({
+      groupName: participants.groupName,
+      role: participants.pedagogicalRole,
+      position: participants.position,
+    }).from(participants).where(where),
+    shiftId != null
+      ? db.select({
+        name: directions.name,
+        isOrganizer: directions.isOrganizer,
+      }).from(directions).where(eq(directions.shiftId, shiftId))
+      : Promise.resolve([] as Array<{ name: string; isOrganizer: boolean | null }>),
+  ]);
+  const sortRu = (a: string, b: string) => a.localeCompare(b, 'ru');
+  const catalogDirections = catalog
+    .map(d => String(d.name || '').trim())
+    .filter(Boolean);
+  const organizerDirections = catalog
+    .filter(d => d.isOrganizer === true)
+    .map(d => String(d.name || '').trim())
+    .filter(Boolean)
+    .sort(sortRu);
+  const regularDirections = catalog
+    .filter(d => d.isOrganizer !== true)
+    .map(d => String(d.name || '').trim())
+    .filter(Boolean)
+    .sort(sortRu);
   const groups = [...new Set(rows.map(r => r.groupName || 'без группы'))];
   const roles = [...new Set(rows.map(r => r.role).filter(Boolean))] as string[];
   const activities = [...new Set(rows.map(r => r.position).filter(Boolean))] as string[];
-  activities.sort((a, b) => a.localeCompare(b, 'ru'));
+  activities.sort(sortRu);
   return {
-    directions,
+    directions: regularDirections.length ? regularDirections : catalogDirections,
+    organizerDirections,
     groups,
     roles,
     ageCategories: AGE_CATEGORY_BUCKETS.map(b => ({ id: b.id, label: b.label })),

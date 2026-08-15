@@ -86,7 +86,7 @@ const PIGGY_NAV: HubNavItem[] = [
 
 export function HubPiggybankScreen() {
   const {
-    adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group,
+    adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group, organizers,
   } = useInsights();
   const [data, setData] = useState<PiggyData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -102,6 +102,7 @@ export function HubPiggybankScreen() {
       group,
       ageCategory,
       activity,
+      organizers,
     });
     adminFetch(`/analytics/hub/piggybank?${params.toString()}`)
       .then(res => setData(res as PiggyData))
@@ -109,7 +110,7 @@ export function HubPiggybankScreen() {
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить копилку');
       })
       .finally(() => setLoading(false));
-  }, [adminFetch, forumDay, direction, group, ageCategory, activity]);
+  }, [adminFetch, forumDay, direction, group, ageCategory, activity, organizers]);
 
   const allForum = isAllForumDay(forumDay);
   const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);

@@ -76,7 +76,7 @@ const ACTIVITY_NAV: HubNavItem[] = [
 
 export function HubActivityScreen() {
   const {
-    adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group,
+    adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group, organizers,
   } = useInsights();
   const [data, setData] = useState<ActivityData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -92,6 +92,7 @@ export function HubActivityScreen() {
       group,
       ageCategory,
       activity,
+      organizers,
     });
     adminFetch(`/analytics/hub/activity?${params.toString()}`)
       .then(res => setData(res as ActivityData))
@@ -99,7 +100,7 @@ export function HubActivityScreen() {
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить активность');
       })
       .finally(() => setLoading(false));
-  }, [adminFetch, forumDay, direction, group, ageCategory, activity]);
+  }, [adminFetch, forumDay, direction, group, ageCategory, activity, organizers]);
 
   const allForum = isAllForumDay(forumDay);
   const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);

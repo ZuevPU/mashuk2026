@@ -484,6 +484,13 @@
       "when": 1848000000000,
       "tag": "0069_push_queue_shift_id",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1849000000000,
+      "tag": "0070_directions_is_organizer",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { getForumSettings } from '../helpers.js';
-import { isOrganizerDirection } from '../leaderboardQuery.js';
+import { hideOrganizerName } from '../leaderboardQuery.js';
 import type { AnalyticsFilters } from './analyticsQuery.js';
 import { loadCohortParticipants } from './cohort.js';
 import { collectKindAnswerRows, type KindAnswerRow } from './questionKindDashboard.js';
@@ -27,10 +27,10 @@ type Classified = {
   subtopic: string;
 };
 
-function classifyRows(rows: KindAnswerRow[]): Classified[] {
+function classifyRows(rows: KindAnswerRow[], organizersSlice = false): Classified[] {
   const out: Classified[] = [];
   for (const row of rows) {
-    if (isOrganizerDirection(row.direction)) continue;
+    if (hideOrganizerName(organizersSlice, row.direction)) continue;
     const text = (row.answer || '').trim();
     if (!text || text.startsWith('(ответ без')) continue;
     const parent = (row.parentEventTitle || '').trim();
@@ -66,6 +66,7 @@ function levelDistOf(items: Classified[]) {
 function buildSlice(
   items: Classified[],
   registeredRows: Array<{ id: number; direction: string }>,
+  organizersSlice = false,
 ) {
   const registered = registeredRows.length;
   const peopleIds = new Set(items.map(i => i.row.participantId));
@@ -121,14 +122,14 @@ function buildSlice(
   // Directions
   const dirReg = new Map<string, number>();
   for (const p of registeredRows) {
-    if (isOrganizerDirection(p.direction)) continue;
+    if (hideOrganizerName(organizersSlice, p.direction)) continue;
     const d = (p.direction || '—').trim() || '—';
     dirReg.set(d, (dirReg.get(d) || 0) + 1);
   }
   const dirMap = new Map<string, Classified[]>();
   for (const it of items) {
     const d = (it.row.direction || '—').trim() || '—';
-    if (isOrganizerDirection(d)) continue;
+    if (hideOrganizerName(organizersSlice, d)) continue;
     if (!dirMap.has(d)) dirMap.set(d, []);
     dirMap.get(d)!.push(it);
   }
@@ -214,7 +215,7 @@ export async function buildAfterBlocksHubDashboard(filters: AnalyticsFilters, re
 
   const cohort = await loadCohortParticipants(filters, req);
   const registeredRows = cohort
-    .filter(p => p.onboardingCompletedAt && !isOrganizerDirection(p.direction))
+    .filter(p => p.onboardingCompletedAt && !hideOrganizerName(filters.organizers, p.direction))
     .map(p => ({ id: p.id, direction: (p.direction || '—').trim() || '—' }));
 
   // Все дни смены — для динамики; срез выбранного дня — для панелей
@@ -223,11 +224,11 @@ export async function buildAfterBlocksHubDashboard(filters: AnalyticsFilters, re
   const allowed = new Set(registeredRows.map(p => p.id));
   const scoped = allRows.filter(r => allowed.has(r.participantId));
 
-  const dayItems = classifyRows(scoped.filter(r => r.day === day));
-  const slice = buildSlice(dayItems, registeredRows);
+  const dayItems = classifyRows(scoped.filter(r => r.day === day), filters.organizers);
+  const slice = buildSlice(dayItems, registeredRows, filters.organizers);
 
   const daySeries = [1, 2, 3, 4, 5, 6, 7, 8].map(d => {
-    const items = classifyRows(scoped.filter(r => r.day === d));
+    const items = classifyRows(scoped.filter(r => r.day === d), filters.organizers);
     if (!items.length && d !== day) {
       return { day: d, own: null, coveragePct: null, answers: 0 };
     }

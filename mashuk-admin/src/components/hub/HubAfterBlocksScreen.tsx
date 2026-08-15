@@ -81,7 +81,7 @@ const AFTER_NAV: HubNavItem[] = [
 
 export function HubAfterBlocksScreen() {
   const {
-    adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group,
+    adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group, organizers,
   } = useInsights();
   const [data, setData] = useState<AfterBlocksData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -101,6 +101,7 @@ export function HubAfterBlocksScreen() {
       group,
       ageCategory,
       activity,
+      organizers,
     });
     adminFetch(`/analytics/hub/after-blocks?${params.toString()}`)
       .then(res => setData(res as AfterBlocksData))
@@ -108,7 +109,7 @@ export function HubAfterBlocksScreen() {
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить осмысление');
       })
       .finally(() => setLoading(false));
-  }, [adminFetch, forumDay, direction, group, ageCategory, activity]);
+  }, [adminFetch, forumDay, direction, group, ageCategory, activity, organizers]);
 
   const allForum = isAllForumDay(forumDay);
   const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);

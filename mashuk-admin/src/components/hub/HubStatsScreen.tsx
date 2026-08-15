@@ -79,7 +79,7 @@ export function HubStatsScreen({
   onLensChange: (l: HubLens) => void;
 }) {
   const {
-    adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group,
+    adminFetch, forumDay, setForumDay, meta, ageCategory, activity, direction, group, organizers,
   } = useInsights();
   const [data, setData] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -95,6 +95,7 @@ export function HubStatsScreen({
       group,
       ageCategory,
       activity,
+      organizers,
     });
     adminFetch(`/analytics/hub/stats?${params.toString()}`)
       .then(res => setData(res as StatsData))
@@ -102,7 +103,7 @@ export function HubStatsScreen({
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить статистику дня');
       })
       .finally(() => setLoading(false));
-  }, [adminFetch, forumDay, direction, group, ageCategory, activity]);
+  }, [adminFetch, forumDay, direction, group, ageCategory, activity, organizers]);
 
   const allForum = isAllForumDay(forumDay);
   const selectedDay = hubDisplayDay(forumDay, meta?.currentForumDay || 1);

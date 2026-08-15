@@ -36,6 +36,35 @@ export function isOrganizerDirection(...names: Array<string | null | undefined>)
   return false;
 }
 
+/** Catalog flag wins; name heuristic only if the participant has no directionId. */
+export function isOrganizerParticipant(opts: {
+  isOrganizer?: boolean | null;
+  directionId?: number | null;
+  names?: Array<string | null | undefined>;
+}): boolean {
+  if (opts.isOrganizer === true) return true;
+  if (opts.directionId != null) return false;
+  return isOrganizerDirection(...(opts.names ?? []));
+}
+
+/** Extra name-based hide only in the regular hub slice — organizer slice trusts the cohort. */
+export function hideOrganizerName(
+  organizersSlice: boolean,
+  ...names: Array<string | null | undefined>
+): boolean {
+  return !organizersSlice && isOrganizerDirection(...names);
+}
+
+export function collectOrganizerDirectionIds(
+  rows: Array<{ id: number; name?: string | null; isOrganizer?: boolean | null }>,
+): Set<number> {
+  return new Set(
+    rows
+      .filter(d => d.isOrganizer === true || isOrganizerDirection(d.name))
+      .map(d => d.id),
+  );
+}
+
 export type ParsedLeaderboardQuery = {
   mode: LeaderboardMode;
   scope: LeaderboardScope;

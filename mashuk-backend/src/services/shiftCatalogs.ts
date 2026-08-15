@@ -88,6 +88,7 @@ export async function ensureShiftCatalogs<T extends DbLike>(
     shiftId: targetId,
     name: row.name,
     isHidden: row.isHidden,
+    isOrganizer: row.isOrganizer === true,
   }));
   const placeMap = await cloneByName(tx, programPlaces, sourceId, targetId, row => ({
     shiftId: targetId,

@@ -159,7 +159,7 @@ function drilldownInsight(block: BlockDayRatings | undefined): string {
 }
 
 export function HubForumResultsScreen() {
-  const { adminFetch, direction, group, ageCategory, activity } = useInsights();
+  const { adminFetch, direction, group, ageCategory, activity, organizers } = useInsights();
   const [data, setData] = useState<ForumResultsData | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -176,6 +176,7 @@ export function HubForumResultsScreen() {
       group,
       ageCategory,
       activity,
+      organizers,
     });
     adminFetch(`/analytics/hub/forum-results?${params.toString()}`)
       .then(res => {
@@ -190,7 +191,7 @@ export function HubForumResultsScreen() {
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить итоги форума');
       })
       .finally(() => setLoading(false));
-  }, [adminFetch, direction, group, ageCategory, activity, reloadTick]);
+  }, [adminFetch, direction, group, ageCategory, activity, organizers, reloadTick]);
 
   const m = data?.meta;
   const selectedBlock = useMemo(

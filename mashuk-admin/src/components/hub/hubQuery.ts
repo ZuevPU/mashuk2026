@@ -5,9 +5,17 @@ export function isOrganizerDirection(name: string | null | undefined): boolean {
   return d === 'организатор форума' || d === 'организатор' || d.includes('организатор форума');
 }
 
-/** Список направлений участника для селекта Штаба (и «Итоги дня», и «Состояние», и дальше). */
+/** Список обычных направлений для селекта Штаба. */
 export function hubDirections(directions: string[] | null | undefined): string[] {
   return (directions ?? []).filter(d => !isOrganizerDirection(d));
+}
+
+export function hubDirectionOptions(
+  filters: { directions?: string[]; organizerDirections?: string[] } | null | undefined,
+  organizers: boolean,
+): string[] {
+  if (organizers) return (filters?.organizerDirections ?? []).filter(Boolean);
+  return hubDirections(filters?.directions);
 }
 
 /** Значение селекта «Дата» = весь форум (все дни смены). */
@@ -41,6 +49,7 @@ export function hubFilterParams(opts: {
   group?: string;
   ageCategory?: string;
   activity?: string;
+  organizers?: boolean;
 }): URLSearchParams {
   const params = new URLSearchParams();
   const allForum = isAllForumDay(opts.forumDay);
@@ -55,6 +64,7 @@ export function hubFilterParams(opts: {
   if (opts.group) params.set('group', opts.group);
   if (opts.ageCategory) params.set('ageCategory', opts.ageCategory);
   if (opts.activity) params.set('activity', opts.activity);
+  if (opts.organizers) params.set('organizers', '1');
   return params;
 }
 
