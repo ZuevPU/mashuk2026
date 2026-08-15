@@ -836,20 +836,38 @@ export const crudThematicTags = {
     const name = String(req.body.name || '').trim();
     if (!name) { res.status(400).json({ error: 'name required' }); return; }
     const shiftId = await resolveAdminShiftId(req);
-    const slug = String(req.body.slug || slugifyTagName(name)).trim();
-    const [t] = await db.insert(thematicTags).values({
-      shiftId,
-      name,
-      slug,
-      description: req.body.description ?? null,
-      color: req.body.color ?? null,
-      isActive: req.body.isActive !== false,
-      sortOrder: Number(req.body.sortOrder) || 0,
-      applicationTypes: Array.isArray(req.body.applicationTypes) ? req.body.applicationTypes : ['events', 'interests'],
-    }).returning();
-    const { logAdminAction } = await import('../services/adminActionsLog.js');
-    await logAdminAction({ req, actionType: 'tag_create', section: 'recommendation-tags', objectId: t.id, newValue: t });
-    res.json({ tag: t });
+    const [nameTaken] = await db.select({ id: thematicTags.id }).from(thematicTags)
+      .where(and(eq(thematicTags.shiftId, shiftId), eq(thematicTags.name, name))).limit(1);
+    if (nameTaken) {
+      res.status(400).json({ error: 'Тег с таким названием уже есть в этой смене' });
+      return;
+    }
+    let slug = String(req.body.slug || slugifyTagName(name)).trim();
+    const [slugTaken] = await db.select({ id: thematicTags.id }).from(thematicTags)
+      .where(and(eq(thematicTags.shiftId, shiftId), eq(thematicTags.slug, slug))).limit(1);
+    if (slugTaken) slug = `${slug}-${Date.now().toString(36)}`.slice(0, 80);
+    try {
+      const [t] = await db.insert(thematicTags).values({
+        shiftId,
+        name,
+        slug,
+        description: req.body.description ?? null,
+        color: req.body.color ?? null,
+        isActive: req.body.isActive !== false,
+        sortOrder: Number(req.body.sortOrder) || 0,
+        applicationTypes: Array.isArray(req.body.applicationTypes) ? req.body.applicationTypes : ['events', 'interests'],
+      }).returning();
+      const { logAdminAction } = await import('../services/adminActionsLog.js');
+      await logAdminAction({ req, actionType: 'tag_create', section: 'recommendation-tags', objectId: t.id, newValue: t });
+      res.json({ tag: t });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : '';
+      if (/thematic_tags_slug_unique|duplicate key|unique/i.test(msg)) {
+        res.status(400).json({ error: 'Такой тег уже есть. Если это другая смена — обновите сервер и попробуйте ещё раз.' });
+        return;
+      }
+      throw error;
+    }
   },
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
@@ -995,6 +1013,12 @@ export const crudProgramPlaces = {
       return;
     }
     const shiftId = await resolveAdminShiftId(req);
+    const [taken] = await db.select({ id: programPlaces.id }).from(programPlaces)
+      .where(and(eq(programPlaces.shiftId, shiftId), eq(programPlaces.name, name))).limit(1);
+    if (taken) {
+      res.status(400).json({ error: 'Площадка с таким названием уже есть в этой смене' });
+      return;
+    }
     const [place] = await db.insert(programPlaces).values({ name, shiftId }).returning();
     res.json({ place });
   },
@@ -1059,6 +1083,12 @@ export const crudProgramBlockTypes = {
     const name = String(req.body.name || '').trim();
     if (!key || !name) { res.status(400).json({ error: 'key and name required' }); return; }
     const shiftId = await resolveAdminShiftId(req);
+    const [taken] = await db.select({ id: programBlockTypes.id }).from(programBlockTypes)
+      .where(and(eq(programBlockTypes.shiftId, shiftId), eq(programBlockTypes.key, key))).limit(1);
+    if (taken) {
+      res.status(400).json({ error: 'Тип блока с таким ключом уже есть в этой смене' });
+      return;
+    }
     const [row] = await db.insert(programBlockTypes).values({
       shiftId, key, name, sortOrder: Number(req.body.sortOrder) || 0,
     }).returning();
@@ -1997,7 +2027,11 @@ export const crudTasks = {
     const publishJustHappened = isPublished && (!wasPublished || (updated.publishTime && before.publishTime && updated.publishTime > before.publishTime));
     if (updated?.pushOnPublish && isPublished && publishJustHappened) {
       const { pushCopy } = await import('../services/pushCopy.js');
-      await notifyAllParticipants(pushCopy.taskPublished(updated.title), 'task_publish');
+      await notifyAllParticipants(
+        pushCopy.taskPublished(updated.title),
+        `task_publish_${updated.id}`,
+        updated.shiftId,
+      );
     }
     if (isPublished && publishJustHappened) {
       try {
@@ -2053,7 +2087,26 @@ export const crudTasks = {
     } else if (action === 'unhide') {
       await db.update(tasks).set({ isHidden: false }).where(inArray(tasks.id, ids));
     } else if (action === 'publish') {
+      const beforeRows = await db.select().from(tasks).where(inArray(tasks.id, ids));
       await db.update(tasks).set({ status: 'published', isHidden: false }).where(inArray(tasks.id, ids));
+      const now = new Date();
+      const { pushCopy } = await import('../services/pushCopy.js');
+      const { fireTaskPublishTrigger } = await import('../services/pushTriggerRunner.js');
+      for (const before of beforeRows) {
+        if (before.status === 'published') continue;
+        if (before.pushOnPublish) {
+          await notifyAllParticipants(
+            pushCopy.taskPublished(before.title),
+            `task_publish_${before.id}`,
+            before.shiftId,
+          );
+        }
+        try {
+          await fireTaskPublishTrigger(before.id, now);
+        } catch {
+          // tables may not exist yet
+        }
+      }
     } else if (action === 'draft') {
       await db.update(tasks).set({ status: 'draft' }).where(inArray(tasks.id, ids));
     }

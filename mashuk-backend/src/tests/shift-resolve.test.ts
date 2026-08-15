@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   shiftOpsToForumShape,
   pickParticipantForVk,
+  pickLiveShifts,
   resolveRegistrationRoute,
 } from '../services/shiftService.js';
 
@@ -148,5 +149,25 @@ describe('resolveRegistrationRoute', () => {
       { shiftId: 10, onboardingCompleted: false },
     ]);
     assert.deepEqual(route, { action: 'register', shiftId: 10 });
+  });
+
+  it('asks copied shift-1 alumni to choose a shift', () => {
+    const route = resolveRegistrationRoute(published, [
+      { shiftId: 10, onboardingCompleted: true },
+      { shiftId: 20, onboardingCompleted: false },
+    ]);
+    assert.deepEqual(route, { action: 'choose', shiftId: null });
+  });
+});
+
+describe('live shifts for push planner', () => {
+  it('includes every active non-sandbox shift', () => {
+    const live = pickLiveShifts([
+      { status: 'active', isSandbox: false, id: 1 },
+      { status: 'active', isSandbox: false, id: 2 },
+      { status: 'draft', isSandbox: false, id: 3 },
+      { status: 'active', isSandbox: true, id: 4 },
+    ]);
+    assert.deepEqual(live.map(s => s.id), [1, 2]);
   });
 });

@@ -122,17 +122,19 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
       return;
     }
     const currentDay = await participantForumDayForShift(settings, shiftId, now);
-    const list = await db.select().from(questions)
-      .where(and(
-        eq(questions.shiftId, shiftId),
-        eq(questions.status, 'published'),
-      ));
-
     const [userAnswers, userAttendance] = await Promise.all([
       db.select().from(answers).where(eq(answers.participantId, me.id)),
       db.select({ eventId: eventAttendance.eventId }).from(eventAttendance).where(eq(eventAttendance.participantId, me.id)),
     ]);
     const answeredIds = new Set(userAnswers.map(a => a.questionId));
+    const answeredIdList = [...answeredIds];
+    const list = await db.select().from(questions)
+      .where(and(
+        eq(questions.shiftId, shiftId),
+        answeredIdList.length
+          ? or(eq(questions.status, 'published'), inArray(questions.id, answeredIdList))
+          : eq(questions.status, 'published'),
+      ));
     const answerByQuestion = new Map(userAnswers.map(a => [a.questionId, a]));
     const attendedEventIds = new Set(userAttendance.map(a => a.eventId));
 
@@ -254,10 +256,6 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       res.status(404).json({ error: 'Not found' });
       return;
     }
-    if (question.status !== 'published') {
-      res.status(403).json({ error: 'Question not available' });
-      return;
-    }
     const [existingAnswer, userAttendance] = await Promise.all([
       db.select().from(answers)
         .where(and(
@@ -268,6 +266,10 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
       db.select({ eventId: eventAttendance.eventId }).from(eventAttendance).where(eq(eventAttendance.participantId, req.participant!.id)),
     ]);
     const hasOwnAnswer = !!existingAnswer;
+    if (question.status !== 'published' && !hasOwnAnswer) {
+      res.status(403).json({ error: 'Question not available' });
+      return;
+    }
     if (!hasOwnAnswer) {
       if (question.isHidden === true) {
         res.status(403).json({ error: 'Question hidden by organizers' });

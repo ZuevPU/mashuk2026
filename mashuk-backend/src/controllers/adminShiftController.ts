@@ -350,7 +350,7 @@ export const copyParticipantsAdminShift = async (req: AdminRequest, res: Respons
     });
     res.json({
       ...result,
-      message: `Перенесено: ${result.copied}. Пропущено: ${result.skipped}. Не найдено: ${result.notFound}.`,
+      message: `Скопировано: ${result.copied}. Пропущено: ${result.skipped}. Не найдено: ${result.notFound}.`,
     });
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : 'Participant transfer failed' });

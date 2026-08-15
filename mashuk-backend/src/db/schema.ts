@@ -25,6 +25,7 @@ export const thematicTags = pgTable('thematic_tags', {
 }, (table) => [
   index('thematic_tags_shift_id_idx').on(table.shiftId),
   uniqueIndex('thematic_tags_shift_name_unique').on(table.shiftId, table.name),
+  uniqueIndex('thematic_tags_shift_slug_unique').on(table.shiftId, table.slug),
 ]);
 
 export const programPlaces = pgTable('program_places', {

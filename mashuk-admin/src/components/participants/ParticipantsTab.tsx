@@ -102,6 +102,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
   const [shiftOptions, setShiftOptions] = useState<ShiftOption[]>([]);
   const [currentShiftId, setCurrentShiftId] = useState<number | null>(null);
   const [transferTargetId, setTransferTargetId] = useState<number | null>(null);
+  const [transferIds, setTransferIds] = useState<number[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [pushModal, setPushModal] = useState<{ ids: number[] } | null>(null);
   const [pushText, setPushText] = useState('');
@@ -249,35 +250,39 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
     }, 'Пуш отправлен');
   };
 
-  const openTransfer = () => {
+  const openTransfer = (ids?: number[]) => {
+    const participantIds = ids?.length ? ids : [...selected];
+    if (!participantIds.length) return;
     const target = shiftOptions.find(s => s.id !== currentShiftId);
     if (!target) {
       alert('Нет другой смены для переноса участников');
       return;
     }
+    setTransferIds(participantIds);
     setTransferTargetId(target.id);
   };
 
   const copyParticipantsToShift = () => {
-    if (transferTargetId == null || selected.size === 0) return;
+    if (transferTargetId == null || transferIds.length === 0) return;
     const target = shiftOptions.find(s => s.id === transferTargetId);
     if (!target) return;
     if (!confirm(
-      `Добавить выбранных участников (${selected.size}) в смену «${target.name}»?\n\n` +
-      'В исходной смене участники и их история останутся. В целевой смене прогресс начнётся с нуля, ' +
-      'а при первом входе участники завершат регистрацию.',
+      `Добавить выбранных участников (${transferIds.length}) в смену «${target.name}»?\n\n` +
+      'Копируется только карточка участника без прогресса и анкеты. ' +
+      'При первом входе участник выберет смену, затем сможет сменить её в профиле.',
     )) return;
     act(async () => {
       const res = await adminFetch('/participants/copy-to-shift', {
         method: 'POST',
         body: JSON.stringify({
-          participantIds: [...selected],
+          participantIds: transferIds,
           targetShiftId: transferTargetId,
         }),
       });
       setTransferTargetId(null);
+      setTransferIds([]);
       setSelected(new Set());
-      return res.message || `Перенесено: ${res.copied || 0}`;
+      return res.message || `Скопировано: ${res.copied || 0}`;
     }, 'Участники добавлены в смену');
   };
 
@@ -593,6 +598,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
                         { label: 'Скорректировать роль', onClick: () => onOpenCard(p.id, 'profile') },
                         { label: 'Выгрузить данные (PDF)', onClick: () => act(() => adminDownloadBinary(`/participants/${p.id}/pdf`, `profile_${p.id}.pdf`), 'PDF') },
                         { label: 'Отправить пуш', onClick: () => setPushModal({ ids: [p.id] }) },
+                        { label: 'Копировать в смену', onClick: () => openTransfer([p.id]) },
                         ...(p.isBlocked
                           ? [{ label: 'Разблокировать', onClick: () => act(() => adminFetch(`/participants/${p.id}/unblock`, { method: 'POST' }).then(reloadPage), 'Разблокирован') }]
                           : [{
@@ -644,13 +650,13 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
         <div className="adm-modal-backdrop" onClick={() => setTransferTargetId(null)}>
           <div className="card adm-kb-panel" style={{ maxWidth: 460, width: '100%' }} onClick={e => e.stopPropagation()}>
             <div className="adm-kb-panel-head">
-              <h3>Перенести участников в смену</h3>
+              <h3>Копировать в смену</h3>
               <p className="adm-kb-panel-sub">
-                Создаётся предварительная запись с теми же персональными данными. История исходной смены сохранится.
+                Создаётся пустая карточка в другой смене. Прогресс и анкета исходной смены не копируются.
               </p>
             </div>
             <p className="adm-muted" style={{ fontSize: 12 }}>
-              Ответы, баллы, задания, награды, направление, группа и роль не переносятся.
+              При первом входе участник увидит выбор смены. Потом смену можно сменить в профиле.
             </p>
             <label className="adm-field">
               <span className="adm-label">Целевая смена</span>
@@ -673,7 +679,7 @@ export function ParticipantsTab({ adminFetch, act, reloadKey, onOpenCard }: Part
             </p>
             <div className="adm-mod-item-actions">
               <button type="button" className="adm-btn adm-btn-primary adm-btn-sm" onClick={copyParticipantsToShift}>
-                Перенести {selected.size}
+                Копировать {transferIds.length}
               </button>
               <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setTransferTargetId(null)}>
                 Отмена

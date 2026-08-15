@@ -268,3 +268,22 @@ export function setStoredShiftId(id: number | null): void {
     // ignore quota / private mode
   }
 }
+
+const SHIFT_CHOICE_KEY = 'mashuk-shift-choice-done';
+
+export function getShiftChoiceDone(): boolean {
+  try {
+    return localStorage.getItem(SHIFT_CHOICE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setShiftChoiceDone(done = true): void {
+  try {
+    if (done) localStorage.setItem(SHIFT_CHOICE_KEY, '1');
+    else localStorage.removeItem(SHIFT_CHOICE_KEY);
+  } catch {
+    // ignore quota / private mode
+  }
+}

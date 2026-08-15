@@ -38,9 +38,9 @@ export async function runProgramEventBeforeTriggers(now = new Date()): Promise<n
     if (cfg.kind !== 'program_event_before' || !cfg.eventId) continue;
 
     const [ev] = await db.select().from(events).where(eq(events.id, cfg.eventId)).limit(1);
-    if (!ev) continue;
+    if (!ev || !ev.isPublished || !ev.dayPublished) continue;
 
-    const interval = resolveEventInterval(ev, settings);
+    const interval = resolveEventInterval(ev, ev.shiftId ? await getForumSettings(ev.shiftId) : settings);
     if (!interval?.start) continue;
 
     const minutesBefore = cfg.minutesBefore ?? 15;

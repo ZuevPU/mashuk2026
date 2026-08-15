@@ -19,7 +19,7 @@ import { DelayedSurveyPanel } from './panels/DelayedSurvey';
 import { ScanPanel } from './panels/Scan';
 import { OpenInVkScreen } from './components/OpenInVkScreen';
 import { hasUsableLaunchParams, peekPendingTaskQr } from './utils/launchParams';
-import { apiGet, getHashSearchParams, initAuth, setStoredShiftId } from './api/client';
+import { apiGet, getHashSearchParams, getShiftChoiceDone, initAuth, setStoredShiftId } from './api/client';
 
 export const ModalContext = createContext<{ setModal: (modal: ReactNode | null) => void }>({ setModal: () => {} });
 export const useAppModal = () => useContext(ModalContext);
@@ -114,6 +114,7 @@ export const App = () => {
         blockReason?: string;
         user?: { shiftId?: number };
         registrationTargetShiftId?: number | null;
+        registrationAction?: 'enter' | 'register' | 'choose';
       }>('/auth/me');
       if (auth.status === 'self_deleted') {
         setSelfDeleted(true);
@@ -123,6 +124,11 @@ export const App = () => {
         setSelfDeleted(false);
         setBlockedReason(auth.blockReason || 'Доступ к программе ограничен организаторами.');
         setIsRegistered(false);
+      } else if (auth.registrationAction === 'choose' && !getShiftChoiceDone()) {
+        setIsRegistered(false);
+        if (!window.location.hash.includes('registration')) {
+          routeNavigator.push('/registration');
+        }
       } else if (auth.status === 'needs_registration') {
         setIsRegistered(false);
         if (auth.registrationTargetShiftId) {

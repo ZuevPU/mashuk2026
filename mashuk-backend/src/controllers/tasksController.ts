@@ -246,6 +246,7 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
       .where(and(
         eq(questions.status, 'published'),
         eq(questions.dayNumber, currentDay),
+        eq(questions.shiftId, req.participant!.shiftId),
         or(isNull(questions.publishTime), lte(questions.publishTime, now)),
       ));
     const participantAnswers = await db.select().from(answers)

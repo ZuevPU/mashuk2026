@@ -470,6 +470,13 @@
       "when": 1846000000000,
       "tag": "0067_shift_scoped_catalogs",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1847000000000,
+      "tag": "0068_thematic_tags_shift_slug",
+      "breakpoints": true
     }
   ]
 }

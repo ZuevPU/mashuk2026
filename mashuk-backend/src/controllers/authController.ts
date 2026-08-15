@@ -144,6 +144,7 @@ export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> =>
     });
 
     // Участник смены 1 сразу входит туда, если в запрошенной смене профиля ещё нет.
+    // Скопированным в другую смену сначала даём выбрать смену — не перехватываем вход.
     if (route.action === 'enter' && route.shiftId) {
       const preferredCompleted = !!(
         user?.onboardingCompletedAt
@@ -192,6 +193,8 @@ export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> =>
       publishedShifts,
       enrollments,
       shiftLive: shift?.status === 'active',
+      registrationAction: route.action,
+      registrationTargetShiftId: route.shiftId,
     });
   } catch (error) {
     console.error('getMe:', error);

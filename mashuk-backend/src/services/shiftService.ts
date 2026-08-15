@@ -103,6 +103,21 @@ export async function resolveActiveShiftId(): Promise<number> {
   return shift.id;
 }
 
+export function pickLiveShifts<T extends { status?: string | null; isSandbox?: boolean | null }>(
+  rows: T[],
+): T[] {
+  return rows.filter(s => s.status === 'active' && !s.isSandbox);
+}
+
+/** Смены в эфире: активные, не песочница. Если таких нет — текущая активная. */
+export async function listLiveShifts(): Promise<ShiftRow[]> {
+  const rows = await db.select().from(shifts).orderBy(asc(shifts.id));
+  const live = pickLiveShifts(rows);
+  if (live.length) return live;
+  const fallback = await resolveActiveShift();
+  return fallback ? [fallback] : [];
+}
+
 export function clearShiftCaches(): void {
   clearCache('activeShift');
   clearCache('forumSettings');
@@ -291,11 +306,11 @@ export function findPublishedShiftBySlot(
 }
 
 export type RegistrationRoute = {
-  action: 'enter' | 'register';
+  action: 'enter' | 'register' | 'choose';
   shiftId: number | null;
 };
 
-/** Смена 1 — вход без регистрации; иначе регистрация на смену 2. */
+/** Смена 1 — вход; копия в другую смену — выбор; иначе регистрация на смену 2. */
 export function resolveRegistrationRoute(
   published: Array<{ id: number; code: string; name: string }>,
   enrollments: Array<{ shiftId: number | null; onboardingCompleted: boolean }>,
@@ -307,6 +322,14 @@ export function resolveRegistrationRoute(
   const shift1Enrollment = shift1
     ? enrollments.find(e => e.shiftId === shift1.id)
     : undefined;
+  const incompleteOther = enrollments.some(e =>
+    !e.onboardingCompleted
+    && e.shiftId != null
+    && e.shiftId !== shift1?.id,
+  );
+  if (shift1 && shift1Enrollment?.onboardingCompleted && incompleteOther) {
+    return { action: 'choose', shiftId: null };
+  }
   if (shift1 && shift1Enrollment) {
     return {
       action: shift1Enrollment.onboardingCompleted ? 'enter' : 'register',
@@ -590,15 +613,6 @@ export async function copyParticipantsToShift(input: {
       shiftId: input.targetShiftId,
       firstName: source.firstName,
       lastName: source.lastName,
-      age: source.age,
-      workplace: source.workplace,
-      position: source.position,
-      region: source.region,
-      consentPd: source.consentPd,
-      consentAnalytics: source.consentAnalytics,
-      consentPdVersion: source.consentPdVersion,
-      consentAnalyticsVersion: source.consentAnalyticsVersion,
-      pushOptOut: source.pushOptOut,
       avatarUrl: source.avatarUrl,
       avatarSyncedAt: source.avatarSyncedAt,
       qrToken: null,

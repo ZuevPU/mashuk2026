@@ -1,7 +1,7 @@
 import { and, eq, gte, isNotNull, lte, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
-  answers, events, forumSettings, pushLog, pushQueue, pushTemplates, questions,
+  answers, events, pushLog, pushQueue, pushTemplates, questions,
 } from '../db/schema.js';
 import { getMoscowParts } from './timePhase.js';
 import { pushCopy } from './pushCopy.js';
@@ -11,7 +11,8 @@ import {
   filterUnsentParticipantIds,
   resolveBroadcastParticipantIds,
 } from './pushAudienceResolve.js';
-import { resolveActiveShiftId } from './shiftService.js';
+import { listLiveShifts } from './shiftService.js';
+import { getForumSettings } from './helpers.js';
 
 /** Слоты авто-push по ТЗ (минуты от полуночи МСК) */
 export const PUSH_SLOTS: { minutes: number; key: string; text: string; retryText: string }[] = [
@@ -131,18 +132,83 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
   }
 
   const slot = matchPushSlot(totalMinutes);
-  const [forumRowEarly] = await db.select().from(forumSettings).limit(1);
-  const nightEnabled = forumRowEarly?.pushNightSlotEnabled === true;
-  const shiftId = await resolveActiveShiftId();
-  const audienceIds = await resolveBroadcastParticipantIds(shiftId);
+  const liveShifts = await listLiveShifts();
+  let eventCount = 0;
 
-  if (slot) {
-    if (slot.key === 'slot_2300' && !nightEnabled) {
-      // optional night slot
-    } else {
-      const trigger = `auto_${slot.key}`;
-      const text = await resolveSlotText(slot.key, slot.text);
+  for (const shift of liveShifts) {
+    const settings = await getForumSettings(shift.id);
+    const nightEnabled = settings.pushNightSlotEnabled === true;
+    const audienceIds = await resolveBroadcastParticipantIds(shift.id);
+
+    if (slot) {
+      if (slot.key === 'slot_2300' && !nightEnabled) {
+        // optional night slot
+      } else {
+        const trigger = `auto_${slot.key}`;
+        const text = await resolveSlotText(slot.key, slot.text);
+        if (await sendSlotToUnsent(trigger, text, dayStart, audienceIds)) {
+          fired.push(`${trigger}:shift${shift.id}`);
+        }
+      }
+    }
+
+    const retry = matchRetrySlot(totalMinutes);
+    if (retry) {
+      const trigger = `auto_retry_${retry.key}`;
+      const currentDay = settings.currentDay ?? 1;
+      const dayQs = await db.select().from(questions)
+        .where(and(
+          eq(questions.status, 'published'),
+          eq(questions.dayNumber, currentDay),
+          eq(questions.shiftId, shift.id),
+        ));
+      if (dayQs.length > 0) {
+        const already = await participantIdsSentTriggerToday(trigger, dayStart);
+        const candidates = filterUnsentParticipantIds(audienceIds, already);
+        const needRemind: number[] = [];
+        for (const pid of candidates) {
+          const ansQ = await db.select({ questionId: answers.questionId }).from(answers)
+            .where(eq(answers.participantId, pid));
+          const qAnswered = new Set(ansQ.map(a => a.questionId));
+          if (dayQs.some(q => !qAnswered.has(q.id))) needRemind.push(pid);
+        }
+        if (needRemind.length > 0 && retry.retryText) {
+          const text = await resolveSlotText(`${retry.key}_retry`, retry.retryText);
+          await sendPushNotification(needRemind, text, trigger);
+          fired.push(`${trigger}:shift${shift.id}`);
+        }
+      }
+    }
+
+    const in10 = new Date(now.getTime() + 10 * 60 * 1000);
+    const in15 = new Date(now.getTime() + 15 * 60 * 1000);
+    const pushBlockTypes = (settings.pushBlockTypes as Record<string, boolean> | null) ?? {};
+
+    const upcoming = await db.select().from(events)
+      .where(and(
+        eq(events.isPublished, true),
+        eq(events.dayPublished, true),
+        eq(events.pushReminder, true),
+        eq(events.shiftId, shift.id),
+        isNotNull(events.startTime),
+        gte(events.startTime, in10),
+        lte(events.startTime, in15),
+      ));
+
+    const shouldRemindEvent = (ev: typeof upcoming[0]) => {
+      if (ev.isKeyBlock || ev.blockType === 'key_block') return true;
+      const t = ev.blockType || 'session';
+      if (pushBlockTypes[t] === true) return true;
+      if (pushBlockTypes[t] === false) return false;
+      return false;
+    };
+
+    for (const ev of upcoming) {
+      if (!shouldRemindEvent(ev)) continue;
+      const trigger = `event_reminder_${ev.id}_${getMoscowParts(now).dateKey}`;
+      const text = pushCopy.eventSoon(ev.title, ev.place);
       if (await sendSlotToUnsent(trigger, text, dayStart, audienceIds)) {
+        eventCount += 1;
         fired.push(trigger);
       }
     }
@@ -153,69 +219,6 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
     fired.push(...tpFired.slice(0, 5));
   } catch (err) {
     console.error('touchpointPushPlanner:', err);
-  }
-
-  const retry = matchRetrySlot(totalMinutes);
-  if (retry) {
-    const trigger = `auto_retry_${retry.key}`;
-    const [settings] = await db.select().from(forumSettings).limit(1);
-    const currentDay = settings?.currentDay ?? 1;
-    const dayQs = await db.select().from(questions)
-      .where(and(
-        eq(questions.status, 'published'),
-        eq(questions.dayNumber, currentDay),
-        eq(questions.shiftId, shiftId),
-      ));
-    if (dayQs.length > 0) {
-      const already = await participantIdsSentTriggerToday(trigger, dayStart);
-      const candidates = filterUnsentParticipantIds(audienceIds, already);
-      const needRemind: number[] = [];
-      for (const pid of candidates) {
-        const ansQ = await db.select({ questionId: answers.questionId }).from(answers)
-          .where(eq(answers.participantId, pid));
-        const qAnswered = new Set(ansQ.map(a => a.questionId));
-        if (dayQs.some(q => !qAnswered.has(q.id))) needRemind.push(pid);
-      }
-      if (needRemind.length > 0 && retry.retryText) {
-        const text = await resolveSlotText(`${retry.key}_retry`, retry.retryText);
-        await sendPushNotification(needRemind, text, trigger);
-        fired.push(trigger);
-      }
-    }
-  }
-
-  const in10 = new Date(now.getTime() + 10 * 60 * 1000);
-  const in15 = new Date(now.getTime() + 15 * 60 * 1000);
-  const [forumRow] = await db.select().from(forumSettings).limit(1);
-  const pushBlockTypes = (forumRow?.pushBlockTypes as Record<string, boolean> | null) ?? {};
-
-  const upcoming = await db.select().from(events)
-    .where(and(
-      eq(events.isPublished, true),
-      eq(events.pushReminder, true),
-      eq(events.shiftId, shiftId),
-      isNotNull(events.startTime),
-      gte(events.startTime, in10),
-      lte(events.startTime, in15),
-    ));
-
-  const shouldRemindEvent = (ev: typeof upcoming[0]) => {
-    if (ev.isKeyBlock || ev.blockType === 'key_block') return true;
-    const t = ev.blockType || 'session';
-    if (pushBlockTypes[t] === true) return true;
-    if (pushBlockTypes[t] === false) return false;
-    return false;
-  };
-
-  let eventCount = 0;
-  for (const ev of upcoming) {
-    if (!shouldRemindEvent(ev)) continue;
-    const trigger = `event_reminder_${ev.id}_${getMoscowParts(now).dateKey}`;
-    const text = pushCopy.eventSoon(ev.title, ev.place);
-    if (await sendSlotToUnsent(trigger, text, dayStart, audienceIds)) {
-      eventCount += 1;
-      fired.push(trigger);
-    }
   }
 
   let delayed = 0;

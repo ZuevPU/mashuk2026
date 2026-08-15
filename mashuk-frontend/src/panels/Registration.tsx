@@ -5,7 +5,7 @@ import {
 } from '@vkontakte/vkui';
 import { UserInfo } from '@vkontakte/vk-bridge';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
-import { apiGet, apiPost, getStoredShiftId, setStoredShiftId } from '../api/client';
+import { apiGet, apiPost, getStoredShiftId, setShiftChoiceDone, setStoredShiftId } from '../api/client';
 import { requestVkPushPermission } from '../utils/pushNotifications';
 import {
   GOAL_QUESTIONS,
@@ -66,6 +66,8 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   const routeNavigator = useRouteNavigator();
   const [step, setStep] = useState<WizardStep>(0);
   const [publishedShifts, setPublishedShifts] = useState<PublishedShift[]>([]);
+  const [enrollments, setEnrollments] = useState<Array<{ shiftId: number; onboardingCompleted: boolean }>>([]);
+  const [allowShiftPick, setAllowShiftPick] = useState(false);
   const [selectedShiftId, setSelectedShiftId] = useState<number | null>(() => getStoredShiftId());
   const [directions, setDirections] = useState<Direction[]>([]);
   const [directionId, setDirectionId] = useState<number | null>(null);
@@ -165,11 +167,18 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
       .catch(() => undefined);
     apiGet<{
       shifts?: PublishedShift[];
+      enrollments?: Array<{ shiftId: number; onboardingCompleted: boolean }>;
       registrationTargetShiftId?: number | null;
+      registrationAction?: 'enter' | 'register' | 'choose';
     }>('/auth/shifts')
       .then(data => {
         const list = data.shifts || [];
         setPublishedShifts(list);
+        setEnrollments(data.enrollments || []);
+        if (data.registrationAction === 'choose') {
+          setAllowShiftPick(true);
+          return;
+        }
         const target = data.registrationTargetShiftId
           ?? (list.length === 1 ? list[0].id : null);
         if (target && list.some(s => s.id === target)) {
@@ -178,6 +187,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
           setStep(prev => (prev === 0 ? 1 : prev));
           return;
         }
+        setAllowShiftPick(true);
         setSelectedShiftId(prev => {
           if (prev && list.some(s => s.id === prev)) return prev;
           return list.length === 1 ? list[0].id : prev;
@@ -293,6 +303,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         shiftId: selectedShiftId,
       });
       void requestVkPushPermission();
+      setShiftChoiceDone(true);
       onRegistered?.();
       routeNavigator.replace('/');
     } catch (e) {
@@ -332,13 +343,14 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
               const on = selectedShiftId === s.id;
               const start = s.startDate ? new Date(s.startDate).toLocaleDateString('ru-RU') : '—';
               const end = s.endDate ? new Date(s.endDate).toLocaleDateString('ru-RU') : start;
+              const enrolled = enrollments.some(e => e.shiftId === s.id && e.onboardingCompleted);
               return (
                 <Cell
                   key={s.id}
                   multiline
                   onClick={() => setSelectedShiftId(s.id)}
                   after={on ? '✓' : undefined}
-                  subtitle={`${start} — ${end}`}
+                  subtitle={`${start} — ${end}${enrolled ? ' · профиль есть' : ' · нужна регистрация'}`}
                 >
                   {s.name}
                 </Cell>
@@ -352,10 +364,21 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 onClick={() => {
                   if (!selectedShiftId) return;
                   setStoredShiftId(selectedShiftId);
+                  setShiftChoiceDone(true);
+                  const enrolled = enrollments.some(
+                    e => e.shiftId === selectedShiftId && e.onboardingCompleted,
+                  );
+                  if (enrolled) {
+                    onRegistered?.();
+                    routeNavigator.replace('/');
+                    return;
+                  }
                   setStep(1);
                 }}
               >
-                Далее
+                {enrollments.some(e => e.shiftId === selectedShiftId && e.onboardingCompleted)
+                  ? 'Войти в смену'
+                  : 'Далее'}
               </Button>
             </Div>
           </>
@@ -432,9 +455,11 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
             <Button size="l" stretched disabled={!canGoStep1} onClick={() => setStep(2)}>
               Дальше → Целеполагание
             </Button>
-            <Button size="l" stretched mode="secondary" style={{ marginTop: 8 }} onClick={() => setStep(0)}>
-              ← Назад к выбору смены
-            </Button>
+            {allowShiftPick && (
+              <Button size="l" stretched mode="secondary" style={{ marginTop: 8 }} onClick={() => setStep(0)}>
+                ← Назад к выбору смены
+              </Button>
+            )}
           </>
         )}
 

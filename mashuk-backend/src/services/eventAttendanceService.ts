@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { eventAttendance, events } from '../db/schema.js';
+import { eventAttendance, events, participants } from '../db/schema.js';
 import { awardPoints } from './pointsService.js';
 
 export type RecordAttendanceResult = {
@@ -30,6 +30,14 @@ export async function recordEventAttendance(
   const [event] = await db.select().from(events).where(eq(events.id, eventId)).limit(1);
   if (!event) {
     return { ok: false, error: 'Event not found', status: 404 };
+  }
+  if (!event.isPublished || !event.dayPublished) {
+    return { ok: false, error: 'Event is not published', status: 403 };
+  }
+  const [person] = await db.select({ shiftId: participants.shiftId })
+    .from(participants).where(eq(participants.id, participantId)).limit(1);
+  if (person?.shiftId != null && event.shiftId !== person.shiftId) {
+    return { ok: false, error: 'Event not available', status: 403 };
   }
 
   const qrToken = opts?.qrToken?.trim();

@@ -347,9 +347,26 @@ export async function sendPushNotification(
   return participantIds.length === 1 ? lastStatus : undefined;
 }
 
-export async function notifyAllParticipants(text: string, triggerType: string): Promise<void> {
-  const ids = await resolveBroadcastParticipantIds();
-  await sendPushNotification(ids, text, triggerType);
+export async function notifyAllParticipants(
+  text: string,
+  triggerType: string,
+  shiftId?: number | null,
+): Promise<void> {
+  if (shiftId != null) {
+    const ids = await resolveBroadcastParticipantIds(shiftId);
+    await sendPushNotification(ids, text, triggerType);
+    return;
+  }
+  const { listLiveShifts } = await import('./shiftService.js');
+  const live = await listLiveShifts();
+  const ids = new Set<number>();
+  for (const shift of live) {
+    for (const id of await resolveBroadcastParticipantIds(shift.id)) ids.add(id);
+  }
+  if (!ids.size) {
+    for (const id of await resolveBroadcastParticipantIds()) ids.add(id);
+  }
+  await sendPushNotification([...ids], text, triggerType);
 }
 
 export type AdminPushRow = typeof adminPushNotifications.$inferSelect;

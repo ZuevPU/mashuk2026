@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 
-import { adminDownloadBinary } from '../admin/client';
+import { adminDownloadBinary, getAdminEditingShiftId } from '../admin/client';
 import { CONFIRM_BLOCK_PARTICIPANT, CONFIRM_DELETE_PARTICIPANT, CONFIRM_REMOVE_FROM_PROGRAM, confirmDelete } from '../admin/confirmDelete';
 import { label } from '../labels/ru';
 import { formatAnswerPreview } from '../utils/formatAnswerPreview';
 
 import { VkProfileLink } from './VkProfileLink';
 import { ParticipantAvatar } from './participants/ParticipantAvatar';
+import { RowActionsMenu } from './participants/RowActionsMenu';
 import { ParticipantFinalProfileModal } from './participants/ParticipantFinalProfileModal';
 import { ParticipantAnalyticalProfileModal } from './participants/ParticipantAnalyticalProfileModal';
 import { ParticipantDataDrivenProfileModal } from './participants/ParticipantDataDrivenProfileModal';
@@ -220,6 +221,19 @@ export function ParticipantCardModal({
   const [taskCatalog, setTaskCatalog] = useState<{ id: number; title?: string }[]>([]);
   const [manualTaskId, setManualTaskId] = useState('');
   const [registrationGroups, setRegistrationGroups] = useState<{ id: number; name: string }[]>([]);
+  const [shiftOptions, setShiftOptions] = useState<Array<{ id: number; name: string; code: string; status: string }>>([]);
+  const [currentShiftId, setCurrentShiftId] = useState<number | null>(null);
+  const [copyTargetId, setCopyTargetId] = useState<number | null>(null);
+
+  useEffect(() => {
+    adminFetch('/shifts')
+      .then((res: { shifts?: Array<{ id: number; name: string; code: string; status: string }>; activeShiftId?: number }) => {
+        const list = res.shifts ?? [];
+        setShiftOptions(list);
+        setCurrentShiftId(getAdminEditingShiftId() ?? res.activeShiftId ?? null);
+      })
+      .catch(() => setShiftOptions([]));
+  }, [adminFetch]);
 
   useEffect(() => {
     if (tab !== 'tasks' || !p?.id) return;
@@ -438,6 +452,30 @@ export function ParticipantCardModal({
           </button>
           <h2 className="adm-pc-topbar-title" id="adm-pc-dialog-title">{displayName}</h2>
           <span className="adm-pc-topbar-id">ID {p.id}</span>
+          <RowActionsMenu actions={[
+            {
+              label: 'Копировать в смену',
+              onClick: () => {
+                const target = shiftOptions.find(s => s.id !== currentShiftId);
+                if (!target) {
+                  alert('Нет другой смены');
+                  return;
+                }
+                setCopyTargetId(target.id);
+              },
+            },
+            { label: 'Отправить пуш', onClick: () => {
+              const text = prompt('Текст пуша');
+              if (!text?.trim()) return;
+              act(async () => {
+                const res = await adminFetch(`/participants/${p.id}/push`, {
+                  method: 'POST',
+                  body: JSON.stringify({ text: text.trim() }),
+                }) as { deliveryStatusHint?: string; deliveryStatus?: string };
+                return res.deliveryStatusHint || res.deliveryStatus || 'Пуш отправлен';
+              }, 'Пуш отправлен');
+            } },
+          ]} />
         </header>
 
         <div className="adm-pc-header">
@@ -492,6 +530,20 @@ export function ParticipantCardModal({
                 return res.deliveryStatusHint || res.deliveryStatus || 'Пуш отправлен';
               }, 'Пуш отправлен');
             }}>Отправить пуш</button>
+            <button
+              type="button"
+              className="adm-btn adm-btn-sm adm-btn-secondary"
+              onClick={() => {
+                const target = shiftOptions.find(s => s.id !== currentShiftId);
+                if (!target) {
+                  alert('Нет другой смены');
+                  return;
+                }
+                setCopyTargetId(target.id);
+              }}
+            >
+              Копировать в смену
+            </button>
             <button
               type="button"
               className="adm-btn adm-btn-sm adm-btn-secondary"
@@ -1736,6 +1788,63 @@ export function ParticipantCardModal({
       participantName={displayName}
       onClose={() => setDataDrivenProfileOpen(false)}
     />
+    {copyTargetId != null && (
+      <div className="adm-modal-backdrop" onClick={() => setCopyTargetId(null)} role="presentation">
+        <div className="card adm-kb-panel" style={{ maxWidth: 460, width: '100%' }} onClick={e => e.stopPropagation()}>
+          <div className="adm-kb-panel-head">
+            <h3>Копировать в смену</h3>
+            <p className="adm-kb-panel-sub">
+              Копируется только участник, без прогресса и анкеты. При первом входе он выберет смену.
+            </p>
+          </div>
+          <label className="adm-field">
+            <span className="adm-label">Целевая смена</span>
+            <select
+              className="adm-input"
+              value={copyTargetId}
+              onChange={e => setCopyTargetId(Number(e.target.value))}
+            >
+              {shiftOptions
+                .filter(s => s.id !== currentShiftId)
+                .map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.code}){s.status === 'active' ? ' · активная' : ''}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <div className="adm-mod-item-actions">
+            <button
+              type="button"
+              className="adm-btn adm-btn-primary adm-btn-sm"
+              onClick={() => {
+                const target = shiftOptions.find(s => s.id === copyTargetId);
+                if (!target) return;
+                if (!confirm(
+                  `Добавить ${displayName} в смену «${target.name}» без прогресса и анкеты?`,
+                )) return;
+                act(async () => {
+                  const res = await adminFetch('/participants/copy-to-shift', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      participantIds: [p.id],
+                      targetShiftId: copyTargetId,
+                    }),
+                  });
+                  setCopyTargetId(null);
+                  return res.message || 'Скопирован в смену';
+                }, 'Скопирован в смену');
+              }}
+            >
+              Копировать
+            </button>
+            <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={() => setCopyTargetId(null)}>
+              Отмена
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 

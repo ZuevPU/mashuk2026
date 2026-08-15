@@ -9,8 +9,8 @@ import {
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import {
-  autoNotifyTouchpointIfLive,
   notifyQuestionAudience,
+  notifyQuestionOnPublish,
 } from '../services/questionAutoNotify.js';
 import {
   questionCreateSchema, questionUpdateSchema, parseBody,
@@ -275,14 +275,7 @@ export const crudQuestions = {
     // Точки осмысления / state_check — авто-рассылка, когда уже «в эфире»
     // (опубликован сейчас; по времени — подхватит push-планировщик).
     if (q.status === 'published') {
-      await autoNotifyTouchpointIfLive(q);
-      if (q.pushOnPublish) {
-        // Опциональный кастомный пуш (не точка) — только если живой и есть текст
-        const custom = (q.pushTemplate || '').trim();
-        if (custom) {
-          await notifyQuestionAudience(q, custom, `question_publish_${q.id}`);
-        }
-      }
+      await notifyQuestionOnPublish(q, { wasPublished: false });
     }
     res.json({ question: serializeAdminQuestion(q, 0) });
   },
@@ -362,7 +355,7 @@ export const crudQuestions = {
       };
       const [created] = await db.insert(questions).values(copyFields).returning();
       if (created.status === 'published') {
-        await autoNotifyTouchpointIfLive(created);
+        await notifyQuestionOnPublish(created, { wasPublished: false });
       }
       const { logAdminAction } = await import('../services/adminActionsLog.js');
       await logAdminAction({
@@ -414,14 +407,7 @@ export const crudQuestions = {
     const wasPublished = before.status === 'published';
     const isPublished = updated?.status === 'published';
     if (updated && isPublished) {
-      // Идемпотентно: если точка уже в эфире — разошлём (или пропустим, если уже слали сегодня)
-      await autoNotifyTouchpointIfLive(updated);
-      if (updated.pushOnPublish && !wasPublished) {
-        const custom = (updated.pushTemplate || '').trim();
-        if (custom) {
-          await notifyQuestionAudience(updated, custom, `question_publish_${updated.id}`);
-        }
-      }
+      await notifyQuestionOnPublish(updated, { wasPublished });
     }
     res.json({ question: serializeAdminQuestion(updated!, Number(answerCount)), versioned: false });
   },
@@ -698,10 +684,13 @@ export const crudQuestions = {
       await db.update(questions).set({ isHidden: hide }).where(inArray(questions.id, ids));
       void all;
     } else if (action === 'publish') {
+      const beforeRows = await db.select({ id: questions.id, status: questions.status })
+        .from(questions).where(inArray(questions.id, ids));
+      const wasPublished = new Set(beforeRows.filter(q => q.status === 'published').map(q => q.id));
       await db.update(questions).set({ status: 'published', isHidden: false }).where(inArray(questions.id, ids));
       const published = await db.select().from(questions).where(inArray(questions.id, ids));
       for (const q of published) {
-        await autoNotifyTouchpointIfLive(q);
+        await notifyQuestionOnPublish(q, { wasPublished: wasPublished.has(q.id) });
       }
     } else if (action === 'draft') {
       const { setQuestionUnpublishedCascade } = await import('../services/questionHideCascade.js');

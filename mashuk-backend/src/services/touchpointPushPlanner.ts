@@ -15,7 +15,7 @@ import { questionMatchesDay } from './questionAdminHelpers.js';
 import { pushCopy } from './pushCopy.js';
 import { sendPushNotification } from './pushService.js';
 import { TOUCHPOINT_SLOTS } from './touchpointTemplates.js';
-import { resolveActiveShiftId } from './shiftService.js';
+import { listLiveShifts } from './shiftService.js';
 
 const RETRY_MS = 30 * 60 * 1000;
 const OPEN_CATCHUP_MS = 2 * 60 * 60 * 1000; // до 2 ч после publishTime — догоняем пропуск тика
@@ -82,13 +82,15 @@ async function loadDayTouchpointsForNotify(currentDay: number, shiftId: number |
  * Push при открытии окна точки (publishTime) + retry +30 мин.
  * Открытие — пакетно аудитории вопроса (мини-апп + сообщество), с догонялкой до 2 ч.
  */
-export async function runTouchpointPushPlanner(now = new Date()): Promise<string[]> {
-  const settings = await getForumSettings();
+async function runTouchpointPushPlannerForShift(
+  shiftId: number,
+  now: Date,
+  dayStart: Date,
+): Promise<string[]> {
+  const settings = await getForumSettings(shiftId);
   const currentDay = resolveEffectiveCurrentDay(settings, now);
   if (currentDay < 1 || currentDay > 7) return [];
 
-  const dayStart = startOfMoscowDay(now);
-  const shiftId = await resolveActiveShiftId();
   const dayTouch = await loadDayTouchpointsForNotify(currentDay, shiftId);
   if (dayTouch.length === 0) return [];
 
@@ -123,6 +125,16 @@ export async function runTouchpointPushPlanner(now = new Date()): Promise<string
     }
   }
 
+  return fired;
+}
+
+export async function runTouchpointPushPlanner(now = new Date()): Promise<string[]> {
+  const dayStart = startOfMoscowDay(now);
+  const live = await listLiveShifts();
+  const fired: string[] = [];
+  for (const shift of live) {
+    fired.push(...await runTouchpointPushPlannerForShift(shift.id, now, dayStart));
+  }
   return fired;
 }
 

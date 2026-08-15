@@ -260,6 +260,8 @@ async function ensureShiftScopedCatalogsSchema(pool: ReturnType<typeof createPoo
     CREATE UNIQUE INDEX IF NOT EXISTS thematic_tags_shift_name_unique ON thematic_tags (shift_id, name);
     CREATE UNIQUE INDEX IF NOT EXISTS program_places_shift_name_unique ON program_places (shift_id, name);
     CREATE UNIQUE INDEX IF NOT EXISTS program_block_types_shift_key_unique ON program_block_types (shift_id, key);
+    DROP INDEX IF EXISTS thematic_tags_slug_unique;
+    CREATE UNIQUE INDEX IF NOT EXISTS thematic_tags_shift_slug_unique ON thematic_tags (shift_id, slug) WHERE slug IS NOT NULL;
   `);
 }
 
