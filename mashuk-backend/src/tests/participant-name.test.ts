@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   isPlaceholderDisplayName,
+  parseEditablePersonName,
   pickPersonName,
   sanitizePersonName,
 } from '../services/participantName.js';
@@ -48,5 +49,20 @@ describe('participantName', () => {
 
   it('trims person names', () => {
     assert.equal(sanitizePersonName('  Анна  '), 'Анна');
+  });
+
+  it('accepts a real name for profile edit', () => {
+    const parsed = parseEditablePersonName('  Анна-Мария ', 'О’Коннор');
+    assert.equal('firstName' in parsed, true);
+    if ('firstName' in parsed) {
+      assert.equal(parsed.firstName, 'Анна-Мария');
+      assert.equal(parsed.lastName, 'О’Коннор');
+    }
+  });
+
+  it('rejects placeholder and empty names on edit', () => {
+    assert.equal('error' in parseEditablePersonName('Тест', 'Пользователь'), true);
+    assert.equal('error' in parseEditablePersonName('', 'Иванов'), true);
+    assert.equal('error' in parseEditablePersonName('Анна', '123'), true);
   });
 });

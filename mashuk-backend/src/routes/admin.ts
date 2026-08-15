@@ -49,6 +49,7 @@ router.post('/participants/:id/points/adjust', requireAdminRole('moderate'), wra
 router.post('/participants', requireAdminRole('settings'), wrap(admin.createParticipant));
 router.patch('/participants/:id/direction', requireAdminRole('settings'), wrap(admin.updateParticipantDirection));
 router.patch('/participants/:id/group', requireAdminRole('settings'), wrap(admin.updateParticipantGroup));
+router.patch('/participants/:id/profile', P('participants', 'update'), wrap(admin.updateParticipantProfile));
 router.patch('/participants/:id/role', requireAdminRole('settings'), wrap(admin.updateParticipantRole));
 router.post('/participants/:id/restore', requireAdminRole('settings'), wrap(admin.restoreParticipantAccount));
 router.post('/participants/:id/remove-from-program', requireAdminRole('moderate'), wrap(admin.removeParticipantFromProgram));

@@ -227,6 +227,14 @@ export function ParticipantCardModal({
   const [shiftOptions, setShiftOptions] = useState<Array<{ id: number; name: string; code: string; status: string }>>([]);
   const [currentShiftId, setCurrentShiftId] = useState<number | null>(null);
   const [copyTargetId, setCopyTargetId] = useState<number | null>(null);
+  const [profileDraft, setProfileDraft] = useState({
+    firstName: '',
+    lastName: '',
+    age: '',
+    workplace: '',
+    position: '',
+    region: '',
+  });
 
   const pickCopyTarget = () => {
     const others = shiftOptions.filter(s => s.id !== currentShiftId);
@@ -253,6 +261,17 @@ export function ParticipantCardModal({
       })
       .catch(() => setTaskCatalog([]));
   }, [tab, p?.id, adminFetch]);
+
+  useEffect(() => {
+    setProfileDraft({
+      firstName: p.firstName || '',
+      lastName: p.lastName || '',
+      age: p.age != null ? String(p.age) : '',
+      workplace: p.workplace || '',
+      position: p.position || '',
+      region: p.region || '',
+    });
+  }, [p.id, p.firstName, p.lastName, p.age, p.workplace, p.position, p.region]);
 
   useEffect(() => {
     if (tab !== 'profile') return;
@@ -527,6 +546,7 @@ export function ParticipantCardModal({
           )}
 
           <div className="adm-pc-toolbar adm-forum-toolbar">
+            <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setTab('profile')}>Редактировать профиль</button>
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setTab('profile')}>Скорректировать роль</button>
             <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => setTab('points')}>Начислить/снять баллы</button>
             {canSettings && <button type="button" className="adm-btn adm-btn-sm adm-btn-secondary" onClick={() => {
@@ -640,6 +660,84 @@ export function ParticipantCardModal({
 
               <div className="adm-field-row"><span className="adm-label">ВКонтакте</span><span><VkProfileLink vkId={p.vkId} /></span></div>
 
+              <div className="adm-forum-block" style={{ margin: '8px 0 12px' }}>
+                <div className="adm-label" style={{ marginBottom: 8 }}>Анкетные данные</div>
+                <div className="adm-forum-grid-2">
+                  <label className="adm-field">
+                    <span className="adm-label">Имя</span>
+                    <input
+                      className="adm-input"
+                      value={profileDraft.firstName}
+                      onChange={e => setProfileDraft(d => ({ ...d, firstName: e.target.value }))}
+                    />
+                  </label>
+                  <label className="adm-field">
+                    <span className="adm-label">Фамилия</span>
+                    <input
+                      className="adm-input"
+                      value={profileDraft.lastName}
+                      onChange={e => setProfileDraft(d => ({ ...d, lastName: e.target.value }))}
+                    />
+                  </label>
+                  <label className="adm-field">
+                    <span className="adm-label">Возраст</span>
+                    <input
+                      className="adm-input"
+                      type="number"
+                      min={14}
+                      max={100}
+                      value={profileDraft.age}
+                      onChange={e => setProfileDraft(d => ({ ...d, age: e.target.value }))}
+                    />
+                  </label>
+                  <label className="adm-field">
+                    <span className="adm-label">Регион</span>
+                    <input
+                      className="adm-input"
+                      value={profileDraft.region}
+                      onChange={e => setProfileDraft(d => ({ ...d, region: e.target.value }))}
+                    />
+                  </label>
+                  <label className="adm-field">
+                    <span className="adm-label">Место работы</span>
+                    <input
+                      className="adm-input"
+                      value={profileDraft.workplace}
+                      onChange={e => setProfileDraft(d => ({ ...d, workplace: e.target.value }))}
+                    />
+                  </label>
+                  <label className="adm-field">
+                    <span className="adm-label">Должность</span>
+                    <input
+                      className="adm-input"
+                      value={profileDraft.position}
+                      onChange={e => setProfileDraft(d => ({ ...d, position: e.target.value }))}
+                    />
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-primary adm-btn-sm"
+                  style={{ marginTop: 10 }}
+                  onClick={() => act(async () => {
+                    await adminFetch(`/participants/${p.id}/profile`, {
+                      method: 'PATCH',
+                      body: JSON.stringify({
+                        firstName: profileDraft.firstName,
+                        lastName: profileDraft.lastName,
+                        age: profileDraft.age.trim() ? Number(profileDraft.age) : null,
+                        workplace: profileDraft.workplace,
+                        position: profileDraft.position,
+                        region: profileDraft.region,
+                      }),
+                    });
+                    onReloadCard();
+                  }, 'Профиль сохранён')}
+                >
+                  Сохранить профиль
+                </button>
+              </div>
+
               <label className="adm-field">
 
                 <span className="adm-label">Педагогическая роль</span>
@@ -701,10 +799,6 @@ export function ParticipantCardModal({
                 Согласия: ПД {p.consentPd ? 'да' : 'нет'} · аналитика {p.consentAnalytics ? 'да' : 'нет'}
               </div>
 
-              {p.workplace && <div className="adm-field-row">Место работы: {p.workplace}</div>}
-              {p.position && <div className="adm-field-row">Должность: {p.position}</div>}
-              {p.region && <div className="adm-field-row">Регион: {p.region}</div>}
-
               {p.interests != null && (
                 <div className="adm-field-row">
                   Интересы: {Array.isArray(p.interests) ? (p.interests as string[]).join(', ') : JSON.stringify(p.interests)}
@@ -713,10 +807,6 @@ export function ParticipantCardModal({
 
               {p.createdAt && (
                 <div className="adm-field-row">Регистрация: {new Date(p.createdAt).toLocaleString('ru-RU')}</div>
-              )}
-
-              {p.age != null && (
-                <div className="adm-field-row">Возраст: {p.age}</div>
               )}
 
               {p.goals != null && p.goals !== '' && (

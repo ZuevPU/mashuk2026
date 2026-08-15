@@ -18,7 +18,7 @@ import {
 } from '../controllers/questionsController.js';
 import { listActiveExchangeCategories } from '../controllers/exchangeCategoryController.js';
 import {
-  getProfile, listPiggybank, createPiggybank, updateProfileSettings, deleteMyProfile, getPublicLeaderboard,
+  getProfile, listPiggybank, createPiggybank, updateProfileSettings, updateParticipantName, updateParticipantInterests, deleteMyProfile, getPublicLeaderboard,
   exportPiggybankText, listMyMedals, listMedalsCatalog, synthesizeMyOutcomes, downloadMyProfilePdf,
   getMyShiftResults, regenerateMyQr,
 } from '../controllers/profileController.js';
@@ -93,6 +93,8 @@ router.get('/profile', vkAuthMiddleware, requireParticipant, getProfile);
 router.get('/profile/pdf', vkAuthMiddleware, requireParticipant, downloadMyProfilePdf);
 router.get('/profile/shift-results', vkAuthMiddleware, requireParticipant, getMyShiftResults);
 router.patch('/profile/settings', vkAuthMiddleware, requireParticipant, updateProfileSettings);
+router.patch('/profile/name', vkAuthMiddleware, requireParticipant, updateParticipantName);
+router.patch('/profile/interests', vkAuthMiddleware, requireParticipant, updateParticipantInterests);
 router.post('/profile/regenerate-qr', vkAuthMiddleware, requireParticipant, regenerateMyQr);
 router.post('/profile/delete', vkAuthMiddleware, requireParticipant, deleteMyProfile);
 router.post('/profile/outcomes/synthesize', vkAuthMiddleware, requireParticipant, synthesizeMyOutcomes);

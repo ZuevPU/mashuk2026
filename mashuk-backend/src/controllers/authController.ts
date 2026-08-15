@@ -18,6 +18,7 @@ import { generateQrToken } from '../services/qrService.js';
 import { awardPoints } from '../services/pointsService.js';
 import { scheduleParticipantAvatarSync } from '../services/participantAvatarSync.js';
 import { healParticipantPlaceholderName, resolveOnboardingName } from '../services/participantName.js';
+import { needsShift2InterestsReselection } from '../services/shift2InterestsGate.js';
 import { getForumSettings } from '../services/helpers.js';
 import {
   findParticipantForVk,
@@ -189,6 +190,15 @@ export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> =>
     user = await healParticipantPlaceholderName(user) ?? user;
 
     const shift = await getShiftById(user.shiftId);
+    const onboardingConfig = await getForumOnboardingConfig(user.shiftId);
+    const needsInterestsReselection = needsShift2InterestsReselection({
+      onboardingCompleted: true,
+      shift,
+      interestsReselectedAt: user.interestsReselectedAt,
+      interests: user.interests,
+      interestMin: onboardingConfig.interestMin,
+      allowedTags: interestTagsFromConfig(onboardingConfig),
+    });
     res.json({
       status: 'ok',
       user,
@@ -197,6 +207,14 @@ export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> =>
       shiftLive: shift?.status === 'active',
       registrationAction: route.action,
       registrationTargetShiftId: route.shiftId,
+      needsInterestsReselection,
+      interestsCatalog: needsInterestsReselection
+        ? {
+          interestGroups: onboardingConfig.interestGroups,
+          interestMin: onboardingConfig.interestMin,
+          interestMax: onboardingConfig.interestMax,
+        }
+        : null,
     });
   } catch (error) {
     console.error('getMe:', error);
@@ -356,6 +374,7 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       directionId: finalDir.id,
       direction: finalDir.name,
       interests: data.interests,
+      interestsReselectedAt: new Date(),
       goalAnswers: data.goalAnswers,
       roleAnswers: data.roleAnswers,
       pedagogicalRole,

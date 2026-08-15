@@ -12,6 +12,26 @@ export function sanitizePersonName(raw: unknown): string {
   return String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 255);
 }
 
+const PERSON_NAME_RE = /^[\p{L}][\p{L}\s.'’-]*$/u;
+
+export function parseEditablePersonName(
+  first: unknown,
+  last: unknown,
+): { firstName: string; lastName: string } | { error: string } {
+  const firstName = sanitizePersonName(first);
+  const lastName = sanitizePersonName(last);
+  if (!firstName || !lastName) {
+    return { error: 'Укажите имя и фамилию' };
+  }
+  if (isPlaceholderDisplayName(firstName, lastName)) {
+    return { error: 'Укажите своё имя, а не тестовое' };
+  }
+  if (!PERSON_NAME_RE.test(firstName) || !PERSON_NAME_RE.test(lastName)) {
+    return { error: 'Имя и фамилия могут содержать только буквы' };
+  }
+  return { firstName, lastName };
+}
+
 export function isPlaceholderDisplayName(
   firstName?: string | null,
   lastName?: string | null,

@@ -27,6 +27,7 @@ import {
   parseBody,
 } from '../validation/adminSchemas.js';
 import { ROLE_KEYS } from '../services/roleService.js';
+import { parseEditablePersonName } from '../services/participantName.js';
 import {
   adviceCsvTemplate,
   importAdviceCsv,
@@ -245,6 +246,85 @@ export const updateParticipantGroup = async (req: AdminRequest, res: Response): 
       groupName: group.name,
       ...(dirPatch?.fromGroup ? { directionId: dirPatch.id, direction: dirPatch.name } : {}),
     },
+    isCritical: true,
+  });
+  res.json({ participant: updated });
+};
+
+export const updateParticipantProfile = async (req: AdminRequest, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: 'Invalid participant id' });
+    return;
+  }
+  const [existing] = await db.select({
+    id: participants.id,
+    firstName: participants.firstName,
+    lastName: participants.lastName,
+    age: participants.age,
+    workplace: participants.workplace,
+    position: participants.position,
+    region: participants.region,
+  }).from(participants).where(eq(participants.id, id)).limit(1);
+  if (!existing) {
+    res.status(404).json({ error: 'Participant not found' });
+    return;
+  }
+
+  const patch: Partial<typeof participants.$inferInsert> = {};
+  if (req.body.firstName !== undefined || req.body.lastName !== undefined) {
+    const parsed = parseEditablePersonName(
+      req.body.firstName !== undefined ? req.body.firstName : existing.firstName,
+      req.body.lastName !== undefined ? req.body.lastName : existing.lastName,
+    );
+    if ('error' in parsed) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+    patch.firstName = parsed.firstName;
+    patch.lastName = parsed.lastName;
+  }
+  if (req.body.age !== undefined) {
+    if (req.body.age === null || req.body.age === '') {
+      patch.age = null;
+    } else {
+      const age = Number(req.body.age);
+      if (!Number.isInteger(age) || age < 14 || age > 100) {
+        res.status(400).json({ error: 'Возраст должен быть от 14 до 100' });
+        return;
+      }
+      patch.age = age;
+    }
+  }
+  if (req.body.workplace !== undefined) {
+    const v = String(req.body.workplace ?? '').trim().slice(0, 500);
+    patch.workplace = v || null;
+  }
+  if (req.body.position !== undefined) {
+    const v = String(req.body.position ?? '').trim().slice(0, 500);
+    patch.position = v || null;
+  }
+  if (req.body.region !== undefined) {
+    const v = String(req.body.region ?? '').trim().slice(0, 255);
+    patch.region = v || null;
+  }
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: 'No fields to update' });
+    return;
+  }
+
+  const [updated] = await db.update(participants)
+    .set(patch)
+    .where(eq(participants.id, id))
+    .returning();
+  const { logAdminAction } = await import('../services/adminActionsLog.js');
+  await logAdminAction({
+    req,
+    actionType: 'participant_profile_update',
+    section: 'participants',
+    objectId: id,
+    oldValue: existing,
+    newValue: patch,
     isCritical: true,
   });
   res.json({ participant: updated });

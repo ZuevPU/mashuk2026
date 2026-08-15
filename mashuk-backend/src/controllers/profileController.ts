@@ -5,7 +5,7 @@ import {
   piggybank, answers, taskSubmissions, tasks, questions, participants, directions, pointsLog,
 } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
-import { getRoleMeta } from '../services/roleService.js';
+import { getRoleMeta, interestTagsFromConfig, normalizeOnboardingConfig } from '../services/roleService.js';
 import { inferReflectionDepth } from '../services/reflectionDepth.js';
 import { generateQrToken } from '../services/qrService.js';
 import { getLevel, participantRatingScore, isUnifiedRatingEnabled } from '../services/pointsService.js';
@@ -20,7 +20,9 @@ import { createPiggybankEntry, filterPiggybankEntries } from '../services/piggyb
 import { gatherProfileBundle, streamProfilePdf } from '../services/profilePdfBuilder.js';
 import { answerText } from '../services/exports/exportCommon.js';
 import { getForumSettings } from '../services/helpers.js';
-import { normalizeOnboardingConfig } from '../services/roleService.js';
+import { parseEditablePersonName } from '../services/participantName.js';
+import { isSecondShift, normalizeInterestList } from '../services/shift2InterestsGate.js';
+import { getShiftById } from '../services/shiftService.js';
 import { buildPointARequestItems } from '../services/pointARequest.js';
 
 export const getProfile = async (req: ParticipantRequest, res: Response): Promise<void> => {
@@ -345,6 +347,72 @@ export const updateProfileSettings = async (req: ParticipantRequest, res: Respon
     });
   } catch (error) {
     console.error('updateProfileSettings:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const updateParticipantName = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const parsed = parseEditablePersonName(req.body?.firstName, req.body?.lastName);
+    if ('error' in parsed) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+    const [updated] = await db.update(participants)
+      .set({
+        firstName: parsed.firstName,
+        lastName: parsed.lastName,
+      })
+      .where(eq(participants.id, req.participant!.id))
+      .returning({
+        firstName: participants.firstName,
+        lastName: participants.lastName,
+      });
+    res.json({
+      status: 'ok',
+      user: {
+        firstName: updated.firstName,
+        lastName: updated.lastName,
+      },
+    });
+  } catch (error) {
+    console.error('updateParticipantName:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const updateParticipantInterests = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const me = req.participant!;
+    const shift = await getShiftById(me.shiftId);
+    if (!isSecondShift(shift)) {
+      res.status(400).json({ error: 'Повторный выбор интересов доступен только во второй смене' });
+      return;
+    }
+    const config = normalizeOnboardingConfig((await getForumSettings(me.shiftId))?.roleDiagnosticsConfig);
+    const picked = normalizeInterestList(req.body?.interests);
+    if (picked.length < config.interestMin || picked.length > config.interestMax) {
+      res.status(400).json({
+        error: `Выберите от ${config.interestMin} до ${config.interestMax} интересов`,
+      });
+      return;
+    }
+    const allowed = interestTagsFromConfig(config);
+    if (picked.some(tag => !allowed.has(tag))) {
+      res.status(400).json({ error: 'Выберите интересы из списка смены' });
+      return;
+    }
+    const [updated] = await db.update(participants)
+      .set({ interests: picked, interestsReselectedAt: new Date() })
+      .where(eq(participants.id, me.id))
+      .returning();
+    res.json({
+      status: 'ok',
+      interests: Array.isArray(updated.interests) ? updated.interests : picked,
+      interestsReselectedAt: updated.interestsReselectedAt,
+    });
+  } catch (error) {
+    console.error('updateParticipantInterests:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

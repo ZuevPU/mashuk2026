@@ -10,6 +10,7 @@ import { buildParticipantVolunteerUrl } from '../utils/qrDeepLink';
 import { requestVkPushPermission } from '../utils/pushNotifications';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
 import { ParticipantAvatarCircle } from '../components/ParticipantAvatarCircle';
+import { ProfileNameEditor } from '../components/profile/ProfileNameEditor';
 import { QrCodeImage } from '../components/QrCodeImage';
 import { PiggybankEntryText } from '../components/PiggybankEntryText';
 
@@ -411,8 +412,19 @@ export const ProfilePanel: React.FC<{
                 avatarUrl={avatarUrl}
                 size="md"
               />
-              <div style={{ flex: 1 }}>
-                <div className="pf-n">{p.user.firstName} {p.user.lastName}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <ProfileNameEditor
+                  firstName={p.user.firstName || ''}
+                  lastName={p.user.lastName || ''}
+                  onSaved={(firstName, lastName) => {
+                    setProfile((prev: any) => prev ? {
+                      ...prev,
+                      user: { ...prev.user, firstName, lastName },
+                    } : prev);
+                    setSnackbar('Имя сохранено');
+                  }}
+                  onError={setSnackbar}
+                />
                 <div className="pf-r">{shiftLine || p.user.direction}</div>
                 <button
                   type="button"

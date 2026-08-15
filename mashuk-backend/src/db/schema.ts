@@ -410,6 +410,8 @@ export const participants = pgTable('participants', {
   nextStepsEdited: jsonb('next_steps_edited'),
   roleAnswers: jsonb('role_answers'),
   onboardingCompletedAt: timestamp('onboarding_completed_at'),
+  /** Смена 2: участник подтвердил интересы в отдельном окне после повторного входа */
+  interestsReselectedAt: timestamp('interests_reselected_at'),
   pathPoints: integer('path_points').default(0),
   experiencePoints: integer('experience_points').default(0),
   bonusPoints: integer('bonus_points').default(0),

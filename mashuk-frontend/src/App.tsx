@@ -20,6 +20,7 @@ import { ScanPanel } from './panels/Scan';
 import { OpenInVkScreen } from './components/OpenInVkScreen';
 import { hasUsableLaunchParams, peekPendingTaskQr, setPendingTaskQr } from './utils/launchParams';
 import { apiGet, getHashSearchParams, getStoredShiftId, initAuth, setStoredShiftId } from './api/client';
+import { InterestsReselectGate } from './components/onboarding/InterestsReselectGate';
 
 export const ModalContext = createContext<{ setModal: (modal: ReactNode | null) => void }>({ setModal: () => {} });
 export const useAppModal = () => useContext(ModalContext);
@@ -67,6 +68,12 @@ export const App = () => {
   const [showPiggyFab, setShowPiggyFab] = useState(false);
   const [apiErrorToast, setApiErrorToast] = useState<string | null>(null);
   const [modal, setModal] = useState<ReactNode | null>(null);
+  const [interestsGate, setInterestsGate] = useState<{
+    current: string[];
+    groups: Array<{ title: string; tags: string[] }>;
+    interestMin: number;
+    interestMax: number;
+  } | null>(null);
 
   useEffect(() => {
     const handleApiError = (e: Event) => {
@@ -118,20 +125,29 @@ export const App = () => {
       const auth = await apiGet<{
         status: string;
         blockReason?: string;
-        user?: { shiftId?: number };
+        user?: { shiftId?: number; interests?: string[] | null };
         registrationTargetShiftId?: number | null;
         registrationAction?: 'enter' | 'register' | 'choose';
+        needsInterestsReselection?: boolean;
+        interestsCatalog?: {
+          interestGroups?: Array<{ title: string; tags: string[] }>;
+          interestMin?: number;
+          interestMax?: number;
+        } | null;
       }>('/auth/me');
       if (auth.status === 'self_deleted') {
         setSelfDeleted(true);
         setBlockedReason(null);
         setIsRegistered(false);
+        setInterestsGate(null);
       } else if (auth.status === 'blocked') {
         setSelfDeleted(false);
         setBlockedReason(auth.blockReason || 'Доступ к программе ограничен организаторами.');
         setIsRegistered(false);
+        setInterestsGate(null);
       } else if (auth.registrationAction === 'choose') {
         setIsRegistered(false);
+        setInterestsGate(null);
         const pending = getHashSearchParams();
         const qr = pending.get('qr');
         const task = pending.get('task');
@@ -141,6 +157,7 @@ export const App = () => {
         }
       } else if (auth.status === 'needs_registration') {
         setIsRegistered(false);
+        setInterestsGate(null);
         const pending = getHashSearchParams();
         const qr = pending.get('qr');
         const task = pending.get('task');
@@ -156,6 +173,16 @@ export const App = () => {
         setIsRegistered(true);
         if (auth.user?.shiftId) {
           setStoredShiftId(auth.user.shiftId);
+        }
+        if (auth.needsInterestsReselection && auth.interestsCatalog?.interestGroups?.length) {
+          setInterestsGate({
+            current: Array.isArray(auth.user?.interests) ? auth.user.interests : [],
+            groups: auth.interestsCatalog.interestGroups,
+            interestMin: auth.interestsCatalog.interestMin ?? 5,
+            interestMax: auth.interestsCatalog.interestMax ?? 8,
+          });
+        } else {
+          setInterestsGate(null);
         }
 
         try {
@@ -327,7 +354,7 @@ export const App = () => {
         <Epic
           activeStory="main"
       tabbar={
-        activePanel !== 'registration' && (
+        activePanel !== 'registration' && !interestsGate && (
           <Tabbar className="mashuk-tabbar">
             {showTab('home') && (
               <TabbarItem
@@ -431,6 +458,15 @@ export const App = () => {
     </Epic>
       </SplitCol>
       </SplitLayout>
+      {interestsGate && (
+        <InterestsReselectGate
+          current={interestsGate.current}
+          groups={interestsGate.groups}
+          interestMin={interestsGate.interestMin}
+          interestMax={interestsGate.interestMax}
+          onSaved={() => setInterestsGate(null)}
+        />
+      )}
     </ModalContext.Provider>
   );
 };
