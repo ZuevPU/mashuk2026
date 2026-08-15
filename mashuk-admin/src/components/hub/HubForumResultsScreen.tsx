@@ -164,7 +164,6 @@ export function HubForumResultsScreen() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [blockKey, setBlockKey] = useState('');
-  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     setLoading(true);
@@ -191,7 +190,7 @@ export function HubForumResultsScreen() {
         setErr(e instanceof Error ? e.message : 'Не удалось загрузить итоги форума');
       })
       .finally(() => setLoading(false));
-  }, [adminFetch, direction, group, ageCategory, activity, organizers, reloadTick]);
+  }, [adminFetch, direction, group, ageCategory, activity, organizers]);
 
   const m = data?.meta;
   const selectedBlock = useMemo(
@@ -723,13 +722,12 @@ export function HubForumResultsScreen() {
             <DayResultsSection
               id="hub-forum-people"
               title="Кто заполнил"
-              note="Сначала 10 строк. Заголовки вопросов сверху — по ним можно сортировать. Нажмите строку, чтобы открыть анкету."
+              note="Сначала 10 строк. Заголовки вопросов сверху — по ним можно сортировать. Строка открывает анкету только для просмотра."
             >
               <ForumResultsPeopleTable
                 columns={data.people!.columns}
                 rows={data.people!.rows}
                 adminFetch={adminFetch}
-                onSaved={() => setReloadTick(n => n + 1)}
               />
             </DayResultsSection>
           )}

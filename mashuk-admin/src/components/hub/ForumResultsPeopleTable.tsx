@@ -28,7 +28,6 @@ type Props = {
   columns: ForumPeopleColumn[];
   rows: ForumPeopleRow[];
   adminFetch: (path: string, init?: RequestInit) => Promise<unknown>;
-  onSaved: () => void;
 };
 
 const PAGE = 10;
@@ -47,7 +46,7 @@ function heatValue(row: ForumPeopleRow, key: string): number | null {
   return row.heat.find(c => c.key === key)?.v ?? null;
 }
 
-export function ForumResultsPeopleTable({ columns, rows, adminFetch, onSaved }: Props) {
+export function ForumResultsPeopleTable({ columns, rows, adminFetch }: Props) {
   const [query, setQuery] = useState('');
   const [limit, setLimit] = useState(PAGE);
   const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -207,7 +206,6 @@ export function ForumResultsPeopleTable({ columns, rows, adminFetch, onSaved }: 
           participantId={openId}
           adminFetch={adminFetch}
           onClose={() => setOpenId(null)}
-          onSaved={onSaved}
         />
       )}
     </>

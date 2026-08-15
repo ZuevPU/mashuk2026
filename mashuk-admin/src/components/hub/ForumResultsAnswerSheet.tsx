@@ -27,7 +27,6 @@ type Props = {
   participantId: number;
   adminFetch: (path: string, init?: RequestInit) => Promise<unknown>;
   onClose: () => void;
-  onSaved: () => void;
 };
 
 function asText(value: unknown): string {
@@ -42,12 +41,11 @@ function asBool(value: unknown): boolean | null {
   return null;
 }
 
-export function ForumResultsAnswerSheet({ participantId, adminFetch, onClose, onSaved }: Props) {
+export function ForumResultsAnswerSheet({ participantId, adminFetch, onClose }: Props) {
   const [payload, setPayload] = useState<FormPayload | null>(null);
   const [dayNumber, setDayNumber] = useState<number | null>(null);
   const [form, setForm] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -76,33 +74,6 @@ export function ForumResultsAnswerSheet({ participantId, adminFetch, onClose, on
     if (!day) return;
     setForm({ ...day.ratings });
   }, [day?.dayNumber]);
-
-  const setValue = (key: string, value: unknown) => {
-    setForm(prev => ({ ...prev, [key]: value }));
-  };
-
-  const save = async () => {
-    if (!day || !payload?.canEdit) return;
-    setSaving(true);
-    setErr(null);
-    try {
-      await adminFetch(`/participants/${participantId}/evening-form`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dayNumber: day.dayNumber,
-          ratings: form,
-          tomorrowRoleKey: typeof form.tomorrowRoleKey === 'string' ? form.tomorrowRoleKey : day.tomorrowRoleKey,
-        }),
-      });
-      onSaved();
-      onClose();
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : 'Не удалось сохранить');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <div className="adm-modal-backdrop" onClick={onClose} role="presentation">
@@ -150,21 +121,12 @@ export function ForumResultsAnswerSheet({ participantId, adminFetch, onClose, on
                   field={field}
                   value={form[field.key]}
                   roles={payload.roles}
-                  disabled={!payload.canEdit}
-                  onChange={value => setValue(field.key, value)}
                 />
               ))}
             </div>
 
             <footer className="adm-frp-sheet-foot">
-              <span>Участник не получит уведомление и не увидит, что ответ правили.</span>
-              {payload.canEdit ? (
-                <button type="button" className="adm-btn adm-btn-primary" disabled={saving} onClick={() => void save()}>
-                  {saving ? 'Сохранение…' : 'Сохранить'}
-                </button>
-              ) : (
-                <span className="adm-muted">Только просмотр</span>
-              )}
+              <span className="adm-muted">Только просмотр. Ответы участника менять нельзя.</span>
             </footer>
           </>
         )}
@@ -177,14 +139,10 @@ function FieldEditor({
   field,
   value,
   roles,
-  disabled,
-  onChange,
 }: {
   field: EveningField;
   value: unknown;
   roles: Array<{ roleKey: string; name: string }>;
-  disabled: boolean;
-  onChange: (value: unknown) => void;
 }) {
   if (field.type === 'scale_1_5' || field.type === 'scale_1_10') {
     const max = field.type === 'scale_1_10' ? 10 : 5;
@@ -197,9 +155,8 @@ function FieldEditor({
             <button
               key={n}
               type="button"
-              disabled={disabled}
+              disabled
               className={current === n ? 'on' : ''}
-              onClick={() => onChange(n)}
             >
               {n}
             </button>
@@ -215,8 +172,8 @@ function FieldEditor({
       <label className="adm-frp-field">
         <span>{field.label}</span>
         <div className="adm-frp-scale">
-          <button type="button" disabled={disabled} className={current === true ? 'on' : ''} onClick={() => onChange(true)}>Да</button>
-          <button type="button" disabled={disabled} className={current === false ? 'on' : ''} onClick={() => onChange(false)}>Нет</button>
+          <button type="button" disabled className={current === true ? 'on' : ''}>Да</button>
+          <button type="button" disabled className={current === false ? 'on' : ''}>Нет</button>
         </div>
       </label>
     );
@@ -231,9 +188,8 @@ function FieldEditor({
         <span>{field.label}</span>
         <select
           className="adm-input"
-          disabled={disabled}
+          disabled
           value={isOther ? '__other__' : text}
-          onChange={e => onChange(e.target.value === '__other__' ? '' : e.target.value)}
         >
           <option value="">—</option>
           {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -242,9 +198,8 @@ function FieldEditor({
         {(field.allowOther && (isOther || text === '')) && (
           <input
             className="adm-input"
-            disabled={disabled}
+            disabled
             value={isOther ? text : ''}
-            onChange={e => onChange(e.target.value)}
             placeholder="Свой вариант"
           />
         )}
@@ -258,9 +213,8 @@ function FieldEditor({
         <span>{field.label}</span>
         <select
           className="adm-input"
-          disabled={disabled}
+          disabled
           value={asText(value)}
-          onChange={e => onChange(e.target.value || null)}
         >
           <option value="">—</option>
           {roles.map(r => <option key={r.roleKey} value={r.roleKey}>{r.name}</option>)}
@@ -286,14 +240,8 @@ function FieldEditor({
               type="number"
               min={1}
               max={10}
-              disabled={disabled}
+              disabled
               value={item.score ?? ''}
-              onChange={e => {
-                const next = items.map((row, idx) => idx === i
-                  ? { ...row, score: e.target.value === '' ? null : Number(e.target.value) }
-                  : row);
-                onChange({ items: next });
-              }}
             />
           </div>
         ))}
@@ -307,9 +255,8 @@ function FieldEditor({
       <textarea
         className="adm-input"
         rows={3}
-        disabled={disabled}
+        disabled
         value={asText(value)}
-        onChange={e => onChange(e.target.value)}
       />
     </label>
   );
