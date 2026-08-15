@@ -1448,6 +1448,34 @@ body {
   padding: 0;
 }
 .pf-name-row input::placeholder { color: #C7C7CC; }
+.pf-name-row select {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--m-text-main);
+  outline: none;
+  padding: 0;
+}
+.pf-shift-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 12px;
+  background: #007AFF;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  font-family: inherit;
+}
+.pf-shift-btn:active { opacity: 0.88; }
 .pf-name-actions {
   display: flex;
   justify-content: flex-end;

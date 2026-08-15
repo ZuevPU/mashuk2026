@@ -72,6 +72,7 @@ export const getProfile = async (req: ParticipantRequest, res: Response): Promis
         firstName: p.firstName,
         lastName: p.lastName,
         direction: p.direction,
+        directionId: p.directionId ?? null,
         age: p.age,
         workplace: p.workplace,
         position: p.position,
@@ -364,21 +365,68 @@ export const updateParticipantName = async (req: ParticipantRequest, res: Respon
       res.status(400).json({ error: parsed.error });
       return;
     }
+    const me = req.participant!;
+    const patch: {
+      firstName: string;
+      lastName: string;
+      directionId?: number;
+      direction?: string;
+      groupId?: number | null;
+      groupName?: string | null;
+    } = {
+      firstName: parsed.firstName,
+      lastName: parsed.lastName,
+    };
+
+    if (req.body?.directionId != null && req.body.directionId !== '') {
+      const directionId = Number(req.body.directionId);
+      if (!Number.isInteger(directionId) || directionId <= 0) {
+        res.status(400).json({ error: 'Некорректное направление' });
+        return;
+      }
+      if (me.directionId !== directionId) {
+        const { getDirectionInShift } = await import('../services/shiftCatalogs.js');
+        const { isSelfServeDirection } = await import('../services/leaderboardQuery.js');
+        const dir = await getDirectionInShift(directionId, me.shiftId);
+        if (!dir || !isSelfServeDirection(dir)) {
+          res.status(400).json({ error: 'Это направление нельзя выбрать' });
+          return;
+        }
+        patch.directionId = dir.id;
+        patch.direction = dir.name;
+        if (me.groupId) {
+          const { participantGroups } = await import('../db/schema.js');
+          const [group] = await db.select().from(participantGroups)
+            .where(eq(participantGroups.id, me.groupId))
+            .limit(1);
+          if (group && group.directionId != null && group.directionId !== dir.id) {
+            patch.groupId = null;
+            patch.groupName = null;
+          }
+        }
+      }
+    }
+
     const [updated] = await db.update(participants)
-      .set({
-        firstName: parsed.firstName,
-        lastName: parsed.lastName,
-      })
-      .where(eq(participants.id, req.participant!.id))
+      .set(patch)
+      .where(eq(participants.id, me.id))
       .returning({
         firstName: participants.firstName,
         lastName: participants.lastName,
+        direction: participants.direction,
+        directionId: participants.directionId,
+        groupId: participants.groupId,
+        groupName: participants.groupName,
       });
     res.json({
       status: 'ok',
       user: {
         firstName: updated.firstName,
         lastName: updated.lastName,
+        direction: updated.direction,
+        directionId: updated.directionId,
+        groupId: updated.groupId,
+        groupName: updated.groupName,
       },
     });
   } catch (error) {

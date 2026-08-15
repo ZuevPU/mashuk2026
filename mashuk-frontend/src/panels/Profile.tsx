@@ -416,29 +416,29 @@ export const ProfilePanel: React.FC<{
                 <ProfileNameEditor
                   firstName={p.user.firstName || ''}
                   lastName={p.user.lastName || ''}
-                  onSaved={(firstName, lastName) => {
+                  direction={p.user.direction}
+                  directionId={p.user.directionId}
+                  onSaved={(user) => {
                     setProfile((prev: any) => prev ? {
                       ...prev,
-                      user: { ...prev.user, firstName, lastName },
+                      user: {
+                        ...prev.user,
+                        firstName: user.firstName,
+                        lastName: user.lastName,
+                        direction: user.direction ?? prev.user.direction,
+                        directionId: user.directionId ?? prev.user.directionId,
+                        groupId: user.groupId !== undefined ? user.groupId : prev.user.groupId,
+                        groupName: user.groupName !== undefined ? user.groupName : prev.user.groupName,
+                      },
                     } : prev);
-                    setSnackbar('Имя сохранено');
+                    setSnackbar('Сохранено');
                   }}
                   onError={setSnackbar}
                 />
                 <div className="pf-r">{shiftLine || p.user.direction}</div>
                 <button
                   type="button"
-                  className="m-link"
-                  style={{
-                    marginTop: 6,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: '#007AFF',
-                    background: 'none',
-                    border: 0,
-                    padding: 0,
-                    cursor: 'pointer',
-                  }}
+                  className="pf-shift-btn"
                   onClick={async () => {
                     try {
                       const data = await apiGet<{

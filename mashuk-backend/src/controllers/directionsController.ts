@@ -25,7 +25,8 @@ export const listDirections = async (req: Request, res: Response): Promise<void>
       res.json({ directions: [] });
       return;
     }
-    const list = await listDirectionsForShift(shiftId);
+    const { isSelfServeDirection } = await import('../services/leaderboardQuery.js');
+    const list = (await listDirectionsForShift(shiftId)).filter(isSelfServeDirection);
     res.json({ directions: list });
   } catch (error) {
     console.error('listDirections:', error);

@@ -55,6 +55,16 @@ export function hideOrganizerName(
   return !organizersSlice && isOrganizerDirection(...names);
 }
 
+/** Направления, которые участник может выбрать сам (не скрытые и не организаторские). */
+export function isSelfServeDirection(d: {
+  isHidden?: boolean | null;
+  isOrganizer?: boolean | null;
+  name?: string | null;
+}): boolean {
+  if (d.isHidden === true) return false;
+  return d.isOrganizer !== true && !isOrganizerDirection(d.name);
+}
+
 export function collectOrganizerDirectionIds(
   rows: Array<{ id: number; name?: string | null; isOrganizer?: boolean | null }>,
 ): Set<number> {

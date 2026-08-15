@@ -7,6 +7,7 @@ import {
   hideOrganizerName,
   isOrganizerDirection,
   isOrganizerParticipant,
+  isSelfServeDirection,
   parseLeaderboardQuery,
   participantDisplayName,
 } from '../services/leaderboardQuery.js';
@@ -122,6 +123,15 @@ describe('hideOrganizerName', () => {
     assert.equal(hideOrganizerName(false, 'Организатор форума'), true);
     assert.equal(hideOrganizerName(true, 'Организатор форума'), false);
     assert.equal(hideOrganizerName(true, 'Учителя'), false);
+  });
+});
+
+describe('isSelfServeDirection', () => {
+  it('hides hidden and organizer catalog rows', () => {
+    assert.equal(isSelfServeDirection({ name: 'Учителя' }), true);
+    assert.equal(isSelfServeDirection({ name: 'Учителя', isHidden: true }), false);
+    assert.equal(isSelfServeDirection({ name: 'Кураторы', isOrganizer: true }), false);
+    assert.equal(isSelfServeDirection({ name: 'Организатор форума' }), false);
   });
 });
 
