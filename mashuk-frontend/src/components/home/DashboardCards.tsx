@@ -35,6 +35,7 @@ export const NextEventCard: React.FC<{title: string, time: string, isSoon?: bool
 
 export type TouchpointItem = {
   id: number;
+  slotIndex?: number;
   title?: string;
   state: 'done' | 'active' | 'overdue' | 'locked' | 'pending';
   block?: string | null;
@@ -60,7 +61,7 @@ export const TouchpointsCard: React.FC<{
       const clickable = item.state === 'active' || item.state === 'overdue' || item.state === 'done';
       points.push(
         <div
-          key={item.id}
+          key={`tp-${item.slotIndex ?? points.length}-${item.id}`}
           className={`m-pd ${cls}`}
           role={clickable ? 'button' : undefined}
           tabIndex={clickable ? 0 : undefined}

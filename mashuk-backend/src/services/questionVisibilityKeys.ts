@@ -1,5 +1,9 @@
 import { normalizeDayNumbers } from './questionAdminHelpers.js';
-import { questionMatchesTouchpointSlot } from './touchpointProgress.js';
+import {
+  isStateCheckQuestion,
+  normalizeStateCheckPhase,
+  questionMatchesTouchpointSlot,
+} from './touchpointProgress.js';
 import { TOUCHPOINT_SLOTS } from './touchpointTemplates.js';
 
 type QLike = {
@@ -14,25 +18,7 @@ type QLike = {
   isHidden?: boolean | null;
 };
 
-function isStateCheckQuestion(q: QLike): boolean {
-  const kind = String(q.questionKind || q.reflectionKind || '').toLowerCase();
-  const block = (q.block || '').toLowerCase();
-  return q.type === 'checkin'
-    || kind === 'state_check'
-    || block === 'проверка состояния'
-    || block.includes('проверк');
-}
-
-/** Нормализуем фазу: timePoint или эвристика по заголовку («Дневная…»). */
-export function normalizeStateCheckPhase(q: QLike): 'утро' | 'день' | 'вечер' | null {
-  const tp = (q.timePoint || '').trim().toLowerCase();
-  if (tp === 'утро' || tp === 'день' || tp === 'вечер') return tp;
-  const title = (q.title || '').toLowerCase();
-  if (/утр/.test(title)) return 'утро';
-  if (/дневн|днём|днем|обед/.test(title)) return 'день';
-  if (/вечер/.test(title)) return 'вечер';
-  return null;
-}
+export { isStateCheckQuestion, normalizeStateCheckPhase };
 
 /** Keys used to suppress twins of admin-hidden questions in participant lists. */
 export function visibilityKeysForQuestion(q: QLike): string[] {

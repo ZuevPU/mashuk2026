@@ -196,6 +196,46 @@ describe('touchpoint slot matching', () => {
     assert.equal(completed, 1);
   });
 
+  it('does not let a daytime state-check close the evening slot', () => {
+    const daySlot = TOUCHPOINT_SLOTS.find(s => s.title === 'Дневная проверка состояния')!;
+    const eveningSlot = TOUCHPOINT_SLOTS.find(s => s.title === 'Вечерняя проверка состояния')!;
+    const directionSlot = TOUCHPOINT_SLOTS.find(s => s.title === 'Осмысление по направлению')!;
+    const daily = {
+      id: 3,
+      title: 'Дневная проверка состояния',
+      type: 'checkin',
+      block: 'Проверка состояния',
+      timePoint: 'вечер',
+      questionKind: 'state_check',
+      dayNumber: 6,
+      dayNumbers: [6],
+    };
+    const curator = {
+      id: 12,
+      title: 'Вопрос с кураторами',
+      type: 'open',
+      block: 'Точки осмысления',
+      timePoint: 'день',
+      questionKind: 'after_blocks',
+      dayNumber: 6,
+      dayNumbers: [6],
+    };
+    assert.equal(questionMatchesTouchpointSlot(daily, daySlot), true);
+    assert.equal(questionMatchesTouchpointSlot(daily, eveningSlot), false);
+    assert.equal(questionMatchesTouchpointSlot(daily, directionSlot), false);
+    const items = buildTouchpointItemsForDay(
+      [daily, curator] as never,
+      new Set([3, 12]),
+      6,
+      6,
+      new Date(),
+    );
+    const done = items.filter(i => i.state === 'done');
+    assert.equal(done.length, 2);
+    assert.equal(items.find(i => i.slotIndex === 6)?.state, 'pending');
+    assert.notEqual(items.find(i => i.slotIndex === 6)?.title, daily.title);
+  });
+
   it('marks evening item done from eveningRatings even without marker questions', () => {
     const items = buildTouchpointItemsForDay(
       [] as never,

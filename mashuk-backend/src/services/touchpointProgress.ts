@@ -25,23 +25,43 @@ function isSenseMakingQuestion(q: TouchpointMatchQuestion): boolean {
   return kind === 'after_blocks' || kind === 'after_event';
 }
 
+export function isStateCheckQuestion(q: TouchpointMatchQuestion): boolean {
+  const kind = String(q.questionKind || q.reflectionKind || '').toLowerCase();
+  const block = (q.block || '').toLowerCase();
+  return q.type === 'checkin'
+    || kind === 'state_check'
+    || block === 'проверка состояния'
+    || block.includes('проверк');
+}
+
+/**
+ * Фаза проверки состояния. Заголовок («Дневная…») важнее timePoint:
+ * иначе дневная с ошибочным timePoint=вечер закрывает и 3-й, и 6-й слот.
+ */
+export function normalizeStateCheckPhase(q: TouchpointMatchQuestion): 'утро' | 'день' | 'вечер' | null {
+  const title = (q.title || '').toLowerCase();
+  if (/утр/.test(title)) return 'утро';
+  if (/дневн|днём|днем|обед/.test(title)) return 'день';
+  if (/вечер/.test(title)) return 'вечер';
+  const tp = (q.timePoint || '').trim().toLowerCase();
+  if (tp === 'утро' || tp === 'день' || tp === 'вечер') return tp;
+  return null;
+}
+
 /** Сопоставление вопроса со слотом шаблона (точное название или тип/блок/время). */
 export function questionMatchesTouchpointSlot(
   q: TouchpointMatchQuestion,
   slot: TouchpointSlot,
 ): boolean {
-  if ((q.title || '').trim() === slot.title) return true;
-
-  if (slot.type === 'checkin') {
-    const tp = (q.timePoint || '').trim();
-    if (tp !== slot.timePoint) return false;
-    // Accept any question in the state-check block/slot (admin may use type scale/open)
-    return q.type === 'checkin'
-      || q.questionKind === 'state_check'
-      || q.reflectionKind === 'state_check'
-      || (q.block || '') === 'Проверка состояния'
-      || (q.block || '').toLowerCase().includes('проверк');
+  if (isStateCheckQuestion(q)) {
+    if (slot.type !== 'checkin') return false;
+    const phase = normalizeStateCheckPhase(q);
+    return phase != null && phase === slot.timePoint;
   }
+
+  if (slot.type === 'checkin') return false;
+
+  if ((q.title || '').trim() === slot.title) return true;
 
   if (slot.block === 'Точки осмысления') {
     if (!isSenseMakingQuestion(q)) return false;
@@ -123,6 +143,7 @@ export function isTouchpointQuestionForForumDay(q: QuestionRow, forumDay: number
 
 export type TouchpointItem = {
   id: number | string;
+  slotIndex: number;
   title: string;
   state: 'done' | 'active' | 'overdue' | 'locked' | 'pending';
   block?: string | null;
@@ -170,16 +191,25 @@ export function buildTouchpointItemsForDay(
 ): TouchpointItem[] {
   const dayQs = dayQuestions.filter(q => questionMatchesDay(q, dayNumber));
   const eveningDone = opts?.eveningDone === true;
+  const claimedIds = new Set<number>();
   return TOUCHPOINT_SLOTS.map(slot => {
-    const matchedAll = dayQs.filter(q => questionMatchesTouchpointSlot(q, slot));
+    const matchedAll = dayQs.filter(q =>
+      questionMatchesTouchpointSlot(q, slot) && !claimedIds.has(q.id));
     const eveningSlotDone = eveningDone && isEveningTouchpointSlot(slot);
     const done = eveningSlotDone || matchedAll.some(q => answeredIds.has(q.id));
     // CTA только из нескрытых; скрытые учитываем лишь для «уже ответил».
-    const q = findTouchpointQuestionForSlot(dayQs, slot, { answeredIds, currentDay, now });
+    const q = findTouchpointQuestionForSlot(
+      dayQs.filter(row => !claimedIds.has(row.id)),
+      slot,
+      { answeredIds, currentDay, now },
+    );
+    if (q) claimedIds.add(q.id);
     if (!q) {
       const answeredHidden = matchedAll.find(x => answeredIds.has(x.id));
+      if (answeredHidden) claimedIds.add(answeredHidden.id);
       return {
         id: done && answeredHidden ? answeredHidden.id : slot.index,
+        slotIndex: slot.index,
         title: answeredHidden?.title || slot.title,
         state: done ? 'done' as const : 'pending' as const,
         block: slot.block,
@@ -192,7 +222,7 @@ export function buildTouchpointItemsForDay(
     else if (access === 'overdue') state = 'overdue';
     else if (access === 'open') state = 'active';
     // access === 'soon' → pending (окно ещё не открылось)
-    return { id: q.id, title: q.title, state, block: q.block };
+    return { id: q.id, slotIndex: slot.index, title: q.title, state, block: q.block };
   });
 }
 
