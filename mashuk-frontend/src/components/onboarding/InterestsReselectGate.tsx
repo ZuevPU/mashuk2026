@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Button, Div, Spinner } from '@vkontakte/vkui';
 import { apiPatch } from '../../api/client';
 
@@ -19,7 +19,6 @@ export function InterestsReselectGate({
   interestMax,
   onSaved,
 }: Props) {
-  const allowed = useMemo(() => new Set(groups.flatMap(g => g.tags)), [groups]);
   const [picked, setPicked] = useState<string[]>(() => {
     const catalog = new Set(groups.flatMap(g => g.tags));
     return current.filter(tag => catalog.has(tag));

@@ -23,7 +23,7 @@ function noticeCtaLabel(notice: HomeNoticeItem): string {
 }
 
 function noticeImages(notice: HomeNoticeItem): string[] {
-  const raw = notice.imageUrls ?? notice.image_urls;
+  const raw: unknown = notice.imageUrls ?? notice.image_urls;
   let list: unknown[] = [];
   if (Array.isArray(raw)) list = raw;
   else if (typeof raw === 'string' && raw.trim()) {
