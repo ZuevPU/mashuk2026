@@ -3056,6 +3056,8 @@ export const crudLevels = {
         out.push(created);
       }
     }
+    const { syncLevelsExchangeToSettings } = await import('../services/exchangeLimits.js');
+    await syncLevelsExchangeToSettings(shiftId, items);
     res.json({ config: out });
   },
 };
@@ -3687,8 +3689,9 @@ export const listPointsLog = async (req: AdminRequest, res: Response): Promise<v
   const actionTypePrefix = req.query.actionTypePrefix as string | undefined;
   const participantIdRaw = req.query.participantId as string | undefined;
   const participantId = participantIdRaw ? Number(participantIdRaw) : undefined;
+  const shiftId = await resolveAdminShiftId(req);
 
-  const conditions = [];
+  const conditions = [eq(participants.shiftId, shiftId)];
   if (participantId && !Number.isNaN(participantId)) {
     conditions.push(eq(pointsLog.participantId, participantId));
   }

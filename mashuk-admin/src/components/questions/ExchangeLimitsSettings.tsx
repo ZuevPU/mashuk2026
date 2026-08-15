@@ -9,16 +9,25 @@ type Props = {
   form: ExchangeLimitsForm;
   onChange: (patch: Partial<ExchangeLimitsForm>) => void;
   onSave: () => void;
+  onOpenLevels?: () => void;
 };
 
-export function ExchangeLimitsSettings({ form, onChange, onSave }: Props) {
+export function ExchangeLimitsSettings({ form, onChange, onSave, onOpenLevels }: Props) {
   return (
     <div className="card adm-forum-block" style={{ marginBottom: 12 }}>
       <h3 style={{ marginTop: 0 }}>Обмен опытом · лимиты и баллы</h3>
       <p className="adm-muted" style={{ fontSize: 13, marginBottom: 12, lineHeight: 1.45 }}>
         Правила для всех участников. Вопросы: лимит на календарный день (МСК) и баллы за каждый одобренный.
         Ответы: можно отвечать без ограничений, но баллы начисляются только за первые N ответов на вопросы других.
+        Баллы здесь и в «Системе баллов» — одно и то же: сохранение в любом месте обновляет оба экрана.
       </p>
+      {onOpenLevels && (
+        <p style={{ margin: '-4px 0 12px' }}>
+          <button type="button" className="adm-link" onClick={onOpenLevels}>
+            Открыть ставки в системе баллов
+          </button>
+        </p>
+      )}
 
       <div style={{ display: 'grid', gap: 16 }}>
         <div>

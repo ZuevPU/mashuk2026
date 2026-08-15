@@ -35,7 +35,6 @@ import {
   updateShift,
 } from '../services/shiftService.js';
 
-const FORUM_WRAP_POINTS = 15;
 
 const ratingsValue = z.union([
   z.string().max(4000),
@@ -299,7 +298,7 @@ async function awardForumWrapOnce(participantId: number, forumDay: number): Prom
     ))
     .limit(1);
   if (existing) return;
-  await awardPoints(participantId, 'forum_wrap_complete', FORUM_WRAP_POINTS, forumDay);
+  await awardPoints(participantId, 'forum_wrap_complete', undefined, forumDay);
 }
 
 export async function submitForumWrapQuestionnaire(req: ParticipantRequest, res: Response): Promise<void> {

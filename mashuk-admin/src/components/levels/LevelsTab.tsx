@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { label } from '../../labels/ru';
 import { AdminPageHero } from '../admin/AdminPageHero';
-import type { AdminTabProps } from '../admin/types';
+import type { AdminBlockFocus, AdminTabProps } from '../admin/types';
 import { HubLensLayout, type HubNavItem } from '../hub/HubSideNav';
 import { BonusRulesEditor, type BonusRule } from './BonusRulesEditor';
 import { RatingFormulaPreview } from './RatingFormulaPreview';
@@ -35,6 +35,8 @@ type LevelConfig = {
   displayName?: string | null;
 };
 
+type ActionSource = AdminBlockFocus;
+
 type ActionRow = {
   actionType: string;
   displayName: string;
@@ -42,6 +44,7 @@ type ActionRow = {
   track: string;
   max: number;
   group: string;
+  source?: ActionSource | null;
 };
 
 type PointsLogRow = {
@@ -208,9 +211,11 @@ function ThresholdLevelSample({ rows }: { rows: ThresholdRow[] }) {
 function ActionTable({
   rows,
   onChange,
+  onOpenBlock,
 }: {
   rows: ActionRow[];
   onChange: (actionType: string, patch: Partial<ActionRow>) => void;
+  onOpenBlock?: (focus: AdminBlockFocus) => void;
 }) {
   return (
     <div className="adm-kb-table-scroll">
@@ -221,7 +226,7 @@ function ActionTable({
             <th>Баллы</th>
             <th>Линия</th>
             <th>Макс.</th>
-            <th className="adm-muted" style={{ fontSize: 11 }}>actionType</th>
+            <th>Блок</th>
           </tr>
         </thead>
         <tbody>
@@ -233,6 +238,7 @@ function ActionTable({
                   value={row.displayName}
                   onChange={e => onChange(row.actionType, { displayName: e.target.value })}
                 />
+                <div className="adm-muted adm-levels-action-key">{row.actionType}</div>
               </td>
               <td>
                 <input
@@ -263,7 +269,19 @@ function ActionTable({
                   onChange={e => onChange(row.actionType, { max: Number(e.target.value) })}
                 />
               </td>
-              <td className="adm-muted" style={{ fontSize: 11 }}>{row.actionType}</td>
+              <td>
+                {row.source && onOpenBlock ? (
+                  <button
+                    type="button"
+                    className="adm-link adm-levels-block-link"
+                    onClick={() => onOpenBlock(row.source!)}
+                  >
+                    {row.source.label || 'Открыть'}
+                  </button>
+                ) : (
+                  <span className="adm-muted">—</span>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -272,7 +290,7 @@ function ActionTable({
   );
 }
 
-export function LevelsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
+export function LevelsTab({ adminFetch, act, reloadKey, onOpenBlock }: AdminTabProps) {
   const [segment, setSegment] = useState<RatingSegment>('settings');
   const [loading, setLoading] = useState(true);
   const [pathRows, setPathRows] = useState<ThresholdRow[]>([]);
@@ -305,6 +323,7 @@ export function LevelsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
           maxAccruals?: number | null;
           track: string;
           group: string;
+          source?: ActionSource | null;
         }[];
         levelConfig?: LevelConfig[];
       };
@@ -321,6 +340,7 @@ export function LevelsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         track: c.track || 'path',
         max: c.maxAccruals ?? 0,
         group: c.group || 'path',
+        source: c.source ?? null,
       })));
 
       const fs = (await adminFetch('/forum-settings')).settings as { leaderboardScopes?: Partial<LeaderboardScopes> } | undefined;
@@ -493,7 +513,7 @@ export function LevelsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       <section id="levels-hero" className="adm-forum-anchor">
         <AdminPageHero
           title="Система баллов"
-          hint="Ставки по действиям и срезы лидербордов. Итог участника = Путь + Опыт + Бонус."
+          hint="Ставки синхронизированы с блоками приложения. Итог участника = Путь + Опыт + Бонус. Журнал и ставки — только для смены в шапке."
         >
           <div className="adm-forum-seg">
             <button type="button" className={segment === 'settings' ? 'on' : ''} onClick={() => setSegment('settings')}>Настройка</button>
@@ -536,8 +556,13 @@ export function LevelsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                           Командные задания начисляют XP через task_complete. Медаль — отдельная награда, без XP.
                         </p>
                       )}
+                      {g === 'path' && (
+                        <p className="adm-kb-panel-sub">
+                          Баллы «Общения» те же, что в Вопросы → Обмен опытом. Ссылка в колонке «Блок» открывает источник.
+                        </p>
+                      )}
                     </div>
-                    <ActionTable rows={rows} onChange={patchAction} />
+                    <ActionTable rows={rows} onChange={patchAction} onOpenBlock={onOpenBlock} />
                   </div>
                 );
               })}
@@ -712,7 +737,7 @@ export function LevelsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             <div className="card adm-forum-block adm-kb-panel">
               <div className="adm-kb-panel-head">
                 <h3>История ручных начислений</h3>
-                <p className="adm-kb-panel-sub">Последние операции admin_manual из журнала баллов.</p>
+                <p className="adm-kb-panel-sub">Последние операции admin_manual выбранной смены. Смена 1 и смена 2 не пересекаются.</p>
               </div>
               <div className="adm-kb-table-scroll">
                 <table className="adm-table adm-kb-inline-table">

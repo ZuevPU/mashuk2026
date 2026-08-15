@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  mergeExchangeLimitsFromLevels,
   normalizeExchangeLimitsInput,
   resolveExchangeLimitsConfig,
 } from '../services/exchangeLimits.js';
@@ -63,5 +64,24 @@ describe('exchangeLimits config', () => {
       pointsPerQuestion: 2,
       pointsPerAnswer: 4,
     });
+  });
+
+  it('mergeExchangeLimitsFromLevels copies stakes from the levels table', () => {
+    const current = resolveExchangeLimitsConfig({
+      maxQuestionsTotal: 3,
+      maxAnswersForPoints: 5,
+      pointsPerQuestion: 3,
+      pointsPerAnswer: 5,
+    });
+    const merged = mergeExchangeLimitsFromLevels(current, {
+      questionPoints: 7,
+      answerPoints: 4,
+      answerMax: 8,
+      questionMax: 16,
+    }, 8);
+    assert.equal(merged.pointsPerQuestion, 7);
+    assert.equal(merged.pointsPerAnswer, 4);
+    assert.equal(merged.maxAnswersForPoints, 8);
+    assert.equal(merged.maxQuestionsTotal, 2);
   });
 });

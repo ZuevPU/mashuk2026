@@ -44,9 +44,20 @@ const QUESTIONS_CONFIRM_NAV: HubNavItem[] = [
 
 type QuestionsTabProps = AdminTabProps & {
   onOpenCard?: (id: number) => void;
+  focusKind?: string | null;
+  focusNonce?: number;
 };
 
-export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }: QuestionsTabProps) {
+export function QuestionsTab({
+  adminFetch,
+  act,
+  reloadKey,
+  setTab,
+  onOpenCard,
+  onOpenBlock,
+  focusKind,
+  focusNonce,
+}: QuestionsTabProps) {
   const [loading, setLoading] = useState(true);
   const [totalAll, setTotalAll] = useState(0);
   const [questions, setQuestions] = useState<AdminQuestion[]>([]);
@@ -99,6 +110,14 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   const [participants, setParticipants] = useState<{ id: number; firstName?: string | null; lastName?: string | null; direction?: string | null }[]>([]);
   const [practicesResultsId, setPracticesResultsId] = useState<number | null>(null);
   const [practicesResultsTitle, setPracticesResultsTitle] = useState('');
+
+  useEffect(() => {
+    if (!focusKind || !focusNonce) return;
+    if (KIND_TABS.some(t => t.key === focusKind)) {
+      setKindTab(focusKind as QuestionKindTab);
+      setView('list');
+    }
+  }, [focusKind, focusNonce]);
 
   const readOnly = kindTab === 'exchange' || kindTab === 'org_director';
 
@@ -774,6 +793,7 @@ export function QuestionsTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
                 method: 'PATCH',
                 body: JSON.stringify({ exchangeLimits: exchangeLimitsForm }),
               }), 'Лимиты обмена сохранены')}
+              onOpenLevels={onOpenBlock ? () => onOpenBlock({ tab: 'levels', anchor: 'levels-actions' }) : (setTab ? () => setTab('levels') : undefined)}
             />
           )}
 

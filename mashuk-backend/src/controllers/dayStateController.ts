@@ -32,13 +32,11 @@ import {
   filterEventsForEveningProgramPick,
 } from '../services/eveningProgramPickTree.js';
 
-const EVENING_COMPLETE_POINTS = 15;
-
 /** One Path award per participant per forum day for evening questionnaire. */
 async function awardEveningCompleteOnce(
   participantId: number,
   dayNumber: number,
-): Promise<void> {
+): Promise<number> {
   const [existing] = await db.select({ id: pointsLog.id })
     .from(pointsLog)
     .where(and(
@@ -49,8 +47,9 @@ async function awardEveningCompleteOnce(
       sql`${pointsLog.points} > 0`,
     ))
     .limit(1);
-  if (existing) return;
-  await awardPoints(participantId, 'evening_complete', EVENING_COMPLETE_POINTS, dayNumber);
+  if (existing) return 0;
+  const result = await awardPoints(participantId, 'evening_complete', undefined, dayNumber);
+  return result?.awarded ?? 0;
 }
 
 const scaleField = z.coerce.number().int().min(1).max(5).optional();
@@ -268,6 +267,7 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
     const summaryQ = visibleSummary.find(q => questionMatchesDay(q, dayNumber))
       ?? visibleSummary.find(q => q.dayNumber === dayNumber)
       ?? null;
+    const eveningPts = await awardEveningCompleteOnce(req.participant!.id, dayNumber);
     if (summaryQ) {
       const [existing] = await db.select().from(answers)
         .where(and(
@@ -282,7 +282,7 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
           questionId: summaryQ.id,
           answerData: ratings,
           questionTextSnapshot: summaryQ.text,
-          pointsAwarded: EVENING_COMPLETE_POINTS,
+          pointsAwarded: eveningPts,
           wordCount,
         });
       } else {
@@ -292,8 +292,6 @@ export const submitEveningQuestionnaire = async (req: ParticipantRequest, res: R
         }).where(eq(answers.id, existing.id));
       }
     }
-    // Award even when Forum evening form has no Questions marker (avoid question_answer double-count).
-    await awardEveningCompleteOnce(req.participant!.id, dayNumber);
 
     res.json({
       ok: true,

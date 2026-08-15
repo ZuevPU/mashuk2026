@@ -88,6 +88,7 @@ export const App = () => {
   const [navOpen, setNavOpen] = useState(false);
   /** Якорь внутри вкладки Форум (итоговая анкета вечера). */
   const [forumFocus, setForumFocus] = useState<{ anchor: string; nonce: number } | null>(null);
+  const [questionsFocus, setQuestionsFocus] = useState<{ kind: string; nonce: number } | null>(null);
   /** Не сбрасывать вкладку на defaultTab после каждого act()/reloadKey */
   const appliedDefaultTabRef = useRef(false);
 
@@ -199,9 +200,46 @@ export const App = () => {
   const selectTab = (next: Tab) => {
     setTab(next);
     setForumFocus(null);
+    setQuestionsFocus(null);
   };
 
-  const tabProps = { adminFetch, act, reloadKey, setTab: selectTab, adminRole };
+  const openBlock = (focus: { tab: Tab; questionsKind?: string; anchor?: string }) => {
+    if (focus.tab === 'forum' && focus.anchor) {
+      setQuestionsFocus(null);
+      setForumFocus({ anchor: focus.anchor, nonce: Date.now() });
+      setTab('forum');
+      return;
+    }
+    if (focus.tab === 'questions' && focus.questionsKind) {
+      setForumFocus(null);
+      setQuestionsFocus({ kind: focus.questionsKind, nonce: Date.now() });
+      setTab('questions');
+      return;
+    }
+    if (focus.tab === 'levels' && focus.anchor) {
+      setForumFocus(null);
+      setQuestionsFocus(null);
+      setTab('levels');
+      window.setTimeout(() => {
+        document.getElementById(focus.anchor!)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
+      return;
+    }
+    setForumFocus(null);
+    setQuestionsFocus(null);
+    setTab(focus.tab);
+  };
+
+  const tabProps = {
+    adminFetch,
+    act,
+    reloadKey,
+    setTab: selectTab,
+    adminRole,
+    questionsFocusKind: questionsFocus?.kind ?? null,
+    questionsFocusNonce: questionsFocus?.nonce ?? 0,
+    onOpenBlock: openBlock,
+  };
 
   if (isAuthenticated && isLeaderboardHash()) {
     return (
@@ -393,7 +431,12 @@ export const App = () => {
           {tab === 'knowledge' && <KnowledgeTab {...tabProps} onOpenCard={openParticipantCard} />}
           {tab === 'tasks' && <TasksTab {...tabProps} />}
           {tab === 'questions' && (
-            <QuestionsTab {...tabProps} onOpenCard={openParticipantCard} />
+            <QuestionsTab
+              {...tabProps}
+              onOpenCard={openParticipantCard}
+              focusKind={questionsFocus?.kind ?? null}
+              focusNonce={questionsFocus?.nonce ?? 0}
+            />
           )}
           {tab === 'moderation' && (
             <ModerationTab {...tabProps} onOpenCard={openParticipantCard} />

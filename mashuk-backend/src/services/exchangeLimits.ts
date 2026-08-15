@@ -5,6 +5,7 @@ import { getForumSettings } from './helpers.js';
 import { loadLevelsConfig } from './shiftContext.js';
 import { env } from '../config/env.js';
 import { startOfMoscowDay } from './questionAutoNotify.js';
+import { clearShiftCaches, getShiftById, updateShift } from './shiftService.js';
 
 function positiveInt(raw: unknown, fallback: number): number {
   const n = Number(raw);
@@ -156,11 +157,79 @@ export type ExchangeLimitsState = {
   answersTodayLeft: number;
 };
 
+export function mergeExchangeLimitsFromLevels(
+  current: ExchangeLimitsConfig,
+  levels: {
+    questionPoints?: number | null;
+    answerPoints?: number | null;
+    answerMax?: number | null;
+    questionMax?: number | null;
+  },
+  totalDays: number,
+): ExchangeLimitsConfig {
+  const days = Math.max(1, totalDays || 8);
+  return {
+    maxQuestionsTotal: levels.questionMax != null
+      ? Math.max(1, Math.round(Number(levels.questionMax) / days))
+      : current.maxQuestionsTotal,
+    pointsPerQuestion: levels.questionPoints != null
+      ? Math.max(0, Math.floor(Number(levels.questionPoints)))
+      : current.pointsPerQuestion,
+    maxAnswersForPoints: levels.answerMax != null
+      ? Math.max(0, Math.floor(Number(levels.answerMax)))
+      : current.maxAnswersForPoints,
+    pointsPerAnswer: levels.answerPoints != null
+      ? Math.max(0, Math.floor(Number(levels.answerPoints)))
+      : current.pointsPerAnswer,
+  };
+}
+
+/** Write exchange stakes from Система баллов back into the shift's exchangeLimits. */
+export async function syncLevelsExchangeToSettings(
+  shiftId: number,
+  items: Array<{ actionType?: string; pointsPerUnit?: number | null; maxAccruals?: number | null }>,
+): Promise<void> {
+  const q = items.find(i => i.actionType === 'exchange_question');
+  const a = items.find(i => i.actionType === 'exchange_answer');
+  if (!q && !a) return;
+  const shift = await getShiftById(shiftId);
+  if (!shift) return;
+  const current = resolveExchangeLimitsConfig(shift.exchangeLimits);
+  const next = mergeExchangeLimitsFromLevels(current, {
+    questionPoints: q?.pointsPerUnit,
+    answerPoints: a?.pointsPerUnit,
+    answerMax: a?.maxAccruals,
+    questionMax: q?.maxAccruals,
+  }, Number(shift.totalDays) || 8);
+  await updateShift(shiftId, { exchangeLimits: next });
+  clearShiftCaches();
+}
+
+function ownShiftLevelsValue(
+  row: { shiftId?: number | null; pointsPerUnit?: number | null; maxAccruals?: number | null } | null,
+  shiftId: number | null | undefined,
+  field: 'pointsPerUnit' | 'maxAccruals',
+): number | undefined {
+  if (!row || shiftId == null || row.shiftId !== shiftId) return undefined;
+  const n = row[field];
+  return n == null ? undefined : Number(n);
+}
+
 export async function getExchangeLimitsConfig(shiftId?: number | null): Promise<ExchangeLimitsConfig> {
   const settings = await getForumSettings(shiftId);
-  return resolveExchangeLimitsConfig(
+  const fromSettings = resolveExchangeLimitsConfig(
     (settings as { exchangeLimits?: unknown } | null)?.exchangeLimits,
   );
+  const [qRow, aRow] = await Promise.all([
+    loadLevelsConfig('exchange_question', shiftId),
+    loadLevelsConfig('exchange_answer', shiftId),
+  ]);
+  return {
+    ...fromSettings,
+    pointsPerQuestion: ownShiftLevelsValue(qRow, shiftId, 'pointsPerUnit') ?? fromSettings.pointsPerQuestion,
+    pointsPerAnswer: ownShiftLevelsValue(aRow, shiftId, 'pointsPerUnit') ?? fromSettings.pointsPerAnswer,
+    maxAnswersForPoints: ownShiftLevelsValue(aRow, shiftId, 'maxAccruals') ?? fromSettings.maxAnswersForPoints,
+  };
 }
 
 export async function getExchangeLimitsForParticipant(

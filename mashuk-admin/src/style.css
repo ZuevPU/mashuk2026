@@ -247,6 +247,18 @@ body {
   font-size: inherit;
 }
 
+.adm-levels-action-key {
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.adm-levels-block-link {
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+}
+
 @media (max-width: 960px) {
   .admin-nav-toggle { display: flex; }
   .admin-nav-backdrop {

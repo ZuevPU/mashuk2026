@@ -104,10 +104,13 @@ export function pointsActionForQuestion(question: {
     || question.questionKind === 'state_check'
     || (question.block || '').toLowerCase().includes('проверк');
   if (isStateCheck) {
-    const tp = `${question.timePoint || ''} ${question.title || ''}`.toLowerCase();
-    if (tp.includes('утро')) return 'state_check_morning';
-    if (tp.includes('вечер')) return 'state_check_evening';
-    if (tp.includes('день') || tp.includes('дневн')) return 'state_check_day';
+    const slot = (question.timePoint || '').trim().toLowerCase();
+    if (slot === 'утро' || slot === 'morning' || slot.startsWith('утр')) return 'state_check_morning';
+    if (slot === 'вечер' || slot === 'evening' || slot.startsWith('веч')) return 'state_check_evening';
+    if (slot === 'день' || slot === 'day' || slot.includes('дневн')) return 'state_check_day';
+    const title = (question.title || '').toLowerCase();
+    if (title.includes('утр')) return 'state_check_morning';
+    if (title.includes('веч')) return 'state_check_evening';
     return 'state_check_day';
   }
   return 'question_answer';
