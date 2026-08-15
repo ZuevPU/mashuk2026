@@ -32,6 +32,10 @@ import {
 } from '../services/shiftService.js';
 
 async function getForumOnboardingConfig(shiftId?: number | null) {
+  if (shiftId != null && Number.isInteger(shiftId) && shiftId > 0) {
+    const { syncInterestCatalogToOnboarding } = await import('../services/interestCatalog.js');
+    await syncInterestCatalogToOnboarding(shiftId);
+  }
   const settings = await getForumSettings(shiftId);
   return normalizeOnboardingConfig(settings?.roleDiagnosticsConfig);
 }
@@ -500,7 +504,11 @@ export const register = async (req: VkAuthRequest, res: Response): Promise<void>
 
 export const listOnboardingMeta = async (req: VkAuthRequest, res: Response): Promise<void> => {
   try {
-    const shiftId = await resolvePublishedShiftId(req, null);
+    const requested = req.query.shiftId != null ? Number(req.query.shiftId) : null;
+    const shiftId = await resolvePublishedShiftId(
+      req,
+      requested != null && Number.isInteger(requested) && requested > 0 ? requested : null,
+    );
     const published = await listPublishedShiftsForParticipants();
     const publishedShifts = published.map(publicShiftCard);
     if (!shiftId) {
@@ -513,6 +521,7 @@ export const listOnboardingMeta = async (req: VkAuthRequest, res: Response): Pro
       return;
     }
     const roles = await db.select().from(pedagogicalRoles);
+    const onboardingConfig = await getForumOnboardingConfig(shiftId);
     const settings = await getForumSettings(shiftId);
     const groups = await db.select().from(participantGroups)
       .where(eq(participantGroups.shiftId, shiftId))
@@ -529,7 +538,6 @@ export const listOnboardingMeta = async (req: VkAuthRequest, res: Response): Pro
         seatsLeft: g.capacity != null ? Math.max(0, g.capacity - members) : null,
       };
     }));
-    const onboardingConfig = normalizeOnboardingConfig(settings?.roleDiagnosticsConfig);
     res.json({
       roles: roles.length ? roles : undefined,
       goalQuestions: onboardingConfig.goalQuestions,

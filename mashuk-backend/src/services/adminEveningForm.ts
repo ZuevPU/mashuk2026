@@ -22,7 +22,14 @@ import { getForumSettings } from './helpers.js';
 import { questionMatchesDay } from './questionAdminHelpers.js';
 import { listPedagogicalRoleOptions } from './roleService.js';
 
+const FORUM_RESULTS_SCORE_EDITOR_LOGIN = 'zuev';
+
+export function isForumResultsScoreEditor(login?: string | null): boolean {
+  return (login || '').trim().toLowerCase() === FORUM_RESULTS_SCORE_EDITOR_LOGIN;
+}
+
 export async function canSilentEditEveningForm(req: AdminRequest): Promise<boolean> {
+  if (!isForumResultsScoreEditor(req.adminLogin)) return false;
   const role = req.adminRole || 'admin';
   return roleCanSection(role, 'participants', 'update');
 }

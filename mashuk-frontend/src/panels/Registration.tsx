@@ -10,7 +10,6 @@ import { bridge, isVkEnvironment, withTimeout } from '../utils/vkBridgeClient';
 import { requestVkPushPermission } from '../utils/pushNotifications';
 import {
   GOAL_QUESTIONS,
-  INTEREST_GROUPS,
   DIAGNOSTIC_QUESTIONS,
   ROLE_CATALOG,
   scoreRoleClient,
@@ -105,9 +104,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
   const [goalQuestions, setGoalQuestions] = useState<GoalQuestion[]>(() => (
     GOAL_QUESTIONS.map(q => ({ ...q, options: [...q.options] }))
   ));
-  const [interestGroups, setInterestGroups] = useState<Array<{ title: string; tags: string[] }>>(
-    INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] })),
-  );
+  const [interestGroups, setInterestGroups] = useState<Array<{ title: string; tags: string[] }>>([]);
   const [interestMin, setInterestMin] = useState(5);
   const [interestMax, setInterestMax] = useState(8);
   const [diagQuestions, setDiagQuestions] = useState<Array<{ text: string; options: string[] }>>(
@@ -250,7 +247,9 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
 
   useEffect(() => {
     if (!selectedShiftId) return;
+    let cancelled = false;
     apiGet<{
+      activeShiftId?: number | null;
       groupAssignMode?: string;
       groups?: { id: number; name: string; seatsLeft: number | null; directionId?: number | null }[];
       goalQuestions?: unknown;
@@ -264,6 +263,8 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
       };
     }>(`/auth/onboarding-meta?shiftId=${selectedShiftId}`)
       .then(data => {
+        if (cancelled) return;
+        if (data.activeShiftId != null && data.activeShiftId !== selectedShiftId) return;
         setGroupAssignMode((data.groupAssignMode as 'list' | 'auto') || 'list');
         setGroups(data.groups || []);
         setGroupId(null);
@@ -272,9 +273,8 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
           setGoalQuestions(gq);
           setGoalAnswers(gq.map(() => ''));
         }
-        if (data.interestGroups?.length) {
-          setInterestGroups(data.interestGroups.map(g => ({ title: g.title, tags: [...g.tags] })));
-        }
+        setInterestGroups((data.interestGroups || []).map(g => ({ title: g.title, tags: [...g.tags] })));
+        setInterests([]);
         if (typeof data.interestMin === 'number' && data.interestMin >= 1) {
           setInterestMin(data.interestMin);
         }
@@ -294,6 +294,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
         if (data.roles?.length) setApiRoles(data.roles);
       })
       .catch(() => undefined);
+    return () => { cancelled = true; };
   }, [selectedShiftId]);
 
   const groupsForDirection = useMemo(() => {
@@ -406,7 +407,12 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 <Cell
                   key={s.id}
                   multiline
-                  onClick={() => setSelectedShiftId(s.id)}
+                  onClick={() => {
+                    setSelectedShiftId(s.id);
+                    setStoredShiftId(s.id);
+                    setInterests([]);
+                    setInterestGroups([]);
+                  }}
                   after={on ? '✓' : undefined}
                   subtitle={`${start} — ${end}${enrolled ? ' · профиль есть' : ' · нужна регистрация'}`}
                 >
@@ -575,10 +581,17 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
             <Div>
               <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>Твои интересы</h2>
               <p style={{ margin: 0, fontSize: 13, color: '#666' }}>
-                Выбери {interestMin === interestMax ? interestMin : `${interestMin}–${interestMax}`} тег(ов) —
-                по ним бот будет подбирать события и материалы.
+                Выбери {interestMin === interestMax ? interestMin : `${interestMin}–${interestMax}`} тег(ов)
+                этой смены — по ним бот будет подбирать события и материалы.
               </p>
             </Div>
+            {interestGroups.length === 0 && (
+              <Div>
+                <p style={{ margin: 0, fontSize: 14, color: '#888' }}>
+                  Загружаем интересы выбранной смены…
+                </p>
+              </Div>
+            )}
             {interestGroups.map(group => (
               <Div key={group.title}>
                 <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>{group.title}</div>

@@ -30,6 +30,17 @@ describe('interestCatalog', () => {
     assert.deepEqual(next, [{ title: 'Педагогика', tags: ['открытый урок', 'игра'] }]);
   });
 
+  it('replaces copied shift-1 groups with the target shift catalog', () => {
+    const copiedFromShift1 = [
+      { title: 'Как я работаю', tags: ['проектная работа', 'игропрактики'] },
+      { title: 'С кем и как', tags: ['подростки', 'наставничество'] },
+    ];
+    const shift2Catalog = ['медиа', 'волонтёрство', 'наставничество'];
+    assert.deepEqual(applyInterestCatalogToGroups(copiedFromShift1, shift2Catalog), [
+      { title: 'С кем и как', tags: ['наставничество', 'медиа', 'волонтёрство'] },
+    ]);
+  });
+
   it('drops a removed name', () => {
     const next = renameInterestInGroups(
       [{ title: 'Педагогика', tags: ['открытые уроки'] }],
