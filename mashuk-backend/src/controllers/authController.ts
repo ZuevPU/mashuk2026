@@ -190,7 +190,8 @@ export const getMe = async (req: VkAuthRequest, res: Response): Promise<void> =>
     if (!user.avatarUrl) {
       scheduleParticipantAvatarSync(user.id);
     }
-    user = await healParticipantPlaceholderName(user) ?? user;
+    const healed = await healParticipantPlaceholderName(user);
+    if (healed) user = healed;
 
     const shift = await getShiftById(user.shiftId);
     const onboardingConfig = await getForumOnboardingConfig(user.shiftId);

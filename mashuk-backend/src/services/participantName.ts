@@ -124,7 +124,9 @@ export async function repairPlaceholderNames<T extends NamedRow>(rows: T[]): Pro
   });
 }
 
-export async function healParticipantPlaceholderName(row: NamedRow | null | undefined) {
+export async function healParticipantPlaceholderName<T extends NamedRow>(
+  row: T | null | undefined,
+): Promise<T | null> {
   if (!row || row.vkId <= 1 || !isPlaceholderDisplayName(row.firstName, row.lastName)) {
     return row ?? null;
   }
