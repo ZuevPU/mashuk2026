@@ -10,6 +10,7 @@ import { resolveBroadcastParticipantIds } from './pushAudienceResolve.js';
 import { questionAudienceAllowsParticipant } from './questionEligibility.js';
 import { sendPushNotification } from './pushService.js';
 import { getMoscowParts } from './timePhase.js';
+import { allowAutoContentPush } from './broadcastPushPolicy.js';
 
 type Q = typeof questions.$inferSelect;
 
@@ -116,6 +117,7 @@ export async function autoNotifyTouchpointIfLive(
   q: Q,
   now = new Date(),
 ): Promise<{ sentTo: number; skipped?: string }> {
+  if (!allowAutoContentPush()) return { sentTo: 0, skipped: 'manual_only' };
   if (!isAutoNotifyTouchpointQuestion(q)) return { sentTo: 0, skipped: 'not_touchpoint' };
   if (!isQuestionLiveNow(q, now)) return { sentTo: 0, skipped: 'not_live' };
 
@@ -139,6 +141,7 @@ export async function notifyQuestionOnPublish(
   q: Q,
   opts?: { wasPublished?: boolean; now?: Date },
 ): Promise<void> {
+  if (!allowAutoContentPush()) return;
   const now = opts?.now ?? new Date();
   const custom = (q.pushTemplate || '').trim();
   if (q.pushOnPublish && !opts?.wasPublished && custom) {

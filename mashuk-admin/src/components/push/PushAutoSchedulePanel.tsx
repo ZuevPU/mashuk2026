@@ -84,11 +84,18 @@ export function PushAutoSchedulePanel({ adminFetch, act }: Pick<AdminTabProps, '
 
   return (
     <div className="adm-push-auto">
-      <div className="card adm-forum-block">
-        <h3>Расписание автоматических сообщений</h3>
+      <div className="card adm-forum-block" style={{ borderColor: 'var(--adm-danger, #c0392b)' }}>
+        <h3>Авторассылка выключена</h3>
+        <p className="adm-muted" style={{ fontSize: 13, marginBottom: 0 }}>
+          Слоты 08:00–23:00, догонялки, пуш при публикации вопроса или задания и напоминания о программе
+          больше не уходят сами. Рассылка только руками: «Уведомления → По дням», «Создать уведомление»
+          или «Отправить в указанное время». Ниже — архив старых текстов, они не отправляются.
+        </p>
+      </div>
+      <div className="card adm-forum-block" style={{ marginTop: 16 }}>
+        <h3>Старые тексты слотов (не отправляются)</h3>
         <p className="adm-muted" style={{ fontSize: 13, marginBottom: 12 }}>
-          Бот отправляет эти сообщения всем участникам по московскому времени. Тексты можно изменить ниже.
-          Участник не получит push, если отключил этот тип в профиле приложения.
+          Раньше бот слал эти сообщения по московскому времени. Сейчас расписание не работает.
         </p>
         <table className="adm-table">
           <thead>

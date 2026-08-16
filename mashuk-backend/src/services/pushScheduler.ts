@@ -13,6 +13,7 @@ import {
 } from './pushAudienceResolve.js';
 import { listLiveShifts } from './shiftService.js';
 import { getForumSettings } from './helpers.js';
+import { allowAutoContentPush } from './broadcastPushPolicy.js';
 
 /** Слоты авто-push по ТЗ (минуты от полуночи МСК) */
 export const PUSH_SLOTS: { minutes: number; key: string; text: string; retryText: string }[] = [
@@ -121,11 +122,13 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
   }
   void adminScheduled;
 
-  try {
-    const { runProgramEventBeforeTriggers } = await import('./pushTriggerRunner.js');
-    await runProgramEventBeforeTriggers(now);
-  } catch {
-    // migration pending
+  if (allowAutoContentPush()) {
+    try {
+      const { runProgramEventBeforeTriggers } = await import('./pushTriggerRunner.js');
+      await runProgramEventBeforeTriggers(now);
+    } catch {
+      // migration pending
+    }
   }
 
   try {
@@ -135,8 +138,8 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
     // table may not exist pre-migration
   }
 
-  const slot = matchPushSlot(totalMinutes);
-  const liveShifts = await listLiveShifts();
+  const slot = allowAutoContentPush() ? matchPushSlot(totalMinutes) : null;
+  const liveShifts = allowAutoContentPush() ? await listLiveShifts() : [];
   let eventCount = 0;
 
   for (const shift of liveShifts) {
@@ -241,7 +244,7 @@ let lastMinuteKey = '';
 
 export function startPushScheduler(): void {
   if (timer) return;
-  console.log('Push scheduler started (1 min tick, MSK slots)');
+  console.log('Push scheduler started (1 min tick; auto content push off, queue + scheduled only)');
   timer = setInterval(() => {
     void (async () => {
       try {

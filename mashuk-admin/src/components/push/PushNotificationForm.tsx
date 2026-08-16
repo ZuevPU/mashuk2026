@@ -230,47 +230,13 @@ export function PushNotificationForm(props: Props) {
         </select>
         {draft.sendMode === 'scheduled' && (
           <p className="adm-muted" style={{ fontSize: 11, marginTop: 4 }}>
-            Укажите «Когда отправить» выше — сообщение попадёт в очередь и уйдёт автоматически.
+            Укажите «Когда отправить» выше — сообщение попадёт в очередь и уйдёт в это время. Это ваша отложенная отправка, не автослот.
           </p>
         )}
         {draft.sendMode === 'trigger' && (
-          <div style={{ marginTop: 8 }}>
-            <select
-              className="adm-input"
-              value={String(draft.triggerConfig.kind ?? 'task_publish')}
-              onChange={e => onChange({ triggerConfig: { kind: e.target.value } })}
-            >
-              <option value="task_publish">Когда опубликуют задание</option>
-              <option value="program_event_before">За N минут до события программы</option>
-            </select>
-            {draft.triggerConfig.kind === 'task_publish' && (
-              <p className="adm-muted" style={{ fontSize: 11, marginTop: 4 }}>
-                Срабатывает при публикации любого задания с включённым push. Обычно проще включить «Push при публикации» в карточке задания.
-              </p>
-            )}
-            {draft.triggerConfig.kind === 'program_event_before' && (
-              <div className="adm-forum-grid-2" style={{ marginTop: 8 }}>
-                <input
-                  className="adm-input"
-                  type="number"
-                  placeholder="ID события в программе"
-                  value={String(draft.triggerConfig.eventId ?? '')}
-                  onChange={e => onChange({
-                    triggerConfig: { ...draft.triggerConfig, eventId: Number(e.target.value) },
-                  })}
-                />
-                <input
-                  className="adm-input"
-                  type="number"
-                  placeholder="Минут до начала"
-                  value={String(draft.triggerConfig.minutesBefore ?? 15)}
-                  onChange={e => onChange({
-                    triggerConfig: { ...draft.triggerConfig, minutesBefore: Number(e.target.value) },
-                  })}
-                />
-              </div>
-            )}
-          </div>
+          <p className="adm-muted" style={{ fontSize: 11, marginTop: 4 }}>
+            Отправка «по событию» выключена. Выберите «сразу» или «в указанное время».
+          </p>
         )}
       </label>
 

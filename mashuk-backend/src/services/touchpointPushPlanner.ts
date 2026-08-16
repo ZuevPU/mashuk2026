@@ -16,6 +16,7 @@ import { pushCopy } from './pushCopy.js';
 import { sendPushNotification } from './pushService.js';
 import { TOUCHPOINT_SLOTS } from './touchpointTemplates.js';
 import { listLiveShifts } from './shiftService.js';
+import { allowAutoContentPush } from './broadcastPushPolicy.js';
 
 const RETRY_MS = 30 * 60 * 1000;
 const OPEN_CATCHUP_MS = 2 * 60 * 60 * 1000; // до 2 ч после publishTime — догоняем пропуск тика
@@ -129,6 +130,7 @@ async function runTouchpointPushPlannerForShift(
 }
 
 export async function runTouchpointPushPlanner(now = new Date()): Promise<string[]> {
+  if (!allowAutoContentPush()) return [];
   const dayStart = startOfMoscowDay(now);
   const live = await listLiveShifts();
   const fired: string[] = [];

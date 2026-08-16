@@ -37,7 +37,7 @@ export function PushTemplatesPanel({ adminFetch, act, templates, onReload }: Pro
       <p className="adm-muted" style={{ fontSize: 13, marginBottom: 12 }}>
         Заготовки текстов для кнопки «Создать уведомление». При отправке подставятся данные участника:
         {' '}<strong>{'{ФИО}'}</strong>, <strong>{'{День}'}</strong>, <strong>{'{Роль}'}</strong>, <strong>{'{Событие}'}</strong>.
-        Тексты автоматических слотов (08:00, 13:00…) редактируются во вкладке «Автоматические».
+        Автоматические слоты выключены — отсюда уходят только тексты, которые вы отправите сами.
       </p>
 
       <div className="adm-forum-grid-2">

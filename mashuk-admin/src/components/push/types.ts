@@ -25,7 +25,6 @@ export const PUSH_AUDIENCE_OPTIONS = [
 export const PUSH_SEND_MODE_OPTIONS = [
   { key: 'now', label: 'Отправить сразу' },
   { key: 'scheduled', label: 'Отправить в указанное время' },
-  { key: 'trigger', label: 'По событию (для опытных)' },
 ] as const;
 
 export type PushNotificationRow = {

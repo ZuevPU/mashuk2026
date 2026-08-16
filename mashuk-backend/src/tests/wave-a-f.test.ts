@@ -1,11 +1,18 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { matchPushSlot, matchRetrySlot, PUSH_SLOTS } from '../services/pushScheduler.js';
+import { allowAutoContentPush } from '../services/broadcastPushPolicy.js';
 import { pushCategoryOf } from '../services/pushService.js';
 import { roleCan } from '../utils/adminToken.js';
 import { generateQrToken } from '../services/qrService.js';
 import { isGigachatConfigured, tokenVector, cosineSimilarity } from '../services/gigachatService.js';
 import { parseEventAttendanceRef } from '../services/eventAttendanceService.js';
+
+describe('broadcastPushPolicy', () => {
+  it('keeps content broadcasts manual-only', () => {
+    assert.equal(allowAutoContentPush(), false);
+  });
+});
 
 describe('pushScheduler slots', () => {
   it('matches 08:00 and retry +30', () => {

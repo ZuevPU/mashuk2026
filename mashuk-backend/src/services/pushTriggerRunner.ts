@@ -6,6 +6,7 @@ import {
 import { executeAdminPushCampaign } from './pushService.js';
 import { resolveEventInterval } from './eventSchedule.js';
 import { getForumSettings } from './helpers.js';
+import { allowAutoContentPush } from './broadcastPushPolicy.js';
 
 type TriggerConfig = {
   kind?: string;
@@ -29,6 +30,7 @@ export function taskPublishFireKey(cfg: { taskId?: number | null }, taskId: numb
 }
 
 export async function runProgramEventBeforeTriggers(now = new Date()): Promise<number> {
+  if (!allowAutoContentPush()) return 0;
   const rows = await db.select().from(adminPushNotifications)
     .where(and(
       eq(adminPushNotifications.status, 'queued'),
@@ -67,6 +69,7 @@ export async function runProgramEventBeforeTriggers(now = new Date()): Promise<n
 }
 
 export async function fireTaskPublishTrigger(taskId: number, now = new Date()): Promise<void> {
+  if (!allowAutoContentPush()) return;
   const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
   const rows = await db.select().from(adminPushNotifications)
     .where(and(

@@ -12,6 +12,7 @@ import {
 } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import { notifyAllParticipants, sendPushNotification } from '../services/pushService.js';
+import { allowAutoContentPush } from '../services/broadcastPushPolicy.js';
 import { recalculateDailyStats } from '../services/analyticsService.js';
 import { clearCache } from '../services/cache.js';
 import { normalizeOnboardingConfig } from '../services/roleService.js';
@@ -2147,7 +2148,7 @@ export const crudTasks = {
     const isPublished = updated?.status === 'published';
     const publishJustHappened = isPublished && (!wasPublished || (updated.publishTime && before.publishTime && updated.publishTime > before.publishTime));
     const taskLiveNow = !updated?.publishTime || updated.publishTime <= now;
-    if (updated?.pushOnPublish && isPublished && publishJustHappened && taskLiveNow) {
+    if (allowAutoContentPush() && updated?.pushOnPublish && isPublished && publishJustHappened && taskLiveNow) {
       const { pushCopy } = await import('../services/pushCopy.js');
       await notifyAllParticipants(
         pushCopy.taskPublished(updated.title),
@@ -2219,7 +2220,7 @@ export const crudTasks = {
         const before = beforeById.get(updated.id);
         if (before?.status === 'published') continue;
         if (updated.publishTime && updated.publishTime > now) continue;
-        if (updated.pushOnPublish) {
+        if (allowAutoContentPush() && updated.pushOnPublish) {
           await notifyAllParticipants(
             pushCopy.taskPublished(updated.title),
             `task_publish_${updated.id}`,

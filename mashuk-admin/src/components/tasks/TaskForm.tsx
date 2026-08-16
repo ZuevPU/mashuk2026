@@ -317,10 +317,9 @@ export function TaskForm({
           <input type="checkbox" checked={draft.medalTask} onChange={e => onChange({ medalTask: e.target.checked })} />
           Особое (награда медалью)
         </label>
-        <label className="adm-forum-check">
-          <input type="checkbox" checked={draft.pushOnPublish} onChange={e => onChange({ pushOnPublish: e.target.checked })} />
-          Push при публикации
-        </label>
+        <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 8px' }}>
+          Публикация задания не шлёт рассылку. Оповещение — только из «Уведомления → По дням».
+        </p>
         <label className="adm-forum-check">
           <input type="checkbox" checked={draft.allowRetry} onChange={e => onChange({ allowRetry: e.target.checked })} />
           Повтор при отклонении
