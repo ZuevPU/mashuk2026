@@ -55,14 +55,13 @@ export function hideOrganizerName(
   return !organizersSlice && isOrganizerDirection(...names);
 }
 
-/** Направления, которые участник может выбрать сам (не скрытые и не организаторские). */
+/** Направления смены, которые участник видит в регистрации и в профиле. Галочка «организатор» на выбор не влияет. */
 export function isSelfServeDirection(d: {
   isHidden?: boolean | null;
   isOrganizer?: boolean | null;
   name?: string | null;
 }): boolean {
-  if (d.isHidden === true) return false;
-  return d.isOrganizer !== true && !isOrganizerDirection(d.name);
+  return d.isHidden !== true;
 }
 
 export function collectOrganizerDirectionIds(

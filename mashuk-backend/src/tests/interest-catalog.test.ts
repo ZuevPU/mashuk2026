@@ -41,6 +41,16 @@ describe('interestCatalog', () => {
     ]);
   });
 
+  it('does not invent groups when the target catalog is empty', () => {
+    assert.deepEqual(
+      applyInterestCatalogToGroups(
+        [{ title: 'Как я работаю', tags: ['проектная работа'] }],
+        [],
+      ),
+      [],
+    );
+  });
+
   it('drops a removed name', () => {
     const next = renameInterestInGroups(
       [{ title: 'Педагогика', tags: ['открытые уроки'] }],

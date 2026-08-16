@@ -24,7 +24,7 @@ export function markOnboardingCopiedForReview(raw: unknown): Record<string, unkn
   const base = raw && typeof raw === 'object' && !Array.isArray(raw)
     ? { ...(raw as Record<string, unknown>) }
     : {};
-  return { ...base, needsReview: true };
+  return { ...base, needsReview: true, interestGroups: [] };
 }
 import {
   generateUniqueShiftCode,

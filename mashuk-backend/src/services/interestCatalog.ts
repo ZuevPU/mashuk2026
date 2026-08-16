@@ -6,7 +6,6 @@ import { db } from '../db/index.js';
 import { thematicTags } from '../db/schema.js';
 import { normalizeOnboardingConfig } from './roleService.js';
 import { clearShiftCaches, getShiftById, updateShift } from './shiftService.js';
-import { ensureThematicTagRegistry } from './thematicTagRegistry.js';
 
 export type InterestGroup = { title: string; tags: string[] };
 
@@ -17,6 +16,7 @@ export function applyInterestCatalogToGroups(
   catalog: string[],
 ): InterestGroup[] {
   const catalogList = [...new Set(catalog.map(t => String(t || '').trim()).filter(Boolean))];
+  if (!catalogList.length) return [];
   const catalogSet = new Set(catalogList);
   const kept: InterestGroup[] = [];
   for (const g of groups) {
@@ -78,19 +78,12 @@ export async function renameInterestInOnboarding(
   clearShiftCaches();
 }
 
-/** Подтянуть интересы из реестра смены в шаг регистрации. Пустой реестр заполняется из текущих групп. */
+/** Каталог смены — источник правды. Пустой каталог не заполняем из онбординга другой смены. */
 export async function syncInterestCatalogToOnboarding(shiftId: number): Promise<string[]> {
-  let catalog = await listShiftInterestNames(shiftId);
+  const catalog = await listShiftInterestNames(shiftId);
   const shift = await getShiftById(shiftId);
   if (!shift) return catalog;
   const cfg = normalizeOnboardingConfig(shift.roleDiagnosticsConfig);
-  if (!catalog.length) {
-    const fromConfig = [...new Set(cfg.interestGroups.flatMap(g => g.tags).filter(Boolean))];
-    if (fromConfig.length) {
-      await ensureThematicTagRegistry(fromConfig, shiftId);
-      catalog = await listShiftInterestNames(shiftId);
-    }
-  }
   const nextGroups = applyInterestCatalogToGroups(cfg.interestGroups, catalog);
   if (JSON.stringify(nextGroups) !== JSON.stringify(cfg.interestGroups)) {
     await updateShift(shiftId, {

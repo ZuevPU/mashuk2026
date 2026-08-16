@@ -8,7 +8,6 @@ import {
   DEFAULT_DIAG_QUESTIONS,
   coerceGoalQuestions,
   DEFAULT_GOAL_QUESTIONS,
-  DEFAULT_INTEREST_GROUPS,
 } from './constants';
 import { AdviceCatalogSection } from './AdviceCatalogSection';
 import { GoalsStepEditor } from './GoalsStepEditor';
@@ -40,9 +39,7 @@ export function OnboardingTab({ adminFetch, act, reloadKey, setTab }: AdminTabPr
   const [goalQuestions, setGoalQuestions] = useState<GoalQuestion[]>(() => (
     DEFAULT_GOAL_QUESTIONS.map(q => ({ ...q, options: [...q.options] }))
   ));
-  const [interestGroups, setInterestGroups] = useState(
-    () => DEFAULT_INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] })),
-  );
+  const [interestGroups, setInterestGroups] = useState<Array<{ title: string; tags: string[] }>>([]);
   const [interestMin, setInterestMin] = useState(1);
   const [interestMax, setInterestMax] = useState(8);
   const [diagQuestions, setDiagQuestions] = useState(() => cloneDiagQuestions(DEFAULT_DIAG_QUESTIONS));
@@ -123,12 +120,12 @@ export function OnboardingTab({ adminFetch, act, reloadKey, setTab }: AdminTabPr
         }
         return row.slice(0, q.options.length);
       });
-      const ig = Array.isArray(cfg.interestGroups) && cfg.interestGroups.length > 0
+      const ig = Array.isArray(cfg.interestGroups)
         ? cfg.interestGroups.map((g: { title: string; tags: string[] }) => ({
           title: g.title,
           tags: [...g.tags],
         }))
-        : DEFAULT_INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] }));
+        : [];
       let imin = Number(cfg.interestMin);
       let imax = Number(cfg.interestMax);
       if (!Number.isFinite(imin)) imin = 1;

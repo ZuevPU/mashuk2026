@@ -12,7 +12,6 @@ import {
   questions,
   shifts,
   tasks,
-  thematicTags,
 } from '../db/schema.js';
 function remapId(id: number | null | undefined, map: Map<number, number>): number | null {
   if (id == null || !Number.isFinite(id) || id <= 0) return null;
@@ -109,16 +108,6 @@ export async function ensureShiftCatalogs<T extends DbLike>(
     shiftId: targetId,
     name: row.name,
   }));
-  await cloneByName(tx, thematicTags, sourceId, targetId, row => ({
-    shiftId: targetId,
-    name: row.name,
-    slug: row.slug,
-    description: row.description,
-    color: row.color,
-    isActive: row.isActive,
-    sortOrder: row.sortOrder,
-    applicationTypes: row.applicationTypes,
-  }));
   await cloneByKey(tx, programBlockTypes, sourceId, targetId, row => ({
     shiftId: targetId,
     key: row.key,
@@ -131,7 +120,7 @@ export async function ensureShiftCatalogs<T extends DbLike>(
 
 async function cloneByName(
   tx: DbLike,
-  table: typeof directions | typeof programPlaces | typeof thematicTags,
+  table: typeof directions | typeof programPlaces,
   sourceId: number,
   targetId: number,
   toInsert: (row: { id: number; name: string } & Record<string, unknown>) => Record<string, unknown>,

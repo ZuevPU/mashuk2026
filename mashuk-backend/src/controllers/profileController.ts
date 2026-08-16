@@ -386,9 +386,8 @@ export const updateParticipantName = async (req: ParticipantRequest, res: Respon
       }
       if (me.directionId !== directionId) {
         const { getDirectionInShift } = await import('../services/shiftCatalogs.js');
-        const { isSelfServeDirection } = await import('../services/leaderboardQuery.js');
         const dir = await getDirectionInShift(directionId, me.shiftId);
-        if (!dir || !isSelfServeDirection(dir)) {
+        if (!dir || dir.isHidden === true) {
           res.status(400).json({ error: 'Это направление нельзя выбрать' });
           return;
         }

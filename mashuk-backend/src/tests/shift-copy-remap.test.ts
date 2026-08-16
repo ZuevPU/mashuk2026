@@ -83,6 +83,13 @@ describe('shift copy id remap', () => {
     });
     assert.equal(marked.needsReview, true);
     assert.equal(marked.interestMax, 8);
+    assert.deepEqual(marked.interestGroups, []);
+    assert.deepEqual(
+      markOnboardingCopiedForReview({
+        interestGroups: [{ title: 'Как я работаю', tags: ['проектная работа'] }],
+      }).interestGroups,
+      [],
+    );
     assert.equal(markOnboardingCopiedForReview(null).needsReview, true);
   });
 });

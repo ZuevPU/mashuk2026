@@ -643,7 +643,9 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
             {interestGroups.length === 0 && (
               <Div>
                 <p style={{ margin: 0, fontSize: 14, color: '#888' }}>
-                  Загружаем интересы выбранной смены…
+                  {interestLimitsReady
+                    ? 'Для этой смены интересы ещё не заданы.'
+                    : 'Загружаем интересы выбранной смены…'}
                 </p>
               </Div>
             )}

@@ -22,7 +22,7 @@ describe('normalizeOnboardingConfig', () => {
     assert.equal(cfg.optionToRole[0].length, 6);
     assert.equal(cfg.interestMin, 1);
     assert.equal(cfg.interestMax, 8);
-    assert.ok(cfg.interestGroups.length > 0);
+    assert.equal(cfg.interestGroups.length, 0);
   });
 
   it('preserves custom goal question text from legacy strings', () => {

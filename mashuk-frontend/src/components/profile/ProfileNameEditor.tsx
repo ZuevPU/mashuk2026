@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { apiGet, apiPatch, ApiError } from '../../api/client';
+import { apiGet, apiPatch, ApiError, getStoredShiftId } from '../../api/client';
 
 function isPlaceholderName(first?: string | null, last?: string | null): boolean {
   const full = `${first || ''} ${last || ''}`.trim().toLowerCase();
@@ -51,7 +51,9 @@ export function ProfileNameEditor({
 
   useEffect(() => {
     if (!open) return;
-    apiGet<{ directions: DirectionOpt[] }>('/directions')
+    const shiftId = getStoredShiftId();
+    const qs = shiftId ? `?shiftId=${shiftId}` : '';
+    apiGet<{ directions: DirectionOpt[] }>(`/directions${qs}`)
       .then(data => {
         const list = data.directions || [];
         if (directionId && direction && !list.some(d => d.id === directionId)) {

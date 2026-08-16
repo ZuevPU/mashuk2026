@@ -516,8 +516,7 @@ export function interestPickCountError(
 }
 
 export function normalizeInterestGroups(raw: unknown): Array<{ title: string; tags: string[] }> {
-  const defaults = INTEREST_GROUPS.map(g => ({ title: g.title, tags: [...g.tags] }));
-  if (!Array.isArray(raw) || raw.length === 0) return defaults;
+  if (!Array.isArray(raw) || raw.length === 0) return [];
   const out: Array<{ title: string; tags: string[] }> = [];
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
@@ -529,7 +528,7 @@ export function normalizeInterestGroups(raw: unknown): Array<{ title: string; ta
       .filter(t => t.length > 0);
     out.push({ title, tags });
   }
-  return out.length > 0 ? out : defaults;
+  return out;
 }
 
 /** Old factory quiz was hardcoded 6 questions × 4 options; replace with NAV 8×6. */

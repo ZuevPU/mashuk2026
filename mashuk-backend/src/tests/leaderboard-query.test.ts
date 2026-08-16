@@ -127,11 +127,11 @@ describe('hideOrganizerName', () => {
 });
 
 describe('isSelfServeDirection', () => {
-  it('hides hidden and organizer catalog rows', () => {
+  it('hides only catalog rows marked hidden', () => {
     assert.equal(isSelfServeDirection({ name: 'Учителя' }), true);
     assert.equal(isSelfServeDirection({ name: 'Учителя', isHidden: true }), false);
-    assert.equal(isSelfServeDirection({ name: 'Кураторы', isOrganizer: true }), false);
-    assert.equal(isSelfServeDirection({ name: 'Организатор форума' }), false);
+    assert.equal(isSelfServeDirection({ name: 'Кураторы', isOrganizer: true }), true);
+    assert.equal(isSelfServeDirection({ name: 'Организатор форума' }), true);
   });
 });
 
