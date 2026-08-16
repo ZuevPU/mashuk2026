@@ -60,9 +60,14 @@ COPY docker-entrypoint.sh ./docker-entrypoint.sh
 COPY healthcheck.cjs ./healthcheck.cjs
 RUN chmod +x docker-entrypoint.sh && mkdir -p /app/uploads
 
+ENV PORT=8080 \
+    NODE_ENV=production \
+    HOST=0.0.0.0
+
 EXPOSE 8080
 
-HEALTHCHECK --interval=10s --timeout=5s --start-period=45s --retries=12 \
+HEALTHCHECK --interval=5s --timeout=5s --start-period=20s --retries=12 \
   CMD ["node", "/app/healthcheck.cjs"]
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
+CMD ["node", "dist/index.js"]

@@ -1,4 +1,4 @@
 #!/bin/sh
 set -e
-echo "Starting server (migrations run after HTTP listen)..."
-exec node dist/index.js
+echo "Starting server (HTTP listen first, then app boot)..."
+exec "$@"

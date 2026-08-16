@@ -1,57 +1,96 @@
+import http from 'node:http';
 import dotenv from 'dotenv';
-import { env } from './config/env.js';
-import { validateEnv } from './config/validateEnv.js';
-import { createApp } from './app.js';
-import { runMigrations } from './db/migrate.js';
-import { ensureAdminPermissionsSeeded } from './services/adminPermissionsService.js';
-import { ensureNavDiagnosticsTemplateApplied } from './services/ensureNavDiagnosticsTemplate.js';
-import { runSeed } from './db/seed.js';
-import { startAnalyticsRefreshScheduler } from './services/analytics/refreshScheduler.js';
-import { startPushScheduler } from './services/pushScheduler.js';
-import { startExportJobRunner } from './services/exports/exportJobRunner.js';
 
 dotenv.config();
 
-const app = createApp();
-const port = env.PORT || 8080;
+const port = Number(process.env.PORT) || 8080;
 const host = '0.0.0.0';
 
-// validateEnv() runs AFTER listen() so the healthcheck port is always open
-// immediately, even if env config is wrong on the platform. A crash from bad
-// config then shows up clearly in runtime logs instead of silently blocking
-// the port and making the deploy healthcheck fail with no visible reason.
-app.listen(port, host, () => {
-  console.log(`Server running on http://${host}:${port}`);
-  console.log(`Health: / and /health (liveness), /health/ready (DB check)`);
-  if (env.PUBLIC_URL) console.log(`PUBLIC_URL: ${env.PUBLIC_URL}`);
+type NodeHandler = (req: http.IncomingMessage, res: http.ServerResponse) => void;
 
-  void (async () => {
-    const envOk = validateEnv();
-    if (!envOk) {
-      console.error('Startup config invalid — server stays up for healthchecks, but DB/auth routes will fail until env vars are fixed and the app is restarted.');
+let appHandler: NodeHandler | null = null;
+
+function sendJson(res: http.ServerResponse, status: number, body: unknown) {
+  const payload = JSON.stringify(body);
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(payload),
+  });
+  res.end(payload);
+}
+
+function isLiveness(urlPath: string): boolean {
+  return urlPath === '/' || urlPath === '/health';
+}
+
+// Bind 8080 before importing Express/DB/PDF. Timeweb fails the deploy if
+// /health is silent during module load on a small CPU quota.
+const server = http.createServer((req, res) => {
+  if (appHandler) {
+    appHandler(req, res);
+    return;
+  }
+  const urlPath = (req.url || '').split('?')[0];
+  if (isLiveness(urlPath)) {
+    if (req.method === 'HEAD') {
+      res.writeHead(200);
+      res.end();
       return;
     }
-
-    try {
-      await runMigrations();
-      await ensureAdminPermissionsSeeded();
-      try {
-        await ensureNavDiagnosticsTemplateApplied();
-      } catch (err) {
-        console.error('Nav diagnostics template upgrade failed (non-fatal):', err);
-      }
-      if (process.env.AUTO_SEED === 'true') {
-        try {
-          await runSeed();
-        } catch (err) {
-          console.error('Seed skipped or failed (non-fatal):', err);
-        }
-      }
-      startAnalyticsRefreshScheduler();
-      startPushScheduler();
-      startExportJobRunner();
-    } catch (err) {
-      console.error('Migrations failed — server stays up for healthchecks, but DB routes will fail until this is fixed and the app is restarted:', err);
-    }
-  })();
+    sendJson(res, 200, { status: 'ok' });
+    return;
+  }
+  sendJson(res, 503, { status: 'starting' });
 });
+
+server.listen(port, host, () => {
+  console.log(`Server running on http://${host}:${port}`);
+  console.log('Health: / and /health (liveness), /health/ready (DB check after boot)');
+  void boot().catch((err) => {
+    console.error('Boot failed after listen — healthcheck stays up:', err);
+  });
+});
+
+async function boot() {
+  const { env } = await import('./config/env.js');
+  const { validateEnv } = await import('./config/validateEnv.js');
+  const { createApp } = await import('./app.js');
+  if (env.PUBLIC_URL) console.log(`PUBLIC_URL: ${env.PUBLIC_URL}`);
+
+  appHandler = createApp() as unknown as NodeHandler;
+
+  const envOk = validateEnv();
+  if (!envOk) {
+    console.error('Startup config invalid — server stays up for healthchecks, but DB/auth routes will fail until env vars are fixed and the app is restarted.');
+    return;
+  }
+
+  try {
+    const { runMigrations } = await import('./db/migrate.js');
+    const { ensureAdminPermissionsSeeded } = await import('./services/adminPermissionsService.js');
+    const { ensureNavDiagnosticsTemplateApplied } = await import('./services/ensureNavDiagnosticsTemplate.js');
+    await runMigrations();
+    await ensureAdminPermissionsSeeded();
+    try {
+      await ensureNavDiagnosticsTemplateApplied();
+    } catch (err) {
+      console.error('Nav diagnostics template upgrade failed (non-fatal):', err);
+    }
+    if (process.env.AUTO_SEED === 'true') {
+      try {
+        const { runSeed } = await import('./db/seed.js');
+        await runSeed();
+      } catch (err) {
+        console.error('Seed skipped or failed (non-fatal):', err);
+      }
+    }
+    const { startAnalyticsRefreshScheduler } = await import('./services/analytics/refreshScheduler.js');
+    const { startPushScheduler } = await import('./services/pushScheduler.js');
+    const { startExportJobRunner } = await import('./services/exports/exportJobRunner.js');
+    startAnalyticsRefreshScheduler();
+    startPushScheduler();
+    startExportJobRunner();
+  } catch (err) {
+    console.error('Migrations failed — server stays up for healthchecks, but DB routes will fail until this is fixed and the app is restarted:', err);
+  }
+}
