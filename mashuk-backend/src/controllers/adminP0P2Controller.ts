@@ -75,23 +75,22 @@ export const crudGroups = {
   list: async (req: AdminRequest, res: Response) => {
     const { resolveAdminShiftId } = await import('../services/shiftService.js');
     const shiftId = await resolveAdminShiftId(req);
-    const groups = await db.select().from(participantGroups)
-      .where(eq(participantGroups.shiftId, shiftId))
-      .orderBy(asc(participantGroups.id));
-    const withCounts = await Promise.all(groups.map(async (g) => {
-      const [c] = await db.select({ c: count() }).from(participants).where(and(
-        eq(participants.groupId, g.id),
-        eq(participants.shiftId, shiftId),
-      ));
-      return { ...g, membersCount: Number(c?.c ?? 0) };
-    }));
+    const { listShiftGroupsWithSeats } = await import('../services/groupDirectionSync.js');
+    const withCounts = await listShiftGroupsWithSeats(shiftId);
     res.json({ groups: withCounts });
   },
   create: async (req: AdminRequest, res: Response) => {
     const { name, directionId, capacity } = req.body;
     if (!name?.trim()) { res.status(400).json({ error: 'name required' }); return; }
     const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const { findDuplicateGroupOnShift, normalizeGroupName } = await import('../services/groupDirectionSync.js');
     const shiftId = await resolveAdminShiftId(req);
+    const groupName = normalizeGroupName(name);
+    const dup = await findDuplicateGroupOnShift(shiftId, groupName);
+    if (dup) {
+      res.status(400).json({ error: `Группа «${dup.name}» уже есть на этой смене` });
+      return;
+    }
     let nextDirectionId = directionId ? Number(directionId) : null;
     if (nextDirectionId) {
       const { getDirectionInShift } = await import('../services/shiftCatalogs.js');
@@ -100,7 +99,7 @@ export const crudGroups = {
       nextDirectionId = dir.id;
     }
     const [g] = await db.insert(participantGroups).values({
-      name: name.trim(),
+      name: groupName,
       directionId: nextDirectionId,
       capacity: capacity != null ? Number(capacity) : 30,
       shiftId,
@@ -114,7 +113,17 @@ export const crudGroups = {
       return;
     }
     const patch: Partial<typeof participantGroups.$inferInsert> = {};
-    if (req.body.name !== undefined) patch.name = String(req.body.name).trim();
+    if (req.body.name !== undefined) {
+      const { findDuplicateGroupOnShift, normalizeGroupName } = await import('../services/groupDirectionSync.js');
+      const { resolveAdminShiftId } = await import('../services/shiftService.js');
+      const shiftIdForName = await resolveAdminShiftId(req);
+      patch.name = normalizeGroupName(String(req.body.name));
+      const dup = await findDuplicateGroupOnShift(shiftIdForName, patch.name, id);
+      if (dup) {
+        res.status(400).json({ error: `Группа «${dup.name}» уже есть на этой смене` });
+        return;
+      }
+    }
     if (req.body.capacity !== undefined) patch.capacity = Math.max(1, Number(req.body.capacity) || 1);
     if (req.body.directionId !== undefined) {
       const raw = req.body.directionId;

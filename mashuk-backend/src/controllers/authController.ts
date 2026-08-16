@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { and, eq, asc, count } from 'drizzle-orm';
+import { and, eq, asc } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db/index.js';
 import { participants, pedagogicalRoles, participantGroups } from '../db/schema.js';
@@ -86,7 +86,9 @@ async function assignGroup(
   groupId: number | null | undefined,
   directionId: number,
   shiftId: number,
+  exceptParticipantId?: number,
 ): Promise<{ groupId: number | null; groupName: string | null }> {
+  const { countGroupOccupants } = await import('../services/groupDirectionSync.js');
   if (mode === 'list') {
     if (!groupId) return { groupId: null, groupName: null };
     const [g] = await db.select().from(participantGroups).where(and(
@@ -94,11 +96,8 @@ async function assignGroup(
       eq(participantGroups.shiftId, shiftId),
     )).limit(1);
     if (!g) return { groupId: null, groupName: null };
-    const [c] = await db.select({ c: count() }).from(participants).where(and(
-      eq(participants.groupId, g.id),
-      eq(participants.shiftId, shiftId),
-    ));
-    if (g.capacity != null && Number(c?.c ?? 0) >= g.capacity) {
+    const n = await countGroupOccupants(g.id, shiftId, { exceptParticipantId });
+    if (g.capacity != null && n >= g.capacity) {
       throw new Error('Группа заполнена');
     }
     return { groupId: g.id, groupName: g.name };
@@ -111,11 +110,7 @@ async function assignGroup(
   let best: typeof pool[0] | null = null;
   let bestCount = Infinity;
   for (const g of pool) {
-    const [c] = await db.select({ c: count() }).from(participants).where(and(
-      eq(participants.groupId, g.id),
-      eq(participants.shiftId, shiftId),
-    ));
-    const n = Number(c?.c ?? 0);
+    const n = await countGroupOccupants(g.id, shiftId, { exceptParticipantId });
     if (g.capacity != null && n >= g.capacity) continue;
     if (n < bestCount) { best = g; bestCount = n; }
   }
@@ -333,7 +328,7 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
     const mode = settings?.groupAssignMode || 'list';
     let groupAssign: { groupId: number | null; groupName: string | null };
     try {
-      groupAssign = await assignGroup(mode, data.groupId, dir.id, shiftId);
+      groupAssign = await assignGroup(mode, data.groupId, dir.id, shiftId, existing?.id);
     } catch (e) {
       res.status(400).json({ error: e instanceof Error ? e.message : 'Group assign failed' });
       return;

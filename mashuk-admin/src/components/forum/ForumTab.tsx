@@ -529,9 +529,8 @@ export function ForumTab({ adminFetch, act, reloadKey, focusAnchor, focusNonce }
           <h3>Группы при регистрации</h3>
           <p className="adm-kb-panel-sub">
             Рабочие группы только этой смены (переключатель смены в шапке).
-            Участник выбирает любую группу смены или система назначает автоматически.
-            Переименование обновляет название у всех участников группы.
-            Столбец «Направление» задаёт направление членам группы, если оно указано.
+            Места считают живых зарегистрированных этой смены: удалившие профиль и недорегистрация место не занимают.
+            Одинаковые имена вроде 2Г и 2Г на одной смене больше не создаются.
           </p>
         </div>
         <label className="adm-field">
@@ -666,7 +665,7 @@ export function ForumTab({ adminFetch, act, reloadKey, focusAnchor, focusNonce }
               <th>Название</th>
               <th>Мест</th>
               <th>Направление</th>
-              <th>Участников</th>
+              <th>Занято / мест</th>
               <th></th>
             </tr>
           </thead>
@@ -736,7 +735,24 @@ export function ForumTab({ adminFetch, act, reloadKey, focusAnchor, focusNonce }
                     ))}
                   </select>
                 </td>
-                <td>{g.membersCount ?? 0}</td>
+                <td>
+                  {g.membersCount ?? 0} / {g.capacity ?? '∞'}
+                  {g.seatsLeft != null && (
+                    <span className="adm-muted" style={{ display: 'block', fontSize: 11 }}>
+                      свободно {g.seatsLeft}
+                    </span>
+                  )}
+                  {g.ghostCount > 0 && (
+                    <span className="adm-muted" style={{ display: 'block', fontSize: 11 }}>
+                      +{g.ghostCount} скрытых (удалили профиль / не дошли регистрацию)
+                    </span>
+                  )}
+                  {g.duplicateName && (
+                    <span style={{ display: 'block', fontSize: 11, color: '#b45309' }}>
+                      То же имя ещё у другой группы этой смены
+                    </span>
+                  )}
+                </td>
                 <td>
                   <button
                     type="button"

@@ -405,11 +405,9 @@ export const updateParticipantName = async (req: ParticipantRequest, res: Respon
           res.status(400).json({ error: 'Группа не найдена на этой смене' });
           return;
         }
-        const [c] = await db.select({ c: count() }).from(participants).where(and(
-          eq(participants.groupId, group.id),
-          eq(participants.shiftId, me.shiftId),
-        ));
-        if (group.capacity != null && Number(c?.c ?? 0) >= group.capacity) {
+        const { countGroupOccupants } = await import('../services/groupDirectionSync.js');
+        const n = await countGroupOccupants(group.id, me.shiftId, { exceptParticipantId: me.id });
+        if (group.capacity != null && n >= group.capacity) {
           res.status(400).json({ error: 'Группа заполнена' });
           return;
         }

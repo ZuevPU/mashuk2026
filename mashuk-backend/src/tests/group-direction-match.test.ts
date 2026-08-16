@@ -1,6 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupsMatchingDirection } from '../services/groupDirectionSync.js';
+import {
+  groupNameKey,
+  groupSeatsLeft,
+  groupsMatchingDirection,
+  normalizeGroupName,
+} from '../services/groupDirectionSync.js';
 
 describe('groupsMatchingDirection', () => {
   const groups = [
@@ -28,5 +33,28 @@ describe('groupsMatchingDirection', () => {
       groupsMatchingDirection(groups.filter(g => g.directionId != null), 99),
       [],
     );
+  });
+});
+
+describe('group names and seats', () => {
+  it('treats 2Г / 2г / 2 Г / 2G as the same group on a shift', () => {
+    assert.equal(groupNameKey('2Г'), groupNameKey('2г'));
+    assert.equal(groupNameKey('2Г'), groupNameKey('2 Г'));
+    assert.equal(groupNameKey('2Г'), groupNameKey('2G'));
+  });
+
+  it('does not collapse different letters', () => {
+    assert.notEqual(groupNameKey('2А'), groupNameKey('2Б'));
+    assert.notEqual(groupNameKey('2В'), groupNameKey('2Г'));
+  });
+
+  it('trims group names', () => {
+    assert.equal(normalizeGroupName('  2Г  '), '2Г');
+  });
+
+  it('counts only live occupants toward capacity', () => {
+    assert.equal(groupSeatsLeft(40, 30), 10);
+    assert.equal(groupSeatsLeft(30, 30), 0);
+    assert.equal(groupSeatsLeft(null, 30), null);
   });
 });
