@@ -431,7 +431,8 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       {occupiedSelected.length > 0 && (
         <>
           <p className="adm-forum-hint" style={{ color: '#C62828' }}>
-            Данные смены «{shifts.find(s => s.id === copyIntoTargetId)?.name || 'цели'}» по выбранным блокам будут стёрты и заменены данными из «{selected?.name}».
+            Данные смены «{shifts.find(s => s.id === copyIntoTargetId)?.name || 'цели'}» по выбранным блокам будут заменены данными из «{selected?.name}».
+            База знаний цели не удаляется — старые материалы уходят в архив этой же смены.
           </p>
           <label className="adm-forum-check" style={{ display: 'block' }}>
             <input

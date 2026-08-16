@@ -280,6 +280,19 @@ async function ensureAfterBlocksConfigSchema(pool: ReturnType<typeof createPool>
   await pool.query(sql);
 }
 
+async function ensureNoticePlacementSchema(pool: ReturnType<typeof createPool>): Promise<void> {
+  const { rows } = await pool.query<{ ok: number }>(
+    `SELECT 1 AS ok FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'home_notices' AND column_name = 'placement'
+     LIMIT 1`,
+  );
+  if (rows.length > 0) return;
+  const sqlPath = path.join(__dirname, '../../drizzle/0072_notice_placement.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+  console.warn('Repair: applying 0072_notice_placement.sql');
+  await pool.query(sql);
+}
+
 async function ensureInterestsReselectedAtSchema(pool: ReturnType<typeof createPool>): Promise<void> {
   const { rows } = await pool.query<{ ok: number }>(
     `SELECT 1 AS ok FROM information_schema.columns
@@ -331,6 +344,7 @@ export async function runMigrations(): Promise<void> {
     await ensureShiftScopedCatalogsSchema(pool);
     await ensurePushQueueShiftIdSchema(pool);
     await ensureInterestsReselectedAtSchema(pool);
+    await ensureNoticePlacementSchema(pool);
     await pool.end();
   }
 }

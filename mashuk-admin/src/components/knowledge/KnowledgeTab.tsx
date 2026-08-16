@@ -15,6 +15,7 @@ type KbUnlock = {
   participantId: number;
   dayNumber: number;
   unlockedAt?: string;
+  participantName?: string;
 };
 
 type ListSortKey = 'section' | 'day' | 'speaker' | 'title' | 'type' | 'audience' | 'binding' | 'status';
@@ -115,6 +116,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   const [previewDay, setPreviewDay] = useState(1);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [kbForumThreshold, setKbForumThreshold] = useState(4);
+  const [kbUnlockDisabled, setKbUnlockDisabled] = useState(false);
   const [totalDays, setTotalDays] = useState(8);
   const [listSort, setListSort] = useState<ListSort>({ key: 'section', dir: 'asc' });
 
@@ -158,6 +160,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
         adminFetch('/kb-unlocks').catch(() => ({ unlocks: [] })),
       ]);
       setKbForumThreshold(fsRes.settings?.kbUnlockThreshold ?? 4);
+      setKbUnlockDisabled(fsRes.settings?.kbUnlockDisabled === true);
       setTotalDays(fsRes.settings?.totalDays ?? 8);
       setMaterials(matRes.materials || []);
       setMaterialTypes((typesRes.types || []).map((t: { key: string; name: string }) => ({ key: t.key, name: t.name })));
@@ -367,6 +370,26 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
     if (onOpenCard) onOpenCard(id);
   };
 
+  const draftCount = materials.filter(m => (m.status || 'published') === 'draft').length;
+  const archivedCount = materials.filter(m => m.status === 'archived').length;
+  const publishedCount = materials.filter(m => (m.status || 'published') === 'published').length;
+
+  const publishToEveryone = () => {
+    const text = [
+      'Текущая смена в шапке. Другая смена не изменится.',
+      `Сейчас: опубликовано ${publishedCount}, черновиков ${draftCount}, в архиве ${archivedCount}.`,
+      'Черновики этой смены опубликуются. Порог точек отключится. База знаний станет доступна всем живым участникам смены без ограничений.',
+    ].join('\n\n');
+    if (!window.confirm(text)) return;
+    act(async () => {
+      const res = await adminFetch('/kb/open-shift', { method: 'POST', body: JSON.stringify({}) });
+      setKbUnlockDisabled(true);
+      await refreshMaterials();
+      await refreshUnlocks();
+      return res;
+    }, 'База знаний открыта всей смене без ограничений');
+  };
+
   if (loading && materials.length === 0) return <p className="adm-muted">Загрузка базы знаний…</p>;
 
   const materialsTableHead = (
@@ -417,14 +440,22 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
             ? `База знаний · ${materials.length} материалов`
             : `База знаний · ${filtered.length} из ${materials.length} материалов`
         }
-        hint="Материалы сгруппированы по дням смены. После сохранения форма оставляет раздел и спикеров. Типы и ручная разблокировка — внизу страницы."
+        hint="Материалы только этой смены (переключатель в шапке). Смена 1 и смена 2 не делят список. Копирование смены больше не удаляет БЗ — старое уходит в архив."
       >
+        <button type="button" className="adm-kb-btn adm-kb-btn-primary" onClick={publishToEveryone}>
+          Опубликовать всем
+        </button>
         {setTab && (
           <button type="button" className="adm-kb-btn adm-kb-btn-secondary" onClick={() => setTab('events')}>
             Перейти к программе
           </button>
         )}
       </AdminPageHero>
+      <p className="adm-kb-panel-sub" style={{ margin: '0 0 12px' }}>
+        {kbUnlockDisabled
+          ? 'Сейчас: база знаний этой смены открыта всем без порога точек.'
+          : `Сейчас: день закрыт, пока участник не наберёт ≥ ${kbForumThreshold} из 7 точек. Черновиков ${draftCount}, в архиве ${archivedCount}.`}
+      </p>
 
       <div className="card adm-forum-block adm-kb-panel">
         <div className="adm-kb-panel-head">
@@ -749,21 +780,18 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
 
       <MaterialTypesPanel adminFetch={adminFetch} act={act} />
 
-      <div className="card adm-forum-block adm-kb-panel">
+      <div className="card adm-forum-block adm-kb-panel" id="kb-unlock">
         <div className="adm-kb-panel-head">
-          <h3>Разблокировка БЗ</h3>
+          <h3>Открытие базы знаний</h3>
           <p className="adm-kb-panel-sub">
-            Порог форума: ≥ {kbForumThreshold} из 7 точек осмысления за день
+            «Опубликовать всем» в шапке вкладки открывает всю смену без порога.
+            Ниже — точечно: только черновики или один день.
           </p>
         </div>
         <div className="adm-kb-toolbar">
-          <input
-            type="number"
-            className="adm-input"
-            value={kbUnlockForm.participantId}
-            onChange={e => setKbUnlockForm({ ...kbUnlockForm, participantId: e.target.value })}
-            placeholder="ID участника"
-          />
+          <button type="button" className="adm-kb-btn adm-kb-btn-primary" onClick={publishToEveryone}>
+            Опубликовать всем
+          </button>
           <select
             className="adm-input adm-kb-control-sm"
             value={kbUnlockForm.dayNumber}
@@ -774,20 +802,79 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
               <option key={d} value={d}>День {d}</option>
             ))}
           </select>
+          <button
+            type="button"
+            className="adm-kb-btn adm-kb-btn-secondary"
+            onClick={() => {
+              const label = draftCount
+                ? `Опубликовать ${draftCount} черновик(ов) текущей смены? Порог точек не снимается.`
+                : 'Черновиков нет.';
+              if (!draftCount) {
+                window.alert(label);
+                return;
+              }
+              if (!window.confirm(label)) return;
+              act(async () => {
+                const res = await adminFetch('/materials/publish-drafts', { method: 'POST', body: JSON.stringify({}) });
+                await refreshMaterials();
+                return res;
+              }, `Опубликовано черновиков: ${draftCount}`);
+            }}
+          >
+            Только черновики
+          </button>
+          <button
+            type="button"
+            className="adm-kb-btn adm-kb-btn-secondary"
+            onClick={() => {
+              if (!window.confirm(`Открыть базу знаний дня ${kbUnlockForm.dayNumber} всем живым участникам текущей смены?`)) return;
+              act(async () => {
+                const res = await adminFetch('/kb-unlocks/bulk', {
+                  method: 'POST',
+                  body: JSON.stringify({ dayNumber: kbUnlockForm.dayNumber }),
+                });
+                await refreshUnlocks();
+                return res;
+              }, `День ${kbUnlockForm.dayNumber} открыт всей смене`);
+            }}
+          >
+            Открыть всем за день {kbUnlockForm.dayNumber}
+          </button>
+        </div>
+        <p className="adm-kb-panel-sub" style={{ marginTop: 12 }}>Одному участнику</p>
+        <div className="adm-kb-toolbar">
+          <input
+            type="number"
+            className="adm-input"
+            value={kbUnlockForm.participantId}
+            onChange={e => setKbUnlockForm({ ...kbUnlockForm, participantId: e.target.value })}
+            placeholder="ID участника"
+          />
           <button type="button" className="adm-kb-btn adm-kb-btn-secondary" onClick={() => {
             const id = Number(kbUnlockForm.participantId);
-            if (id) openCard(id);
+            if (!id) {
+              window.alert('Сначала укажите ID участника');
+              return;
+            }
+            openCard(id);
           }}>Карточка</button>
-          <button type="button" className="adm-kb-btn adm-kb-btn-primary" onClick={() => act(async () => {
-            await adminFetch('/kb-unlocks', {
-              method: 'POST',
-              body: JSON.stringify({
-                participantId: Number(kbUnlockForm.participantId),
-                dayNumber: kbUnlockForm.dayNumber,
-              }),
-            });
-            await refreshUnlocks();
-          }, 'БЗ разблокирована')}>Разблокировать</button>
+          <button type="button" className="adm-kb-btn adm-kb-btn-primary" onClick={() => {
+            const id = Number(kbUnlockForm.participantId);
+            if (!id) {
+              window.alert('Укажите ID участника. Чтобы открыть БЗ всей смене — «Открыть всем за день».');
+              return;
+            }
+            act(async () => {
+              await adminFetch('/kb-unlocks', {
+                method: 'POST',
+                body: JSON.stringify({
+                  participantId: id,
+                  dayNumber: kbUnlockForm.dayNumber,
+                }),
+              });
+              await refreshUnlocks();
+            }, 'БЗ открыта участнику');
+          }}>Открыть одному</button>
         </div>
         {kbUnlocks.length > 0 && (
           <div className="adm-table-scroll adm-kb-mini-scroll">
@@ -796,12 +883,12 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
               <tbody>
                 {kbUnlocks.slice(0, 30).map(u => (
                   <tr key={u.id}>
-                    <td>{u.participantId}</td>
+                    <td>{u.participantName || u.participantId}</td>
                     <td>{u.dayNumber}</td>
                     <td>{u.unlockedAt ? new Date(u.unlockedAt).toLocaleString('ru-RU') : '—'}</td>
                     <td>
                       <button type="button" className="adm-kb-btn adm-kb-btn-danger" onClick={() => {
-                        if (!confirmDelete('Отозвать разблокировку БЗ?')) return;
+                        if (!confirmDelete('Отозвать открытие БЗ?')) return;
                         act(async () => {
                           await adminFetch(`/kb-unlocks/${u.participantId}/${u.dayNumber}`, { method: 'DELETE' });
                           await refreshUnlocks();

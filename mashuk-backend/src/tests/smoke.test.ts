@@ -274,6 +274,47 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     assert.ok(!listed.body.tasks.some((t: { id: number }) => t.id === id));
   });
 
+  it('admin home-notices can target tasks placement', async () => {
+    const token = await getAdminBearerToken(app);
+    const created = await request(app)
+      .post('/api/admin/home-notices')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: `Tasks notice ${Date.now()}`, body: 'Для заданий', placement: 'tasks', status: 'draft' });
+    assert.equal(created.status, 200);
+    assert.equal(created.body.notice?.placement, 'tasks');
+    const listed = await request(app)
+      .get('/api/admin/home-notices?placement=tasks')
+      .set('Authorization', `Bearer ${token}`);
+    assert.equal(listed.status, 200);
+    assert.ok((listed.body.notices || []).some((n: { id: number }) => n.id === created.body.notice.id));
+    const homeList = await request(app)
+      .get('/api/admin/home-notices?placement=home')
+      .set('Authorization', `Bearer ${token}`);
+    assert.ok(!(homeList.body.notices || []).some((n: { id: number }) => n.id === created.body.notice.id));
+  });
+
+  it('POST /api/admin/kb/open-shift opens current shift KB', async () => {
+    const token = await getAdminBearerToken(app);
+    const res = await request(app)
+      .post('/api/admin/kb/open-shift')
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+    assert.equal(res.status, 200);
+    assert.equal(res.body.kbUnlockDisabled, true);
+    assert.ok(typeof res.body.published === 'number');
+    assert.ok(typeof res.body.shiftId === 'number');
+  });
+
+  it('POST /api/admin/kb-unlocks without participant returns 400', async () => {
+    const token = await getAdminBearerToken(app);
+    const res = await request(app)
+      .post('/api/admin/kb-unlocks')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ dayNumber: 3 });
+    assert.equal(res.status, 400);
+    assert.match(String(res.body.error || ''), /ID участника/i);
+  });
+
   it('GET /api/admin/questions with filters', async () => {
     const token = await getAdminBearerToken(app);
     const res = await request(app)

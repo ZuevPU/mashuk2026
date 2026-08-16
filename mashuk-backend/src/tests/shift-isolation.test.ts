@@ -115,5 +115,6 @@ describe('getScheduleDayPublished', () => {
 describe('getActiveHomeNotice', () => {
   it('does not guess the active shift when shiftId is missing', async () => {
     assert.equal(await getActiveHomeNotice(undefined), null);
+    assert.equal(await getActiveHomeNotice(undefined, new Date(), 'tasks'), null);
   });
 });

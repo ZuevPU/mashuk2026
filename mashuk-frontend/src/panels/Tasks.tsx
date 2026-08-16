@@ -8,6 +8,7 @@ import { getDeviceKey } from '../utils/deviceKey';
 import { clearPendingTaskQr, peekPendingTaskQr, setPendingTaskQr } from '../utils/launchParams';
 import { useAppModal } from '../App';
 import { EmptyState } from '../components/EmptyState';
+import { HomeNoticeCard, HomeNoticeModalBody, type HomeNoticeItem } from '../components/home/HomeNoticeCard';
 import {
   AnswerSuccessOverlay,
   type SubmitSuccessPayload,
@@ -583,6 +584,7 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
   const [submitTaskMeta, setSubmitTaskMeta] = useState<any>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [successPayload, setSuccessPayload] = useState<SubmitSuccessPayload | null>(null);
+  const [showTaskNotice, setShowTaskNotice] = useState(false);
 
   const openSubmit = useCallback((task: any) => {
     const pending = peekPendingTaskQr();
@@ -650,11 +652,21 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
           />
         </ModalRoot>
       );
+    } else if (showTaskNotice && data?.taskNotice) {
+      const closeNotice = () => setShowTaskNotice(false);
+      setModal(
+        <ModalRoot activeModal="task-notice" onClose={closeNotice}>
+          <ModalPage id="task-notice" settlingHeight={80} onClose={closeNotice}>
+            <ModalPageHeader>Объявление</ModalPageHeader>
+            <HomeNoticeModalBody notice={data.taskNotice as HomeNoticeItem} onAfterOpenLink={closeNotice} />
+          </ModalPage>
+        </ModalRoot>,
+      );
     } else {
       setModal(null);
     }
   }, [
-    submitTaskId, submitTaskMeta,
+    submitTaskId, submitTaskMeta, showTaskNotice, data?.taskNotice,
     load, setModal, activePanel, id,
   ]);
 
@@ -681,6 +693,14 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
           </>
         ) : (
           <>
+            {data?.taskNotice && (
+              <div style={{ marginBottom: 12 }}>
+                <HomeNoticeCard
+                  notice={data.taskNotice as HomeNoticeItem}
+                  onOpen={() => setShowTaskNotice(true)}
+                />
+              </div>
+            )}
             <div className="tasks-xp-banner">
               <div className="tasks-xp-col">
                 <div className="tasks-xp-val">⚡ {data?.progress?.experienceTotal ?? 0}</div>

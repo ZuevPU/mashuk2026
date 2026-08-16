@@ -498,6 +498,13 @@
       "when": 1850000000000,
       "tag": "0071_interests_reselected_at",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1851000000000,
+      "tag": "0072_notice_placement",
+      "breakpoints": true
     }
   ]
 }

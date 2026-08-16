@@ -104,6 +104,7 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
     const now = new Date();
     const { getShiftById, isShiftLive } = await import('../services/shiftService.js');
     if (!isShiftLive(await getShiftById(shiftId))) {
+      const { getActiveHomeNotice } = await import('./homeNoticeController.js');
       res.json({
         tasks: [],
         dayNumber: 1,
@@ -114,6 +115,7 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
         pendingTeamInvites: [],
         progress: { done: 0, total: 0, percent: 0, pointsToday: 0, experienceTotal: 0 },
         shiftLive: false,
+        taskNotice: await getActiveHomeNotice(shiftId, now, 'tasks'),
       });
       return;
     }
@@ -291,6 +293,7 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
         pointsToday,
         experienceTotal,
       },
+      taskNotice: await (await import('./homeNoticeController.js')).getActiveHomeNotice(shiftId, now, 'tasks'),
     });
   } catch (error) {
     console.error('listTasks:', error);

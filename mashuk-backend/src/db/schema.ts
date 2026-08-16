@@ -350,11 +350,14 @@ export const homeNotices = pgTable('home_notices', {
   publishedAt: timestamp('published_at'),
   visibleFrom: timestamp('visible_from'),
   visibleUntil: timestamp('visible_until'),
+  /** home — главная; tasks — экран заданий */
+  placement: varchar('placement', { length: 20 }).notNull().default('home'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
   index('home_notices_shift_id_idx').on(table.shiftId),
   index('home_notices_status_idx').on(table.status),
+  index('home_notices_shift_placement_idx').on(table.shiftId, table.placement),
 ]);
 
 export const adminUsers = pgTable('admin_users', {

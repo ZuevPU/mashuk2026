@@ -125,6 +125,7 @@ router.patch('/forum-wrap-questionnaire', requireAdminRole('settings'), wrap(for
 router.post('/forum-wrap-questionnaire/notify', requireAdminRole('settings'), wrap(forumWrapCtrl.notifyAdminForumWrapQuestionnaire));
 router.get('/kb-unlocks', wrap(admin.listKbDayUnlocks));
 router.post('/kb-unlocks', requireAdminRole('settings'), wrap(admin.createKbDayUnlock));
+router.post('/kb-unlocks/bulk', requireAdminRole('settings'), wrap(admin.bulkKbDayUnlock));
 router.delete('/kb-unlocks/:participantId/:dayNumber', requireAdminRole('settings'), wrap(admin.deleteKbDayUnlock));
 router.get('/day-focus', wrap(admin.listDayFocus));
 router.post('/day-focus', requireAdminRole('settings'), wrap(admin.upsertDayFocus));
@@ -219,6 +220,8 @@ router.get('/event-attendance', wrap(admin.listEventAttendance));
 router.post('/upload-file', requireAdminRole('settings'), wrap(uploadAdminFile));
 router.get('/materials', wrap(admin.crudMaterials.list));
 router.post('/materials', requireAdminRole('settings'), wrap(admin.crudMaterials.create));
+router.post('/materials/publish-drafts', requireAdminRole('settings'), wrap(admin.crudMaterials.publishDrafts));
+router.post('/kb/open-shift', requireAdminRole('settings'), wrap(admin.crudMaterials.openShift));
 router.patch('/materials/:id', requireAdminRole('settings'), wrap(admin.crudMaterials.update));
 router.delete('/materials/:id', requireAdminRole('delete'), wrap(admin.crudMaterials.delete));
 router.get('/material-types', wrap(admin.crudMaterialTypes.list));

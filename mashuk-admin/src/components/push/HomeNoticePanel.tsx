@@ -88,11 +88,40 @@ function normalizeCtaUrl(raw: string): string {
   return t;
 }
 
+type NoticePlacement = 'home' | 'tasks';
+
 type Props = Pick<AdminTabProps, 'adminFetch' | 'act'> & {
   reloadKey?: number;
+  placement?: NoticePlacement;
 };
 
-export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
+const COPY: Record<NoticePlacement, {
+  title: string;
+  hint: string;
+  live: string;
+  publish: string;
+  published: string;
+  photo: string;
+}> = {
+  home: {
+    title: 'Плашка главного экрана',
+    hint: 'На главной участника — карточка с первым фото и кнопкой «Посмотреть». В модалке — текст, ссылка и все картинки. После загрузки нажмите «Опубликовать», иначе плашка останется черновиком и в приложении не появится.',
+    live: 'Сейчас на главной',
+    publish: 'Опубликовано на главной',
+    published: 'Опубликовать',
+    photo: 'Первая картинка сразу видна на карточке главной. Остальные — в модалке. Фото сохраняется вместе с плашкой и не пропадает после выкладки.',
+  },
+  tasks: {
+    title: 'Плашка заданий',
+    hint: 'На экране заданий участника сверху — такая же карточка, как на главной: первое фото и «Посмотреть». В модалке — текст, ссылка и все картинки. Видна только во вкладке «Задания».',
+    live: 'Сейчас в заданиях',
+    publish: 'Опубликовано в заданиях',
+    published: 'Опубликовать',
+    photo: 'Первая картинка сразу видна на карточке в заданиях. Остальные — в модалке. Фото сохраняется вместе с плашкой.',
+  },
+};
+
+export function HomeNoticePanel({ adminFetch, act, reloadKey, placement = 'home' }: Props) {
   const [loading, setLoading] = useState(true);
   const [notices, setNotices] = useState<HomeNoticeRow[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -103,13 +132,13 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
   const load = useCallback(async (mode: 'full' | 'soft' = 'full') => {
     if (mode === 'full') setLoading(true);
     try {
-      const res = await adminFetch('/home-notices') as { notices: HomeNoticeRow[] };
+      const res = await adminFetch(`/home-notices?placement=${placement}`) as { notices: HomeNoticeRow[] };
       setNotices(res.notices || []);
       bootstrappedRef.current = true;
     } finally {
       if (mode === 'full') setLoading(false);
     }
-  }, [adminFetch]);
+  }, [adminFetch, placement]);
 
   useEffect(() => {
     // Первый заход — со спиннером; reloadKey после act — мягко, без размонтирования формы.
@@ -137,6 +166,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
       ctaUrl: normalizeCtaUrl(d.ctaUrl) || null,
       ctaLabel: d.ctaLabel.trim() || null,
       imageUrls: d.imageUrls,
+      placement,
       ...(status ? { status } : {}),
     };
     if (editingId) {
@@ -193,6 +223,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
     await persist(undefined, next);
   };
 
+  const copy = COPY[placement];
   const published = notices.find(n => n.status === 'published');
 
   if (loading) {
@@ -204,10 +235,9 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 16 }}>Плашка главного экрана</h3>
+            <h3 style={{ margin: 0, fontSize: 16 }}>{copy.title}</h3>
             <p className="adm-muted" style={{ margin: '4px 0 0', fontSize: 12 }}>
-              На главной участника — карточка с первым фото и кнопкой «Посмотреть». В модалке — текст, ссылка и все картинки.
-              После загрузки нажмите «Опубликовать», иначе плашка останется черновиком и в приложении не появится.
+              {copy.hint}
             </p>
           </div>
           <button type="button" className="adm-btn adm-btn-secondary adm-btn-sm" onClick={openCreate}>
@@ -220,7 +250,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
             className="adm-forum-hint"
             style={{ marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}
           >
-            <span>Сейчас на главной: <strong>{published.title}</strong></span>
+            <span>{copy.live}: <strong>{published.title}</strong></span>
             <button
               type="button"
               className="adm-btn adm-btn-secondary adm-btn-sm"
@@ -276,8 +306,7 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
         <div className="adm-forum-block" style={{ marginTop: 12 }}>
           <span className="adm-label">Картинки</span>
           <p className="adm-muted" style={{ margin: '0 0 6px', fontSize: 11 }}>
-            Первая картинка сразу видна на карточке главной. Остальные — в модалке.
-            Фото сохраняется вместе с плашкой и не пропадает после выкладки.
+            {copy.photo}
           </p>
           <input
             type="file"
@@ -329,8 +358,8 @@ export function HomeNoticePanel({ adminFetch, act, reloadKey }: Props) {
           <button type="button" className="adm-btn adm-btn-secondary" onClick={() => act(() => persist('draft'), 'Черновик сохранён')}>
             Сохранить черновик
           </button>
-          <button type="button" className="adm-btn adm-btn-primary" onClick={() => act(() => persist('published'), 'Опубликовано на главной')}>
-            Опубликовать
+          <button type="button" className="adm-btn adm-btn-primary" onClick={() => act(() => persist('published'), copy.publish)}>
+            {copy.published}
           </button>
           {editingId && notices.find(n => n.id === editingId)?.status === 'published' && (
             <button

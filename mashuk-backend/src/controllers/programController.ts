@@ -574,7 +574,10 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
     const shiftId = req.participant!.shiftId;
     const settings = await getForumSettings(shiftId);
     const day = Number(req.query.day) || settings.currentDay || 1;
-    if (!isShiftLive(await getShiftById(shiftId))) {
+    const shiftRow = await getShiftById(shiftId);
+    // Own-shift KB must stay visible even if another stream is the "active" one.
+    // Archived shifts stay empty. This is why shift 2 looked "deleted" while shift 1 was live.
+    if (!shiftRow || shiftRow.status === 'archived') {
       res.json({ materials: [], day, shiftLive: false });
       return;
     }
@@ -617,9 +620,12 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
     });
 
     const forumDefaultN = access.requiredTouchpoints;
-    const unlockedMaterials = access.unlocked
-      ? filtered.filter(m => isMaterialUnlockedForParticipant(m, access.touchpointsCompleted, forumDefaultN))
-      : [];
+    const { materialVisibleWhenShiftOpen } = await import('../services/kbOpenShift.js');
+    const unlockedMaterials = filtered.filter(m => materialVisibleWhenShiftOpen(
+      access.unlockDisabled,
+      access.unlocked,
+      isMaterialUnlockedForParticipant(m, access.touchpointsCompleted, forumDefaultN),
+    ));
 
     const {
       compareKbMaterials,

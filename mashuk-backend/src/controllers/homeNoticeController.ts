@@ -7,6 +7,14 @@ import { resolveAdminShiftId } from '../services/shiftService.js';
 import { coerceImageUrlList, toStoredUploadPath } from '../utils/uploadImageStorage.js';
 
 const STATUSES = new Set(['draft', 'published', 'archived']);
+const PLACEMENTS = new Set(['home', 'tasks']);
+
+export type NoticePlacement = 'home' | 'tasks';
+
+export function parseNoticePlacement(raw: unknown, fallback: NoticePlacement = 'home'): NoticePlacement {
+  const v = String(raw ?? '').trim().toLowerCase();
+  return PLACEMENTS.has(v) ? (v as NoticePlacement) : fallback;
+}
 
 function parseOptionalDate(value: unknown): Date | null | undefined {
   if (value === undefined) return undefined;
@@ -47,21 +55,35 @@ function toPublicNotice(row: typeof homeNotices.$inferSelect) {
   };
 }
 
-async function archiveOtherPublished(shiftId: number, keepId?: number) {
+async function archiveOtherPublished(shiftId: number, placement: NoticePlacement, keepId?: number) {
   const cond = keepId != null
-    ? and(eq(homeNotices.shiftId, shiftId), eq(homeNotices.status, 'published'), ne(homeNotices.id, keepId))
-    : and(eq(homeNotices.shiftId, shiftId), eq(homeNotices.status, 'published'));
+    ? and(
+      eq(homeNotices.shiftId, shiftId),
+      eq(homeNotices.placement, placement),
+      eq(homeNotices.status, 'published'),
+      ne(homeNotices.id, keepId),
+    )
+    : and(
+      eq(homeNotices.shiftId, shiftId),
+      eq(homeNotices.placement, placement),
+      eq(homeNotices.status, 'published'),
+    );
   await db.update(homeNotices)
     .set({ status: 'archived', updatedAt: new Date() })
     .where(cond!);
 }
 
-export async function getActiveHomeNotice(shiftId?: number, now = new Date()) {
+export async function getActiveHomeNotice(
+  shiftId?: number,
+  now = new Date(),
+  placement: NoticePlacement = 'home',
+) {
   if (shiftId == null || !Number.isFinite(shiftId)) return null;
   const sid = shiftId;
   const [row] = await db.select().from(homeNotices)
     .where(and(
       eq(homeNotices.shiftId, sid),
+      eq(homeNotices.placement, placement),
       eq(homeNotices.status, 'published'),
       or(isNull(homeNotices.visibleFrom), lte(homeNotices.visibleFrom, now)),
       or(isNull(homeNotices.visibleUntil), gt(homeNotices.visibleUntil, now)),
@@ -74,8 +96,9 @@ export async function getActiveHomeNotice(shiftId?: number, now = new Date()) {
 export const listHomeNotices = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
     const shiftId = await resolveAdminShiftId(req);
+    const placement = parseNoticePlacement(req.query.placement);
     const rows = await db.select().from(homeNotices)
-      .where(eq(homeNotices.shiftId, shiftId))
+      .where(and(eq(homeNotices.shiftId, shiftId), eq(homeNotices.placement, placement)))
       .orderBy(desc(homeNotices.updatedAt), desc(homeNotices.id));
     res.json({ notices: rows.map(toAdminNotice) });
   } catch (error) {
@@ -134,8 +157,9 @@ export const createHomeNotice = async (req: AdminRequest, res: Response): Promis
       return;
     }
 
+    const placement = parseNoticePlacement(req.body.placement);
     if (status === 'published') {
-      await archiveOtherPublished(shiftId);
+      await archiveOtherPublished(shiftId, placement);
     }
 
     const now = new Date();
@@ -146,6 +170,7 @@ export const createHomeNotice = async (req: AdminRequest, res: Response): Promis
       ctaUrl,
       ctaLabel,
       imageUrls,
+      placement,
       status,
       publishedAt: status === 'published' ? now : null,
       visibleFrom: visibleFrom ?? null,
@@ -214,6 +239,9 @@ export const updateHomeNotice = async (req: AdminRequest, res: Response): Promis
       }
       patch.visibleUntil = d;
     }
+    if (req.body.placement !== undefined) {
+      patch.placement = parseNoticePlacement(req.body.placement, parseNoticePlacement(existing.placement));
+    }
     if (req.body.status !== undefined) {
       const status = String(req.body.status);
       if (!STATUSES.has(status)) {
@@ -222,7 +250,11 @@ export const updateHomeNotice = async (req: AdminRequest, res: Response): Promis
       }
       patch.status = status;
       if (status === 'published') {
-        await archiveOtherPublished(shiftId, id);
+        const placement = parseNoticePlacement(
+          req.body.placement,
+          parseNoticePlacement(existing.placement),
+        );
+        await archiveOtherPublished(shiftId, placement, id);
         if (!existing.publishedAt || existing.status !== 'published') {
           patch.publishedAt = new Date();
         }

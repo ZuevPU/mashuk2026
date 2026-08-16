@@ -20,7 +20,7 @@ import {
   PUSH_AUDIENCE_OPTIONS,
 } from './types';
 
-type ListTab = 'board' | 'sent' | 'queued' | 'drafts' | 'auto' | 'templates' | 'journal' | 'home';
+type ListTab = 'board' | 'sent' | 'queued' | 'drafts' | 'auto' | 'templates' | 'journal' | 'home' | 'tasks';
 type View = 'list' | 'form';
 
 export type PushTabProps = AdminTabProps;
@@ -146,7 +146,7 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
   };
 
   // Не размонтировать «Главный экран»: после act()/reloadKey иначе сбрасывается черновик плашки.
-  if (loading && view === 'list' && listTab !== 'home' && listTab !== 'board') {
+  if (loading && view === 'list' && listTab !== 'home' && listTab !== 'tasks' && listTab !== 'board') {
     return <p className="adm-muted">Загрузка пушей…</p>;
   }
 
@@ -201,6 +201,7 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
     { key: 'queued', label: 'В очереди' },
     { key: 'drafts', label: 'Черновики' },
     { key: 'home', label: 'Главный экран' },
+    { key: 'tasks', label: 'Задания' },
     { key: 'auto', label: 'Автоматические (выкл.)' },
     { key: 'templates', label: 'Шаблоны' },
     { key: 'journal', label: 'Журнал' },
@@ -211,11 +212,15 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
       <AdminPageHero
         title={listTab === 'home'
           ? 'Уведомления · Главный экран'
+          : listTab === 'tasks'
+            ? 'Уведомления · Задания'
           : listTab === 'board'
             ? 'Уведомления · По дням'
             : `Уведомления · ${summary.total} рассылок · ${summary.queued} в очереди`}
         hint={listTab === 'home'
           ? 'Редакционная плашка на главной участника: заголовок, текст, кнопка-ссылка и картинки. Не связана с VK-пушами.'
+          : listTab === 'tasks'
+            ? 'Такая же плашка, но только сверху экрана заданий. Главная не меняется.'
           : listTab === 'board'
             ? 'Вопросы, задания, программа и итоговая анкета дня. Одно нажатие — превью, текст, время, отправка без задвоений.'
             : 'Рассылки только вручную: «По дням», «Создать уведомление» или «Отправить в указанное время». Автослоты выключены.'}
@@ -254,7 +259,11 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
       {listTab === 'board' ? (
         <PushContentBoard adminFetch={adminFetch} act={act} reloadKey={reloadKey} />
       ) : listTab === 'home' ? (
-        <HomeNoticePanel adminFetch={adminFetch} act={act} reloadKey={reloadKey} />
+        <HomeNoticePanel adminFetch={adminFetch} act={act} reloadKey={reloadKey} placement="home" />
+      ) : listTab === 'tasks' ? (
+        <div id="push-tasks-notice">
+          <HomeNoticePanel adminFetch={adminFetch} act={act} reloadKey={reloadKey} placement="tasks" />
+        </div>
       ) : listTab === 'templates' ? (
         <PushTemplatesPanel adminFetch={adminFetch} act={act} templates={templates} onReload={() => load()} />
       ) : listTab === 'auto' ? (

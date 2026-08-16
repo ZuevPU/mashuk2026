@@ -3370,6 +3370,20 @@ export const crudMaterials = {
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ material: updated });
   },
+  publishDrafts: async (req: AdminRequest, res: Response) => {
+    const shiftId = await resolveAdminShiftId(req);
+    const updated = await db.update(materials)
+      .set({ status: 'published' })
+      .where(and(eq(materials.shiftId, shiftId), eq(materials.status, 'draft')))
+      .returning();
+    res.json({ published: updated.length, materials: updated });
+  },
+  openShift: async (req: AdminRequest, res: Response) => {
+    const shiftId = await resolveAdminShiftId(req);
+    const { openKnowledgeBaseForShift } = await import('../services/kbOpenShift.js');
+    const result = await openKnowledgeBaseForShift(shiftId, req.adminId ?? null);
+    res.json(result);
+  },
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
     const [deleted] = await db.delete(materials).where(eq(materials.id, id)).returning();
@@ -3958,16 +3972,48 @@ export const getForumSettings = async (req: AdminRequest, res: Response): Promis
   res.json({ settings: { ...settings, shiftId }, editingShiftId: shiftId });
 };
 
-export const listKbDayUnlocks = async (_req: AdminRequest, res: Response): Promise<void> => {
-  const rows = await db.select().from(kbDayUnlocks).orderBy(desc(kbDayUnlocks.unlockedAt));
-  res.json({ unlocks: rows });
+function kbUnlockPersonName(firstName?: string | null, lastName?: string | null): string {
+  return `${firstName ?? ''} ${lastName ?? ''}`.trim();
+}
+
+export const listKbDayUnlocks = async (req: AdminRequest, res: Response): Promise<void> => {
+  const shiftId = await resolveAdminShiftId(req);
+  const rows = await db.select({
+    id: kbDayUnlocks.id,
+    participantId: kbDayUnlocks.participantId,
+    dayNumber: kbDayUnlocks.dayNumber,
+    unlockedAt: kbDayUnlocks.unlockedAt,
+    firstName: participants.firstName,
+    lastName: participants.lastName,
+  }).from(kbDayUnlocks)
+    .innerJoin(participants, eq(participants.id, kbDayUnlocks.participantId))
+    .where(eq(participants.shiftId, shiftId))
+    .orderBy(desc(kbDayUnlocks.unlockedAt));
+  res.json({
+    unlocks: rows.map(r => ({
+      id: r.id,
+      participantId: r.participantId,
+      dayNumber: r.dayNumber,
+      unlockedAt: r.unlockedAt,
+      participantName: kbUnlockPersonName(r.firstName, r.lastName),
+    })),
+  });
 };
 
 export const createKbDayUnlock = async (req: AdminRequest, res: Response): Promise<void> => {
+  const shiftId = await resolveAdminShiftId(req);
   const participantId = Number(req.body.participantId);
   const dayNumber = Number(req.body.dayNumber);
   if (!participantId || !dayNumber) {
-    res.status(400).json({ error: 'participantId and dayNumber required' });
+    res.status(400).json({ error: 'Укажите ID участника и день. Чтобы открыть БЗ всей смене — «Открыть всем за день».' });
+    return;
+  }
+  const [person] = await db.select({
+    id: participants.id,
+    shiftId: participants.shiftId,
+  }).from(participants).where(eq(participants.id, participantId)).limit(1);
+  if (!person || person.shiftId !== shiftId) {
+    res.status(400).json({ error: 'Участник не найден в текущей смене' });
     return;
   }
   const [row] = await db.insert(kbDayUnlocks).values({
@@ -3979,6 +4025,41 @@ export const createKbDayUnlock = async (req: AdminRequest, res: Response): Promi
     set: { unlockedAt: new Date(), unlockedByAdminId: req.adminId ?? null },
   }).returning();
   res.json({ unlock: row });
+};
+
+export const bulkKbDayUnlock = async (req: AdminRequest, res: Response): Promise<void> => {
+  const shiftId = await resolveAdminShiftId(req);
+  const dayNumber = Number(req.body.dayNumber);
+  if (!dayNumber) {
+    res.status(400).json({ error: 'Укажите день смены' });
+    return;
+  }
+  const people = await db.select({ id: participants.id }).from(participants).where(and(
+    eq(participants.shiftId, shiftId),
+    isNotNull(participants.onboardingCompletedAt),
+    isNull(participants.selfDeletedAt),
+  ));
+  if (people.length === 0) {
+    res.json({ unlocked: 0, dayNumber });
+    return;
+  }
+  const now = new Date();
+  const rows = people.map(p => ({
+    participantId: p.id,
+    dayNumber,
+    unlockedByAdminId: req.adminId ?? null,
+    unlockedAt: now,
+  }));
+  let unlocked = 0;
+  for (let i = 0; i < rows.length; i += 200) {
+    const chunk = rows.slice(i, i + 200);
+    const inserted = await db.insert(kbDayUnlocks).values(chunk).onConflictDoUpdate({
+      target: [kbDayUnlocks.participantId, kbDayUnlocks.dayNumber],
+      set: { unlockedAt: now, unlockedByAdminId: req.adminId ?? null },
+    }).returning();
+    unlocked += inserted.length;
+  }
+  res.json({ unlocked, dayNumber });
 };
 
 export const deleteKbDayUnlock = async (req: AdminRequest, res: Response): Promise<void> => {

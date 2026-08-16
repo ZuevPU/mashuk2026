@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, ne } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   adminPushNotifications,
@@ -429,7 +429,10 @@ export async function copyShiftModules(opts: {
 
     if (toCopy.includes('knowledge')) {
       if (replaced.includes('knowledge')) {
-        await tx.delete(materials).where(eq(materials.shiftId, target.id));
+        // Keep target materials: archive instead of DELETE so shift 1/2 history is not wiped.
+        await tx.update(materials)
+          .set({ status: 'archived' })
+          .where(and(eq(materials.shiftId, target.id), ne(materials.status, 'archived')));
       }
       const srcMats = await tx.select().from(materials).where(eq(materials.shiftId, opts.sourceId));
       for (const m of srcMats) {
