@@ -1,7 +1,4 @@
 import http from 'node:http';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 const port = Number(process.env.PORT) || 8080;
 const host = '0.0.0.0';
@@ -23,8 +20,9 @@ function isLiveness(urlPath: string): boolean {
   return urlPath === '/' || urlPath === '/health';
 }
 
-// Bind 8080 before importing Express/DB/PDF. Timeweb fails the deploy if
-// /health is silent during module load on a small CPU quota.
+// Bind 8080 with zero app imports. Timeweb's healthcheck has ~105s and fails
+// if /health is silent while Express/DB/PDF are still loading — or if dotenv
+// runs first. Platform env vars are already in process.env.
 const server = http.createServer((req, res) => {
   if (appHandler) {
     appHandler(req, res);
@@ -41,6 +39,11 @@ const server = http.createServer((req, res) => {
     return;
   }
   sendJson(res, 503, { status: 'starting' });
+});
+
+server.on('error', (err) => {
+  console.error(`Failed to bind http://${host}:${port}:`, err);
+  process.exit(1);
 });
 
 server.listen(port, host, () => {

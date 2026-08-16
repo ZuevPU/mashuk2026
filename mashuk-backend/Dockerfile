@@ -58,16 +58,21 @@ COPY assets ./assets
 COPY config ./config
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 COPY healthcheck.cjs ./healthcheck.cjs
-RUN chmod +x docker-entrypoint.sh && mkdir -p /app/uploads
+COPY docker-healthcheck.sh ./docker-healthcheck.sh
+RUN chmod +x docker-entrypoint.sh docker-healthcheck.sh \
+  && mkdir -p /app/uploads \
+  && ln -sf /usr/local/bin/node /usr/bin/node
 
 ENV PORT=8080 \
     NODE_ENV=production \
-    HOST=0.0.0.0
+    HOST=0.0.0.0 \
+    PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=5s --timeout=5s --start-period=20s --retries=12 \
-  CMD ["node", "/app/healthcheck.cjs"]
+# Absolute paths: Timeweb healthcheck PATH may not include /usr/local/bin,
+# so `CMD ["node", ...]` stays unhealthy even when the app is already up.
+HEALTHCHECK --interval=3s --timeout=4s --start-period=8s --retries=20 \
+  CMD ["/bin/sh", "/app/docker-healthcheck.sh"]
 
-ENTRYPOINT ["./docker-entrypoint.sh"]
-CMD ["node", "dist/index.js"]
+ENTRYPOINT ["/usr/local/bin/node", "dist/index.js"]

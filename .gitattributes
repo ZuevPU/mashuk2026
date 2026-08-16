@@ -1,0 +1,4 @@
+# Shell scripts in images must stay LF. CRLF breaks shebangs on Linux.
+*.sh text eol=lf
+mashuk-backend/docker-entrypoint.sh text eol=lf
+mashuk-backend/docker-healthcheck.sh text eol=lf

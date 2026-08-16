@@ -1,4 +1,4 @@
 #!/bin/sh
 set -e
-echo "Starting server (HTTP listen first, then app boot)..."
-exec "$@"
+echo "Starting server on 8080..."
+exec /usr/local/bin/node dist/index.js
