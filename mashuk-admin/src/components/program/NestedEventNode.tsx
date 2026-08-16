@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { confirmDelete, CONFIRM_DELETE_SUBTOPIC } from '../../admin/confirmDelete';
+import { normalizeSpeakerIds } from '../speakers/speakerFormat';
 import { PlaceSelect } from './ProgramPlacesBlock';
 import { SpeakerMultiPick } from './ProgramCatalogs';
 import { ThematicTagPick } from './ThematicTagPick';
@@ -30,7 +31,7 @@ type NestedDraft = {
 
 function draftFrom(e: ProgramEvent): NestedDraft {
   const { start, end } = parseOptionalTimeSlot(e.timeSlot);
-  const speakerIds = Array.isArray(e.speakerIds) ? e.speakerIds : (e.speakers?.map(s => s.id) ?? []);
+  const speakerIds = normalizeSpeakerIds(e.speakerIds?.length ? e.speakerIds : e.speakers);
   const tags = Array.isArray(e.tags) ? e.tags : [];
   return {
     title: e.title || '',

@@ -7,7 +7,7 @@ import { DescriptionEditor } from '../admin/DescriptionEditor';
 import { PlaceSelect } from './ProgramPlacesBlock';
 import { SpeakerMultiPick } from './ProgramCatalogs';
 import { ThematicTagPick } from './ThematicTagPick';
-import { speakerFullLabel } from '../speakers/speakerFormat';
+import { normalizeSpeakerIds, speakerFullLabel } from '../speakers/speakerFormat';
 import { NestedEventNode } from './NestedEventNode';
 import { EventParticipantPreview } from './EventParticipantPreview';
 import {
@@ -44,7 +44,7 @@ function draftFromEvent(e: ProgramEvent): Draft {
   const { start, end } = parseTimeSlot(e.timeSlot);
   const tags = Array.isArray(e.tags) ? e.tags : [];
   const blockType = e.blockType === 'key_block' || e.isKeyBlock ? 'key_block' : (e.blockType || 'session');
-  const speakerIds = Array.isArray(e.speakerIds) ? e.speakerIds : (e.speakers?.map(s => s.id) ?? []);
+  const speakerIds = normalizeSpeakerIds(e.speakerIds?.length ? e.speakerIds : e.speakers);
   return {
     title: e.title || '',
     place: e.place || '',

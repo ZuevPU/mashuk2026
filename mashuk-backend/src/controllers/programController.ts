@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { eq, and, asc, lte, or, isNull, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { events, eventAttendance, materials, materialTypes, questions, answers, scheduleDays, dayFocus, kbDayUnlocks, programSpeakers, participantDayState, participants } from '../db/schema.js';
+import { events, eventAttendance, materials, materialTypes, questions, answers, scheduleDays, dayFocus, kbDayUnlocks, participantDayState, participants } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import {
   getForumSettings, formatTime, getForumOperationalDateKey,
@@ -19,6 +19,7 @@ import {
   resolveEventInterval,
 } from '../services/eventSchedule.js';
 import { cache } from '../services/cache.js';
+import { sanitizeDescriptionHtml } from '../services/sanitizeDescriptionHtml.js';
 import {
   isTouchpointQuestionForForumDay,
   touchpointCompletionRatio,
@@ -27,6 +28,7 @@ import { TOUCHPOINT_SLOTS } from '../services/touchpointTemplates.js';
 import { getShiftById, isShiftLive } from '../services/shiftService.js';
 import { clusterOverlappingTimedItems, formatSlotLabel } from '../services/programSlots.js';
 import { eventVisibleForParticipantDirection } from '../services/eventAudience.js';
+import { loadSpeakersByIds, normalizeSpeakerIds } from '../services/speakerLabels.js';
 
 export const getProgramSettings = async (req: ParticipantRequest, res: Response): Promise<void> => {
   const shiftId = req.participant!.shiftId;
@@ -247,7 +249,7 @@ export const getKnowledgeBaseDays = async (req: ParticipantRequest, res: Respons
         ...access,
         dayTitle: focus?.title ?? `День ${day}`,
         dayDescription: focus?.text ?? null,
-        dayDescriptionHtml: focus?.textHtml ?? null,
+        dayDescriptionHtml: sanitizeDescriptionHtml(focus?.textHtml),
         opensOn: getForumDayDateLabel(settings.startDate ?? null, day),
       });
     }
@@ -311,10 +313,13 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
       .where(eq(eventAttendance.participantId, req.participant!.id));
     const attendedIds = new Set(attendance.map(a => a.eventId));
 
-    const speakerRows = await db.select().from(programSpeakers).where(eq(programSpeakers.shiftId, shiftId));
-    const speakerMap = new Map(speakerRows.map(s => [s.id, s]));
+    const speakerIdSet = new Set<number>();
+    for (const e of eventsList) {
+      for (const id of normalizeSpeakerIds(e.speakerIds)) speakerIdSet.add(id);
+    }
+    const speakerMap = await loadSpeakersByIds([...speakerIdSet]);
     const mapSpeakers = (rawIds: unknown) => {
-      const ids = Array.isArray(rawIds) ? (rawIds as number[]) : [];
+      const ids = normalizeSpeakerIds(rawIds);
       return ids
         .map(id => speakerMap.get(id))
         .filter((s): s is NonNullable<typeof s> => !!s)
@@ -374,7 +379,7 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
         time: c.timeSlot ? formatTime(iv.start) : '',
         endTime: c.timeSlot ? formatTime(iv.end) : '',
         description: c.description,
-        descriptionHtml: c.descriptionHtml,
+        descriptionHtml: sanitizeDescriptionHtml(c.descriptionHtml),
         tags: (c.tags as string[]) || [],
         speakers,
         hasSubSessions: nested.length > 0 || c.hasSubSessions === true,
@@ -399,7 +404,7 @@ export const getProgram = async (req: ParticipantRequest, res: Response): Promis
         endTime: formatTime(end),
         title: e.title,
         description: e.description,
-        descriptionHtml: e.descriptionHtml,
+        descriptionHtml: sanitizeDescriptionHtml(e.descriptionHtml),
         subtitle: [e.place, speakerLine].filter(Boolean).join(' · ') || '',
         place: e.place,
         tags: (e.tags as string[]) || [],
@@ -524,7 +529,7 @@ export const getRecommendations = async (req: ParticipantRequest, res: Response)
         eventId: s.event.id,
         title: s.event.title,
         description: s.event.description,
-        descriptionHtml: s.event.descriptionHtml,
+        descriptionHtml: sanitizeDescriptionHtml(s.event.descriptionHtml),
         time: s.event.timeSlot || null,
         place: s.event.place || null,
         subtitle: s.matchedThemes.length
@@ -636,22 +641,17 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
 
     const speakerIdSet = new Set<number>();
     for (const m of unlockedMaterials) {
-      const ids = (m.speakerIds as number[] | null) || [];
-      for (const id of ids) {
-        if (Number.isFinite(id)) speakerIdSet.add(Number(id));
-      }
+      for (const id of normalizeSpeakerIds(m.speakerIds)) speakerIdSet.add(id);
     }
-    const speakerRows = speakerIdSet.size
-      ? await db.select().from(programSpeakers).where(inArray(programSpeakers.id, [...speakerIdSet]))
-      : [];
-    const speakerById = new Map(speakerRows.map(s => [s.id, s.name]));
+    const speakerRows = await loadSpeakersByIds([...speakerIdSet]);
+    const speakerById = new Map([...speakerRows.entries()].map(([id, s]) => [id, s.name]));
 
     const typeRows = await db.select().from(materialTypes);
     const typeNameByKey = new Map(typeRows.map(t => [t.key, t.name]));
 
     const mapped = unlockedMaterials
       .map(m => {
-        const ids = ((m.speakerIds as number[] | null) || []).map(Number).filter(Number.isFinite);
+        const ids = normalizeSpeakerIds(m.speakerIds);
         const names = ids.map(id => speakerById.get(id)).filter(Boolean) as string[];
         const speakerName = names.length ? names.join('; ') : m.speakerName;
         const client = mapMaterialForClient(m, now, {
@@ -689,7 +689,7 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
       ...access,
       dayTitle: focus?.title ?? `День ${day}`,
       dayDescription: focus?.text ?? null,
-      dayDescriptionHtml: focus?.textHtml ?? null,
+      dayDescriptionHtml: sanitizeDescriptionHtml(focus?.textHtml),
       opensOn,
       lockMessage,
       sections: publicKbSectionsCatalog(),

@@ -1,3 +1,4 @@
+import { normalizeSpeakerIds } from '../speakers/speakerFormat';
 import { buildTimeSlot, parseTimeSlot, type ProgramEvent } from './types';
 
 export type EventDraft = {
@@ -52,7 +53,7 @@ export function draftFromEvent(e: ProgramEvent): EventDraft {
   const { start, end } = parseTimeSlot(e.timeSlot);
   const tags = Array.isArray(e.tags) ? e.tags : [];
   const blockType = e.blockType === 'key_block' || e.isKeyBlock ? 'key_block' : (e.blockType || 'session');
-  const speakerIds = Array.isArray(e.speakerIds) ? e.speakerIds : (e.speakers?.map(s => s.id) ?? []);
+  const speakerIds = normalizeSpeakerIds(e.speakerIds?.length ? e.speakerIds : e.speakers);
   return {
     title: e.title || '',
     place: e.place || '',

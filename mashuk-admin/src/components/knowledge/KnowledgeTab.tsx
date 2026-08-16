@@ -9,6 +9,7 @@ import { KnowledgeBaseParticipantPreview } from './KnowledgeBaseParticipantPrevi
 import { MaterialCard, type MaterialRow } from './MaterialCard';
 import { MaterialTypesPanel } from './MaterialTypesPanel';
 import { KB_SECTIONS, compareKbMaterials, kbSubsectionOptions, speakerSortKey } from './kbSections';
+import { normalizeSpeakerIds, speakerNamesFromCatalog } from '../speakers/speakerFormat';
 
 type KbUnlock = {
   id: number;
@@ -118,6 +119,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   const [kbForumThreshold, setKbForumThreshold] = useState(4);
   const [kbUnlockDisabled, setKbUnlockDisabled] = useState(false);
   const [totalDays, setTotalDays] = useState(8);
+  const [currentDay, setCurrentDay] = useState(1);
   const [listSort, setListSort] = useState<ListSort>({ key: 'section', dir: 'asc' });
 
   const openDayPreview = (day: number) => {
@@ -162,6 +164,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
       setKbForumThreshold(fsRes.settings?.kbUnlockThreshold ?? 4);
       setKbUnlockDisabled(fsRes.settings?.kbUnlockDisabled === true);
       setTotalDays(fsRes.settings?.totalDays ?? 8);
+      setCurrentDay(fsRes.settings?.currentDay ?? 1);
       setMaterials(matRes.materials || []);
       setMaterialTypes((typesRes.types || []).map((t: { key: string; name: string }) => ({ key: t.key, name: t.name })));
       setEvents(evRes.events || []);
@@ -182,14 +185,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   }, [dayFilter]);
 
   const speakerLabel = useCallback((m: MaterialRow) => {
-    if (m.speakerIds?.length) {
-      const names = speakers
-        .filter(s => m.speakerIds!.includes(s.id))
-        .map(s => s.name)
-        .filter(Boolean);
-      if (names.length) return names.join('; ');
-    }
-    return m.speakerName || '';
+    return speakerNamesFromCatalog(normalizeSpeakerIds(m.speakerIds), speakers, m.speakerName);
   }, [speakers]);
 
   const filtered = useMemo(() => {
@@ -283,7 +279,7 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
       url: newMaterial.url.trim() || null,
       type: newMaterial.type || null,
       speakerIds: newMaterial.speakerIds,
-      speakerName: newMaterial.speakerName || null,
+      speakerName: speakerNamesFromCatalog(newMaterial.speakerIds, speakers, newMaterial.speakerName) || null,
       isGeneral: !!newMaterial.isGeneral,
       kbUnlockMode: newMaterial.kbUnlockMode,
       kbUnlockMinTouchpoints: newMaterial.kbUnlockMode === 'touchpoints' && newMaterial.kbUnlockMinTouchpoints !== ''
@@ -375,10 +371,15 @@ export function KnowledgeTab({ adminFetch, act, reloadKey, setTab, onOpenCard }:
   const publishedCount = materials.filter(m => (m.status || 'published') === 'published').length;
 
   const publishToEveryone = () => {
+    const tooEarly = currentDay < totalDays;
     const text = [
       'Текущая смена в шапке. Другая смена не изменится.',
+      `День смены: ${currentDay} из ${totalDays}.`,
       `Сейчас: опубликовано ${publishedCount}, черновиков ${draftCount}, в архиве ${archivedCount}.`,
       'Черновики этой смены опубликуются. Порог точек отключится. База знаний станет доступна всем живым участникам смены без ограничений.',
+      tooEarly
+        ? 'Сейчас API ответит 409: «Опубликовать всем» можно только в последний день смены.'
+        : 'Это последний день смены — порог точек снимется.',
     ].join('\n\n');
     if (!window.confirm(text)) return;
     act(async () => {

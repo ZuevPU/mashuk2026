@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { ProgramSpeaker } from '../program/types';
-import { speakerFullLabel } from '../speakers/speakerFormat';
+import { normalizeSpeakerIds, speakerFullLabel, speakerNamesFromCatalog } from '../speakers/speakerFormat';
 import type { MaterialRow } from './MaterialCard';
 import { KB_SECTIONS, compareKbMaterials, kbSectionMeta, kbSubsectionLabel } from './kbSections';
 
@@ -28,11 +28,12 @@ function typeLabel(type: string | null | undefined, typeOptions: Props['typeOpti
 }
 
 function speakerName(m: MaterialRow, speakers: ProgramSpeaker[]): string {
-  if (m.speakerIds?.length) {
-    const names = speakers.filter(s => m.speakerIds!.includes(s.id)).map(speakerFullLabel);
+  const ids = normalizeSpeakerIds(m.speakerIds);
+  if (ids.length) {
+    const names = speakers.filter(s => ids.includes(s.id)).map(speakerFullLabel);
     if (names.length) return names.join('; ');
   }
-  return m.speakerName || '—';
+  return speakerNamesFromCatalog(ids, speakers, m.speakerName) || '—';
 }
 
 function materialHref(m: MaterialRow): string | null {

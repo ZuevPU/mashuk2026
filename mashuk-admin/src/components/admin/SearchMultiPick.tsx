@@ -41,28 +41,33 @@ export function SearchMultiPick({
     return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
 
+  const selectedIdSet = useMemo(
+    () => new Set(selectedIds.map(Number).filter(n => Number.isFinite(n))),
+    [selectedIds],
+  );
+
   const selected = useMemo(
-    () => items.filter(i => selectedIds.includes(i.id)),
-    [items, selectedIds],
+    () => items.filter(i => selectedIdSet.has(i.id)),
+    [items, selectedIdSet],
   );
 
   const filtered = useMemo(() => {
     const needle = debouncedQ.toLowerCase();
     if (needle.length < minQueryLength) {
       if (minQueryLength === 0) {
-        return items.filter(i => !selectedIds.includes(i.id)).slice(0, 40);
+        return items.filter(i => !selectedIdSet.has(i.id)).slice(0, 40);
       }
       return [];
     }
     const fn = filterItem ?? ((item: SearchPickItem, n: string) =>
       item.label.toLowerCase().includes(n) || (item.sublabel?.toLowerCase().includes(n) ?? false));
     // Empty needle + minQueryLength 0 → full catalog (already handled above)
-    if (!needle) return items.filter(i => !selectedIds.includes(i.id)).slice(0, 40);
-    return items.filter(i => !selectedIds.includes(i.id) && fn(i, needle)).slice(0, 40);
-  }, [items, debouncedQ, selectedIds, minQueryLength, filterItem]);
+    if (!needle) return items.filter(i => !selectedIdSet.has(i.id)).slice(0, 40);
+    return items.filter(i => !selectedIdSet.has(i.id) && fn(i, needle)).slice(0, 40);
+  }, [items, debouncedQ, selectedIdSet, minQueryLength, filterItem]);
 
   const toggle = (id: number) => {
-    onChange(selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id]);
+    onChange(selectedIdSet.has(id) ? selectedIds.filter(x => Number(x) !== id) : [...selectedIds, id]);
   };
 
   const showList = open && debouncedQ.length >= minQueryLength;

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { SpeakerMultiPick } from '../program/ProgramCatalogs';
 import type { ProgramSpeaker } from '../program/types';
-import { speakerFullLabel } from '../speakers/speakerFormat';
+import { normalizeSpeakerIds, speakerFullLabel, speakerNamesFromCatalog } from '../speakers/speakerFormat';
 import { confirmDelete } from '../../admin/confirmDelete';
 import { KB_SECTIONS, kbSectionMeta, kbSubsectionOptions } from './kbSections';
 
@@ -68,7 +68,7 @@ function mkDraft(m: MaterialRow): Draft {
     type: m.type || '',
     status: m.status || 'draft',
     tags: [...((m.tags as string[]) || [])],
-    speakerIds: [...(m.speakerIds || [])],
+    speakerIds: normalizeSpeakerIds(m.speakerIds),
     dayNumber: m.dayNumber ?? 1,
     eventId: m.eventId != null ? String(m.eventId) : '',
     direction: m.direction || '',
@@ -82,7 +82,12 @@ function mkDraft(m: MaterialRow): Draft {
   };
 }
 
-function draftToBody(draft: Draft, statusOverride?: string): Record<string, unknown> {
+function draftToBody(
+  draft: Draft,
+  speakers: ProgramSpeaker[],
+  fallbackName?: string | null,
+  statusOverride?: string,
+): Record<string, unknown> {
   const direction = draft.audienceAll ? '' : draft.direction;
   return {
     title: draft.title,
@@ -92,6 +97,7 @@ function draftToBody(draft: Draft, statusOverride?: string): Record<string, unkn
     status: statusOverride ?? draft.status,
     tags: draft.tags,
     speakerIds: draft.speakerIds,
+    speakerName: speakerNamesFromCatalog(draft.speakerIds, speakers, fallbackName) || null,
     dayNumber: draft.dayNumber,
     eventId: draft.isGeneral ? null : (draft.eventId ? Number(draft.eventId) : null),
     direction: direction || null,
@@ -107,10 +113,7 @@ function draftToBody(draft: Draft, statusOverride?: string): Record<string, unkn
 }
 
 function speakerSummary(ids: number[], speakers: ProgramSpeaker[], fallback?: string | null): string {
-  if (ids.length) {
-    return speakers.filter(s => ids.includes(s.id)).map(s => s.name).join(', ') || '—';
-  }
-  return fallback?.trim() || 'Без спикера';
+  return speakerNamesFromCatalog(ids, speakers, fallback) || (ids.length ? '—' : 'Без спикера');
 }
 
 export function MaterialCard({
@@ -143,7 +146,7 @@ export function MaterialCard({
   }, [material, draft]);
 
   const persist = (statusOverride?: string) => {
-    onSave(draftToBody(draft, statusOverride));
+    onSave(draftToBody(draft, speakers, material.speakerName, statusOverride));
     if (statusOverride) {
       setDraft(d => ({ ...d, status: statusOverride }));
     }
@@ -512,13 +515,10 @@ export function MaterialCard({
                     selectedIds={draft.speakerIds}
                     onChange={ids => setDraft(d => ({ ...d, speakerIds: ids }))}
                   />
-                  {draft.speakerIds.length > 0 && (
+                  {(draft.speakerIds.length > 0 || material.speakerName) && (
                     <p className="adm-muted" style={{ fontSize: 11, margin: '6px 0 0' }}>
-                      {draft.speakerIds
-                        .map(id => speakers.find(s => s.id === id))
-                        .filter(Boolean)
-                        .map(s => speakerFullLabel(s!))
-                        .join(' · ')}
+                      {speakerNamesFromCatalog(draft.speakerIds, speakers, material.speakerName)
+                        || draft.speakerIds.map(id => speakers.find(s => s.id === id)).filter(Boolean).map(s => speakerFullLabel(s!)).join(' · ')}
                     </p>
                   )}
                 </div>
