@@ -416,8 +416,8 @@ export const ProfilePanel: React.FC<{
                 <ProfileNameEditor
                   firstName={p.user.firstName || ''}
                   lastName={p.user.lastName || ''}
-                  direction={p.user.direction}
-                  directionId={p.user.directionId}
+                  groupId={p.user.groupId}
+                  groupName={p.user.groupName}
                   onSaved={(user) => {
                     setProfile((prev: any) => prev ? {
                       ...prev,
@@ -435,7 +435,7 @@ export const ProfilePanel: React.FC<{
                   }}
                   onError={setSnackbar}
                 />
-                <div className="pf-r">{shiftLine || p.user.direction}</div>
+                <div className="pf-r">{[p.user.groupName, shiftLine || p.user.direction].filter(Boolean).join(' · ')}</div>
                 <button
                   type="button"
                   className="pf-shift-btn"

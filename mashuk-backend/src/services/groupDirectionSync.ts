@@ -1,6 +1,37 @@
-import { eq } from 'drizzle-orm';
+import { and, asc, count, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { directions, participantGroups, participants } from '../db/schema.js';
+
+export type ShiftGroupOption = {
+  id: number;
+  name: string;
+  directionId: number | null;
+  capacity: number | null;
+  membersCount: number;
+  seatsLeft: number | null;
+};
+
+/** All groups of this shift, with free seats. Empty groups stay in the list. */
+export async function listShiftGroupsWithSeats(shiftId: number): Promise<ShiftGroupOption[]> {
+  const groups = await db.select().from(participantGroups)
+    .where(eq(participantGroups.shiftId, shiftId))
+    .orderBy(asc(participantGroups.name), asc(participantGroups.id));
+  return Promise.all(groups.map(async (g) => {
+    const [c] = await db.select({ c: count() }).from(participants).where(and(
+      eq(participants.groupId, g.id),
+      eq(participants.shiftId, shiftId),
+    ));
+    const membersCount = Number(c?.c ?? 0);
+    return {
+      id: g.id,
+      name: g.name,
+      directionId: g.directionId ?? null,
+      capacity: g.capacity ?? null,
+      membersCount,
+      seatsLeft: g.capacity != null ? Math.max(0, g.capacity - membersCount) : null,
+    };
+  }));
+}
 
 /** Groups without a direction, or tied to the chosen one. */
 export function groupsMatchingDirection<T extends { directionId?: number | null }>(

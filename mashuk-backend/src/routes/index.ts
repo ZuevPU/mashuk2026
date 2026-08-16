@@ -18,7 +18,7 @@ import {
 } from '../controllers/questionsController.js';
 import { listActiveExchangeCategories } from '../controllers/exchangeCategoryController.js';
 import {
-  getProfile, listPiggybank, createPiggybank, updateProfileSettings, updateParticipantName, updateParticipantInterests, deleteMyProfile, getPublicLeaderboard,
+  getProfile, listProfileGroups, listPiggybank, createPiggybank, updateProfileSettings, updateParticipantName, updateParticipantInterests, deleteMyProfile, getPublicLeaderboard,
   exportPiggybankText, listMyMedals, listMedalsCatalog, synthesizeMyOutcomes, downloadMyProfilePdf,
   getMyShiftResults, regenerateMyQr,
 } from '../controllers/profileController.js';
@@ -90,6 +90,7 @@ router.post('/org/threads', vkAuthMiddleware, requireParticipant, createOrgThrea
 router.post('/org/threads/:id/reply', vkAuthMiddleware, requireParticipant, replyOrgThread);
 
 router.get('/profile', vkAuthMiddleware, requireParticipant, getProfile);
+router.get('/profile/groups', vkAuthMiddleware, requireParticipant, listProfileGroups);
 router.get('/profile/pdf', vkAuthMiddleware, requireParticipant, downloadMyProfilePdf);
 router.get('/profile/shift-results', vkAuthMiddleware, requireParticipant, getMyShiftResults);
 router.patch('/profile/settings', vkAuthMiddleware, requireParticipant, updateProfileSettings);

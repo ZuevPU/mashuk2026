@@ -4,6 +4,7 @@ import { adminDownloadBinary } from '../../admin/client';
 import { AdminPageHero } from '../admin/AdminPageHero';
 import { RowActionsMenu } from '../participants/RowActionsMenu';
 import type { AdminTabProps } from '../admin/types';
+import { UpdatesJournal } from './UpdatesJournal';
 
 type ActionLogRow = {
   id: number;
@@ -19,9 +20,11 @@ type ActionLogRow = {
   reviewedAt?: string | null;
 };
 
+type JournalPane = 'updates' | 'actions';
 type JournalMode = 'all' | 'critical';
 
-export function JournalTab({ adminFetch, act, reloadKey }: AdminTabProps) {
+export function JournalTab({ adminFetch, act, reloadKey, onOpenBlock }: AdminTabProps) {
+  const [pane, setPane] = useState<JournalPane>('updates');
   const [mode, setMode] = useState<JournalMode>('all');
   const [reviewFilter, setReviewFilter] = useState('');
   const [search, setSearch] = useState('');
@@ -59,8 +62,9 @@ export function JournalTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   }, [adminFetch, buildQuery]);
 
   useEffect(() => {
+    if (pane !== 'actions') return;
     load().catch(() => setLoading(false));
-  }, [load, reloadKey]);
+  }, [load, reloadKey, pane]);
 
   const exportXlsx = () => {
     const sp = buildQuery();
@@ -70,10 +74,21 @@ export function JournalTab({ adminFetch, act, reloadKey }: AdminTabProps) {
   return (
     <div className="adm-forum">
       <AdminPageHero
-        title="Журнал изменений"
-        hint="История операций администраторов. Критичные операции — отдельная вкладка."
+        title={pane === 'updates' ? 'Журнал обновлений' : 'Журнал действий'}
+        hint={pane === 'updates'
+          ? 'Что поменяли в продукте: дата, суть, ссылка на раздел, механика у админа и у участника.'
+          : 'История операций администраторов. Критичные операции — отдельный фильтр.'}
       />
 
+      <div className="adm-seg" style={{ marginBottom: 12 }}>
+        <button type="button" className={pane === 'updates' ? 'on' : ''} onClick={() => setPane('updates')}>Обновления</button>
+        <button type="button" className={pane === 'actions' ? 'on' : ''} onClick={() => setPane('actions')}>Действия админов</button>
+      </div>
+
+      {pane === 'updates' && <UpdatesJournal onOpenBlock={onOpenBlock} />}
+
+      {pane === 'actions' && (
+        <>
       <div className="adm-seg" style={{ marginBottom: 12 }}>
         <button type="button" className={mode === 'all' ? 'on' : ''} onClick={() => setMode('all')}>Все записи</button>
         <button type="button" className={mode === 'critical' ? 'on' : ''} onClick={() => setMode('critical')}>Критичные операции</button>
@@ -167,6 +182,8 @@ export function JournalTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             <button type="button" className="adm-btn adm-btn-secondary" onClick={() => setDetail(null)}>Закрыть</button>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

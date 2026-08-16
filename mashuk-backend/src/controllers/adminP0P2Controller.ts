@@ -135,11 +135,20 @@ export const crudGroups = {
       res.status(400).json({ error: 'Nothing to update' });
       return;
     }
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
     const [before] = await db.select({
       directionId: participantGroups.directionId,
-    }).from(participantGroups).where(eq(participantGroups.id, id)).limit(1);
+      shiftId: participantGroups.shiftId,
+    }).from(participantGroups).where(and(
+      eq(participantGroups.id, id),
+      eq(participantGroups.shiftId, shiftId),
+    )).limit(1);
     if (!before) { res.status(404).json({ error: 'Not found' }); return; }
-    const [updated] = await db.update(participantGroups).set(patch).where(eq(participantGroups.id, id)).returning();
+    const [updated] = await db.update(participantGroups).set(patch).where(and(
+      eq(participantGroups.id, id),
+      eq(participantGroups.shiftId, shiftId),
+    )).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
     // sync group_name on participants
     await db.update(participants).set({ groupName: updated.name }).where(eq(participants.groupId, id));
@@ -153,8 +162,18 @@ export const crudGroups = {
   },
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
+    const [owned] = await db.select({ id: participantGroups.id }).from(participantGroups).where(and(
+      eq(participantGroups.id, id),
+      eq(participantGroups.shiftId, shiftId),
+    )).limit(1);
+    if (!owned) { res.status(404).json({ error: 'Not found' }); return; }
     await db.update(participants).set({ groupId: null, groupName: null }).where(eq(participants.groupId, id));
-    const [deleted] = await db.delete(participantGroups).where(eq(participantGroups.id, id)).returning();
+    const [deleted] = await db.delete(participantGroups).where(and(
+      eq(participantGroups.id, id),
+      eq(participantGroups.shiftId, shiftId),
+    )).returning();
     if (!deleted) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ ok: true });
   },

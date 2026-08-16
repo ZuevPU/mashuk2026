@@ -5451,3 +5451,57 @@ tr.adm-dir-me td { background: rgba(230, 174, 74, 0.09); }
   .adm-role-board-grid { grid-template-columns: 1fr; }
   .adm-role-board-foot { grid-template-columns: 1fr; gap: 6px; }
 }
+
+.adm-changelog-card { padding: 0; overflow: hidden; }
+.adm-changelog-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.adm-changelog-when {
+  font-size: 12px;
+  font-weight: 600;
+  color: #718096;
+  margin-bottom: 4px;
+}
+.adm-changelog-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.adm-changelog-done { margin: 0; }
+.adm-changelog-body {
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--m-border, #E8E4DC);
+}
+.adm-changelog-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.adm-changelog-dl {
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+.adm-changelog-dl dt {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #718096;
+  margin-bottom: 4px;
+}
+.adm-changelog-dl dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}

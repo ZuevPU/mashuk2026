@@ -257,7 +257,7 @@ export const SECTION_LABELS: Record<AdminSection, string> = {
   exports: 'Выгрузки',
   push: 'Уведомления',
   admins: 'Пользователи админки',
-  journal: 'Журнал изменений',
+  journal: 'Журнал обновлений',
   medals: 'Медали',
   piggybank: 'Копилка',
   'recommendation-tags': 'Теги рекомендаций',

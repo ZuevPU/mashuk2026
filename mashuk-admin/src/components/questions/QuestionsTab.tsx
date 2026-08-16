@@ -168,7 +168,7 @@ export function QuestionsTab({
     setTotalAll(allRes.totalCount ?? allRes.questions?.length ?? 0);
     const [dirRes, grpRes, shiftsRes, evRes, partRes] = await Promise.all([
       adminFetch('/directions').catch(() => ({ directions: [] })),
-      adminFetch('/participants/groups').catch(() => ({ groups: [] })),
+      adminFetch('/groups').catch(() => ({ groups: [] })),
       adminFetch('/shifts').catch(() => ({ shifts: [] })),
       adminFetch('/events').catch(() => ({ events: [] })),
       adminFetch('/participants?limit=2000').catch(() => ({ participants: [] })),

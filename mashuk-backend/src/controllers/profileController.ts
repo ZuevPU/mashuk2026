@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { eq, desc, and, or, isNull, isNotNull, lte, sql } from 'drizzle-orm';
+import { eq, desc, and, or, isNull, isNotNull, lte, sql, count } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   piggybank, answers, taskSubmissions, tasks, questions, participants, directions, pointsLog,
@@ -358,6 +358,17 @@ export const updateProfileSettings = async (req: ParticipantRequest, res: Respon
   }
 };
 
+export const listProfileGroups = async (req: ParticipantRequest, res: Response): Promise<void> => {
+  try {
+    const { listShiftGroupsWithSeats } = await import('../services/groupDirectionSync.js');
+    const groups = await listShiftGroupsWithSeats(req.participant!.shiftId);
+    res.json({ groups, groupId: req.participant!.groupId ?? null });
+  } catch (error) {
+    console.error('listProfileGroups:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const updateParticipantName = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
     const parsed = parseEditablePersonName(req.body?.firstName, req.body?.lastName);
@@ -378,7 +389,42 @@ export const updateParticipantName = async (req: ParticipantRequest, res: Respon
       lastName: parsed.lastName,
     };
 
-    if (req.body?.directionId != null && req.body.directionId !== '') {
+    if (req.body?.groupId != null && req.body.groupId !== '') {
+      const groupId = Number(req.body.groupId);
+      if (!Number.isInteger(groupId) || groupId <= 0) {
+        res.status(400).json({ error: 'Некорректная группа' });
+        return;
+      }
+      if (me.groupId !== groupId) {
+        const { participantGroups } = await import('../db/schema.js');
+        const [group] = await db.select().from(participantGroups).where(and(
+          eq(participantGroups.id, groupId),
+          eq(participantGroups.shiftId, me.shiftId),
+        )).limit(1);
+        if (!group) {
+          res.status(400).json({ error: 'Группа не найдена на этой смене' });
+          return;
+        }
+        const [c] = await db.select({ c: count() }).from(participants).where(and(
+          eq(participants.groupId, group.id),
+          eq(participants.shiftId, me.shiftId),
+        ));
+        if (group.capacity != null && Number(c?.c ?? 0) >= group.capacity) {
+          res.status(400).json({ error: 'Группа заполнена' });
+          return;
+        }
+        patch.groupId = group.id;
+        patch.groupName = group.name;
+        if (group.directionId) {
+          const { getDirectionInShift } = await import('../services/shiftCatalogs.js');
+          const dir = await getDirectionInShift(group.directionId, me.shiftId);
+          if (dir) {
+            patch.directionId = dir.id;
+            patch.direction = dir.name;
+          }
+        }
+      }
+    } else if (req.body?.directionId != null && req.body.directionId !== '') {
       const directionId = Number(req.body.directionId);
       if (!Number.isInteger(directionId) || directionId <= 0) {
         res.status(400).json({ error: 'Некорректное направление' });
@@ -393,16 +439,6 @@ export const updateParticipantName = async (req: ParticipantRequest, res: Respon
         }
         patch.directionId = dir.id;
         patch.direction = dir.name;
-        if (me.groupId) {
-          const { participantGroups } = await import('../db/schema.js');
-          const [group] = await db.select().from(participantGroups)
-            .where(eq(participantGroups.id, me.groupId))
-            .limit(1);
-          if (group && group.directionId != null && group.directionId !== dir.id) {
-            patch.groupId = null;
-            patch.groupName = null;
-          }
-        }
       }
     }
 

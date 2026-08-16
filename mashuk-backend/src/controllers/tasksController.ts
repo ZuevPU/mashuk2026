@@ -328,6 +328,10 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
     }
 
     const now = new Date();
+    if (task.status !== 'published' || task.isHidden) {
+      res.status(404).json({ error: 'Задание не найдено' });
+      return;
+    }
     const methods = taskMethodsForParticipant(task);
     const isQrSubmit = methods.includes('qr') || !!qrToken;
     const requestDeviceKey = isQrSubmit
@@ -366,6 +370,10 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
       res.status(400).json({
         error: 'QR-код задания сейчас не активен. Сканируйте только в указанное в админке время и дни.',
       });
+      return;
+    }
+    if ((task.publishTime && task.publishTime > now) || (task.availableFrom && task.availableFrom > now)) {
+      res.status(400).json({ error: 'Задание ещё не открыто' });
       return;
     }
     if (!isTaskSubmissionOpen(task, now)) {
@@ -597,6 +605,14 @@ export const resolveTaskQr = async (req: ParticipantRequest, res: Response): Pro
     }
 
     const now = new Date();
+    if (task.status !== 'published' || task.isHidden) {
+      res.status(404).json({ error: 'QR-код не найден' });
+      return;
+    }
+    if (task.publishTime && task.publishTime > now) {
+      res.status(400).json({ error: 'Задание ещё не открыто' });
+      return;
+    }
     const forumDay = await resolveForumDayForNewEntry(req.participant.shiftId);
     if (!isQrInValidWindow(task, now, forumDay)) {
       res.status(400).json({

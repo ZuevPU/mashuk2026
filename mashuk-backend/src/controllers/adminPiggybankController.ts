@@ -66,13 +66,19 @@ function buildWhere(params: ReturnType<typeof parseListQuery>) {
 
 async function resolveCohortIds(params: ReturnType<typeof parseListQuery>) {
   if (!params.directionId && params.directionName) {
+    const dirWhere = params.shiftId
+      ? and(eq(directions.name, params.directionName), eq(directions.shiftId, params.shiftId))
+      : eq(directions.name, params.directionName);
     const [d] = await db.select({ id: directions.id }).from(directions)
-      .where(eq(directions.name, params.directionName)).limit(1);
+      .where(dirWhere).limit(1);
     if (d) params.directionId = d.id;
   }
   if (!params.groupId && params.groupName) {
+    const groupWhere = params.shiftId
+      ? and(eq(participantGroups.name, params.groupName), eq(participantGroups.shiftId, params.shiftId))
+      : eq(participantGroups.name, params.groupName);
     const [g] = await db.select({ id: participantGroups.id }).from(participantGroups)
-      .where(eq(participantGroups.name, params.groupName)).limit(1);
+      .where(groupWhere).limit(1);
     if (g) params.groupId = g.id;
   }
   return params;

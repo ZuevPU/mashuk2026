@@ -321,17 +321,10 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
     return () => { cancelled = true; };
   }, [selectedShiftId]);
 
-  const groupsForDirection = useMemo(() => {
-    if (!directionId) return [];
-    return groups.filter(g => g.directionId == null || g.directionId === directionId);
-  }, [groups, directionId]);
-
-  useEffect(() => {
-    setGroupId(prev => {
-      if (prev == null) return prev;
-      return groupsForDirection.some(g => g.id === prev) ? prev : null;
-    });
-  }, [groupsForDirection]);
+  const openGroups = useMemo(
+    () => groups.filter(g => g.seatsLeft == null || g.seatsLeft > 0),
+    [groups],
+  );
 
   const progressValue = step === 'result' || step === 'confirm'
     ? 100
@@ -343,7 +336,7 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
     hasRealName
     && directionId && age && Number(age) >= 14 && Number(age) <= 100
     && workplace.trim() && position.trim() && region
-    && (groupAssignMode !== 'list' || groupsForDirection.length === 0 || groupId),
+    && (groupAssignMode !== 'list' || openGroups.length === 0 || groupId),
   );
   const canGoStep2 = onboardingStepsReady
     && goalQuestions.length > 0
@@ -535,7 +528,6 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 value={directionId ?? undefined}
                 onChange={e => {
                   setDirectionId(Number(e.target.value));
-                  setGroupId(null);
                 }}
               />
             </FormItem>
@@ -567,13 +559,16 @@ export const RegistrationPanel: React.FC<RegistrationPanelProps> = ({
                 />
               </FormItem>
             )}
-            {groupAssignMode === 'list' && groupsForDirection.length > 0 && (
+            {groupAssignMode === 'list' && groups.length > 0 && (
               <FormItem top="Группа *">
                 <CustomSelect
                   placeholder="Выберите группу"
-                  options={groupsForDirection.map(g => ({
-                    label: g.seatsLeft != null ? `${g.name} (мест: ${g.seatsLeft})` : g.name,
+                  options={groups.map(g => ({
+                    label: g.seatsLeft === 0
+                      ? `${g.name} (нет мест)`
+                      : g.seatsLeft != null ? `${g.name} (мест: ${g.seatsLeft})` : g.name,
                     value: g.id,
+                    disabled: g.seatsLeft === 0,
                   }))}
                   value={groupId ?? undefined}
                   onChange={e => setGroupId(Number(e.target.value))}

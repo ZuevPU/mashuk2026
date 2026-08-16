@@ -50,7 +50,7 @@ export const TAB_LABELS: Record<Tab, string> = {
   push: 'Уведомления',
   'recommendation-tags': 'Интересы',
   admins: 'Админы',
-  journal: 'Журнал',
+  journal: 'Журнал обновлений',
   medals: 'Медали',
 };
 

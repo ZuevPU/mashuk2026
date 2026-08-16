@@ -142,20 +142,10 @@ export const listParticipants = async (req: AdminRequest, res: Response): Promis
 
 export const listParticipantGroups = async (req: AdminRequest, res: Response): Promise<void> => {
   const shiftId = await resolveAdminShiftId(req);
-  const rows = await db.select({
-    groupId: participants.groupId,
-    groupName: participants.groupName,
-  }).from(participants).where(and(
-    eq(participants.shiftId, shiftId),
-    isNull(participants.selfDeletedAt),
-    isNotNull(participants.groupId),
-  ));
-  const map = new Map<number, string>();
-  for (const r of rows) {
-    if (r.groupId != null) map.set(r.groupId, r.groupName || `Группа ${r.groupId}`);
-  }
+  const { listShiftGroupsWithSeats } = await import('../services/groupDirectionSync.js');
+  const groups = await listShiftGroupsWithSeats(shiftId);
   res.json({
-    groups: [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+    groups: groups.map(g => ({ id: g.id, name: g.name })),
   });
 };
 
@@ -2156,7 +2146,8 @@ export const crudTasks = {
     const wasPublished = before.status === 'published';
     const isPublished = updated?.status === 'published';
     const publishJustHappened = isPublished && (!wasPublished || (updated.publishTime && before.publishTime && updated.publishTime > before.publishTime));
-    if (updated?.pushOnPublish && isPublished && publishJustHappened) {
+    const taskLiveNow = !updated?.publishTime || updated.publishTime <= now;
+    if (updated?.pushOnPublish && isPublished && publishJustHappened && taskLiveNow) {
       const { pushCopy } = await import('../services/pushCopy.js');
       await notifyAllParticipants(
         pushCopy.taskPublished(updated.title),
@@ -2164,7 +2155,7 @@ export const crudTasks = {
         updated.shiftId,
       );
     }
-    if (isPublished && publishJustHappened) {
+    if (isPublished && publishJustHappened && taskLiveNow) {
       try {
         const { fireTaskPublishTrigger } = await import('../services/pushTriggerRunner.js');
         await fireTaskPublishTrigger(id, now);
@@ -2227,6 +2218,7 @@ export const crudTasks = {
       for (const updated of publishedRows) {
         const before = beforeById.get(updated.id);
         if (before?.status === 'published') continue;
+        if (updated.publishTime && updated.publishTime > now) continue;
         if (updated.pushOnPublish) {
           await notifyAllParticipants(
             pushCopy.taskPublished(updated.title),

@@ -22,7 +22,11 @@ import { scheduleParticipantAvatarSync } from '../services/participantAvatarSync
 import { healParticipantPlaceholderName, resolveOnboardingName } from '../services/participantName.js';
 import { needsShift2InterestsReselection } from '../services/shift2InterestsGate.js';
 import { getForumSettings } from '../services/helpers.js';
-import { groupsMatchingDirection } from '../services/groupDirectionSync.js';
+import {
+  groupsMatchingDirection,
+  listShiftGroupsWithSeats,
+  resolveDirectionFromGroup,
+} from '../services/groupDirectionSync.js';
 import {
   findParticipantForVk,
   getShiftById,
@@ -90,9 +94,6 @@ async function assignGroup(
       eq(participantGroups.shiftId, shiftId),
     )).limit(1);
     if (!g) return { groupId: null, groupName: null };
-    if (g.directionId != null && g.directionId !== directionId) {
-      throw new Error('Эта группа относится к другому направлению. Выберите группу своего направления.');
-    }
     const [c] = await db.select({ c: count() }).from(participants).where(and(
       eq(participants.groupId, g.id),
       eq(participants.shiftId, shiftId),
@@ -339,7 +340,7 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
     }
     if (mode === 'list' && !groupAssign.groupId) {
       const shiftGroups = await db.select().from(participantGroups).where(eq(participantGroups.shiftId, shiftId));
-      if (groupsMatchingDirection(shiftGroups, dir.id).length > 0) {
+      if (shiftGroups.length > 0) {
         res.status(400).json({ error: 'Выберите группу' });
         return;
       }
@@ -361,15 +362,7 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       return;
     }
 
-    if (groupAssign.groupId) {
-      const [assignedGroup] = await db.select({
-        directionId: participantGroups.directionId,
-      }).from(participantGroups).where(eq(participantGroups.id, groupAssign.groupId)).limit(1);
-      if (assignedGroup?.directionId && assignedGroup.directionId !== dir.id) {
-        res.status(400).json({ error: 'Эта группа относится к другому направлению. Выберите группу своего направления.' });
-        return;
-      }
-    }
+    const resolvedDir = await resolveDirectionFromGroup(groupAssign.groupId, { id: dir.id, name: dir.name });
 
     const resolvedName = await resolveOnboardingName(vkUserId, data.firstName, data.lastName);
     if ('error' in resolvedName) {
@@ -392,8 +385,8 @@ export const completeOnboarding = async (req: VkAuthRequest, res: Response): Pro
       consentAnalyticsVersion: data.consentAnalyticsVersion ?? consentVersions.analytics,
       groupId: groupAssign.groupId,
       groupName: groupAssign.groupName,
-      directionId: dir.id,
-      direction: dir.name,
+      directionId: resolvedDir.id,
+      direction: resolvedDir.name,
       interests: data.interests,
       interestsReselectedAt: new Date(),
       goalAnswers: data.goalAnswers,
@@ -527,21 +520,7 @@ export const listOnboardingMeta = async (req: VkAuthRequest, res: Response): Pro
     const roles = await db.select().from(pedagogicalRoles);
     const onboardingConfig = await getForumOnboardingConfig(shiftId);
     const settings = await getForumSettings(shiftId);
-    const groups = await db.select().from(participantGroups)
-      .where(eq(participantGroups.shiftId, shiftId))
-      .orderBy(asc(participantGroups.id));
-    const groupsWithFree = await Promise.all(groups.map(async (g) => {
-      const [c] = await db.select({ c: count() }).from(participants).where(and(
-        eq(participants.groupId, g.id),
-        eq(participants.shiftId, shiftId),
-      ));
-      const members = Number(c?.c ?? 0);
-      return {
-        ...g,
-        membersCount: members,
-        seatsLeft: g.capacity != null ? Math.max(0, g.capacity - members) : null,
-      };
-    }));
+    const groupsWithSeats = await listShiftGroupsWithSeats(shiftId);
     res.json({
       roles: roles.length ? roles : undefined,
       goalQuestions: onboardingConfig.goalQuestions,
@@ -556,7 +535,7 @@ export const listOnboardingMeta = async (req: VkAuthRequest, res: Response): Pro
         interestGroups: onboardingConfig.interestGroups,
       },
       groupAssignMode: settings?.groupAssignMode || 'list',
-      groups: groupsWithFree.filter(g => g.seatsLeft == null || g.seatsLeft > 0),
+      groups: groupsWithSeats,
       activeShiftId: shiftId,
       publishedShifts,
     });

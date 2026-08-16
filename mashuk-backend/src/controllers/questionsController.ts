@@ -320,6 +320,9 @@ export const getQuestion = async (req: ParticipantRequest, res: Response): Promi
     } else if (!questionVisibleToParticipant(question, req.participant!, currentDay, { attendedEventIds })) {
       res.status(403).json({ error: 'Question not available' });
       return;
+    } else if (question.publishTime && question.publishTime > new Date()) {
+      res.status(400).json({ error: 'Question not yet published', access: 'soon' });
+      return;
     }
     const options = await db.select().from(questionOptions).where(eq(questionOptions.questionId, id))
       .orderBy(asc(questionOptions.sortOrder));
