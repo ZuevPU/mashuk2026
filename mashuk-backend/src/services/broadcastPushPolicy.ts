@@ -6,10 +6,10 @@
  * Всё остальное (слоты, публикация, догонялки, программа, заявка, медаль,
  * команда, обмен, уровень) не шлёт ни push, ни messages.send.
  */
-export const AUTO_CONTENT_PUSH_ENABLED = false;
+export const AUTO_CONTENT_PUSH_ENABLED: boolean = false;
 
 export function allowAutoContentPush(): boolean {
-  return AUTO_CONTENT_PUSH_ENABLED === true;
+  return AUTO_CONTENT_PUSH_ENABLED;
 }
 
 /** Очередь push_queue: слать только то, что поставил админ. */

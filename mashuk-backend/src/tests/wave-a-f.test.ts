@@ -11,6 +11,7 @@ import { parseEventAttendanceRef } from '../services/eventAttendanceService.js';
 describe('broadcastPushPolicy', () => {
   it('keeps content broadcasts manual-only', () => {
     assert.equal(allowAutoContentPush(), false);
+    assert.equal(typeof allowAutoContentPush(), 'boolean');
     assert.equal(isAdminQueuedPush(null), false);
     assert.equal(isAdminQueuedPush(0), false);
     assert.equal(isAdminQueuedPush(12), true);
