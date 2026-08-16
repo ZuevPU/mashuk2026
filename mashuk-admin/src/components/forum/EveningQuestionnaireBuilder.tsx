@@ -678,7 +678,7 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
             : scheduleDayPublished === false
               ? 'День скрыт в программе — участники не видят анкету, пока день не опубликуют.'
               : forcePublished
-                ? 'Открыта вручную («Опубликовать сейчас»).'
+                ? 'Открыта вручную («Опубликовать сейчас») — видна, пока не снимете с публикации.'
                 : isOpenNow
                   ? `Сейчас открыта по расписанию (день ${opensOnDay} ${opensAtMsk} → день ${closesOnDay} ${closesAtMsk} МСК).`
                   : `Появится автоматически: день ${opensOnDay} ${opensAtMsk} → день ${closesOnDay} ${closesAtMsk} МСК.`}
@@ -687,15 +687,16 @@ export function EveningQuestionnaireBuilder({ adminFetch, act, initialDay, direc
           type="button"
           className="adm-btn adm-btn-secondary adm-btn-sm"
           onClick={() => setPublishMode('schedule')}
-          title="Сохранить время и убрать ручные флаги публикации"
+          title="Видна участникам только в указанное время. Ручная публикация снимается."
         >
-          Опубликовать во время
+          Опубликовать по времени
         </button>
         <button
           type="button"
           className="adm-btn adm-btn-primary adm-btn-sm"
           onClick={() => setPublishMode('publish')}
-          disabled={forcePublished && isOpenNow}
+          disabled={forcePublished}
+          title="Открыть сразу и держать, пока сами не снимете с публикации"
         >
           Опубликовать сейчас
         </button>

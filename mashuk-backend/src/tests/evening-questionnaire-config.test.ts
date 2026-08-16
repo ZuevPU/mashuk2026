@@ -79,12 +79,11 @@ describe('eveningQuestionnaireConfig', () => {
       }, at2045),
       true,
     );
-    // Legacy forcePublished without timestamp must not hang after the evening window
+    // Manual «Опубликовать сейчас» stays open after the clock window
     assert.equal(
       isEveningOpenForConfig({ steps: [], opensAtMsk: '22:00', forcePublished: true }, at0730),
-      false,
+      true,
     );
-    // Fresh force expires after 01:00 MSK
     assert.equal(
       isEveningOpenForConfig({
         steps: [],
@@ -92,7 +91,7 @@ describe('eveningQuestionnaireConfig', () => {
         forcePublished: true,
         forcePublishedAt: '2026-07-01T17:00:00.000Z',
       }, at0730),
-      false,
+      true,
     );
     assert.equal(
       isEveningOpenForConfig({ steps: [], opensAtMsk: '22:00' }, at2130, {
@@ -383,6 +382,12 @@ describe('eveningQuestionnaireConfig', () => {
       new Date('2026-07-03T19:00:00.000Z'),
       { settings },
     ), false);
+    assert.equal(isEveningOpenForDay(
+      { ...cfg, forcePublished: true },
+      3,
+      new Date('2026-07-03T23:00:00.000Z'),
+      { settings },
+    ), true);
   });
 
   it('same-day close stays on that forum day', () => {

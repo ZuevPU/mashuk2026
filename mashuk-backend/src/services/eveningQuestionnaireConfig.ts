@@ -154,9 +154,9 @@ export type EveningQuestionnaireConfig = {
   opensOnDay?: number;
   /** Forum day when the window ends. 02:00 after 22:00 is usually the next day. */
   closesOnDay?: number;
-  /** Admin forced the questionnaire open for this day (before opensAtMsk). */
+  /** Admin forced the questionnaire open — stays until «Снять с публикации». */
   forcePublished?: boolean;
-  /** ISO timestamp when forcePublished was set — expires at the configured close. */
+  /** ISO timestamp when forcePublished was set (audit only, does not expire). */
   forcePublishedAt?: string;
   /** Admin hid the questionnaire — overrides schedule and forcePublished. */
   forceUnpublished?: boolean;
@@ -211,7 +211,7 @@ function clockToMinutes(hhmm: string): number {
   return h * 60 + m;
 }
 
-/** «Опубликовать сейчас» действует до ближайшего closesAtMsk (по умолчанию 02:00 МСК). */
+/** Kept for older callers; manual publish no longer expires by clock. */
 export function forcePublishedExpiresAt(
   forcedAt: Date,
   closesAtMsk = DEFAULT_EVENING_CLOSES_AT_MSK,
@@ -226,16 +226,12 @@ export function forcePublishedExpiresAt(
   return new Date(mskWall.getTime() - MSK_OFFSET_MS);
 }
 
-/** Early force-open is active only with a fresh forcePublishedAt (legacy flag alone does not hang all day). */
+/** «Опубликовать сейчас» — флаг в конфиге, без привязки к окну времени. */
 export function isForcePublishedActive(
   config: EveningQuestionnaireConfig | null | undefined,
-  now = new Date(),
+  _now = new Date(),
 ): boolean {
-  if (!config?.forcePublished) return false;
-  if (!config.forcePublishedAt) return false;
-  const forcedAt = new Date(config.forcePublishedAt);
-  if (Number.isNaN(forcedAt.getTime())) return false;
-  return now.getTime() < forcePublishedExpiresAt(forcedAt, getEveningClosesAtMsk(config)).getTime();
+  return !!config?.forcePublished && !config?.forceUnpublished;
 }
 
 /** Normalize "21:00" / "9:30" → "HH:MM", or null if invalid. */
@@ -440,7 +436,9 @@ function isWithinClockWindow(
  * Evening questionnaire window: from opensAtMsk until closesAtMsk (default 22:00→02:00).
  * Overnight wrap is opt-in (`allowOvernight`) so yesterday's form does not reopen
  * every night, and admin days 2–7 do not all show «open».
- * forcePublished opens early until the same close. forceUnpublished always wins.
+ * «Опубликовать по времени» — окно opensAt..closesAt.
+ * «Опубликовать сейчас» — forcePublished, пока админ не снимет.
+ * forceUnpublished always wins.
  */
 export function isEveningOpenForConfig(
   config: EveningQuestionnaireConfig | null | undefined,
@@ -448,9 +446,9 @@ export function isEveningOpenForConfig(
   opts?: { scheduleDayPublished?: boolean | null; allowOvernight?: boolean },
 ): boolean {
   if (config?.forceUnpublished) return false;
+  if (isForcePublishedActive(config, now)) return true;
   if (opts?.scheduleDayPublished === false) return false;
-  if (isWithinClockWindow(config, now, opts?.allowOvernight === true)) return true;
-  return isForcePublishedActive(config, now);
+  return isWithinClockWindow(config, now, opts?.allowOvernight === true);
 }
 
 /** Open-window check for a specific forum day (overnight wrap only for that operational day). */
@@ -464,12 +462,12 @@ export function isEveningOpenForDay(
   },
 ): boolean {
   if (config?.forceUnpublished) return false;
+  if (isForcePublishedActive(config, now)) return true;
   if (opts?.scheduleDayPublished === false) return false;
   const window = resolveEveningScheduleWindow(config, dayNumber, opts?.settings);
   if (window.start && window.end && window.end.getTime() > window.start.getTime()) {
     const t = now.getTime();
-    if (t >= window.start.getTime() && t < window.end.getTime()) return true;
-    return isForcePublishedActive(config, now) && t < window.end.getTime();
+    return t >= window.start.getTime() && t < window.end.getTime();
   }
   return isEveningOpenForConfig(config, now, {
     scheduleDayPublished: opts?.scheduleDayPublished,
