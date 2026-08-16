@@ -7,7 +7,6 @@ import {
 import { inferReflectionDepth } from '../reflectionDepth.js';
 import { isPublishedStatus } from '../publishStatus.js';
 import { questionMatchesDay } from '../questionAdminHelpers.js';
-import { questionMatchesDay } from '../questionAdminHelpers.js';
 import {
   ANSWER_ROW_HEADERS_RU, addReadmeSheet, answerText, buildAnswerRow, filterAnswersByTouchpoint, formatTs, fullName,
 } from './exportCommon.js';

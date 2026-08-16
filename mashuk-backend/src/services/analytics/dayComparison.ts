@@ -13,7 +13,7 @@ import {
 } from './zoneDistribution.js';
 import { isQuestionLiveForAnalytics } from './analyticsQuestionLive.js';
 
-export type KindDashboardMode = 'after_blocks' | 'state_check';
+export type KindDashboardMode = 'after_blocks' | 'state_check' | 'extra';
 
 function isStateCheckQuestion(q: typeof questions.$inferSelect): boolean {
   if (q.questionKind === 'state_check' || q.reflectionKind === 'state_check') return true;
@@ -34,6 +34,7 @@ function isAfterBlocksQuestion(q: typeof questions.$inferSelect): boolean {
 
 function matchesKind(q: typeof questions.$inferSelect, mode: KindDashboardMode): boolean {
   if (mode === 'after_blocks') return isAfterBlocksQuestion(q) && !isStateCheckQuestion(q);
+  if (mode === 'extra') return q.questionKind === 'extra';
   return isStateCheckQuestion(q);
 }
 
