@@ -109,7 +109,7 @@ export function triggersForContent(kind: ContentNotifyKind, id: number, day: num
 }
 
 export function sendTriggerForContent(kind: ContentNotifyKind, id: number, day: number): string {
-  if (kind === 'question') return touchpointOpenTrigger(id);
+  if (kind === 'question') return `question_notify_${id}`;
   if (kind === 'task') return `task_notify_${id}`;
   if (kind === 'event') return `event_notify_${id}`;
   if (kind === 'forum_wrap') return 'forum_wrap_questionnaire_notify';

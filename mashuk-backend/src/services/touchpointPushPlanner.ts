@@ -88,6 +88,7 @@ async function runTouchpointPushPlannerForShift(
   now: Date,
   dayStart: Date,
 ): Promise<string[]> {
+  if (!allowAutoContentPush()) return [];
   const settings = await getForumSettings(shiftId);
   const currentDay = resolveEffectiveCurrentDay(settings, now);
   if (currentDay < 1 || currentDay > 7) return [];

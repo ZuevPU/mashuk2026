@@ -10,7 +10,6 @@ import {
 import { AdminRequest } from '../middlewares/adminAuth.js';
 import {
   notifyQuestionAudience,
-  notifyQuestionOnPublish,
 } from '../services/questionAutoNotify.js';
 import {
   questionCreateSchema, questionUpdateSchema, parseBody,
@@ -276,11 +275,6 @@ export const crudQuestions = {
     if (!values.type) values.type = 'open';
     if (!values.status) values.status = 'draft';
     const [q] = await db.insert(questions).values({ ...values, shiftId } as typeof questions.$inferInsert).returning();
-    // Точки осмысления / state_check — авто-рассылка, когда уже «в эфире»
-    // (опубликован сейчас; по времени — подхватит push-планировщик).
-    if (q.status === 'published') {
-      await notifyQuestionOnPublish(q, { wasPublished: false });
-    }
     const { syncQuestionPointsToLevels } = await import('../services/questionStakesSync.js');
     await syncQuestionPointsToLevels(q);
     res.json({ question: serializeAdminQuestion(q, 0) });
@@ -362,9 +356,6 @@ export const crudQuestions = {
         parentQuestionId: id,
       };
       const [created] = await db.insert(questions).values(copyFields).returning();
-      if (created.status === 'published') {
-        await notifyQuestionOnPublish(created, { wasPublished: false });
-      }
       const { logAdminAction } = await import('../services/adminActionsLog.js');
       await logAdminAction({
         req, actionType: 'question_update', section: 'questions', objectId: created.id,
@@ -414,11 +405,6 @@ export const crudQuestions = {
         .where(eq(questions.id, id))
         .returning()
       : await db.select().from(questions).where(eq(questions.id, id)).limit(1);
-    const wasPublished = before.status === 'published';
-    const isPublished = updated?.status === 'published';
-    if (updated && isPublished) {
-      await notifyQuestionOnPublish(updated, { wasPublished });
-    }
     if (updated) {
       const { syncQuestionPointsToLevels } = await import('../services/questionStakesSync.js');
       await syncQuestionPointsToLevels(updated);
@@ -715,14 +701,7 @@ export const crudQuestions = {
       await db.update(questions).set({ isHidden: hide }).where(inArray(questions.id, ids));
       void all;
     } else if (action === 'publish') {
-      const beforeRows = await db.select({ id: questions.id, status: questions.status })
-        .from(questions).where(inArray(questions.id, ids));
-      const wasPublished = new Set(beforeRows.filter(q => q.status === 'published').map(q => q.id));
       await db.update(questions).set({ status: 'published', isHidden: false }).where(inArray(questions.id, ids));
-      const published = await db.select().from(questions).where(inArray(questions.id, ids));
-      for (const q of published) {
-        await notifyQuestionOnPublish(q, { wasPublished: wasPublished.has(q.id) });
-      }
     } else if (action === 'draft') {
       const { setQuestionUnpublishedCascade } = await import('../services/questionHideCascade.js');
       const all = new Set<number>();

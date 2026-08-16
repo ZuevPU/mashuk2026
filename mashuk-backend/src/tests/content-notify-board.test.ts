@@ -16,7 +16,7 @@ describe('content notify board helpers', () => {
   it('uses one open trigger for question publish and planner', () => {
     const triggers = questionOpenTriggers(42);
     assert.equal(triggers[0], touchpointOpenTrigger(42));
-    assert.equal(sendTriggerForContent('question', 42, 2), 'touchpoint_open_42');
+    assert.equal(sendTriggerForContent('question', 42, 2), 'question_notify_42');
   });
 
   it('keeps evening trigger per day so day 1 and day 2 do not collide', () => {

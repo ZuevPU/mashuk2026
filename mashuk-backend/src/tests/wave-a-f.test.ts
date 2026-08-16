@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { matchPushSlot, matchRetrySlot, PUSH_SLOTS } from '../services/pushScheduler.js';
-import { allowAutoContentPush } from '../services/broadcastPushPolicy.js';
+import { allowAutoContentPush, isAdminQueuedPush, isManualAdminPushTrigger, allowOutgoingPush } from '../services/broadcastPushPolicy.js';
 import { pushCategoryOf } from '../services/pushService.js';
 import { roleCan } from '../utils/adminToken.js';
 import { generateQrToken } from '../services/qrService.js';
@@ -11,6 +11,19 @@ import { parseEventAttendanceRef } from '../services/eventAttendanceService.js';
 describe('broadcastPushPolicy', () => {
   it('keeps content broadcasts manual-only', () => {
     assert.equal(allowAutoContentPush(), false);
+    assert.equal(isAdminQueuedPush(null), false);
+    assert.equal(isAdminQueuedPush(0), false);
+    assert.equal(isAdminQueuedPush(12), true);
+    assert.equal(isManualAdminPushTrigger('question_notify_12'), true);
+    assert.equal(isManualAdminPushTrigger('task_notify_5'), true);
+    assert.equal(isManualAdminPushTrigger('admin_campaign_3_reminder'), true);
+    assert.equal(isManualAdminPushTrigger('evening_questionnaire_notify_d2'), true);
+    assert.equal(allowOutgoingPush('touchpoint_open_12'), false);
+    assert.equal(allowOutgoingPush('auto_slot_0800'), false);
+    assert.equal(allowOutgoingPush('transactional_task_approved'), false);
+    assert.equal(allowOutgoingPush('transactional_medal'), false);
+    assert.equal(allowOutgoingPush('event_reminder_1'), false);
+    assert.equal(allowOutgoingPush('team_confirm_9'), false);
   });
 });
 

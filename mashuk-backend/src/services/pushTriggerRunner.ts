@@ -94,6 +94,7 @@ export async function fireTaskPublishTrigger(taskId: number, now = new Date()): 
 }
 
 export async function fireWebhookTrigger(token: string, now = new Date()): Promise<{ ok: boolean; error?: string }> {
+  if (!allowAutoContentPush()) return { ok: false, error: 'manual_only' };
   const rows = await db.select().from(adminPushNotifications)
     .where(and(
       eq(adminPushNotifications.status, 'queued'),

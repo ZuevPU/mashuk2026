@@ -3,6 +3,7 @@ import { db } from '../../db/index.js';
 import { delayedSurvey, participants, pushQueue } from '../../db/schema.js';
 import { getShiftById } from '../shiftService.js';
 import { fullName, formatTs } from './exportCommon.js';
+import { allowAutoContentPush } from '../broadcastPushPolicy.js';
 
 const DEFAULT_WEEKS_AFTER_SHIFT = 7;
 
@@ -91,6 +92,7 @@ export async function getDelayedSurveyStatus() {
 
 /** Due pending surveys → push_queue + mark sent. */
 export async function processDueDelayedSurveys(now = new Date()): Promise<number> {
+  if (!allowAutoContentPush()) return 0;
   const due = await db.select().from(delayedSurvey)
     .where(and(
       eq(delayedSurvey.status, 'pending'),

@@ -13,7 +13,7 @@ import {
 } from './pushAudienceResolve.js';
 import { listLiveShifts } from './shiftService.js';
 import { getForumSettings } from './helpers.js';
-import { allowAutoContentPush } from './broadcastPushPolicy.js';
+import { allowAutoContentPush, isAdminQueuedPush } from './broadcastPushPolicy.js';
 
 /** Слоты авто-push по ТЗ (минуты от полуночи МСК) */
 export const PUSH_SLOTS: { minutes: number; key: string; text: string; retryText: string }[] = [
@@ -72,6 +72,12 @@ async function processPushQueue(now: Date): Promise<number> {
       .limit(20);
     let n = 0;
     for (const item of pending) {
+      if (!isAdminQueuedPush(item.createdByAdminId)) {
+        await db.update(pushQueue)
+          .set({ status: 'skipped_manual_only', sentAt: now })
+          .where(eq(pushQueue.id, item.id));
+        continue;
+      }
       if (item.target === 'ids' && Array.isArray(item.participantIds)) {
         await sendPushNotification(item.participantIds as number[], item.text, `queue_${item.id}`);
       } else {
@@ -229,11 +235,13 @@ export async function runPushSchedulerTick(now = new Date()): Promise<{ slots: s
   }
 
   let delayed = 0;
-  try {
-    const { processDueDelayedSurveys } = await import('./exports/delayedMeasureService.js');
-    delayed = await processDueDelayedSurveys(now);
-  } catch {
-    delayed = 0;
+  if (allowAutoContentPush()) {
+    try {
+      const { processDueDelayedSurveys } = await import('./exports/delayedMeasureService.js');
+      delayed = await processDueDelayedSurveys(now);
+    } catch {
+      delayed = 0;
+    }
   }
 
   return { slots: fired, events: eventCount, queue, delayed };

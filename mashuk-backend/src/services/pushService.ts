@@ -12,6 +12,7 @@ import {
   isPushDeliveredOk,
   shouldLogPushDeliveryIssue,
 } from './pushDeliveryStatus.js';
+import { allowOutgoingPush } from './broadcastPushPolicy.js';
 
 export { describeDeliveryStatus } from './pushDeliveryStatus.js';
 
@@ -266,6 +267,9 @@ export async function sendPushNotification(
   triggerType: string,
   opts?: PushDeliveryOpts,
 ): Promise<string | undefined> {
+  if (!allowOutgoingPush(triggerType)) {
+    return 'skipped_manual_only';
+  }
   const hasAnyToken = !!(env.VK_SERVICE_TOKEN || env.VK_COMMUNITY_TOKEN);
   let lastStatus: string | undefined;
 

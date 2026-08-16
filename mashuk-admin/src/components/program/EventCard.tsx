@@ -302,10 +302,9 @@ export function EventCard({
             <span className="adm-label">Интересы</span>
             <ThematicTagPick tags={allTags} selectedNames={draft.tagNames} onChange={names => setDraft({ ...draft, tagNames: names })} />
           </div>
-          <label className="adm-forum-check">
-            <input type="checkbox" checked={draft.pushReminder} onChange={e => setDraft({ ...draft, pushReminder: e.target.checked })} />
-            Уведомление за ~15 мин до начала
-          </label>
+          <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 8px' }}>
+            Напоминание за 15 минут само не уходит. Оповещение — из «Уведомления → По дням».
+          </p>
           <label className="adm-forum-check">
             <input
               type="checkbox"
