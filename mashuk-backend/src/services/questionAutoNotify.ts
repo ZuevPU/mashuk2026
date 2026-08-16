@@ -130,15 +130,23 @@ export async function autoNotifyTouchpointIfLive(
   return { sentTo };
 }
 
-/** Точка в эфир + кастомный pushOnPublish — как при одиночной публикации. */
+/**
+ * Точка в эфир + кастомный pushOnPublish.
+ * Один триггер на календарный день МСК (`touchpoint_open_*`), иначе
+ * публикация и планировщик шлют два одинаковых сообщения подряд.
+ */
 export async function notifyQuestionOnPublish(
   q: Q,
   opts?: { wasPublished?: boolean; now?: Date },
 ): Promise<void> {
+  const now = opts?.now ?? new Date();
   const custom = (q.pushTemplate || '').trim();
   if (q.pushOnPublish && !opts?.wasPublished && custom) {
-    await notifyQuestionAudience(q, custom, `question_publish_${q.id}`);
+    if (!isQuestionLiveNow(q, now)) return;
+    const trigger = touchpointOpenTrigger(q.id);
+    if (await sentTriggerGlobalSince(trigger, startOfMoscowDay(now))) return;
+    await notifyQuestionAudience(q, custom, trigger);
     return;
   }
-  await autoNotifyTouchpointIfLive(q, opts?.now);
+  await autoNotifyTouchpointIfLive(q, now);
 }

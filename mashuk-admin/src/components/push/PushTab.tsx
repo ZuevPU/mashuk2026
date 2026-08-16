@@ -8,6 +8,7 @@ import { PushLogPanel } from './PushLogPanel';
 import { PushListTable } from './PushListTable';
 import { PushNotificationForm } from './PushNotificationForm';
 import { PushTemplatesPanel } from './PushTemplatesPanel';
+import { PushContentBoard } from './PushContentBoard';
 import {
   draftToPayload,
   emptyPushDraft,
@@ -19,7 +20,7 @@ import {
   PUSH_AUDIENCE_OPTIONS,
 } from './types';
 
-type ListTab = 'sent' | 'queued' | 'drafts' | 'auto' | 'templates' | 'journal' | 'home';
+type ListTab = 'board' | 'sent' | 'queued' | 'drafts' | 'auto' | 'templates' | 'journal' | 'home';
 type View = 'list' | 'form';
 
 export type PushTabProps = AdminTabProps;
@@ -27,7 +28,7 @@ export type PushTabProps = AdminTabProps;
 export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('list');
-  const [listTab, setListTab] = useState<ListTab>('sent');
+  const [listTab, setListTab] = useState<ListTab>('board');
   const [notifications, setNotifications] = useState<PushNotificationRow[]>([]);
   const [summary, setSummary] = useState({ total: 0, queued: 0 });
   const [templates, setTemplates] = useState<PushTemplateRow[]>([]);
@@ -145,7 +146,7 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
   };
 
   // Не размонтировать «Главный экран»: после act()/reloadKey иначе сбрасывается черновик плашки.
-  if (loading && view === 'list' && listTab !== 'home') {
+  if (loading && view === 'list' && listTab !== 'home' && listTab !== 'board') {
     return <p className="adm-muted">Загрузка пушей…</p>;
   }
 
@@ -195,6 +196,7 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
   }
 
   const tabs: { key: ListTab; label: string }[] = [
+    { key: 'board', label: 'По дням' },
     { key: 'sent', label: 'Отправлено' },
     { key: 'queued', label: 'В очереди' },
     { key: 'drafts', label: 'Черновики' },
@@ -209,10 +211,14 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
       <AdminPageHero
         title={listTab === 'home'
           ? 'Уведомления · Главный экран'
-          : `Уведомления · ${summary.total} рассылок · ${summary.queued} в очереди`}
+          : listTab === 'board'
+            ? 'Уведомления · По дням'
+            : `Уведомления · ${summary.total} рассылок · ${summary.queued} в очереди`}
         hint={listTab === 'home'
           ? 'Редакционная плашка на главной участника: заголовок, текст, кнопка-ссылка и картинки. Не связана с VK-пушами.'
-          : 'Ручные рассылки — вкладка «Рассылки». Автоматические сообщения по расписанию и по событиям — «Автоматические». Участник видит push во VK и баннер в приложении.'}
+          : listTab === 'board'
+            ? 'Вопросы, задания, программа и итоговая анкета дня. Одно нажатие — превью, текст, время, отправка без задвоений.'
+            : 'Ручные рассылки — вкладки «Отправлено / Очередь / Черновики». Авто по слотам — «Автоматические».'}
       >
         <div className="adm-seg" style={{ marginBottom: 12 }}>
           {tabs.map(t => (
@@ -245,7 +251,9 @@ export function PushTab({ adminFetch, act, reloadKey }: PushTabProps) {
         )}
       </AdminPageHero>
 
-      {listTab === 'home' ? (
+      {listTab === 'board' ? (
+        <PushContentBoard adminFetch={adminFetch} act={act} reloadKey={reloadKey} />
+      ) : listTab === 'home' ? (
         <HomeNoticePanel adminFetch={adminFetch} act={act} reloadKey={reloadKey} />
       ) : listTab === 'templates' ? (
         <PushTemplatesPanel adminFetch={adminFetch} act={act} templates={templates} onReload={() => load()} />

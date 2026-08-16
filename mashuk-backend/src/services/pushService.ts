@@ -455,11 +455,13 @@ export async function executeAdminPushCampaign(
     const miniByVk = await sendMiniAppNotificationBatch(vkIds, vkText);
     for (const item of items) {
       const mini = miniByVk.get(item.vkId!) ?? { ok: false, status: 'error: empty_response' };
+      const cfg = (notification.triggerConfig ?? {}) as { appLinkHash?: string };
       const status = await finalizeDelivery(
         item.vkId!,
         vkText,
         mini,
         `campaign=${notification.id} participant=${item.participantId}`,
+        cfg.appLinkHash ? { appLinkHash: cfg.appLinkHash } : undefined,
       );
       deliveryByParticipant.set(item.participantId, status);
     }

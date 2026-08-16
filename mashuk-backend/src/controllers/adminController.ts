@@ -1585,8 +1585,9 @@ export const notifyAdminEveningQuestionnaire = async (req: AdminRequest, res: Re
   }
 
   const text = customText || pushCopy.eveningQuestionnaireOpen(day);
+  const { eveningNotifyTrigger } = await import('../services/contentNotifyBoard.js');
   if (targetIds.length) {
-    await sendPushNotification(targetIds, text, 'evening_questionnaire_notify', {
+    await sendPushNotification(targetIds, text, eveningNotifyTrigger(day), {
       appLinkHash: '#/?evening=1',
     });
   }

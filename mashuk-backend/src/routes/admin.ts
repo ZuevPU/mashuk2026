@@ -10,6 +10,7 @@ import * as rights from '../controllers/adminRightsController.js';
 import * as profilePdf from '../controllers/adminProfilePdfController.js';
 import * as participantProfile from '../controllers/adminParticipantProfileController.js';
 import * as pushAdmin from '../controllers/pushAdminController.js';
+import * as contentNotify from '../controllers/contentNotifyController.js';
 import * as piggyAdmin from '../controllers/adminPiggybankController.js';
 import { adminUploadImage } from '../controllers/pushBannerController.js';
 import { uploadAdminFile } from '../controllers/uploadController.js';
@@ -320,6 +321,9 @@ router.get('/analytics/hub/piggybank-matrix', P('analytics', 'read'), wrap(hubCt
 router.get('/analytics/hub/participant-feed', P('analytics', 'read'), wrap(hubCtrl.getHubParticipantFeedHandler));
 router.post('/push/send', requireAdminRole('settings'), wrap(admin.sendManualPush));
 router.get('/push/log', wrap(admin.listPushLog));
+router.get('/push/content-board', wrap(contentNotify.getContentNotifyBoard));
+router.post('/push/content-board/preview', wrap(contentNotify.previewContentNotify));
+router.post('/push/content-board/send', requireAdminRole('settings'), wrap(contentNotify.sendContentNotify));
 router.get('/push/notifications', wrap(pushAdmin.listPushNotifications));
 router.get('/push/notifications/:id', wrap(pushAdmin.getPushNotification));
 router.post('/push/notifications', requireAdminRole('settings'), wrap(pushAdmin.createPushNotification));
