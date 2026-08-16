@@ -265,6 +265,19 @@ export function isTaskOnForumDay(task: Pick<typeof tasks.$inferSelect, 'dayNumbe
   return days.includes(forumDay);
 }
 
+/** Home badge: same day window as the SQL, plus the participant's shift. */
+export function isHomeAvailableTaskRow(
+  task: { shiftId?: number | null; dayNumber?: number | null; publishTime?: Date | string | null },
+  shiftId: number,
+  currentDay: number,
+  now: Date,
+): boolean {
+  if (task.shiftId == null || task.shiftId !== shiftId) return false;
+  if (task.dayNumber != null && task.dayNumber !== currentDay) return false;
+  if (task.publishTime && new Date(task.publishTime).getTime() > now.getTime()) return false;
+  return true;
+}
+
 /** День, на который записываем XP задания: однодневное → его день, иначе текущий день форума. */
 export function resolveTaskAwardForumDay(
   task: Pick<typeof tasks.$inferSelect, 'dayNumbers' | 'dayNumber'>,

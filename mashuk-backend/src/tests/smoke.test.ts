@@ -1,8 +1,8 @@
-import { describe, it } from 'node:test';
+import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import { createApp } from '../app.js';
-import { getAdminBearerToken } from './adminTestHelper.js';
+import { getAdminAuthHeaders } from './adminTestHelper.js';
 
 describe('smoke', () => {
   const app = createApp();
@@ -58,6 +58,11 @@ describe('smoke', () => {
 
 describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   const app = createApp();
+  let adminAuth: Record<string, string>;
+
+  before(async () => {
+    adminAuth = await getAdminAuthHeaders(app);
+  });
 
   it('GET /api/auth/me with test vk id', async () => {
     const res = await request(app)
@@ -76,19 +81,17 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   });
 
   it('GET /api/admin/participants with token', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .get('/api/admin/participants')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body.participants));
   });
 
   it('GET /api/admin/analytics/hub/day-results with token', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .get('/api/admin/analytics/hub/day-results?mode=day&day=2')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(res.status, 200);
     assert.ok(res.body.meta);
     assert.ok(Array.isArray(res.body.blocks));
@@ -98,10 +101,9 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   });
 
   it('GET /api/admin/analytics/hub/state with token', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .get('/api/admin/analytics/hub/state?mode=day&day=3')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(res.status, 200);
     assert.ok(res.body.meta);
     assert.ok(Array.isArray(res.body.zoneByPhase));
@@ -114,10 +116,9 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   });
 
   it('GET /api/admin/analytics/hub/activity with token', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .get('/api/admin/analytics/hub/activity?mode=day&day=4')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(res.status, 200);
     assert.ok(res.body.meta);
     assert.ok(Array.isArray(res.body.segments));
@@ -132,10 +133,9 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   });
 
   it('GET /api/admin/analytics/hub/piggybank with token', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .get('/api/admin/analytics/hub/piggybank?mode=day&day=3')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(res.status, 200);
     assert.ok(res.body.meta);
     assert.ok(Array.isArray(res.body.funnel));
@@ -152,10 +152,9 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   });
 
   it('GET /api/admin/analytics/hub/after-blocks with token', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .get('/api/admin/analytics/hub/after-blocks?mode=day&day=3')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(res.status, 200);
     assert.ok(res.body.meta);
     assert.ok(typeof res.body.meta.own === 'number');
@@ -171,10 +170,9 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   });
 
   it('GET /api/admin/analytics/hub/exchange with token', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .get('/api/admin/analytics/hub/exchange?mode=day&day=4')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(res.status, 200);
     assert.ok(res.body.meta);
     assert.ok(Array.isArray(res.body.byDay));
@@ -188,10 +186,9 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   });
 
   it('GET /api/admin/analytics/hub/stats with token', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .get('/api/admin/analytics/hub/stats?mode=day&day=3')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(res.status, 200);
     assert.ok(res.body.meta);
     assert.ok(typeof res.body.meta.nowLabel === 'string');
@@ -204,10 +201,9 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   });
 
   it('GET /api/admin/analytics/hub/direction with token', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .get('/api/admin/analytics/hub/direction?mode=day&day=3')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(res.status, 200);
     assert.ok(res.body.meta);
     assert.ok(Array.isArray(res.body.dirs));
@@ -222,37 +218,33 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   });
 
   it('GET /api/admin/tasks with token', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .get('/api/admin/tasks')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body.tasks));
   });
 
   it('PATCH /api/admin/events/999999 returns 404', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .patch('/api/admin/events/999999')
-      .set('Authorization', `Bearer ${token}`)
+      .set(adminAuth)
       .send({ title: 'x' });
     assert.equal(res.status, 404);
   });
 
   it('POST /api/admin/tasks without title returns 400', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .post('/api/admin/tasks')
-      .set('Authorization', `Bearer ${token}`)
+      .set(adminAuth)
       .send({ points: 10 });
     assert.equal(res.status, 400);
   });
 
   it('POST draft task then publish', async () => {
-    const token = await getAdminBearerToken(app);
     const created = await request(app)
       .post('/api/admin/tasks')
-      .set('Authorization', `Bearer ${token}`)
+      .set(adminAuth)
       .send({
         title: `Smoke task ${Date.now()}`,
         status: 'draft',
@@ -264,40 +256,38 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     const id = created.body.task?.id;
     const published = await request(app)
       .patch(`/api/admin/tasks/${id}`)
-      .set('Authorization', `Bearer ${token}`)
+      .set(adminAuth)
       .send({ status: 'published', publishTime: new Date().toISOString() });
     assert.equal(published.status, 200);
     assert.equal(published.body.task?.status, 'published');
     const listed = await request(app)
       .get('/api/admin/tasks?status=draft')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.ok(!listed.body.tasks.some((t: { id: number }) => t.id === id));
   });
 
   it('admin home-notices can target tasks placement', async () => {
-    const token = await getAdminBearerToken(app);
     const created = await request(app)
       .post('/api/admin/home-notices')
-      .set('Authorization', `Bearer ${token}`)
+      .set(adminAuth)
       .send({ title: `Tasks notice ${Date.now()}`, body: 'Для заданий', placement: 'tasks', status: 'draft' });
     assert.equal(created.status, 200);
     assert.equal(created.body.notice?.placement, 'tasks');
     const listed = await request(app)
       .get('/api/admin/home-notices?placement=tasks')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(listed.status, 200);
     assert.ok((listed.body.notices || []).some((n: { id: number }) => n.id === created.body.notice.id));
     const homeList = await request(app)
       .get('/api/admin/home-notices?placement=home')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.ok(!(homeList.body.notices || []).some((n: { id: number }) => n.id === created.body.notice.id));
   });
 
   it('POST /api/admin/kb/open-shift opens current shift KB', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .post('/api/admin/kb/open-shift')
-      .set('Authorization', `Bearer ${token}`)
+      .set(adminAuth)
       .send({});
     assert.equal(res.status, 200);
     assert.equal(res.body.kbUnlockDisabled, true);
@@ -306,20 +296,18 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   });
 
   it('POST /api/admin/kb-unlocks without participant returns 400', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .post('/api/admin/kb-unlocks')
-      .set('Authorization', `Bearer ${token}`)
+      .set(adminAuth)
       .send({ dayNumber: 3 });
     assert.equal(res.status, 400);
     assert.match(String(res.body.error || ''), /ID участника/i);
   });
 
   it('GET /api/admin/questions with filters', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .get('/api/admin/questions?status=published')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body.questions));
     assert.ok(typeof res.body.totalCount === 'number');
@@ -329,10 +317,9 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   });
 
   it('POST admin question, duplicate, copy-selected', async () => {
-    const token = await getAdminBearerToken(app);
     const created = await request(app)
       .post('/api/admin/questions')
-      .set('Authorization', `Bearer ${token}`)
+      .set(adminAuth)
       .send({
         title: `Smoke Q ${Date.now()}`,
         text: 'Текст',
@@ -347,45 +334,43 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
 
     const dup = await request(app)
       .post(`/api/admin/questions/${id}/duplicate`)
-      .set('Authorization', `Bearer ${token}`)
+      .set(adminAuth)
       .send({});
     assert.equal(dup.status, 200);
     assert.notEqual(dup.body.question?.id, id);
 
     const copied = await request(app)
       .post('/api/admin/questions/copy-selected')
-      .set('Authorization', `Bearer ${token}`)
+      .set(adminAuth)
       .send({ ids: [id], targetDay: 2 });
     assert.equal(copied.status, 200);
     assert.ok(copied.body.count >= 1);
 
     await request(app)
       .delete(`/api/admin/questions/${dup.body.question.id}`)
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
   });
 
   it('GET exchange source list', async () => {
-    const token = await getAdminBearerToken(app);
     const res = await request(app)
       .get('/api/admin/questions?source=exchange')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(res.status, 200);
     assert.equal(res.body.source, 'exchange');
     assert.ok(Array.isArray(res.body.questions));
   });
 
   it('GET /api/admin/exports/day/stats and day XLSX with export role', async () => {
-    const token = await getAdminBearerToken(app);
     const stats = await request(app)
       .get('/api/admin/exports/day/stats?day=1')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(stats.status, 200);
     assert.equal(stats.body.day, 1);
     assert.ok(stats.body.byTouchpointType);
 
     const book = await request(app)
       .get('/api/admin/exports/day?day=1&type=all')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(book.status, 200);
     assert.ok(
       (book.headers['content-type'] || '').includes('spreadsheet') ||
@@ -394,7 +379,6 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   });
 
   it('Hub Forum exports return real XLSX (ZIP/PK), not CSV/JSON', async () => {
-    const token = await getAdminBearerToken(app);
     const paths = [
       '/api/admin/exports/registration?format=xlsx',
       '/api/admin/exports/state-checks?mode=day&day=1',
@@ -410,7 +394,7 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     for (const path of paths) {
       const res = await request(app)
         .get(path)
-        .set('Authorization', `Bearer ${token}`)
+        .set(adminAuth)
         .buffer(true)
         .parse((incoming, cb) => {
           const chunks: Buffer[] = [];
@@ -431,10 +415,9 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   });
 
   it('GET /api/admin/analytics/meta and pulse dashboard', async () => {
-    const token = await getAdminBearerToken(app);
     const meta = await request(app)
       .get('/api/admin/analytics/meta')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(meta.status, 200);
     assert.ok(meta.body.refreshMs);
     assert.ok(Array.isArray(meta.body.dashboardCatalog));
@@ -442,14 +425,14 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
 
     const pulse = await request(app)
       .get('/api/admin/analytics/dashboards/pulse?mode=day&day=1')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(pulse.status, 200);
     assert.ok(pulse.body.activity);
     assert.ok(pulse.body.emotionalPulse);
 
     const profile = await request(app)
       .get('/api/admin/analytics/dashboards/participant-profile?mode=day&day=1')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(profile.status, 200);
     assert.ok(profile.body.sample);
     assert.ok(profile.body.typical);
@@ -458,17 +441,16 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
   });
 
   it('GET /exports/meta and POST /exports/custom', async () => {
-    const token = await getAdminBearerToken(app);
     const meta = await request(app)
       .get('/api/admin/exports/meta')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(meta.status, 200);
     assert.ok(Array.isArray(meta.body.sources));
     assert.ok(meta.body.sources.some((s: { id: string }) => s.id === 'participant_activity_wide'));
 
     const created = await request(app)
       .post('/api/admin/exports/custom')
-      .set('Authorization', `Bearer ${token}`)
+      .set(adminAuth)
       .send({
         source: 'participants',
         title: 'smoke-custom',
@@ -481,12 +463,12 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
 
     const dl = await request(app)
       .get(`/api/admin/exports/history/${created.body.id}/download`)
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(dl.status, 200);
 
     const wide = await request(app)
       .post('/api/admin/exports/custom')
-      .set('Authorization', `Bearer ${token}`)
+      .set(adminAuth)
       .send({
         source: 'participant_activity_wide',
         title: 'smoke-wide-day',
@@ -497,17 +479,17 @@ describe('smoke with database', { skip: !process.env.DATABASE_URL }, () => {
     assert.equal(wide.body.status, 'ready');
     const wideDl = await request(app)
       .get(`/api/admin/exports/history/${wide.body.id}/download`)
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(wideDl.status, 200);
 
     const wideDirect = await request(app)
       .get('/api/admin/exports/participant-activity-wide?day=1')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(wideDirect.status, 200);
 
     const hist = await request(app)
       .get('/api/admin/exports/history?limit=5')
-      .set('Authorization', `Bearer ${token}`);
+      .set(adminAuth);
     assert.equal(hist.status, 200);
     assert.ok(Array.isArray(hist.body.items));
   });

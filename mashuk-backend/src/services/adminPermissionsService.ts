@@ -36,6 +36,7 @@ export async function ensureAdminPermissionsSeeded(): Promise<void> {
   const [existing] = await db.select({ id: adminRolePermissions.id }).from(adminRolePermissions).limit(1);
   if (existing) {
     await ensureGamificationRolePermissions();
+    await ensureOrganizerRolePermissions();
     return;
   }
   const rows = buildDefaultPermissionRows();
@@ -64,6 +65,31 @@ export async function ensureGamificationRolePermissions(): Promise<void> {
   if (existing) return;
 
   const defaults = buildDefaultPermissionRows().filter(r => r.role === 'gamification');
+  if (defaults.length === 0) return;
+  await db.insert(adminRolePermissions).values(
+    defaults.map(r => ({
+      role: r.role,
+      section: r.section,
+      canRead: r.canRead,
+      canCreate: r.canCreate,
+      canUpdate: r.canUpdate,
+      canDelete: r.canDelete,
+      canConfirm: r.canConfirm,
+      canExport: r.canExport,
+    })),
+  );
+  invalidatePermissionsCache();
+}
+
+/** Insert organizer matrix rows on DBs seeded before the role existed. */
+export async function ensureOrganizerRolePermissions(): Promise<void> {
+  const [existing] = await db.select({ id: adminRolePermissions.id })
+    .from(adminRolePermissions)
+    .where(and(eq(adminRolePermissions.role, 'organizer'), eq(adminRolePermissions.section, 'events')))
+    .limit(1);
+  if (existing) return;
+
+  const defaults = buildDefaultPermissionRows().filter(r => r.role === 'organizer');
   if (defaults.length === 0) return;
   await db.insert(adminRolePermissions).values(
     defaults.map(r => ({

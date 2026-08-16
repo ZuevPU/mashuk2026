@@ -203,6 +203,11 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
 
   const publishSelected = () => {
     if (!selected) return;
+    const ok = confirm(
+      `Опубликовать смену «${selected.name}»?\n\n` +
+        'Участники смогут регистрироваться на эту смену. Другие активные смены не снимаются.',
+    );
+    if (!ok) return;
     act(async () => {
       const res = await adminFetch(`/shifts/${selected.id}/publish`, { method: 'POST', body: '{}' });
       await load();

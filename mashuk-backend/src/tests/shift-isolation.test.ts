@@ -1,11 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { taskBelongsToParticipantShift } from '../services/taskEligibility.js';
-import { pickEnrollmentForTaskShift } from '../services/shiftService.js';
+import { pickEnrollmentForTaskShift, pickParticipantForVk } from '../services/shiftService.js';
 import { taskPublishFireKey } from '../services/pushTriggerRunner.js';
 import { pickLevelsConfigRow, requireForumSettings } from '../services/shiftContext.js';
 import { getScheduleDayPublished } from '../services/eveningScheduleGate.js';
 import { getActiveHomeNotice } from '../controllers/homeNoticeController.js';
+import { isHomeAvailableTaskRow } from '../services/taskAdminHelpers.js';
+import { pointsLogRowMatchesShift } from '../services/exports/exportCommon.js';
 
 describe('taskBelongsToParticipantShift', () => {
   it('rejects another shift', () => {
@@ -16,8 +18,8 @@ describe('taskBelongsToParticipantShift', () => {
     assert.equal(taskBelongsToParticipantShift({ shiftId: 2 }, 2), true);
   });
 
-  it('allows legacy tasks without shift', () => {
-    assert.equal(taskBelongsToParticipantShift({ shiftId: null }, 2), true);
+  it('rejects a task without shift', () => {
+    assert.equal(taskBelongsToParticipantShift({ shiftId: null }, 2), false);
   });
 
   it('rejects when participant shift is missing', () => {
@@ -86,8 +88,8 @@ describe('pickLevelsConfigRow', () => {
     assert.equal(pickLevelsConfigRow(rows, 2)?.pointsPerUnit, 12);
   });
 
-  it('falls back to the global row', () => {
-    assert.equal(pickLevelsConfigRow(rows, 1)?.pointsPerUnit, 5);
+  it('does not fall back to the global row when a shift is requested', () => {
+    assert.equal(pickLevelsConfigRow(rows, 1), undefined);
   });
 
   it('does not take another shift row when this shift has no config', () => {
@@ -109,6 +111,70 @@ describe('getScheduleDayPublished', () => {
   it('does not guess the active shift when shiftId is missing', async () => {
     assert.equal(await getScheduleDayPublished(3), null);
     assert.equal(await getScheduleDayPublished(3, null), null);
+  });
+});
+
+describe('isHomeAvailableTaskRow', () => {
+  const now = new Date('2026-08-17T10:00:00+03:00');
+
+  it('keeps a same-shift task for the current day', () => {
+    assert.equal(isHomeAvailableTaskRow({
+      shiftId: 1, dayNumber: 2, publishTime: new Date('2026-08-17T08:00:00+03:00'),
+    }, 1, 2, now), true);
+  });
+
+  it('drops a task from the other live shift with the same dayNumber', () => {
+    assert.equal(isHomeAvailableTaskRow({
+      shiftId: 2, dayNumber: 2, publishTime: null,
+    }, 1, 2, now), false);
+  });
+
+  it('drops a task without shiftId', () => {
+    assert.equal(isHomeAvailableTaskRow({
+      shiftId: null, dayNumber: 2, publishTime: null,
+    }, 1, 2, now), false);
+  });
+});
+
+describe('pointsLogRowMatchesShift', () => {
+  it('keeps a row from the admin header shift', () => {
+    assert.equal(pointsLogRowMatchesShift(2, 2), true);
+  });
+
+  it('drops a row from the other live shift', () => {
+    assert.equal(pointsLogRowMatchesShift(1, 2), false);
+  });
+
+  it('drops a row without a participant shift', () => {
+    assert.equal(pointsLogRowMatchesShift(null, 2), false);
+  });
+});
+
+describe('pickParticipantForVk', () => {
+  const shift1 = {
+    shiftId: 1,
+    onboardingCompletedAt: new Date('2026-08-01'),
+    selfDeletedAt: null,
+    lastActiveAt: new Date('2026-08-10'),
+  };
+  const shift2 = {
+    shiftId: 2,
+    onboardingCompletedAt: new Date('2026-08-02'),
+    selfDeletedAt: null,
+    lastActiveAt: new Date('2026-08-11'),
+  };
+
+  it('returns null when preferred shift has no enrollment and fallback is off', () => {
+    assert.equal(pickParticipantForVk([shift2], 1, { fallback: false }), null);
+  });
+
+  it('does not hand over another shift enrollment when preferred is set', () => {
+    assert.equal(pickParticipantForVk([shift1, shift2], 9, { fallback: false }), null);
+  });
+
+  it('returns the preferred enrollment when it exists', () => {
+    const picked = pickParticipantForVk([shift1, shift2], 1, { fallback: false });
+    assert.equal(picked?.shiftId, 1);
   });
 });
 

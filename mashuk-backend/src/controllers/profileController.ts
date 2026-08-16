@@ -658,7 +658,10 @@ export const listMedalsCatalog = async (req: ParticipantRequest, res: Response):
   try {
     const { medals, userMedals } = await import('../db/schema.js');
     const { parseMedalRule, getMedalRuleProgress } = await import('../services/medalEvaluator.js');
-    const catalog = await db.select().from(medals).where(eq(medals.isActive, true));
+    const catalog = await db.select().from(medals).where(and(
+      eq(medals.isActive, true),
+      eq(medals.shiftId, req.participant!.shiftId),
+    ));
     const owned = await db.select().from(userMedals)
       .where(eq(userMedals.participantId, req.participant!.id));
     const ownedMedalIds = new Set(owned.map(o => o.medalId));

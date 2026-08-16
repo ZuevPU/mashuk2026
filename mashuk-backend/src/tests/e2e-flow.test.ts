@@ -2,7 +2,7 @@ import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import { createApp } from '../app.js';
-import { getAdminBearerToken, groupIdForDirection, interestsFromOnboardingMeta } from './adminTestHelper.js';
+import { getAdminAuthHeaders, groupIdForDirection, interestsFromOnboardingMeta } from './adminTestHelper.js';
 import { TINY_PNG_DATA_URL } from './fixtures/tinyPng.js';
 
 const E2E_VK_ID = 999001;
@@ -12,8 +12,7 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
   let adminAuth: Record<string, string>;
 
   before(async () => {
-    const token = await getAdminBearerToken(app);
-    adminAuth = { Authorization: `Bearer ${token}` };
+    adminAuth = await getAdminAuthHeaders(app);
   });
 
   it('cleanup and register E2E participant via full onboarding', async () => {
@@ -311,7 +310,7 @@ describe('E2E participant + admin flow', { skip: !process.env.DATABASE_URL }, ()
     assert.equal(recalc.status, 200);
 
     const charts = await request(app).get('/api/admin/analytics/charts').set(adminAuth);
-    assert.equal(charts.status, 200);
+    assert.equal(charts.status, 410);
   });
 
   it('admin push send writes to push_log', async () => {

@@ -1,4 +1,4 @@
-import { and, eq, or, isNull } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Response } from 'express';
 import { db } from '../../db/index.js';
 import {
@@ -27,7 +27,7 @@ export async function loadDayAnswerRows(day: number, shiftId?: number | null) {
     if (!isPublishedStatus(q.status)) return false;
     if (!questionMatchesDay(q, day)) return false;
     if (shiftId == null || Number.isNaN(shiftId)) return true;
-    return q.shiftId == null || q.shiftId === shiftId;
+    return q.shiftId === shiftId;
   });
   const qIds = publishedQ.map(q => q.id);
   return queryAnswerJoinRows({
@@ -62,7 +62,7 @@ export async function writeDayWorkbook(
 
   const roleConds = [eq(participantDayState.dayNumber, day)];
   if (shiftId != null && !Number.isNaN(shiftId)) {
-    roleConds.push(or(eq(participants.shiftId, shiftId), isNull(participants.shiftId))!);
+    roleConds.push(eq(participants.shiftId, shiftId));
   }
   const roleRows = await db.select({ s: participantDayState, p: participants })
     .from(participantDayState)
@@ -71,7 +71,7 @@ export async function writeDayWorkbook(
   const dayRoles = roleRows;
   const allParticipants = shiftId != null && !Number.isNaN(shiftId)
     ? await db.select().from(participants).where(
-      or(eq(participants.shiftId, shiftId), isNull(participants.shiftId))!,
+      eq(participants.shiftId, shiftId),
     )
     : await db.select().from(participants);
 

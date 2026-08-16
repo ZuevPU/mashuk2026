@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { AdminRequest } from '../../middlewares/adminAuth.js';
 import { db } from '../../db/index.js';
 import {
@@ -311,9 +311,7 @@ export async function buildDayStatsHubDashboard(filters: AnalyticsFilters, req?:
 
   const shiftId = filters.shiftId;
   const allQuestions = shiftId != null
-    ? await db.select().from(questions).where(
-      or(eq(questions.shiftId, shiftId), isNull(questions.shiftId))!,
-    )
+    ? await db.select().from(questions).where(eq(questions.shiftId, shiftId))
     : await db.select().from(questions);
 
   const slice = await computeDaySlice(

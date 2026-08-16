@@ -155,7 +155,7 @@ export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         <section id="medals-hero" className="adm-forum-anchor">
           <AdminPageHero
             title={editingId ? 'Редактирование медали' : 'Новая медаль'}
-            hint="Условие, видимость и иконка. Авто-оценка проверяет правила для участников."
+            hint="Каталог смены в шапке. Условие, видимость и иконка. Авто-оценка проверяет правила участников этой смены."
           />
         </section>
         <section id="medals-form" className="adm-forum-anchor">
@@ -192,7 +192,7 @@ export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
       <section id="medals-hero" className="adm-forum-anchor">
         <AdminPageHero
           title={heroTitle}
-          hint="Каталог наград смены. Автоматические — по правилам; ручные — из карточки участника."
+          hint="Каталог смены в шапке. Автоматические — по правилам; ручные — из карточки участника. Чужие смены сюда не попадают."
         >
           <div className="adm-forum-seg" style={{ marginBottom: 12 }}>
             {tabs.map(t => (
@@ -238,7 +238,7 @@ export function MedalsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
         <div className="card adm-forum-block adm-kb-panel">
           <div className="adm-kb-panel-head">
             <h3>Каталог</h3>
-            <p className="adm-kb-panel-sub">Редактирование, скрытие и удаление медалей смены.</p>
+            <p className="adm-kb-panel-sub">Редактирование, скрытие и удаление медалей выбранной смены.</p>
           </div>
           <MedalsListTable medals={medals} onEdit={openEdit} onHide={hideMedal} onDelete={deleteMedal} />
         </div>

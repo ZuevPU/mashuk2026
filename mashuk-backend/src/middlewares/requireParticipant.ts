@@ -26,6 +26,13 @@ async function attachParticipant(
     fallback: opts?.allowAnyEnrollment === true || preferredShiftId == null,
   });
   if (!user || !user.onboardingCompletedAt) {
+    if (preferredShiftId != null && opts?.allowAnyEnrollment !== true) {
+      const other = await findParticipantForVk(vkUserId, null, { fallback: true });
+      if (other?.onboardingCompletedAt && !other.selfDeletedAt) {
+        res.status(403).json({ error: 'Другая смена', status: 'shift_mismatch' });
+        return;
+      }
+    }
     res.status(403).json({ error: 'Registration required', status: 'needs_registration' });
     return;
   }

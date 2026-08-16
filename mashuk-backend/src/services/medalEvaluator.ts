@@ -85,18 +85,12 @@ export async function evaluateMedalsForParticipantDetailed(
     .where(eq(participants.id, participantId))
     .limit(1);
   const shiftId = owner?.shiftId ?? null;
-  const own = shiftId != null
+  const active = shiftId != null
     ? await db.select().from(medals).where(and(
       eq(medals.isActive, true),
       eq(medals.shiftId, shiftId),
     ))
     : [];
-  const active = own.length
-    ? own
-    : await db.select().from(medals).where(and(
-      eq(medals.isActive, true),
-      isNull(medals.shiftId),
-    ));
   const owned = await db.select().from(userMedals).where(eq(userMedals.participantId, participantId));
   const ownedIds = new Set(owned.map(u => u.medalId));
   const newlyAwarded: { id: number; name: string }[] = [];

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getMoscowParts } from './timePhase.js';
 import { db } from '../db/index.js';
 import {
@@ -210,10 +210,7 @@ export async function loadContentNotifyBoard(opts: {
   const { day, shiftId, totalDays } = opts;
 
   const [qRows, tRows, eRows] = await Promise.all([
-    db.select().from(questions).where(or(
-      eq(questions.shiftId, shiftId),
-      isNull(questions.shiftId),
-    )),
+    db.select().from(questions).where(eq(questions.shiftId, shiftId)),
     db.select().from(tasks).where(eq(tasks.shiftId, shiftId)),
     db.select().from(events).where(and(
       eq(events.shiftId, shiftId),

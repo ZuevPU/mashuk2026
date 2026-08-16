@@ -36,6 +36,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
   const [selectedEvent, setSelectedEvent] = useState<ProgramEvent | null>(null);
   const [expandedParents, setExpandedParents] = useState<Record<number, boolean>>({});
   const [settingsReady, setSettingsReady] = useState(false);
+  const [shiftLive, setShiftLive] = useState(true);
   const programVisitRef = useRef(0);
 
   const toggleParent = (id: number) => {
@@ -48,6 +49,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
       liveScheduleDay?: number;
       totalDays: number;
       publishedDays?: number[];
+      shiftLive?: boolean;
     }>('/program/settings')
       .then(s => {
         const today = s.liveScheduleDay ?? s.currentDay ?? 1;
@@ -55,6 +57,7 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
         setLiveDay(today);
         setTotalDays(s.totalDays);
         setPublishedDays(s.publishedDays || []);
+        setShiftLive(s.shiftLive !== false);
         if (jumpToToday) setActiveDay(today);
         return today;
       })
@@ -318,6 +321,14 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
               <Button style={{ marginTop: 8 }} onClick={loadProgram}>Повторить</Button>
             </>
           ) : activeTab === 'sched' ? (            <div style={{ marginTop: 12 }}>
+              {shiftLive === false && (
+                <div className="m-card" style={{ padding: 14, marginBottom: 10 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Смена ещё не открыта</div>
+                  <div style={{ fontSize: 13, color: '#666', lineHeight: 1.4 }}>
+                    Навигация и профиль доступны. Программа, задания и вопросы появятся, когда организаторы активируют смену.
+                  </div>
+                </div>
+              )}
               {activeDay === 8 ? (
                 <div className="m-card" style={{ background: 'linear-gradient(135deg,#FFF3E0,#FFECB3)', border: '1px solid #FFE082', textAlign: 'center' }}>
                   <div style={{ fontSize: 20, marginBottom: 6 }}>🎯</div>
@@ -371,11 +382,19 @@ export const ProgramPanel: React.FC<{ id: string }> = ({ id }) => {
               ) : (
                 <EmptyState
                   icon="📅"
-                  title={!dayPublished ? 'Расписание ещё не опубликовано' : 'Расписание пусто'}
+                  title={
+                    !shiftLive
+                      ? 'Смена ещё не открыта'
+                      : !dayPublished
+                        ? 'Расписание ещё не опубликовано'
+                        : 'Расписание пусто'
+                  }
                   subtitle={
-                    !dayPublished
-                      ? 'Организаторы уже готовят программу — откроем расписание этого дня, когда оно будет опубликовано.'
-                      : `События для дня ${activeDay} появятся позже`
+                    !shiftLive
+                      ? 'Навигация и профиль доступны. Программа, задания и вопросы появятся, когда организаторы активируют смену.'
+                      : !dayPublished
+                        ? 'Организаторы уже готовят программу — откроем расписание этого дня, когда оно будет опубликовано.'
+                        : `События для дня ${activeDay} появятся позже`
                   }
                 />
               )}

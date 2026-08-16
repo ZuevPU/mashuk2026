@@ -3,7 +3,7 @@ import { and, desc, eq, gt, isNull, lte, or, ne } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { homeNotices } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
-import { resolveAdminShiftId } from '../services/shiftService.js';
+import { requireSelectedAdminShiftId, resolveAdminShiftId } from '../services/shiftService.js';
 import { coerceImageUrlList, toStoredUploadPath } from '../utils/uploadImageStorage.js';
 
 const STATUSES = new Set(['draft', 'published', 'archived']);
@@ -131,7 +131,11 @@ export const getHomeNotice = async (req: AdminRequest, res: Response): Promise<v
 
 export const createHomeNotice = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await requireSelectedAdminShiftId(req);
+    if (shiftId == null) {
+      res.status(400).json({ error: 'Выберите смену' });
+      return;
+    }
     const title = String(req.body.title ?? '').trim();
     if (!title) {
       res.status(400).json({ error: 'title required' });
@@ -193,7 +197,11 @@ export const updateHomeNotice = async (req: AdminRequest, res: Response): Promis
       res.status(400).json({ error: 'Invalid id' });
       return;
     }
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await requireSelectedAdminShiftId(req);
+    if (shiftId == null) {
+      res.status(400).json({ error: 'Выберите смену' });
+      return;
+    }
     const [existing] = await db.select().from(homeNotices)
       .where(and(eq(homeNotices.id, id), eq(homeNotices.shiftId, shiftId)))
       .limit(1);

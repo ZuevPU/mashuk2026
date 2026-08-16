@@ -18,8 +18,7 @@ export function pickLevelsConfigRow<T extends { shiftId?: number | null }>(
   shiftId?: number | null,
 ): T | undefined {
   if (shiftId != null && Number.isFinite(shiftId)) {
-    const exact = rows.find(r => r.shiftId === shiftId);
-    if (exact) return exact;
+    return rows.find(r => r.shiftId === shiftId);
   }
   return rows.find(r => r.shiftId == null);
 }

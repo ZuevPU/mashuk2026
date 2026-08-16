@@ -84,6 +84,22 @@ export async function getHubPiggybankMatrixHandler(req: AdminRequest, res: Respo
   res.json(await buildPiggybankDirectionMatrix(filters, req));
 }
 
+export async function getHubTodayHandler(req: AdminRequest, res: Response): Promise<void> {
+  const { resolveAdminShiftId } = await import('../services/shiftService.js');
+  const { buildHubTodayDashboard } = await import('../services/analytics/hubTodayDashboard.js');
+  const shiftId = await resolveAdminShiftId(req);
+  const dayRaw = Number(req.query.day);
+  const payload = await buildHubTodayDashboard(
+    shiftId,
+    Number.isFinite(dayRaw) && dayRaw >= 1 ? dayRaw : undefined,
+  );
+  if (!payload) {
+    res.status(404).json({ error: 'Shift not found' });
+    return;
+  }
+  res.json(payload);
+}
+
 export async function getHubParticipantFeedHandler(req: AdminRequest, res: Response): Promise<void> {
   const filters = await resolveAnalyticsFilters(req);
   const raw = req.query.participantId;

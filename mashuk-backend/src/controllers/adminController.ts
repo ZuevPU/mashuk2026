@@ -79,20 +79,11 @@ import {
   getShiftById,
   pickShiftOpPatch,
   resolveAdminShiftId,
-  requireSelectedAdminShiftId,
+  selectedAdminShiftOr400,
   shiftOpsToForumShape,
   updateShift,
   clearShiftCaches,
 } from '../services/shiftService.js';
-
-async function selectedAdminShiftOr400(req: AdminRequest, res: Response): Promise<number | null> {
-  const shiftId = await requireSelectedAdminShiftId(req);
-  if (shiftId == null) {
-    res.status(400).json({ error: 'Выберите смену' });
-    return null;
-  }
-  return shiftId;
-}
 
 export const listParticipants = async (req: AdminRequest, res: Response): Promise<void> => {
   const parsed = parseParticipantListQuery(req);
@@ -718,7 +709,8 @@ export const createParticipant = async (req: AdminRequest, res: Response): Promi
     res.status(400).json({ error: 'vkId required' });
     return;
   }
-  const shiftId = await resolveAdminShiftId(req);
+  const shiftId = await selectedAdminShiftOr400(req, res);
+  if (shiftId == null) return;
   let directionName: string | undefined;
   if (directionId) {
     const { getDirectionInShift } = await import('../services/shiftCatalogs.js');
@@ -750,7 +742,8 @@ export const crudDirections = {
   create: async (req: AdminRequest, res: Response) => {
     const name = String(req.body.name || '').trim();
     if (!name) { res.status(400).json({ error: 'name required' }); return; }
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const [d] = await db.insert(directions).values({
       name,
       shiftId,
@@ -936,7 +929,8 @@ export const crudThematicTags = {
   create: async (req: AdminRequest, res: Response) => {
     const name = String(req.body.name || '').trim();
     if (!name) { res.status(400).json({ error: 'name required' }); return; }
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const [nameTaken] = await db.select({ id: thematicTags.id }).from(thematicTags)
       .where(and(eq(thematicTags.shiftId, shiftId), eq(thematicTags.name, name))).limit(1);
     if (nameTaken) {
@@ -1121,7 +1115,8 @@ export const crudProgramPlaces = {
       res.status(400).json({ error: 'name required' });
       return;
     }
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const [taken] = await db.select({ id: programPlaces.id }).from(programPlaces)
       .where(and(eq(programPlaces.shiftId, shiftId), eq(programPlaces.name, name))).limit(1);
     if (taken) {
@@ -1191,7 +1186,8 @@ export const crudProgramBlockTypes = {
     const key = String(req.body.key || '').trim();
     const name = String(req.body.name || '').trim();
     if (!key || !name) { res.status(400).json({ error: 'key and name required' }); return; }
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const [taken] = await db.select({ id: programBlockTypes.id }).from(programBlockTypes)
       .where(and(eq(programBlockTypes.shiftId, shiftId), eq(programBlockTypes.key, key))).limit(1);
     if (taken) {
@@ -1240,7 +1236,8 @@ export const crudProgramSpeakers = {
   create: async (req: AdminRequest, res: Response) => {
     const name = String(req.body.name || '').trim();
     if (!name) { res.status(400).json({ error: 'name required' }); return; }
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const credentials = req.body.credentials != null ? String(req.body.credentials).trim() || null : null;
     const initialsRaw = req.body.initials ? String(req.body.initials).slice(0, 10) : null;
     const initials = initialsRaw || name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 3).toUpperCase() || null;
@@ -1551,7 +1548,8 @@ export const resetAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
  */
 export const notifyAdminEveningQuestionnaire = async (req: AdminRequest, res: Response): Promise<void> => {
   const day = Math.max(1, Math.min(7, Number(req.query.day) || Number(req.body?.day) || 1));
-  const shiftId = await resolveAdminShiftId(req);
+  const shiftId = await selectedAdminShiftOr400(req, res);
+  if (shiftId == null) return;
   const includeCompleted = req.body?.includeCompleted === true
     || String(req.query.includeCompleted || '') === '1';
   const customText = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
@@ -1611,7 +1609,8 @@ export const notifyAdminEveningQuestionnaire = async (req: AdminRequest, res: Re
 
 export const upsertDayFocus = async (req: AdminRequest, res: Response): Promise<void> => {
   const { dayNumber, title, text, textHtml, keyQuestion } = req.body;
-  const shiftId = await resolveAdminShiftId(req);
+  const shiftId = await selectedAdminShiftOr400(req, res);
+  if (shiftId == null) return;
   const html = typeof textHtml === 'string' ? textHtml : null;
   const plain = typeof text === 'string'
     ? text
@@ -1653,25 +1652,38 @@ export const crudEvents = {
   list: async (req: AdminRequest, res: Response) => {
     const shiftId = await resolveAdminShiftId(req);
     const day = req.query.day ? Number(req.query.day) : null;
-    let rows = await db.select().from(events).where(eq(events.shiftId, shiftId));
-    if (day && !Number.isNaN(day)) {
-      rows = rows.filter(e => e.dayNumber === day);
+    const { parseAdminListPage } = await import('../services/adminListPage.js');
+    const { limit, offset } = parseAdminListPage(req.query);
+    const conditions = [eq(events.shiftId, shiftId)];
+    if (day && !Number.isNaN(day)) conditions.push(eq(events.dayNumber, day));
+    const allRows = await db.select().from(events).where(and(...conditions));
+    const { normalizeSpeakerIds, loadSpeakersByIds } = await import('../services/speakerLabels.js');
+    const speakerIdSet = new Set<number>();
+    for (const e of allRows) {
+      for (const id of normalizeSpeakerIds(e.speakerIds)) speakerIdSet.add(id);
     }
-    const speakers = await db.select().from(programSpeakers).where(eq(programSpeakers.shiftId, shiftId));
-    const speakerMap = new Map(speakers.map(s => [s.id, s]));
-    const withSpeakers = rows.map(e => {
-      const ids = Array.isArray(e.speakerIds) ? (e.speakerIds as number[]) : [];
+    const speakerMap = await loadSpeakersByIds([...speakerIdSet]);
+    const withSpeakers = allRows.map(e => {
+      const ids = normalizeSpeakerIds(e.speakerIds);
       return {
         ...e,
+        speakerIds: ids,
         speakers: ids.map(id => speakerMap.get(id)).filter(Boolean),
       };
     });
-    res.json({ events: attachEventChildren(withSpeakers) });
+    const tree = attachEventChildren(withSpeakers);
+    res.json({
+      events: tree.slice(offset, offset + limit),
+      totalCount: tree.length,
+      limit,
+      offset,
+    });
   },
   create: async (req: AdminRequest, res: Response) => {
     const parsed = parseBody(eventCreateSchema, req.body);
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const parentEventId = parsed.data.parentEventId ?? null;
     if (parentEventId) {
       const shiftRows = await db.select({
@@ -1735,6 +1747,12 @@ export const crudEvents = {
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
     const [existing] = await db.select().from(events).where(eq(events.id, id)).limit(1);
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+    const selectedShiftId = await selectedAdminShiftOr400(req, res);
+    if (selectedShiftId == null) return;
+    if (existing.shiftId !== selectedShiftId) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
     if (parsed.data.parentEventId !== undefined) {
       const newParentId = parsed.data.parentEventId;
       const shiftRows = await db.select({
@@ -1831,6 +1849,12 @@ export const crudEvents = {
     }
     const [src] = await db.select().from(events).where(eq(events.id, id)).limit(1);
     if (!src) { res.status(404).json({ error: 'Not found' }); return; }
+    const selectedShiftId = await selectedAdminShiftOr400(req, res);
+    if (selectedShiftId == null) return;
+    if (src.shiftId !== selectedShiftId) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
     const shiftRows = await db.select().from(events).where(eq(events.shiftId, src.shiftId));
     const descendantIds = collectDescendantIds(id, shiftRows);
     const subtree = shiftRows.filter(e => e.id === id || descendantIds.includes(e.id));
@@ -1899,6 +1923,12 @@ export const crudEvents = {
     const id = Number(req.params.id);
     const [existing] = await db.select().from(events).where(eq(events.id, id)).limit(1);
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+    const selectedShiftId = await selectedAdminShiftOr400(req, res);
+    if (selectedShiftId == null) return;
+    if (existing.shiftId !== selectedShiftId) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
     const shiftRows = await db.select({ id: events.id, parentEventId: events.parentEventId })
       .from(events).where(eq(events.shiftId, existing.shiftId));
     const descendantIds = collectDescendantIds(id, shiftRows);
@@ -2113,7 +2143,8 @@ export const crudTasks = {
   create: async (req: AdminRequest, res: Response) => {
     const parsed = parseBody(taskCreateSchema, req.body);
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const values = await buildTaskInsertValues(parsed.data as Record<string, unknown>);
     if (values.status === 'published' && !values.qrToken && (values.confirmationMethods as string[] | undefined)?.includes('qr')) {
       values.qrToken = await allocateTaskQrCode();
@@ -2127,6 +2158,12 @@ export const crudTasks = {
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
     const [before] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
     if (!before) { res.status(404).json({ error: 'Not found' }); return; }
+    const selectedShiftId = await selectedAdminShiftOr400(req, res);
+    if (selectedShiftId == null) return;
+    if (before.shiftId !== selectedShiftId) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
     const enriched = enrichTaskWritePayload(parsed.data as Record<string, unknown>, before);
     const patch = { ...parsed.data, ...enriched } as Partial<typeof tasks.$inferInsert>;
     delete (patch as Record<string, unknown>).requiresModeration;
@@ -2170,6 +2207,12 @@ export const crudTasks = {
     const id = Number(req.params.id);
     const [src] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
     if (!src) { res.status(404).json({ error: 'Not found' }); return; }
+    const selectedShiftId = await selectedAdminShiftOr400(req, res);
+    if (selectedShiftId == null) return;
+    if (src.shiftId !== selectedShiftId) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
     const { id: _id, qrToken, createdAt, ...rest } = src;
     const methods = normalizeConfirmationMethods(src.confirmationMethods?.length ? src.confirmationMethods : methodsFromLegacy(src));
     const [copy] = await db.insert(tasks).values({
@@ -2187,6 +2230,12 @@ export const crudTasks = {
     const id = Number(req.params.id);
     const [existing] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+    const selectedShiftId = await selectedAdminShiftOr400(req, res);
+    if (selectedShiftId == null) return;
+    if (existing.shiftId !== selectedShiftId) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
     await db.delete(taskSubmissions).where(eq(taskSubmissions.taskId, id));
     await db.delete(tasks).where(eq(tasks.id, id));
     const { logAdminAction } = await import('../services/adminActionsLog.js');
@@ -2201,10 +2250,20 @@ export const crudTasks = {
     const parsed = bulkTasksSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
     const { ids, action } = parsed.data;
+    const selectedShiftId = await selectedAdminShiftOr400(req, res);
+    if (selectedShiftId == null) return;
+    const owned = await db.select({ id: tasks.id }).from(tasks).where(and(
+      inArray(tasks.id, ids),
+      eq(tasks.shiftId, selectedShiftId),
+    ));
+    if (owned.length !== ids.length) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
 
     if (action === 'delete') {
       await db.delete(taskSubmissions).where(inArray(taskSubmissions.taskId, ids));
-      await db.delete(tasks).where(inArray(tasks.id, ids));
+      await db.delete(tasks).where(and(inArray(tasks.id, ids), eq(tasks.shiftId, selectedShiftId)));
     } else if (action === 'hide') {
       await db.update(tasks).set({ isHidden: true }).where(inArray(tasks.id, ids));
     } else if (action === 'unhide') {
@@ -3093,8 +3152,9 @@ export const crudLevels = {
 
 export const triggerRatingRecalcAll = async (req: AdminRequest, res: Response): Promise<void> => {
   const { recalculateAllParticipantTotals } = await import('../services/ratingRecalcService.js');
-  const { resolveAdminShiftId } = await import('../services/shiftService.js');
-  const result = await recalculateAllParticipantTotals(req.adminId, await resolveAdminShiftId(req));
+  const shiftId = await selectedAdminShiftOr400(req, res);
+  if (shiftId == null) return;
+  const result = await recalculateAllParticipantTotals(req.adminId, shiftId);
   const { logAdminAction } = await import('../services/adminActionsLog.js');
   await logAdminAction({
     req,
@@ -3255,12 +3315,30 @@ export const crudMaterials = {
   list: async (req: AdminRequest, res: Response) => {
     const shiftId = await resolveAdminShiftId(req);
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
-    let rows = await db.select().from(materials).where(eq(materials.shiftId, shiftId));
-    if (status) rows = rows.filter(m => (m.status || 'published') === status);
-    res.json({ materials: rows, totalCount: rows.length });
+    const { parseAdminListPage } = await import('../services/adminListPage.js');
+    const { limit, offset } = parseAdminListPage(req.query);
+    const conditions = [eq(materials.shiftId, shiftId)];
+    if (status) conditions.push(eq(materials.status, status));
+    const allRows = await db.select().from(materials).where(and(...conditions));
+    const { normalizeSpeakerIds, snapshotSpeakerName, loadSpeakersByIds } = await import('../services/speakerLabels.js');
+    const speakerIdSet = new Set<number>();
+    for (const row of allRows) {
+      for (const id of normalizeSpeakerIds(row.speakerIds)) speakerIdSet.add(id);
+    }
+    const speakerById = await loadSpeakersByIds([...speakerIdSet]);
+    const rows = allRows.slice(offset, offset + limit).map(row => {
+      const speakerIds = normalizeSpeakerIds(row.speakerIds);
+      return {
+        ...row,
+        speakerIds,
+        speakerName: snapshotSpeakerName(speakerIds, speakerById, row.speakerName),
+      };
+    });
+    res.json({ materials: rows, totalCount: allRows.length, limit, offset });
   },
   create: async (req: AdminRequest, res: Response) => {
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const body = req.body as Record<string, unknown>;
     const title = String(body.title ?? '').trim();
     if (!title) {
@@ -3279,6 +3357,14 @@ export const crudMaterials = {
     const eventIdRaw = body.eventId;
     const eventId = eventIdRaw == null || eventIdRaw === '' ? null : Number(eventIdRaw);
     const dayNumber = body.dayNumber != null && body.dayNumber !== '' ? Number(body.dayNumber) : null;
+    const { normalizeSpeakerIds, snapshotSpeakerName, loadSpeakersByIds } = await import('../services/speakerLabels.js');
+    const speakerIds = normalizeSpeakerIds(body.speakerIds);
+    const speakerById = await loadSpeakersByIds(speakerIds);
+    const speakerName = snapshotSpeakerName(
+      speakerIds,
+      speakerById,
+      body.speakerName != null ? String(body.speakerName) : null,
+    );
     const [m] = await db.insert(materials).values({
       shiftId,
       title,
@@ -3286,10 +3372,8 @@ export const crudMaterials = {
       fileUrl: body.fileUrl != null && String(body.fileUrl).trim() ? String(body.fileUrl).trim().slice(0, 500) : null,
       type: body.type != null && String(body.type).trim() ? String(body.type).trim().slice(0, 50) : null,
       direction: body.direction != null && String(body.direction).trim() ? String(body.direction).trim().slice(0, 255) : null,
-      speakerName: body.speakerName != null && String(body.speakerName).trim()
-        ? String(body.speakerName).trim().slice(0, 255)
-        : null,
-      speakerIds: Array.isArray(body.speakerIds) ? body.speakerIds.map(Number).filter(n => Number.isFinite(n)) : [],
+      speakerName,
+      speakerIds,
       tags: Array.isArray(tags) ? tags : [],
       eventId: Number.isFinite(eventId as number) ? (eventId as number) : null,
       dayNumber: Number.isFinite(dayNumber as number) ? (dayNumber as number) : null,
@@ -3305,7 +3389,12 @@ export const crudMaterials = {
     const id = Number(req.params.id);
     const [existing] = await db.select().from(materials).where(eq(materials.id, id)).limit(1);
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
-    const shiftId = existing.shiftId ?? await resolveAdminShiftId(req);
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
+    if (existing.shiftId !== shiftId) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
     const body = req.body as Record<string, unknown>;
     const kb = normalizeMaterialKbUnlock(body);
     const sections = await normalizeMaterialKbSections(body, { partial: true });
@@ -3334,15 +3423,20 @@ export const crudMaterials = {
         ? String(body.direction).trim().slice(0, 255)
         : null;
     }
-    if (body.speakerName !== undefined) {
-      patch.speakerName = body.speakerName != null && String(body.speakerName).trim()
-        ? String(body.speakerName).trim().slice(0, 255)
-        : null;
-    }
-    if (body.speakerIds !== undefined) {
-      patch.speakerIds = Array.isArray(body.speakerIds)
-        ? body.speakerIds.map(Number).filter(n => Number.isFinite(n))
-        : [];
+    if (body.speakerName !== undefined || body.speakerIds !== undefined) {
+      const { normalizeSpeakerIds, snapshotSpeakerName, loadSpeakersByIds } = await import('../services/speakerLabels.js');
+      const speakerIds = body.speakerIds !== undefined
+        ? normalizeSpeakerIds(body.speakerIds)
+        : normalizeSpeakerIds(existing.speakerIds);
+      const speakerById = await loadSpeakersByIds(speakerIds);
+      patch.speakerIds = speakerIds;
+      patch.speakerName = snapshotSpeakerName(
+        speakerIds,
+        speakerById,
+        body.speakerName !== undefined
+          ? (body.speakerName != null ? String(body.speakerName) : null)
+          : existing.speakerName,
+      );
     }
     if (body.tags !== undefined) {
       if (Array.isArray(body.tags)) {
@@ -3371,7 +3465,8 @@ export const crudMaterials = {
     res.json({ material: updated });
   },
   publishDrafts: async (req: AdminRequest, res: Response) => {
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const updated = await db.update(materials)
       .set({ status: 'published' })
       .where(and(eq(materials.shiftId, shiftId), eq(materials.status, 'draft')))
@@ -3379,14 +3474,35 @@ export const crudMaterials = {
     res.json({ published: updated.length, materials: updated });
   },
   openShift: async (req: AdminRequest, res: Response) => {
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
+    const shift = await getShiftById(shiftId);
+    if (!shift) {
+      res.status(404).json({ error: 'Shift not found' });
+      return;
+    }
+    const currentDay = Math.max(1, Number(shift.currentDay) || 1);
+    const totalDays = Math.max(1, Number(shift.totalDays) || 8);
+    const force = req.body?.force === true;
+    if (currentDay < totalDays && !force) {
+      res.status(409).json({
+        error: 'Опубликовать всем можно только в последний день смены',
+        currentDay,
+        totalDays,
+      });
+      return;
+    }
     const { openKnowledgeBaseForShift } = await import('../services/kbOpenShift.js');
     const result = await openKnowledgeBaseForShift(shiftId, req.adminId ?? null);
     res.json(result);
   },
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
-    const [deleted] = await db.delete(materials).where(eq(materials.id, id)).returning();
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
+    const [deleted] = await db.delete(materials)
+      .where(and(eq(materials.id, id), eq(materials.shiftId, shiftId)))
+      .returning();
     if (!deleted) { res.status(404).json({ error: 'Not found' }); return; }
     const { logAdminAction } = await import('../services/adminActionsLog.js');
     await logAdminAction({
@@ -3611,80 +3727,34 @@ export const exportAttendance = async (_req: AdminRequest, res: Response): Promi
   );
 };
 
-export const exportPointsLog = async (_req: AdminRequest, res: Response): Promise<void> => {
+export const exportPointsLog = async (req: AdminRequest, res: Response): Promise<void> => {
   const { sendCsv } = await import('../services/exports/workbook.js');
+  const { pointsLogRowMatchesShift } = await import('../services/exports/exportCommon.js');
+  const shiftId = await resolveAdminShiftId(req);
   const rows = await db.select({ l: pointsLog, p: participants })
     .from(pointsLog)
-    .leftJoin(participants, eq(pointsLog.participantId, participants.id))
+    .innerJoin(participants, eq(pointsLog.participantId, participants.id))
+    .where(eq(participants.shiftId, shiftId))
     .orderBy(desc(pointsLog.createdAt));
   sendCsv(
     res,
     'points_log.csv',
     'id,participant_id,name,direction,action_type,points,created_at',
-    rows.map(r => [
-      r.l.id, r.p?.id, `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(), r.p?.direction ?? '',
-      r.l.actionType, r.l.points, r.l.createdAt,
-    ]),
+    rows
+      .filter(r => pointsLogRowMatchesShift(r.p?.shiftId, shiftId))
+      .map(r => [
+        r.l.id, r.p?.id, `${r.p?.firstName ?? ''} ${r.p?.lastName ?? ''}`.trim(), r.p?.direction ?? '',
+        r.l.actionType, r.l.points, r.l.createdAt,
+      ]),
   );
 };
 
 export const getAnalyticsSummary = async (_req: AdminRequest, res: Response): Promise<void> => {
-  const participantCount = (await db.select().from(participants)).length;
-  const answerCount = (await db.select().from(answers)).length;
-  const stats = await db.select().from(dailyStats).limit(1);
-  const tagStats: Record<string, number> = {};
-  for (const e of await db.select().from(piggybank)) {
-    for (const tag of entryTags(e)) {
-      tagStats[tag] = (tagStats[tag] || 0) + 1;
-    }
-  }
-  res.json({
-    participantCount,
-    answerCount,
-    completionPercent: stats[0]?.completionPercent ?? 0,
-    avgEnergy: stats[0]?.avgEnergy ?? 0,
-    emotionsDistribution: stats[0]?.emotionsDistribution ?? {},
-    emotionZonesDistribution: stats[0]?.emotionZonesDistribution ?? {},
-    redFlag: stats[0]?.redFlag ?? false,
-    piggybankTags: tagStats,
-  });
+  res.status(410).json({ error: 'Gone. Use /analytics/hub/* or /analytics/dashboards with X-Admin-Shift-Id.' });
 };
 
 export const getAnalyticsCharts = async (_req: AdminRequest, res: Response): Promise<void> => {
-  const stats = await db.select().from(dailyStats);
-  const allAnswers = await db.select().from(answers);
-  const checkins = allAnswers.filter(a => {
-    const d = a.answerData as { energy?: number; emotion?: string } | null;
-    return d && typeof d.energy === 'number';
-  });
-  const energyByDay: Record<string, number[]> = {};
-  for (const a of checkins) {
-    const day = a.createdAt ? new Date(a.createdAt).toLocaleDateString('ru-RU') : 'unknown';
-    const energy = (a.answerData as { energy: number }).energy;
-    if (!energyByDay[day]) energyByDay[day] = [];
-    energyByDay[day].push(energy);
-  }
-  const energyTrend = Object.entries(energyByDay).map(([day, vals]) => ({
-    day,
-    avg: Math.round(vals.reduce((s, v) => s + v, 0) / vals.length),
-  }));
-  const tagStats: Record<string, number> = {};
-  for (const e of await db.select().from(piggybank)) {
-    for (const tag of entryTags(e)) {
-      tagStats[tag] = (tagStats[tag] || 0) + 1;
-    }
-  }
-  const completionByDirection = stats
-    .filter(s => s.direction !== 'all')
-    .map(s => ({ direction: s.direction, percent: s.completionPercent ?? 0 }));
-  res.json({
-    emotions: stats.find(s => s.direction === 'all')?.emotionsDistribution ?? {},
-    energyTrend,
-    completionPercent: stats.find(s => s.direction === 'all')?.completionPercent ?? 0,
-    completionByDirection,
-    piggybankTags: Object.entries(tagStats).map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count),
-    medianWordCount: stats.find(s => s.direction === 'all')?.medianWordCount ?? 0,
-  });
+  res.status(410).json({ error: 'Gone. Use /analytics/hub/* or /analytics/dashboards with X-Admin-Shift-Id.' });
 };
 
 export const sendManualPush = async (req: AdminRequest, res: Response): Promise<void> => {
@@ -3693,11 +3763,19 @@ export const sendManualPush = async (req: AdminRequest, res: Response): Promise<
     res.status(400).json({ error: 'text required' });
     return;
   }
+  const shiftId = await selectedAdminShiftOr400(req, res);
+  if (shiftId == null) return;
   if (participantId) {
-    await sendPushNotification([Number(participantId)], text, 'manual');
+    const pid = Number(participantId);
+    const [target] = await db.select({ id: participants.id, shiftId: participants.shiftId })
+      .from(participants).where(eq(participants.id, pid)).limit(1);
+    if (!target || target.shiftId !== shiftId) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    await sendPushNotification([pid], text, 'manual');
   } else {
-    const { resolveAdminShiftId } = await import('../services/shiftService.js');
-    await notifyAllParticipants(text, 'manual', await resolveAdminShiftId(req));
+    await notifyAllParticipants(text, 'manual', shiftId);
   }
   const { logAdminAction } = await import('../services/adminActionsLog.js');
   await logAdminAction({

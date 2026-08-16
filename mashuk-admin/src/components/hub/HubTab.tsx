@@ -7,6 +7,7 @@ import type { HubLens } from './hubLenses';
 
 export type { HubLens } from './hubLenses';
 
+const HubTodayScreen = lazy(() => import('./HubTodayScreen').then(m => ({ default: m.HubTodayScreen })));
 const HubActivityScreen = lazy(() => import('./HubActivityScreen').then(m => ({ default: m.HubActivityScreen })));
 const HubAfterBlocksScreen = lazy(() => import('./HubAfterBlocksScreen').then(m => ({ default: m.HubAfterBlocksScreen })));
 const HubDayResultsScreen = lazy(() => import('./HubDayResultsScreen').then(m => ({ default: m.HubDayResultsScreen })));
@@ -60,10 +61,11 @@ function LazyLens({ children }: { children: ReactNode }) {
 }
 
 function HubShell({ onOpenCard }: { onOpenCard: (id: number) => void }) {
-  const [lens, setLens] = useState<HubLens>('forum');
+  const [lens, setLens] = useState<HubLens>('today');
   return (
     <div className="adm-dash-stack">
       <HubToolbar lens={lens} onLensChange={setLens} />
+      {lens === 'today' && <LazyLens><HubTodayScreen /></LazyLens>}
       {lens === 'forum' && <HubForumScreen onLensChange={setLens} />}
       {lens === 'stats' && <LazyLens><HubStatsScreen onLensChange={setLens} /></LazyLens>}
       {lens === 'dayResults' && <LazyLens><HubDayResultsScreen /></LazyLens>}

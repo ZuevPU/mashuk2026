@@ -36,6 +36,7 @@ import { resolveEveningSurveyDayForParticipant } from '../services/eveningSurvey
 import { resolveHomeActiveCard } from '../services/homeActiveCard.js';
 import { loadForumWrapPayload } from './forumWrapController.js';
 import { getShiftById, isShiftLive } from '../services/shiftService.js';
+import { isHomeAvailableTaskRow } from '../services/taskAdminHelpers.js';
 import {
   buildSuppressedVisibilityKeys,
   isSuppressedByHiddenTwin,
@@ -194,11 +195,12 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
     const activeMissed = missed.filter(q => q.access === 'open' || q.access === 'overdue');
     const lockedMissed: typeof missed = [];
 
-    const availableTasks = await db.select().from(tasks)
+    const availableTasks = (await db.select().from(tasks)
       .where(and(
+        eq(tasks.shiftId, shiftIdForQs),
         or(isNull(tasks.dayNumber), eq(tasks.dayNumber, currentDay)),
         or(isNull(tasks.publishTime), lte(tasks.publishTime, now)),
-      ));
+      ))).filter(t => isHomeAvailableTaskRow(t, shiftIdForQs, currentDay, now));
 
     const submissions = await db.select().from(taskSubmissions)
       .where(eq(taskSubmissions.participantId, participant.id));

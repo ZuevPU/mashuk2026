@@ -32,3 +32,24 @@ export async function getAdminBearerToken(app: Express): Promise<string> {
   assert.ok(res.body.token);
   return res.body.token as string;
 }
+
+export async function resolveTestAdminShiftId(app: Express, token: string): Promise<number> {
+  const res = await request(app)
+    .get('/api/admin/shift-options')
+    .set('Authorization', `Bearer ${token}`);
+  assert.equal(res.status, 200, res.text);
+  const activeId = Number(res.body.activeShiftId);
+  if (Number.isFinite(activeId) && activeId > 0) return activeId;
+  const first = Number(res.body.shifts?.[0]?.id);
+  assert.ok(Number.isFinite(first) && first > 0, 'no admin shift to test against');
+  return first;
+}
+
+export async function getAdminAuthHeaders(app: Express): Promise<Record<string, string>> {
+  const token = await getAdminBearerToken(app);
+  const shiftId = await resolveTestAdminShiftId(app, token);
+  return {
+    Authorization: `Bearer ${token}`,
+    'X-Admin-Shift-Id': String(shiftId),
+  };
+}

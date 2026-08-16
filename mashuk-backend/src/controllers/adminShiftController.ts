@@ -14,6 +14,7 @@ import {
   previewCopyShift,
   publishShift,
   resolveActiveShift,
+  requireSelectedAdminShiftId,
   resolveAdminShiftId,
   SHIFT_COPY_MODULES,
   type ShiftCopyModule,
@@ -249,6 +250,11 @@ export const previewCopyAdminShift = async (req: AdminRequest, res: Response): P
 };
 
 export const copyAdminShift = async (req: AdminRequest, res: Response): Promise<void> => {
+  const selected = await requireSelectedAdminShiftId(req);
+  if (selected == null) {
+    res.status(400).json({ error: 'Выберите смену' });
+    return;
+  }
   const sourceId = Number(req.params.id);
   const code = String(req.body.code || '').trim();
   const name = String(req.body.name || '').trim();
@@ -281,6 +287,11 @@ export const copyAdminShift = async (req: AdminRequest, res: Response): Promise<
 };
 
 export const copyIntoAdminShift = async (req: AdminRequest, res: Response): Promise<void> => {
+  const selected = await requireSelectedAdminShiftId(req);
+  if (selected == null) {
+    res.status(400).json({ error: 'Выберите смену' });
+    return;
+  }
   const sourceId = Number(req.params.id);
   const targetId = Number(req.body?.targetShiftId);
   if (!Number.isInteger(targetId) || targetId <= 0) {

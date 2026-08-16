@@ -17,7 +17,7 @@ function categoryLabel(category?: string | null): string {
 
 export function MedalsListTable({ medals, onEdit, onHide, onDelete }: Props) {
   if (medals.length === 0) {
-    return <p className="adm-muted">Нет медалей в этой вкладке.</p>;
+    return <p className="adm-muted">У этой смены нет медалей.</p>;
   }
 
   return (

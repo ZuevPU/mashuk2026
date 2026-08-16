@@ -4,6 +4,7 @@ import { db } from '../db/index.js';
 import { tasks, taskSubmissions, participants, taskTeamConfirmations, pointsLog } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
 import { getForumSettings, resolveEffectiveCurrentDay } from '../services/helpers.js';
+import { sanitizeDescriptionHtml } from '../services/sanitizeDescriptionHtml.js';
 import { resolveTaskAwardPoints } from '../services/taskPoints.js';
 import { sendPushNotification } from '../services/pushService.js';
 import { evaluateMedalsForParticipant } from '../services/medalEvaluator.js';
@@ -193,7 +194,9 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
         title: t.title,
         shortDescription: adminDescription,
         description: adminDescription,
-        descriptionHtml: t.descriptionHtml || (adminDescription ? `<p>${adminDescription}</p>` : null),
+        descriptionHtml: sanitizeDescriptionHtml(
+          t.descriptionHtml || (adminDescription ? `<p>${adminDescription}</p>` : null),
+        ),
         points: t.points,
         category: t.category,
         categoryIconKey: t.iconKey ?? null,
@@ -294,6 +297,7 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
         experienceTotal,
       },
       taskNotice: await (await import('./homeNoticeController.js')).getActiveHomeNotice(shiftId, now, 'tasks'),
+      shiftLive: true,
     });
   } catch (error) {
     console.error('listTasks:', error);

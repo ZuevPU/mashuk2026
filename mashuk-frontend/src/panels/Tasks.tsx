@@ -701,6 +701,14 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
                 />
               </div>
             )}
+            {data?.shiftLive === false && (
+              <div className="m-card" style={{ padding: 14, marginBottom: 10 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Смена ещё не открыта</div>
+                <div style={{ fontSize: 13, color: '#666', lineHeight: 1.4 }}>
+                  Навигация и профиль доступны. Программа, задания и вопросы появятся, когда организаторы активируют смену.
+                </div>
+              </div>
+            )}
             <div className="tasks-xp-banner">
               <div className="tasks-xp-col">
                 <div className="tasks-xp-val">⚡ {data?.progress?.experienceTotal ?? 0}</div>
@@ -782,7 +790,15 @@ export const TasksPanel: React.FC<{ id: string }> = ({ id }) => {
               </div>
             )}
             {filteredTasks.length === 0 ? (
-              <EmptyState icon="📋" title="Нет заданий" subtitle="Задания появятся по ходу дня" />
+              <EmptyState
+                icon="📋"
+                title={data?.shiftLive === false ? 'Смена ещё не открыта' : 'Нет заданий'}
+                subtitle={
+                  data?.shiftLive === false
+                    ? 'Навигация и профиль доступны. Программа, задания и вопросы появятся, когда организаторы активируют смену.'
+                    : 'Задания появятся по ходу дня'
+                }
+              />
             ) : filteredTasks.map((t: any) => {
               const tone = t.category ? categoryTone(t.category) : null;
               const isDone = t.status === 'done';

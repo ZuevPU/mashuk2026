@@ -207,7 +207,7 @@ export function taskBelongsToParticipantShift(
   participantShiftId: number | null | undefined,
 ): boolean {
   if (participantShiftId == null || !Number.isFinite(participantShiftId)) return false;
-  if (task.shiftId == null) return true;
+  if (task.shiftId == null) return false;
   return task.shiftId === participantShiftId;
 }
 

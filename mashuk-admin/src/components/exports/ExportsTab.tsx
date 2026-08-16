@@ -628,7 +628,7 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
                   Журнал медалей
                 </button>
                 <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadCsv('/exports/points-log', 'points_log.csv')}>
-                  Журнал баллов
+                  Журнал баллов (смена в шапке)
                 </button>
                 <button type="button" className="adm-btn adm-btn-secondary" onClick={() => downloadCsv('/exports/moderation-log', 'moderation_log.csv')}>
                   Модерация

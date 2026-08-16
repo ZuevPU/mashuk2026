@@ -144,12 +144,26 @@ export async function resolveAdminShiftId(req: Request): Promise<number> {
   return resolveActiveShiftId();
 }
 
+export const SELECT_ADMIN_SHIFT_ERROR = 'Выберите смену';
+
 /** Write paths: no silent fallback to the first active shift. */
 export async function requireSelectedAdminShiftId(req: Request): Promise<number | null> {
   const candidate = requestedAdminShiftId(req);
   if (candidate == null) return null;
   const [row] = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.id, candidate)).limit(1);
   return row?.id ?? null;
+}
+
+export async function selectedAdminShiftOr400(
+  req: Request,
+  res: { status(code: number): { json(body: unknown): unknown } },
+): Promise<number | null> {
+  const shiftId = await requireSelectedAdminShiftId(req);
+  if (shiftId == null) {
+    res.status(400).json({ error: SELECT_ADMIN_SHIFT_ERROR });
+    return null;
+  }
+  return shiftId;
 }
 
 export function shiftOpsToForumShape(shift: ShiftRow) {

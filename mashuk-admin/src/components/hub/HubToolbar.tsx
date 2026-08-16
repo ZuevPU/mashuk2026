@@ -3,6 +3,7 @@ import type { HubLens } from './hubLenses';
 import { HUB_FORUM_DAY_ALL, hubDirectionOptions, isAllForumDay } from './hubQuery';
 
 const LENS_LABELS: Record<HubLens, string> = {
+  today: 'Сегодня',
   forum: 'Форум',
   stats: 'Статистика',
   dayResults: 'Итоги дня',
@@ -18,7 +19,7 @@ const LENS_LABELS: Record<HubLens, string> = {
 };
 
 const LENS_ORDER: HubLens[] = [
-  'forum', 'stats', 'dayResults', 'forumResults', 'state', 'activity', 'piggybank', 'afterBlocks', 'exchange',
+  'today', 'forum', 'stats', 'dayResults', 'forumResults', 'state', 'activity', 'piggybank', 'afterBlocks', 'exchange',
   'direction', 'groups', 'participant',
 ];
 

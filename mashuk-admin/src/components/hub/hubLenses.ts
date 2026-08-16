@@ -1,3 +1,3 @@
 export type HubLens =
-  | 'forum' | 'stats' | 'dayResults' | 'forumResults' | 'state' | 'activity' | 'piggybank' | 'afterBlocks' | 'exchange'
+  | 'today' | 'forum' | 'stats' | 'dayResults' | 'forumResults' | 'state' | 'activity' | 'piggybank' | 'afterBlocks' | 'exchange'
   | 'direction' | 'groups' | 'participant';

@@ -225,6 +225,11 @@ export const crudQuestions = {
       rows = rows.filter(r => questionMatchesDay(r, day));
     }
 
+    const { parseAdminListPage } = await import('../services/adminListPage.js');
+    const { limit, offset } = parseAdminListPage(req.query);
+    const filteredCount = rows.length;
+    rows = rows.slice(offset, offset + limit);
+
     const [{ totalCount }] = await db.select({ totalCount: count() }).from(questions)
       .where(and(eq(questions.shiftId, shiftId), ne(questions.status, 'archived')));
 
@@ -240,6 +245,9 @@ export const crudQuestions = {
         };
       }),
       totalCount: Number(totalCount),
+      filteredCount,
+      limit,
+      offset,
     });
   },
 
@@ -266,8 +274,12 @@ export const crudQuestions = {
       res.status(400).json({ error: 'Выберите направление для аудитории вопроса' });
       return;
     }
-    const { resolveAdminShiftId } = await import('../services/shiftService.js');
-    const shiftId = await resolveAdminShiftId(req);
+    const { requireSelectedAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await requireSelectedAdminShiftId(req);
+    if (shiftId == null) {
+      res.status(400).json({ error: 'Выберите смену' });
+      return;
+    }
     const values = await applyAudienceDirectionName({
       ...buildQuestionValues(parsed.data as Record<string, unknown>, parsed.data.title.trim()) as Record<string, unknown>,
       shiftId,
@@ -284,8 +296,12 @@ export const crudQuestions = {
     const id = Number(req.params.id);
     const parsed = parseBody(questionUpdateSchema, req.body);
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
-    const { resolveAdminShiftId } = await import('../services/shiftService.js');
-    const shiftId = await resolveAdminShiftId(req);
+    const { requireSelectedAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await requireSelectedAdminShiftId(req);
+    if (shiftId == null) {
+      res.status(400).json({ error: 'Выберите смену' });
+      return;
+    }
     const [before] = await db.select().from(questions).where(and(eq(questions.id, id), eq(questions.shiftId, shiftId))).limit(1);
     if (!before) { res.status(404).json({ error: 'Not found' }); return; }
 
@@ -454,8 +470,14 @@ export const crudQuestions = {
 
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
+    const { selectedAdminShiftOr400 } = await import('../services/shiftService.js');
+    const selectedShiftId = await selectedAdminShiftOr400(req, res);
+    if (selectedShiftId == null) return;
     const [existing] = await db.select().from(questions).where(eq(questions.id, id)).limit(1);
-    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+    if (!existing || existing.shiftId !== selectedShiftId) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
     await db.delete(answers).where(eq(answers.questionId, id));
     await db.delete(questionOptions).where(eq(questionOptions.questionId, id));
     await db.delete(questions).where(eq(questions.id, id));
@@ -469,8 +491,14 @@ export const crudQuestions = {
 
   duplicate: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
+    const { selectedAdminShiftOr400 } = await import('../services/shiftService.js');
+    const selectedShiftId = await selectedAdminShiftOr400(req, res);
+    if (selectedShiftId == null) return;
     const [src] = await db.select().from(questions).where(eq(questions.id, id)).limit(1);
-    if (!src) { res.status(404).json({ error: 'Not found' }); return; }
+    if (!src || src.shiftId !== selectedShiftId) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
     const { id: _id, createdAt, ...rest } = src;
     const [copy] = await db.insert(questions).values({
       ...rest,
@@ -684,6 +712,17 @@ export const crudQuestions = {
     const parsed = bulkTasksSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
     const { ids, action } = parsed.data;
+    const { selectedAdminShiftOr400 } = await import('../services/shiftService.js');
+    const selectedShiftId = await selectedAdminShiftOr400(req, res);
+    if (selectedShiftId == null) return;
+    const owned = await db.select({ id: questions.id }).from(questions).where(and(
+      inArray(questions.id, ids),
+      eq(questions.shiftId, selectedShiftId),
+    ));
+    if (owned.length !== ids.length) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
 
     if (action === 'delete') {
       await db.delete(answers).where(inArray(answers.questionId, ids));

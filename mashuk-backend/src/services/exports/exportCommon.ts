@@ -35,6 +35,14 @@ export const ANSWER_ROW_HEADERS_RU = [
   'Источник',
 ] as const;
 
+/** Points-log CSV: only rows whose participant belongs to the admin header shift. */
+export function pointsLogRowMatchesShift(
+  participantShiftId: number | null | undefined,
+  adminShiftId: number,
+): boolean {
+  return participantShiftId != null && participantShiftId === adminShiftId;
+}
+
 export function fullName(p: { firstName?: string | null; lastName?: string | null } | null | undefined): string {
   if (!p) return '';
   return `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim();

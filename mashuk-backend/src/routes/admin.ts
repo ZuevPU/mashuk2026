@@ -78,25 +78,25 @@ router.delete('/thematic-tags/:id', P('recommendation-tags', 'delete'), wrap(adm
 router.post('/thematic-tags/merge', P('recommendation-tags', 'update'), wrap(admin.crudThematicTags.merge));
 
 router.get('/program-places', wrap(admin.crudProgramPlaces.list));
-router.post('/program-places', requireAdminRole('settings'), wrap(admin.crudProgramPlaces.create));
-router.patch('/program-places/:id', requireAdminRole('settings'), wrap(admin.crudProgramPlaces.update));
+router.post('/program-places', P('events', 'create'), wrap(admin.crudProgramPlaces.create));
+router.patch('/program-places/:id', P('events', 'update'), wrap(admin.crudProgramPlaces.update));
 router.delete('/program-places/:id', requireAdminRole('delete'), wrap(admin.crudProgramPlaces.delete));
 
 router.get('/program-block-types', wrap(admin.crudProgramBlockTypes.list));
-router.post('/program-block-types', requireAdminRole('settings'), wrap(admin.crudProgramBlockTypes.create));
-router.patch('/program-block-types/:id', requireAdminRole('settings'), wrap(admin.crudProgramBlockTypes.update));
+router.post('/program-block-types', P('events', 'create'), wrap(admin.crudProgramBlockTypes.create));
+router.patch('/program-block-types/:id', P('events', 'update'), wrap(admin.crudProgramBlockTypes.update));
 router.delete('/program-block-types/:id', requireAdminRole('delete'), wrap(admin.crudProgramBlockTypes.delete));
 
 router.get('/program-speakers', wrap(admin.crudProgramSpeakers.list));
-router.post('/program-speakers', requireAdminRole('settings'), wrap(admin.crudProgramSpeakers.create));
-router.patch('/program-speakers/:id', requireAdminRole('settings'), wrap(admin.crudProgramSpeakers.update));
+router.post('/program-speakers', P('events', 'create'), wrap(admin.crudProgramSpeakers.create));
+router.patch('/program-speakers/:id', P('events', 'update'), wrap(admin.crudProgramSpeakers.update));
 router.delete('/program-speakers/:id', requireAdminRole('delete'), wrap(admin.crudProgramSpeakers.delete));
 
 router.get('/schedule/days', wrap(p0.crudScheduleDays.list));
-router.post('/schedule/days', requireAdminRole('settings'), wrap(p0.crudScheduleDays.create));
-router.patch('/schedule/days/:id', requireAdminRole('settings'), wrap(p0.crudScheduleDays.update));
+router.post('/schedule/days', P('events', 'create'), wrap(p0.crudScheduleDays.create));
+router.patch('/schedule/days/:id', P('events', 'update'), wrap(p0.crudScheduleDays.update));
 router.delete('/schedule/days/:id', requireAdminRole('delete'), wrap(p0.crudScheduleDays.delete));
-router.post('/schedule/draft', requireAdminRole('settings'), wrap(p0.draftScheduleDay));
+router.post('/schedule/draft', P('events', 'create'), wrap(p0.draftScheduleDay));
 
 router.get('/shift-options', wrap(shiftsCtrl.listAdminShiftOptions));
 router.get('/shifts', P('forum', 'read'), wrap(shiftsCtrl.listAdminShifts));
@@ -131,11 +131,11 @@ router.get('/day-focus', wrap(admin.listDayFocus));
 router.post('/day-focus', requireAdminRole('settings'), wrap(admin.upsertDayFocus));
 
 router.get('/events', wrap(admin.crudEvents.list));
-router.post('/events', requireAdminRole('settings'), wrap(admin.crudEvents.create));
-router.patch('/events/:id', requireAdminRole('settings'), wrap(admin.crudEvents.update));
-router.post('/events/:id/duplicate', requireAdminRole('settings'), wrap(admin.crudEvents.duplicate));
+router.post('/events', P('events', 'create'), wrap(admin.crudEvents.create));
+router.patch('/events/:id', P('events', 'update'), wrap(admin.crudEvents.update));
+router.post('/events/:id/duplicate', P('events', 'update'), wrap(admin.crudEvents.duplicate));
 router.delete('/events/:id', requireAdminRole('delete'), wrap(admin.crudEvents.delete));
-router.post('/schedule/publish', requireAdminRole('settings'), wrap(p0.publishScheduleDay));
+router.post('/schedule/publish', P('events', 'update'), wrap(p0.publishScheduleDay));
 router.get('/schedule/versions', wrap(p0.listScheduleVersions));
 
 router.get('/auth/me', wrap(rights.getMyPermissions));
@@ -306,6 +306,7 @@ router.get('/analytics/forum-clubs', P('analytics', 'read'), wrap(analyticsCtrl.
 router.patch('/analytics/forum-clubs/:id', requireAdminRole('settings'), wrap(analyticsCtrl.patchForumClubHandler));
 router.post('/analytics/recalculate', requireAdminRole('settings'), wrap(admin.triggerAnalyticsRecalc));
 router.post('/analytics/refresh', requireAdminRole('settings'), wrap(analyticsCtrl.postAnalyticsRefreshHandler));
+router.get('/analytics/hub/today', P('analytics', 'read'), wrap(hubCtrl.getHubTodayHandler));
 router.get('/analytics/hub/forum', P('analytics', 'read'), wrap(hubCtrl.getHubForumHandler));
 router.get('/analytics/hub/forum-extras', P('analytics', 'read'), wrap(hubCtrl.getHubForumExtrasHandler));
 router.get('/analytics/hub/day-results', P('analytics', 'read'), wrap(hubCtrl.getHubDayResultsHandler));

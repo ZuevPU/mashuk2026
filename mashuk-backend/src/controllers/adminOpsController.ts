@@ -361,13 +361,15 @@ export const getQuestionAnswerCount = async (req: AdminRequest, res: Response): 
 
 export const crudMedals = {
   list: async (req: AdminRequest, res: Response) => {
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
     const status = String(req.query.status || '');
     const category = String(req.query.category || '');
     const level = String(req.query.level || '');
     const awardType = String(req.query.awardType || '');
     const visibility = String(req.query.visibility || '');
 
-    const conditions = [];
+    const conditions = [eq(medals.shiftId, shiftId)];
     if (status === 'active') conditions.push(eq(medals.isActive, true));
     if (status === 'draft') conditions.push(eq(medals.isActive, false));
     if (category) conditions.push(eq(medals.category, category));
@@ -404,8 +406,12 @@ export const crudMedals = {
       res.status(400).json({ error: parsed.error });
       return;
     }
+    const { selectedAdminShiftOr400 } = await import('../services/shiftService.js');
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const b = parsed.data;
     const [m] = await db.insert(medals).values({
+      shiftId,
       name: b.name,
       description: b.description ?? null,
       conditionRule: b.conditionRule ?? null,
@@ -437,14 +443,36 @@ export const crudMedals = {
     if (b.visibility !== undefined) patch.visibility = b.visibility;
     if (b.isActive !== undefined) patch.isActive = b.isActive;
 
-    const [m] = await db.update(medals).set(patch).where(eq(medals.id, id)).returning();
+    const { selectedAdminShiftOr400 } = await import('../services/shiftService.js');
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
+    const [existing] = await db.select().from(medals).where(eq(medals.id, id)).limit(1);
+    if (!existing || existing.shiftId !== shiftId) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    const [m] = await db.update(medals).set(patch).where(and(
+      eq(medals.id, id),
+      eq(medals.shiftId, shiftId),
+    )).returning();
     if (!m) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ medal: m });
   },
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
+    const { selectedAdminShiftOr400 } = await import('../services/shiftService.js');
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
+    const [existing] = await db.select().from(medals).where(eq(medals.id, id)).limit(1);
+    if (!existing || existing.shiftId !== shiftId) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
     await db.delete(userMedals).where(eq(userMedals.medalId, id));
-    const [d] = await db.delete(medals).where(eq(medals.id, id)).returning();
+    const [d] = await db.delete(medals).where(and(
+      eq(medals.id, id),
+      eq(medals.shiftId, shiftId),
+    )).returning();
     if (!d) { res.status(404).json({ error: 'Not found' }); return; }
     await logAdminAction({
       req, actionType: 'medal_delete', section: 'medals', objectId: id, oldValue: d, isCritical: true,
@@ -463,13 +491,26 @@ export const awardMedal = async (req: AdminRequest, res: Response): Promise<void
     res.status(400).json({ error: 'participantId and medalId required' });
     return;
   }
+  const { selectedAdminShiftOr400 } = await import('../services/shiftService.js');
+  const shiftId = await selectedAdminShiftOr400(req, res);
+  if (shiftId == null) return;
+  const [target] = await db.select({ id: participants.id, shiftId: participants.shiftId })
+    .from(participants).where(eq(participants.id, Number(participantId))).limit(1);
+  if (!target || target.shiftId !== shiftId) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+  const [medal] = await db.select().from(medals).where(eq(medals.id, Number(medalId))).limit(1);
+  if (!medal || medal.shiftId !== shiftId) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
   const [um] = await db.insert(userMedals).values({
     participantId: Number(participantId),
     medalId: Number(medalId),
     awardedByAdminId: req.adminId,
     way: 'manual',
   }).returning();
-  const [medal] = await db.select().from(medals).where(eq(medals.id, Number(medalId))).limit(1);
   const { pushCopy } = await import('../services/pushCopy.js');
   await sendPushNotification(
     [Number(participantId)],

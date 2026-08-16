@@ -82,9 +82,10 @@ export const crudGroups = {
   create: async (req: AdminRequest, res: Response) => {
     const { name, directionId, capacity } = req.body;
     if (!name?.trim()) { res.status(400).json({ error: 'name required' }); return; }
-    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const { selectedAdminShiftOr400 } = await import('../services/shiftService.js');
     const { findDuplicateGroupOnShift, normalizeGroupName } = await import('../services/groupDirectionSync.js');
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const groupName = normalizeGroupName(name);
     const dup = await findDuplicateGroupOnShift(shiftId, groupName);
     if (dup) {
@@ -113,10 +114,12 @@ export const crudGroups = {
       return;
     }
     const patch: Partial<typeof participantGroups.$inferInsert> = {};
+    const { selectedAdminShiftOr400 } = await import('../services/shiftService.js');
+    const selectedShiftId = await selectedAdminShiftOr400(req, res);
+    if (selectedShiftId == null) return;
     if (req.body.name !== undefined) {
       const { findDuplicateGroupOnShift, normalizeGroupName } = await import('../services/groupDirectionSync.js');
-      const { resolveAdminShiftId } = await import('../services/shiftService.js');
-      const shiftIdForName = await resolveAdminShiftId(req);
+      const shiftIdForName = selectedShiftId;
       patch.name = normalizeGroupName(String(req.body.name));
       const dup = await findDuplicateGroupOnShift(shiftIdForName, patch.name, id);
       if (dup) {
@@ -133,10 +136,8 @@ export const crudGroups = {
         return;
       }
       if (patch.directionId != null) {
-        const { resolveAdminShiftId } = await import('../services/shiftService.js');
         const { getDirectionInShift } = await import('../services/shiftCatalogs.js');
-        const shiftId = await resolveAdminShiftId(req);
-        const dir = await getDirectionInShift(patch.directionId, shiftId);
+        const dir = await getDirectionInShift(patch.directionId, selectedShiftId);
         if (!dir) { res.status(400).json({ error: 'Направление не найдено на этой смене' }); return; }
       }
     }
@@ -144,8 +145,7 @@ export const crudGroups = {
       res.status(400).json({ error: 'Nothing to update' });
       return;
     }
-    const { resolveAdminShiftId } = await import('../services/shiftService.js');
-    const shiftId = await resolveAdminShiftId(req);
+    const shiftId = selectedShiftId;
     const [before] = await db.select({
       directionId: participantGroups.directionId,
       shiftId: participantGroups.shiftId,
@@ -171,8 +171,9 @@ export const crudGroups = {
   },
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
-    const { resolveAdminShiftId } = await import('../services/shiftService.js');
-    const shiftId = await resolveAdminShiftId(req);
+    const { selectedAdminShiftOr400 } = await import('../services/shiftService.js');
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const [owned] = await db.select({ id: participantGroups.id }).from(participantGroups).where(and(
       eq(participantGroups.id, id),
       eq(participantGroups.shiftId, shiftId),
@@ -187,8 +188,9 @@ export const crudGroups = {
     res.json({ ok: true });
   },
   syncDirections: async (req: AdminRequest, res: Response) => {
-    const { resolveAdminShiftId } = await import('../services/shiftService.js');
-    const shiftId = await resolveAdminShiftId(req);
+    const { selectedAdminShiftOr400 } = await import('../services/shiftService.js');
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const { applyAllGroupDirections } = await import('../services/groupDirectionSync.js');
     const synced = await applyAllGroupDirections(shiftId);
     res.json({ ok: true, synced });
@@ -200,8 +202,9 @@ export const crudGroups = {
 export const publishScheduleDay = async (req: AdminRequest, res: Response): Promise<void> => {
   const dayNumber = Number(req.body.dayNumber ?? req.params.dayNumber);
   if (!dayNumber) { res.status(400).json({ error: 'dayNumber required' }); return; }
-  const { resolveAdminShiftId } = await import('../services/shiftService.js');
-  const shiftId = await resolveAdminShiftId(req);
+  const { selectedAdminShiftOr400 } = await import('../services/shiftService.js');
+  const shiftId = await selectedAdminShiftOr400(req, res);
+  if (shiftId == null) return;
 
   const dayEvents = await db.select().from(events).where(and(
     eq(events.dayNumber, dayNumber),
@@ -322,8 +325,9 @@ export const crudScheduleDays = {
   create: async (req: AdminRequest, res: Response) => {
     const dayNumber = Number(req.body.dayNumber);
     if (!dayNumber) { res.status(400).json({ error: 'dayNumber required' }); return; }
-    const { resolveAdminShiftId, updateShift } = await import('../services/shiftService.js');
-    const shiftId = await resolveAdminShiftId(req);
+    const { selectedAdminShiftOr400, updateShift } = await import('../services/shiftService.js');
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const [existing] = await db.select().from(scheduleDays).where(and(
       eq(scheduleDays.dayNumber, dayNumber),
       eq(scheduleDays.shiftId, shiftId),
@@ -346,19 +350,31 @@ export const crudScheduleDays = {
   },
   update: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
+    const { selectedAdminShiftOr400 } = await import('../services/shiftService.js');
+    const selectedShiftId = await selectedAdminShiftOr400(req, res);
+    if (selectedShiftId == null) return;
+    const [existing] = await db.select().from(scheduleDays).where(eq(scheduleDays.id, id)).limit(1);
+    if (!existing || existing.shiftId !== selectedShiftId) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
     const patch: Partial<typeof scheduleDays.$inferInsert> = {};
     if (req.body.displayLabel != null) patch.displayLabel = String(req.body.displayLabel);
     if (req.body.shiftNumber != null) patch.shiftNumber = Number(req.body.shiftNumber);
     if (req.body.calendarDate != null) patch.calendarDate = new Date(req.body.calendarDate);
-    const [updated] = await db.update(scheduleDays).set(patch).where(eq(scheduleDays.id, id)).returning();
+    const [updated] = await db.update(scheduleDays).set(patch).where(and(
+      eq(scheduleDays.id, id),
+      eq(scheduleDays.shiftId, selectedShiftId),
+    )).returning();
     if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({ day: updated });
   },
   delete: async (req: AdminRequest, res: Response) => {
     const id = Number(req.params.id);
     const force = req.query.force === '1' || req.query.force === 'true';
-    const { resolveAdminShiftId, updateShift } = await import('../services/shiftService.js');
-    const shiftId = await resolveAdminShiftId(req);
+    const { selectedAdminShiftOr400, updateShift } = await import('../services/shiftService.js');
+    const shiftId = await selectedAdminShiftOr400(req, res);
+    if (shiftId == null) return;
     const [day] = await db.select().from(scheduleDays).where(and(
       eq(scheduleDays.id, id),
       eq(scheduleDays.shiftId, shiftId),
@@ -761,7 +777,7 @@ export const getParticipantCard = async (req: AdminRequest, res: Response): Prom
     }).from(pointsLog).where(eq(pointsLog.participantId, id)),
     db.select().from(medals).where(and(
       eq(medals.isActive, true),
-      p.shiftId != null ? eq(medals.shiftId, p.shiftId) : isNull(medals.shiftId),
+      eq(medals.shiftId, p.shiftId ?? -1),
     )).orderBy(asc(medals.name)),
   ]);
 

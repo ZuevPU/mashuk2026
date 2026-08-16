@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { db } from '../db/index.js';
 import { adminPushNotifications, events, questions, tasks } from '../db/schema.js';
 import { AdminRequest } from '../middlewares/adminAuth.js';
-import { resolveAdminShiftId } from '../services/shiftService.js';
+import { resolveAdminShiftId, selectedAdminShiftOr400 } from '../services/shiftService.js';
 import { getForumSettings } from '../services/helpers.js';
 import { pushCopy } from '../services/pushCopy.js';
 import { sendPushNotification, notifyAllParticipants } from '../services/pushService.js';
@@ -155,7 +155,8 @@ export const sendContentNotify = async (req: AdminRequest, res: Response): Promi
     return;
   }
 
-  const shiftId = await resolveAdminShiftId(req);
+  const shiftId = await selectedAdminShiftOr400(req, res);
+  if (shiftId == null) return;
   const target = await resolveSendTarget(kind, id, day, shiftId, text);
   if ('error' in target) {
     res.status(target.status).json({ error: target.error });
