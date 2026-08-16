@@ -416,6 +416,8 @@ export const ProfilePanel: React.FC<{
                 <ProfileNameEditor
                   firstName={p.user.firstName || ''}
                   lastName={p.user.lastName || ''}
+                  direction={p.user.direction}
+                  directionId={p.user.directionId}
                   groupId={p.user.groupId}
                   groupName={p.user.groupName}
                   onSaved={(user) => {

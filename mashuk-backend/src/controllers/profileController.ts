@@ -415,16 +415,10 @@ export const updateParticipantName = async (req: ParticipantRequest, res: Respon
         }
         patch.groupId = group.id;
         patch.groupName = group.name;
-        if (group.directionId) {
-          const { getDirectionInShift } = await import('../services/shiftCatalogs.js');
-          const dir = await getDirectionInShift(group.directionId, me.shiftId);
-          if (dir) {
-            patch.directionId = dir.id;
-            patch.direction = dir.name;
-          }
-        }
       }
-    } else if (req.body?.directionId != null && req.body.directionId !== '') {
+    }
+
+    if (req.body?.directionId != null && req.body.directionId !== '') {
       const directionId = Number(req.body.directionId);
       if (!Number.isInteger(directionId) || directionId <= 0) {
         res.status(400).json({ error: 'Некорректное направление' });

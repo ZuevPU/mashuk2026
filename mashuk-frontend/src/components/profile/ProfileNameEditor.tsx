@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { apiGet, apiPatch, ApiError } from '../../api/client';
+import { apiGet, apiPatch, ApiError, getStoredShiftId } from '../../api/client';
 
 function isPlaceholderName(first?: string | null, last?: string | null): boolean {
   const full = `${first || ''} ${last || ''}`.trim().toLowerCase();
   return full === 'тест пользователь' || full === 'test user' || !full;
 }
 
+type DirectionOpt = { id: number; name: string };
 type GroupOpt = {
   id: number;
   name: string;
@@ -24,6 +25,8 @@ type SavedUser = {
 type Props = {
   firstName: string;
   lastName: string;
+  direction?: string | null;
+  directionId?: number | null;
   groupId?: number | null;
   groupName?: string | null;
   onSaved: (user: SavedUser) => void;
@@ -33,6 +36,8 @@ type Props = {
 export function ProfileNameEditor({
   firstName,
   lastName,
+  direction,
+  directionId,
   groupId,
   groupName,
   onSaved,
@@ -42,7 +47,9 @@ export function ProfileNameEditor({
   const [open, setOpen] = useState(placeholder);
   const [first, setFirst] = useState(placeholder ? '' : firstName);
   const [last, setLast] = useState(placeholder ? '' : lastName);
+  const [pickedDirectionId, setPickedDirectionId] = useState<number | ''>(directionId ?? '');
   const [pickedGroupId, setPickedGroupId] = useState<number | ''>(groupId ?? '');
+  const [directions, setDirections] = useState<DirectionOpt[]>([]);
   const [groups, setGroups] = useState<GroupOpt[]>([]);
   const [saving, setSaving] = useState(false);
   const firstRef = useRef<HTMLInputElement>(null);
@@ -52,6 +59,24 @@ export function ProfileNameEditor({
     const t = window.setTimeout(() => firstRef.current?.focus(), 40);
     return () => window.clearTimeout(t);
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const shiftId = getStoredShiftId();
+    const qs = shiftId ? `?shiftId=${shiftId}` : '';
+    apiGet<{ directions: DirectionOpt[] }>(`/directions${qs}`)
+      .then(data => {
+        const list = data.directions || [];
+        if (directionId && direction && !list.some(d => d.id === directionId)) {
+          setDirections([{ id: directionId, name: direction }, ...list]);
+        } else {
+          setDirections(list);
+        }
+      })
+      .catch(() => setDirections(
+        directionId && direction ? [{ id: directionId, name: direction }] : [],
+      ));
+  }, [open, direction, directionId]);
 
   useEffect(() => {
     if (!open) return;
@@ -79,6 +104,7 @@ export function ProfileNameEditor({
       const res = await apiPatch<{ user: SavedUser }>('/profile/name', {
         firstName: first,
         lastName: last,
+        ...(pickedDirectionId ? { directionId: Number(pickedDirectionId) } : {}),
         ...(pickedGroupId ? { groupId: Number(pickedGroupId) } : {}),
       });
       onSaved(res.user);
@@ -127,6 +153,20 @@ export function ProfileNameEditor({
             }}
           />
         </label>
+        {directions.length > 0 && (
+          <label className="pf-name-row">
+            <span>Направление</span>
+            <select
+              value={pickedDirectionId}
+              onChange={e => setPickedDirectionId(e.target.value ? Number(e.target.value) : '')}
+            >
+              {!pickedDirectionId && <option value="">Выберите направление</option>}
+              {directions.map(d => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
         {groups.length > 0 && (
           <label className="pf-name-row">
             <span>Группа</span>
@@ -155,6 +195,7 @@ export function ProfileNameEditor({
             onClick={() => {
               setFirst(firstName);
               setLast(lastName);
+              setPickedDirectionId(directionId ?? '');
               setPickedGroupId(groupId ?? '');
               setOpen(false);
             }}
