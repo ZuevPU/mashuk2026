@@ -97,6 +97,7 @@ router.patch('/schedule/days/:id', requireAdminRole('settings'), wrap(p0.crudSch
 router.delete('/schedule/days/:id', requireAdminRole('delete'), wrap(p0.crudScheduleDays.delete));
 router.post('/schedule/draft', requireAdminRole('settings'), wrap(p0.draftScheduleDay));
 
+router.get('/shift-options', wrap(shiftsCtrl.listAdminShiftOptions));
 router.get('/shifts', P('forum', 'read'), wrap(shiftsCtrl.listAdminShifts));
 router.get('/shifts/:id', P('forum', 'read'), wrap(shiftsCtrl.getAdminShift));
 router.post('/shifts', requireAdminRole('settings'), wrap(shiftsCtrl.createAdminShift));

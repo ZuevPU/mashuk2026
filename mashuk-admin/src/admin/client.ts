@@ -167,8 +167,32 @@ function parseAdminErrorResponse(status: number, text: string): string {
 function adminWriteNeedsShift(path: string, method: string): boolean {
   const verb = method.toUpperCase();
   if (verb === 'GET' || verb === 'HEAD') return false;
-  if (path.startsWith('/login') || path.startsWith('/shifts')) return false;
+  if (path.startsWith('/login') || path.startsWith('/shifts') || path.startsWith('/shift-options')) return false;
   return true;
+}
+
+async function ensureAdminShiftSelected(): Promise<number | null> {
+  const existing = getAdminEditingShiftId();
+  if (existing != null) return existing;
+  const base = getAdminApiBase();
+  const token = getAdminToken();
+  if (!base || !token) return null;
+  try {
+    const res = await fetch(`${base}/shift-options`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as {
+      shifts?: { id: number }[];
+      activeShiftId?: number | null;
+    };
+    const list = data.shifts || [];
+    const next = data.activeShiftId ?? list[0]?.id ?? null;
+    if (next != null) setAdminEditingShiftId(next);
+    return next;
+  } catch {
+    return null;
+  }
 }
 
 export async function adminFetch(path: string, options: RequestInit = {}) {
@@ -178,8 +202,11 @@ export async function adminFetch(path: string, options: RequestInit = {}) {
   }
   const token = getAdminToken();
   if (!token) throw new Error('Не авторизован');
-  if (adminWriteNeedsShift(path, String(options.method || 'GET')) && getAdminEditingShiftId() == null) {
-    throw new Error('Выберите смену в шапке');
+  if (adminWriteNeedsShift(path, String(options.method || 'GET'))) {
+    const shiftId = getAdminEditingShiftId() ?? await ensureAdminShiftSelected();
+    if (shiftId == null) {
+      throw new Error('Нет доступных смен. Обновите страницу или создайте смену в разделе «Смены».');
+    }
   }
   const res = await fetchWithRetry(`${base}${path}`, {
     ...options,

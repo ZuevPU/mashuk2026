@@ -41,6 +41,22 @@ export const listAdminShifts = async (_req: AdminRequest, res: Response): Promis
   });
 };
 
+/** Короткий список для шапки и форм. Нужен любому админу, не только с правом «Форум». */
+export const listAdminShiftOptions = async (_req: AdminRequest, res: Response): Promise<void> => {
+  const rows = await listShifts();
+  const active = await resolveActiveShift();
+  res.json({
+    shifts: rows.map(s => ({
+      id: s.id,
+      name: s.name,
+      code: s.code,
+      status: s.status,
+      isSandbox: s.isSandbox === true,
+    })),
+    activeShiftId: active?.id ?? null,
+  });
+};
+
 export const getAdminShift = async (req: AdminRequest, res: Response): Promise<void> => {
   const id = Number(req.params.id);
   const shift = await getShiftById(id);

@@ -3,12 +3,11 @@ import {
   ADMIN_SHIFT_CHANGED_EVENT,
   adminFetch,
   adminLogin,
-  getAdminEditingShiftId,
   getAdminToken,
-  setAdminEditingShiftId,
   setAdminToken,
 } from './admin/client';
 import { translateApiError } from './admin/errors';
+import { AdminShiftSelect } from './components/admin/AdminShiftSelect';
 import { AdminsTab } from './components/admins/AdminsTab';
 import { AnalyticsTab } from './components/analytics/AnalyticsTab';
 import { DataTab } from './components/data/DataTab';
@@ -82,9 +81,6 @@ export const App = () => {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [shiftOptions, setShiftOptions] = useState<{ id: number; name: string; code: string }[]>([]);
-  const [editingShiftId, setEditingShiftId] = useState<number | null>(() => getAdminEditingShiftId());
-  const [activeShiftId, setActiveShiftId] = useState<number | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   /** Якорь внутри вкладки Форум (итоговая анкета вечера). */
   const [forumFocus, setForumFocus] = useState<{ anchor: string; nonce: number } | null>(null);
@@ -143,25 +139,6 @@ export const App = () => {
   }, [isAuthenticated, reloadKey]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
-    adminFetch('/shifts')
-      .then((res: { shifts?: { id: number; name: string; code: string }[]; activeShiftId?: number | null }) => {
-        const list = res.shifts || [];
-        setShiftOptions(list);
-        const activeId = res.activeShiftId ?? null;
-        setActiveShiftId(activeId);
-        const stored = getAdminEditingShiftId();
-        const storedOk = stored != null && list.some(s => s.id === stored);
-        const next = storedOk ? stored : (activeId ?? list[0]?.id ?? null);
-        if (next !== stored) setAdminEditingShiftId(next);
-        setEditingShiftId(next);
-      })
-      .catch(() => {
-        setShiftOptions([]);
-      });
-  }, [isAuthenticated, reloadKey]);
-
-  useEffect(() => {
     const handleApiError = (e: Event) => {
       setToast((e as CustomEvent<string>).detail);
     };
@@ -170,9 +147,7 @@ export const App = () => {
   }, []);
 
   useEffect(() => {
-    const onShiftChanged = (e: Event) => {
-      const id = (e as CustomEvent<number | null>).detail ?? getAdminEditingShiftId();
-      setEditingShiftId(id);
+    const onShiftChanged = () => {
       reload();
     };
     window.addEventListener(ADMIN_SHIFT_CHANGED_EVENT, onShiftChanged);
@@ -388,25 +363,7 @@ export const App = () => {
                 : TAB_LABELS[tab]}
             </h1>
           </div>
-          {shiftOptions.length > 0 && (
-            <label className="admin-shift-select">
-              <span>Смена</span>
-              <select
-                className="adm-input"
-                value={editingShiftId ?? ''}
-                onChange={e => {
-                  const id = e.target.value ? Number(e.target.value) : null;
-                  setAdminEditingShiftId(id);
-                }}
-              >
-                {shiftOptions.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}{s.id === activeShiftId ? ' · участники' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+          {isAuthenticated && <AdminShiftSelect reloadKey={reloadKey} />}
         </header>
 
         <main className="admin-main">

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { ProgramPlace } from '../program/types';
+import { AdminShiftSelect } from '../admin/AdminShiftSelect';
 import { RichFormatToolbar } from '../admin/RichFormatToolbar';
 import { TaskParticipantPreview } from './TaskParticipantPreview';
 import {
@@ -133,6 +134,13 @@ export function TaskForm({
       {showPreview && (
         <TaskParticipantPreview draft={draft} categoryName={categoryName} />
       )}
+
+      <div className="adm-field">
+        <AdminShiftSelect label="Смена задания" className="adm-field admin-shift-select" />
+        <p className="adm-muted" style={{ margin: '6px 0 0', fontSize: 12 }}>
+          Задание сохранится в выбранную смену. Список смен тот же, что в шапке.
+        </p>
+      </div>
 
       <label className="adm-field">
         <span className="adm-label">Название</span>
