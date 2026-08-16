@@ -19,6 +19,12 @@ describe('smoke', () => {
     assert.equal(res.body.status, 'ok');
   });
 
+  it('GET /api/health returns ok', async () => {
+    const res = await request(app).get('/api/health');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.status, 'ok');
+  });
+
   it('GET /health/ready returns db status', async () => {
     const res = await request(app).get('/health/ready');
     if (process.env.DATABASE_URL) {

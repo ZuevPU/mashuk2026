@@ -1,4 +1,8 @@
 #!/bin/sh
+# Always start the API. Timeweb may append extra args after it recreates
+# the container with discovered ports — ignore them.
 set -e
-echo "Starting server on 8080..."
-exec /usr/local/bin/node dist/index.js
+cd /app
+export PORT="${PORT:-8080}"
+echo "Starting mashuk-backend on PORT=${PORT}"
+exec /usr/local/bin/node /app/dist/index.js

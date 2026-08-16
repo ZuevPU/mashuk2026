@@ -124,8 +124,10 @@ export function createApp() {
 
   app.get('/', healthHandler);
   app.get('/health', healthHandler);
+  app.get('/api/health', healthHandler);
   app.head('/', (_req, res) => res.status(200).end());
   app.head('/health', (_req, res) => res.status(200).end());
+  app.head('/api/health', (_req, res) => res.status(200).end());
 
   app.get('/health/ready', async (_req, res) => {
     try {

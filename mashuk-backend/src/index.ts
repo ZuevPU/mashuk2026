@@ -1,7 +1,12 @@
 import http from 'node:http';
 
 const port = Number(process.env.PORT) || 8080;
-const host = '0.0.0.0';
+// Timeweb probes `localhost`, which is often ::1. Binding only 0.0.0.0
+// makes that check fail while the process looks fine. Omit host so Node
+// uses dual-stack (::) when IPv6 exists, otherwise 0.0.0.0.
+const explicitHost = process.env.HOST && process.env.HOST !== '0.0.0.0'
+  ? process.env.HOST
+  : undefined;
 
 type NodeHandler = (req: http.IncomingMessage, res: http.ServerResponse) => void;
 
@@ -17,7 +22,7 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown) {
 }
 
 function isLiveness(urlPath: string): boolean {
-  return urlPath === '/' || urlPath === '/health';
+  return urlPath === '/' || urlPath === '/health' || urlPath === '/api/health';
 }
 
 // Bind 8080 with zero app imports. Timeweb's healthcheck has ~105s and fails
@@ -42,17 +47,27 @@ const server = http.createServer((req, res) => {
 });
 
 server.on('error', (err) => {
-  console.error(`Failed to bind http://${host}:${port}:`, err);
+  console.error(`Failed to bind port ${port}:`, err);
   process.exit(1);
 });
 
-server.listen(port, host, () => {
-  console.log(`Server running on http://${host}:${port}`);
-  console.log('Health: / and /health (liveness), /health/ready (DB check after boot)');
+function onListening() {
+  const addr = server.address();
+  const where = typeof addr === 'object' && addr
+    ? `${addr.address}:${addr.port}`
+    : `port ${port}`;
+  console.log(`Server running on ${where}`);
+  console.log('Health: /, /health, /api/health (liveness), /health/ready (DB check after boot)');
   void boot().catch((err) => {
     console.error('Boot failed after listen — healthcheck stays up:', err);
   });
-});
+}
+
+if (explicitHost) {
+  server.listen(port, explicitHost, onListening);
+} else {
+  server.listen(port, onListening);
+}
 
 async function boot() {
   const { env } = await import('./config/env.js');

@@ -59,20 +59,32 @@ COPY config ./config
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 COPY healthcheck.cjs ./healthcheck.cjs
 COPY docker-healthcheck.sh ./docker-healthcheck.sh
-RUN chmod +x docker-entrypoint.sh docker-healthcheck.sh \
+RUN set -e; \
+  for attempt in 1 2 3; do \
+    apt-get update \
+      && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl ca-certificates \
+      && rm -rf /var/lib/apt/lists/* \
+      && break; \
+    echo "apt-get failed (attempt ${attempt}/3), waiting before retry..."; \
+    sleep $((attempt * 15)); \
+    if [ "${attempt}" = "3" ]; then exit 1; fi; \
+  done; \
+  chmod +x docker-entrypoint.sh docker-healthcheck.sh \
   && mkdir -p /app/uploads \
-  && ln -sf /usr/local/bin/node /usr/bin/node
+  && ln -sf /usr/local/bin/node /usr/bin/node \
+  && ln -sf /usr/bin/curl /usr/local/bin/curl
 
+# Do not set HOST=0.0.0.0: Timeweb probes localhost, often via IPv6 (::1).
 ENV PORT=8080 \
     NODE_ENV=production \
-    HOST=0.0.0.0 \
     PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 EXPOSE 8080
 
-# Absolute paths: Timeweb healthcheck PATH may not include /usr/local/bin,
-# so `CMD ["node", ...]` stays unhealthy even when the app is already up.
-HEALTHCHECK --interval=3s --timeout=4s --start-period=8s --retries=20 \
-  CMD ["/bin/sh", "/app/docker-healthcheck.sh"]
+# Timeweb docs: Dockerfile HEALTHCHECK overrides the panel path and their
+# example uses curl. node:22-slim has no curl unless we install it.
+HEALTHCHECK --interval=5s --timeout=5s --start-period=20s --retries=12 \
+  CMD curl -fsS http://127.0.0.1:8080/health || curl -fsS http://localhost:8080/health || exit 1
 
-ENTRYPOINT ["/usr/local/bin/node", "dist/index.js"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["/usr/local/bin/node", "/app/dist/index.js"]

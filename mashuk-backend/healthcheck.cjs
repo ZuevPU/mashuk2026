@@ -3,28 +3,42 @@
 const http = require('http');
 
 const port = Number(process.env.PORT) || 8080;
-const req = http.get(
-  {
-    host: '127.0.0.1',
-    port,
-    path: '/health',
-    timeout: 3500,
-  },
-  (res) => {
-    res.resume();
-    const ok = Boolean(res.statusCode && res.statusCode >= 200 && res.statusCode < 400);
-    if (!ok) {
-      console.error(`healthcheck: HTTP ${res.statusCode} from 127.0.0.1:${port}/health`);
+const targets = [
+  { host: '127.0.0.1', path: '/health' },
+  { host: 'localhost', path: '/health' },
+  { host: '127.0.0.1', path: '/' },
+];
+
+function probe(target) {
+  return new Promise((resolve) => {
+    const req = http.get(
+      {
+        host: target.host,
+        port,
+        path: target.path,
+        timeout: 2500,
+        family: target.host === '127.0.0.1' ? 4 : undefined,
+      },
+      (res) => {
+        res.resume();
+        const ok = Boolean(res.statusCode && res.statusCode >= 200 && res.statusCode < 400);
+        resolve(ok);
+      },
+    );
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
+(async () => {
+  for (const target of targets) {
+    if (await probe(target)) {
+      process.exit(0);
     }
-    process.exit(ok ? 0 : 1);
-  },
-);
-req.on('error', (err) => {
-  console.error(`healthcheck: ${err && err.message ? err.message : err} (127.0.0.1:${port}/health)`);
+  }
+  console.error(`healthcheck: no 2xx from 127.0.0.1/localhost:${port}/health`);
   process.exit(1);
-});
-req.on('timeout', () => {
-  console.error(`healthcheck: timeout 127.0.0.1:${port}/health`);
-  req.destroy();
-  process.exit(1);
-});
+})();
