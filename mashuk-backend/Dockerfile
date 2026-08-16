@@ -32,8 +32,6 @@ RUN npm run build
 # Stage 2: Runner
 FROM node:22-slim AS runner
 
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 ENV NPM_CONFIG_FETCH_RETRIES=10 \
@@ -64,6 +62,6 @@ RUN chmod +x docker-entrypoint.sh && mkdir -p /app/uploads
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8080/health || exit 1
+  CMD node -e "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
