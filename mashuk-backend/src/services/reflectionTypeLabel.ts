@@ -60,7 +60,9 @@ export function getReflectionTypeLabel(q: {
   type?: string | null;
   title?: string | null;
   timePoint?: string | null;
+  questionKind?: string | null;
 }): string {
+  if (q.questionKind === 'extra') return 'Дополнительные';
   const kind = reflectionKindFromQuestion(q);
   if (kind) return KIND_TO_LABEL[kind];
   if (q.block?.trim()) return q.block.trim();

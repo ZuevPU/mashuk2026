@@ -2,6 +2,7 @@ import { and, asc, eq, ne } from 'drizzle-orm';
 import type { Response } from 'express';
 import { db } from '../../db/index.js';
 import { questions } from '../../db/schema.js';
+import { questionMatchesDay } from '../questionAdminHelpers.js';
 import { getReflectionTypeLabel } from '../reflectionTypeLabel.js';
 import {
   addReadmeSheet,
@@ -154,7 +155,6 @@ export async function writeQuestionsDayAnswersExport(
   const questionKind = filters.questionKind?.trim() || null;
 
   const qConds = [
-    eq(questions.dayNumber, day),
     ne(questions.status, 'archived'),
   ];
   if (shiftId != null && !Number.isNaN(shiftId)) {
@@ -164,9 +164,10 @@ export async function writeQuestionsDayAnswersExport(
     qConds.push(eq(questions.questionKind, questionKind));
   }
 
-  const dayQuestions = await db.select().from(questions)
+  const catalog = await db.select().from(questions)
     .where(and(...qConds))
     .orderBy(asc(questions.id));
+  const dayQuestions = catalog.filter(q => questionMatchesDay(q, day));
 
   const qIds = dayQuestions.map(q => q.id);
   const answerRows = qIds.length
@@ -191,6 +192,7 @@ export async function writeQuestionsDayAnswersExport(
 
   const flatRows = flattenAnswerRows(answerRows);
   const afterBlocksFlat = flatRows.filter(f => isAfterBlocksQuestion(f.source.q));
+  const extraFlat = flatRows.filter(f => f.source.q?.questionKind === 'extra');
 
   const byQuestion = new Map<number, FlatAnswerRow[]>();
   for (const q of dayQuestions) byQuestion.set(q.id, []);
@@ -206,6 +208,7 @@ export async function writeQuestionsDayAnswersExport(
     `Выгрузка ответов на вопросы за день ${day}.`,
     'Лист «Все ответы»: кто на какой вопрос ответил. Для «После блоков» — отдельные колонки темы/подтемы; если выбрано несколько подтем, несколько строк с одним ID ответа.',
     'Лист «После блоков»: только осмысления после блоков (событие → подтема → текст).',
+    'Лист «Дополнительные»: вопросы типа «Дополнительные» (не после блоков).',
     'Лист «По направлениям»: сколько ответов и участников по направлению × вопросу.',
     'Лист «Сводка вопросов»: охват по каждому вопросу.',
     'Далее — отдельный лист на каждый вопрос.',
@@ -226,6 +229,10 @@ export async function writeQuestionsDayAnswersExport(
   const wsAfter = wb.addWorksheet('После блоков');
   wsAfter.addRow([...MAIN_HEADERS]);
   for (const flat of afterBlocksFlat) writeFlatRow(wsAfter, flat, day);
+
+  const wsExtra = wb.addWorksheet('Дополнительные');
+  wsExtra.addRow([...MAIN_HEADERS]);
+  for (const flat of extraFlat) writeFlatRow(wsExtra, flat, day);
 
   const wsDir = wb.addWorksheet('По направлениям');
   wsDir.addRow([
@@ -308,7 +315,7 @@ export async function writeQuestionsDayAnswersExport(
   }
 
   const usedNames = new Set<string>([
-    'Описание', 'Все ответы', 'После блоков', 'По направлениям', 'Сводка вопросов',
+    'Описание', 'Все ответы', 'После блоков', 'Дополнительные', 'По направлениям', 'Сводка вопросов',
   ]);
   for (const q of dayQuestions) {
     const label = (q.title || q.text || `Вопрос ${q.id}`).trim();

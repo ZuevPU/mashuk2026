@@ -16,6 +16,7 @@ import {
   fullName,
 } from './exportCommon.js';
 import { isEveningSummaryQuestion } from './eveningExportData.js';
+import { questionMatchesDay } from '../questionAdminHelpers.js';
 import { touchpointTypeForQuestion } from './touchpointFilter.js';
 import { loadEnrichedParticipants } from './participantEnrichment.js';
 import { roleLabel } from './exportLabels.js';
@@ -58,6 +59,8 @@ const DAY_BASE_COLUMNS: ExportColumnDef[] = [
   { key: 'lesson_important_count', label: 'Урок о важном · ответов' },
   { key: 'lesson_open_done', label: 'Открытый урок сдан (0/1)' },
   { key: 'lesson_open_count', label: 'Открытый урок · ответов' },
+  { key: 'extra_done', label: 'Дополнительные сданы (0/1)' },
+  { key: 'extra_count', label: 'Дополнительные · ответов' },
   { key: 'evening_done', label: 'Итоги дня сданы (0/1)' },
   { key: 'evening_direction', label: 'Итоги · направление' },
   { key: 'evening_lessonsImportant', label: 'Итоги · уроки о важном' },
@@ -238,7 +241,7 @@ export async function buildParticipantActivityWide(params: WideParams = {}): Pro
     if (mode === 'day' && day != null) {
       const dayAnswers = pAnswers.filter(a => {
         const q = a.questionId != null ? qById.get(a.questionId) : undefined;
-        return q?.dayNumber === day;
+        return q ? questionMatchesDay(q, day) : false;
       });
       const byTp: Record<string, typeof dayAnswers> = {};
       for (const a of dayAnswers) {
@@ -251,6 +254,7 @@ export async function buildParticipantActivityWide(params: WideParams = {}): Pro
       const directionAns = byTp.direction || [];
       const lessonImp = byTp.lesson_important || [];
       const lessonOpen = byTp.lesson_open || [];
+      const extraAns = byTp.extra || [];
 
       const state = pStates.find(s => s.dayNumber === day);
       const ratings = (state?.eveningRatings ?? null) as Record<string, unknown> | null;
@@ -291,6 +295,8 @@ export async function buildParticipantActivityWide(params: WideParams = {}): Pro
         lesson_important_count: lessonImp.length,
         lesson_open_done: lessonOpen.length > 0 ? 1 : 0,
         lesson_open_count: lessonOpen.length,
+        extra_done: extraAns.length > 0 ? 1 : 0,
+        extra_count: extraAns.length,
         evening_done: eveningDone,
         evening_direction: ratings?.direction ?? '',
         evening_lessonsImportant: ratings?.lessonsImportant ?? '',
@@ -329,7 +335,7 @@ export async function buildParticipantActivityWide(params: WideParams = {}): Pro
       for (const d of FORUM_DAYS) {
         const dayAnswers = pAnswers.filter(a => {
           const q = a.questionId != null ? qById.get(a.questionId) : undefined;
-          return q?.dayNumber === d;
+          return q ? questionMatchesDay(q, d) : false;
         });
         const hasCheckin = dayAnswers.some(a => {
           const q = qById.get(a.questionId!);

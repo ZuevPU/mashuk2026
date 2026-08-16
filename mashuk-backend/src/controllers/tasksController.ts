@@ -39,6 +39,7 @@ import {
   type EnrichedSubmission,
 } from '../services/submissionLifecycle.js';
 import { findTaskByQrCode, normalizeTaskQrCode } from '../services/qrService.js';
+import { resolveParticipantForTaskShift } from '../services/shiftService.js';
 import { resolveForumDayForNewEntry } from '../services/piggybankService.js';
 import { isUniqueViolation } from '../services/qrScanGuard.js';
 import { isActivePointsLogAction, pointsTrackForAction } from '../services/pointsService.js';
@@ -308,7 +309,20 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
     };
 
     const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
-    if (!task || !taskBelongsToParticipantShift(task, req.participant!.shiftId)) {
+    if (!task) {
+      res.status(404).json({ error: 'Задание не найдено' });
+      return;
+    }
+    const qrAttempt = !!(qrToken || (task.confirmationMethods || []).includes('qr') || task.confirmationType === 'qr');
+    const bound = await resolveParticipantForTaskShift(req.participant!, task.shiftId);
+    if (!bound.ok) {
+      res.status(qrAttempt ? bound.status : 404).json({
+        error: qrAttempt ? bound.error : 'Задание не найдено',
+      });
+      return;
+    }
+    req.participant = bound.participant;
+    if (!taskBelongsToParticipantShift(task, req.participant.shiftId)) {
       res.status(404).json({ error: 'Задание не найдено' });
       return;
     }
@@ -565,10 +579,16 @@ export const resolveTaskQr = async (req: ParticipantRequest, res: Response): Pro
     }
 
     const task = await findTaskByQrCode(code);
-    if (!task || !taskBelongsToParticipantShift(task, req.participant!.shiftId)) {
+    if (!task) {
       res.status(404).json({ error: 'QR-код не найден' });
       return;
     }
+    const bound = await resolveParticipantForTaskShift(req.participant!, task.shiftId);
+    if (!bound.ok) {
+      res.status(bound.status).json({ error: bound.error });
+      return;
+    }
+    req.participant = bound.participant;
 
     const methods = taskMethodsForParticipant(task);
     if (!methods.includes('qr') && task.confirmationType !== 'qr') {
@@ -577,7 +597,7 @@ export const resolveTaskQr = async (req: ParticipantRequest, res: Response): Pro
     }
 
     const now = new Date();
-    const forumDay = await resolveForumDayForNewEntry(req.participant!.shiftId);
+    const forumDay = await resolveForumDayForNewEntry(req.participant.shiftId);
     if (!isQrInValidWindow(task, now, forumDay)) {
       res.status(400).json({
         error: 'QR-код задания сейчас не активен. Сканируйте только в указанное в админке время и дни.',
@@ -588,6 +608,7 @@ export const resolveTaskQr = async (req: ParticipantRequest, res: Response): Pro
     res.json({
       taskId: task.id,
       taskTitle: task.title,
+      shiftId: task.shiftId ?? req.participant.shiftId ?? null,
       /** Normalized token for client to send later on submit (never shown in UI). */
       qrToken: task.qrToken || code,
     });
@@ -611,10 +632,16 @@ export const scanTask = async (req: ParticipantRequest, res: Response): Promise<
     }
 
     const task = await findTaskByQrCode(code);
-    if (!task || !taskBelongsToParticipantShift(task, req.participant!.shiftId)) {
+    if (!task) {
       res.status(404).json({ error: 'QR-код не найден' });
       return;
     }
+    const bound = await resolveParticipantForTaskShift(req.participant!, task.shiftId);
+    if (!bound.ok) {
+      res.status(bound.status).json({ error: bound.error });
+      return;
+    }
+    req.participant = bound.participant;
 
     const methods = taskMethodsForParticipant(task);
     if (!methods.includes('qr') && task.confirmationType !== 'qr') {
@@ -642,6 +669,7 @@ export const scanTask = async (req: ParticipantRequest, res: Response): Promise<
         points,
         taskTitle: task.title,
         taskId: task.id,
+        shiftId: task.shiftId ?? req.participant?.shiftId ?? null,
         submissionId: b.submission?.id ?? null,
         xpAwarded: points,
         track: 'experience',

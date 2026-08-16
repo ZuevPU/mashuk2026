@@ -231,7 +231,7 @@ export function ExportsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
             <tr>
               <td>Ответы на вопросы за день</td>
               <td className="adm-muted">
-                «Все ответы» + «После блоков» (тема → подтема → осмысление) + сводки + лист на каждый вопрос.
+                «Все ответы» + «После блоков» + «Дополнительные» + сводки + лист на каждый вопрос.
               </td>
               <td>
                 <span className="adm-muted">D{forumDay}{direction ? ` · ${direction}` : ''}</span>

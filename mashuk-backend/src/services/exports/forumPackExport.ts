@@ -70,7 +70,7 @@ function packFilters(base: AnalyticsFilters): AnalyticsFilters {
 async function addKindSheet(
   wb: Workbook,
   sheetName: string,
-  mode: 'after_blocks' | 'state_check',
+  mode: 'after_blocks' | 'state_check' | 'extra',
   filters: AnalyticsFilters,
   req: AdminRequest,
 ): Promise<number> {
@@ -80,7 +80,18 @@ async function addKindSheet(
   const rows = rawRows.filter(r => cohortIds.has(r.participantId));
   const ws = wb.addWorksheet(sheetName.slice(0, 31));
 
-  if (mode === 'after_blocks') {
+  if (mode === 'extra') {
+    ws.addRow([
+      'ID ответа', 'ID участника', 'ФИО', 'Направление', 'Группа', 'День',
+      'ID вопроса', 'Вопрос', 'Ответ', 'Время',
+    ]);
+    for (const r of rows) {
+      ws.addRow([
+        r.answerId, r.participantId, r.name, r.direction, r.group, r.day,
+        r.questionId, r.questionTitle, r.answer, r.filledAt ?? '',
+      ]);
+    }
+  } else if (mode === 'after_blocks') {
     ws.addRow([
       'ID ответа', 'ID участника', 'ФИО', 'Направление', 'Группа', 'День',
       'ID вопроса', 'Вопрос', 'ID события', 'Событие программы',
@@ -409,7 +420,7 @@ export async function writeForumPackExport(req: AdminRequest, res: Response): Pr
     `Смена админки: ${shiftId ?? '—'}.`,
     filters.direction ? `Направление: ${filters.direction}.` : '',
     filters.group ? `Группа: ${filters.group}.` : '',
-    'Листы: Состояние · Итоги дня · Открытые уроки · После блоков · Копилка · Активность · Обмен опытом · Статистика дней.',
+    'Листы: Состояние · Итоги дня · Открытые уроки · После блоков · Дополнительные · Копилка · Активность · Обмен опытом · Статистика дней.',
     'Активность и обмен опытом — справочно по смене (у них нет жёсткого дневного среза).',
   ].filter(Boolean));
 
@@ -435,6 +446,7 @@ export async function writeForumPackExport(req: AdminRequest, res: Response): Pr
     { answers: 0, picks: 0 },
   );
   const afterN = await safe('После блоков', () => addKindSheet(wb, 'После блоков', 'after_blocks', filters, req), 0);
+  const extraN = await safe('Дополнительные', () => addKindSheet(wb, 'Дополнительные', 'extra', filters, req), 0);
   const pigN = await safe('Копилка', () => addPiggybankSheet(wb, req), 0);
   const actN = await safe('Активность', () => addActivitySheet(wb, shiftId), 0);
   const exN = await safe('Обмен опытом', () => addExchangeSheet(wb, shiftId), 0);
@@ -450,6 +462,7 @@ export async function writeForumPackExport(req: AdminRequest, res: Response): Pr
     readme.addRow([`Итоговые анкеты (участник×день): ${evening.answers}`]);
     readme.addRow([`Открытые уроки (выборы): ${evening.picks}`]);
     readme.addRow([`После блоков (строк): ${afterN}`]);
+    readme.addRow([`Дополнительные (строк): ${extraN}`]);
     readme.addRow([`Копилка: ${pigN}`]);
     readme.addRow([`Активность (участников): ${actN}`]);
     readme.addRow([`Обмен опытом (строк): ${exN}`]);

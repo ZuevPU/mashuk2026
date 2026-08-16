@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Panel, PanelHeader, Group, Spinner, Button } from '@vkontakte/vkui';
 import { useRouteNavigator } from '@vkontakte/vk-mini-apps-router';
-import { apiPost, ApiError, getHashSearchParams } from '../api/client';
+import { apiPost, ApiError, getHashSearchParams, setStoredShiftId } from '../api/client';
 import { getDeviceKey } from '../utils/deviceKey';
 import { extractTaskQrToken } from '../utils/qrDeepLink';
 import { clearPendingTaskQr, peekPendingTaskQr, takePendingTaskQr } from '../utils/launchParams';
@@ -22,6 +22,7 @@ type ScanResult = {
   xpAwarded?: number;
   taskTitle?: string;
   taskId?: number;
+  shiftId?: number | null;
 };
 
 export function ScanPanel({ id }: { id: string }) {
@@ -57,6 +58,7 @@ export function ScanPanel({ id }: { id: string }) {
     void apiPost<ScanResult>('/tasks/scan', { qr: code, deviceKey: getDeviceKey() })
       .then((res) => {
         clearPendingTaskQr();
+        if (res.shiftId) setStoredShiftId(res.shiftId);
         const points = res.points ?? res.xpAwarded ?? 0;
         setStatus('ok');
         setMessage(res.taskTitle

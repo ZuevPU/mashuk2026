@@ -9,11 +9,12 @@ export interface ParticipantRequest extends VkAuthRequest {
   participant?: typeof participants.$inferSelect;
 }
 
-export const requireParticipant = async (
+async function attachParticipant(
   req: ParticipantRequest,
   res: Response,
-  next: NextFunction
-): Promise<void> => {
+  next: NextFunction,
+  opts?: { allowAnyEnrollment?: boolean },
+): Promise<void> {
   const vkUserId = req.vkUserId;
   if (!vkUserId) {
     res.status(401).json({ error: 'Unauthorized' });
@@ -22,7 +23,7 @@ export const requireParticipant = async (
 
   const preferredShiftId = requestedShiftIdFromReq(req);
   const user = await findParticipantForVk(vkUserId, preferredShiftId, {
-    fallback: preferredShiftId == null,
+    fallback: opts?.allowAnyEnrollment === true || preferredShiftId == null,
   });
   if (!user || !user.onboardingCompletedAt) {
     res.status(403).json({ error: 'Registration required', status: 'needs_registration' });
@@ -48,4 +49,21 @@ export const requireParticipant = async (
 
   req.participant = user;
   next();
+}
+
+export const requireParticipant = async (
+  req: ParticipantRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  await attachParticipant(req, res, next);
+};
+
+/** QR scan: stale X-Shift-Id must not block a valid enrollment on another shift. */
+export const requireParticipantAnyShift = async (
+  req: ParticipantRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  await attachParticipant(req, res, next, { allowAnyEnrollment: true });
 };

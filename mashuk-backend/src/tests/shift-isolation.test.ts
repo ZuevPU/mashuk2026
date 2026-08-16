@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { taskBelongsToParticipantShift } from '../services/taskEligibility.js';
+import { pickEnrollmentForTaskShift } from '../services/shiftService.js';
 import { taskPublishFireKey } from '../services/pushTriggerRunner.js';
 import { pickLevelsConfigRow, requireForumSettings } from '../services/shiftContext.js';
 import { getScheduleDayPublished } from '../services/eveningScheduleGate.js';
@@ -21,6 +22,46 @@ describe('taskBelongsToParticipantShift', () => {
 
   it('rejects when participant shift is missing', () => {
     assert.equal(taskBelongsToParticipantShift({ shiftId: 1 }, null), false);
+  });
+});
+
+describe('pickEnrollmentForTaskShift', () => {
+  const shift1 = {
+    id: 11,
+    shiftId: 1,
+    onboardingCompletedAt: new Date('2026-08-01'),
+    selfDeletedAt: null,
+    isBlocked: false,
+    blockReason: null,
+  };
+  const shift2 = {
+    id: 22,
+    shiftId: 2,
+    onboardingCompletedAt: new Date('2026-08-02'),
+    selfDeletedAt: null,
+    isBlocked: false,
+    blockReason: null,
+  };
+
+  it('keeps the current enrollment when the task is on the same shift', () => {
+    const r = pickEnrollmentForTaskShift(shift1, [shift1, shift2], 1);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.participant.id, 11);
+  });
+
+  it('switches to the matching enrollment for a shift-2 QR', () => {
+    const r = pickEnrollmentForTaskShift(shift1, [shift1, shift2], 2);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.participant.id, 22);
+  });
+
+  it('explains a missing other-shift enrollment instead of pretending the QR is unknown', () => {
+    const r = pickEnrollmentForTaskShift(shift1, [shift1], 2);
+    assert.equal(r.ok, false);
+    if (!r.ok) {
+      assert.equal(r.status, 400);
+      assert.match(r.error, /другой смены/);
+    }
   });
 });
 

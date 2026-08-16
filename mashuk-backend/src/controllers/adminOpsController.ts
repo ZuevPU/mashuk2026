@@ -10,7 +10,7 @@ import { AdminRequest } from '../middlewares/adminAuth.js';
 import { hashPassword } from '../utils/password.js';
 import { logAdminAction } from '../services/adminActionsLog.js';
 import {
-  allocateTaskQrCode,
+  persistTaskQrToken,
   generateQrToken,
   buildParticipantQrUrl,
   buildTaskQrUrl,
@@ -487,8 +487,15 @@ export const generateEntityQr = async (req: AdminRequest, res: Response): Promis
   const { type, id } = req.body as { type: 'task' | 'event' | 'participant'; id: number };
   const base = resolveParticipantAppBase();
   if (type === 'task') {
-    const token = await allocateTaskQrCode();
-    await db.update(tasks).set({ qrToken: token }).where(eq(tasks.id, id));
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
+    if (!task || task.shiftId !== shiftId) {
+      res.status(404).json({ error: 'Задание не найдено в выбранной смене' });
+      return;
+    }
+    const regenerate = (req.body as { regenerate?: boolean })?.regenerate === true;
+    const token = await persistTaskQrToken(task.id, task.qrToken, { regenerate });
     res.json({ token, displayCode: formatTaskQrDisplayCode(token), url: buildTaskQrUrl(base, id, token) });
     return;
   }

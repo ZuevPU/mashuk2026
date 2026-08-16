@@ -289,6 +289,59 @@ export async function findParticipantForVk(
   return pickParticipantForVk(rows, preferredShiftId, opts);
 }
 
+const OTHER_SHIFT_QR_ERROR =
+  'Это задание другой смены. Откройте профиль, переключитесь на нужную смену или зарегистрируйтесь на неё.';
+
+/** When a QR belongs to another shift, credit the matching enrollment instead of 404. */
+export function pickEnrollmentForTaskShift<T extends {
+  shiftId: number | null;
+  onboardingCompletedAt: Date | null;
+  selfDeletedAt: Date | null;
+  isBlocked?: boolean | null;
+  blockReason?: string | null;
+}>(
+  current: T,
+  enrollments: T[],
+  taskShiftId: number | null | undefined,
+): { ok: true; participant: T } | { ok: false; status: number; error: string } {
+  if (taskShiftId == null || taskShiftId === current.shiftId) {
+    return { ok: true, participant: current };
+  }
+  const match = enrollments.find(r => r.shiftId === taskShiftId);
+  if (!match) {
+    return { ok: false, status: 400, error: OTHER_SHIFT_QR_ERROR };
+  }
+  if (match.selfDeletedAt || !match.onboardingCompletedAt) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'Это задание другой смены. Завершите регистрацию на эту смену в профиле.',
+    };
+  }
+  if (match.isBlocked) {
+    return {
+      ok: false,
+      status: 403,
+      error: match.blockReason || 'Доступ ограничен организаторами',
+    };
+  }
+  return { ok: true, participant: match };
+}
+
+export async function resolveParticipantForTaskShift(
+  current: typeof participants.$inferSelect,
+  taskShiftId: number | null | undefined,
+) {
+  if (taskShiftId == null || taskShiftId === current.shiftId) {
+    return { ok: true as const, participant: current };
+  }
+  if (!current.vkId) {
+    return pickEnrollmentForTaskShift(current, [current], taskShiftId);
+  }
+  const rows = await db.select().from(participants).where(eq(participants.vkId, current.vkId));
+  return pickEnrollmentForTaskShift(current, rows, taskShiftId);
+}
+
 export function publicShiftCard(s: ShiftRow) {
   const days = s.totalDays ?? 8;
   const start = s.startDate;

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { vkAuthMiddleware } from '../middlewares/vkAuth.js';
-import { requireParticipant } from '../middlewares/requireParticipant.js';
+import { requireParticipant, requireParticipantAnyShift } from '../middlewares/requireParticipant.js';
 import { adminAuthMiddleware, requireAdminRole } from '../middlewares/adminAuth.js';
 import { getMe, register, completeOnboarding, listOnboardingMeta, listPublishedShifts } from '../controllers/authController.js';
 import { listDirections } from '../controllers/directionsController.js';
@@ -66,8 +66,8 @@ router.post('/program/materials/:id/piggybank', vkAuthMiddleware, requirePartici
 router.post('/program/events/:eventId/attendance', vkAuthMiddleware, requireParticipant, markAttendance);
 
 router.get('/tasks', vkAuthMiddleware, requireParticipant, listTasks);
-router.post('/tasks/qr/resolve', vkAuthMiddleware, requireParticipant, resolveTaskQr);
-router.post('/tasks/scan', vkAuthMiddleware, requireParticipant, scanTask);
+router.post('/tasks/qr/resolve', vkAuthMiddleware, requireParticipantAnyShift, resolveTaskQr);
+router.post('/tasks/scan', vkAuthMiddleware, requireParticipantAnyShift, scanTask);
 router.post('/tasks/:id/submit', vkAuthMiddleware, requireParticipant, submitTask);
 router.post('/tasks/submissions/:submissionId/team-confirm', vkAuthMiddleware, requireParticipant, teamConfirmSubmission);
 router.get('/participants/teammates-search', vkAuthMiddleware, requireParticipant, searchTeammates);

@@ -2,6 +2,7 @@ import { and, eq, inArray, type SQL } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { answers, participants, questions } from '../../db/schema.js';
 import { isPublishedStatus } from '../publishStatus.js';
+import { questionMatchesDay } from '../questionAdminHelpers.js';
 import {
   filterAnswersByTouchpoint,
   type AnswerJoinRow,
@@ -32,9 +33,7 @@ export type AnswerJoinFilters = {
 export async function queryAnswerJoinRows(filters: AnswerJoinFilters = {}): Promise<AnswerJoinRow[]> {
   const conditions: SQL[] = [];
 
-  if (filters.day != null && !Number.isNaN(filters.day)) {
-    conditions.push(eq(questions.dayNumber, filters.day));
-  }
+  const dayFilter = filters.day != null && !Number.isNaN(filters.day) ? filters.day : null;
   if (filters.direction?.trim()) {
     conditions.push(eq(participants.direction, filters.direction.trim()));
   }
@@ -63,6 +62,10 @@ export async function queryAnswerJoinRows(filters: AnswerJoinFilters = {}): Prom
   }
 
   let rows = await q as AnswerJoinRow[];
+
+  if (dayFilter != null) {
+    rows = rows.filter(r => r.q && questionMatchesDay(r.q, dayFilter));
+  }
 
   const publishedOnly = filters.publishedOnly !== false;
   if (publishedOnly) {

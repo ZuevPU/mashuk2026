@@ -15,12 +15,43 @@ import {
 } from '../services/exports/participantActivityWide.js';
 import { HEAVY_EXPORT_SOURCES, STUCK_PENDING_MS, STUCK_PENDING_MS_HEAVY } from '../services/exports/customExportService.js';
 import { computeMeasureDate, computeShiftEndDate } from '../services/exports/delayedMeasureService.js';
+import { questionMatchesDay } from '../services/questionAdminHelpers.js';
+import { matchesKind } from '../services/analytics/questionKindDashboard.js';
+
+describe('extra questions in day exports', () => {
+  it('matches the checked display day even if dayNumber is stale', () => {
+    assert.equal(questionMatchesDay({ dayNumber: 1, dayNumbers: [2] }, 2), true);
+    assert.equal(questionMatchesDay({ dayNumber: 1, dayNumbers: [2] }, 1), false);
+  });
+
+  it('collects extra kind separately from after_blocks', () => {
+    const extra = { questionKind: 'extra', type: 'open', title: 'Главное вчерашнее' };
+    const after = { questionKind: 'after_blocks', type: 'open', title: 'После блока' };
+    assert.equal(matchesKind(extra as never, 'extra'), true);
+    assert.equal(matchesKind(extra as never, 'after_blocks'), false);
+    assert.equal(matchesKind(after as never, 'extra'), false);
+  });
+});
 
 describe('export touchpointFilter', () => {
   it('normalizeExportTouchpointFilter maps legacy lessons', () => {
     assert.equal(normalizeExportTouchpointFilter('lessons'), 'lesson_important');
     assert.equal(normalizeExportTouchpointFilter('lesson_open'), 'lesson_open');
     assert.equal(normalizeExportTouchpointFilter(undefined), 'all');
+  });
+
+  it('treats extra questions as their own touchpoint and keeps them in all', () => {
+    const q = {
+      id: 9,
+      questionKind: 'extra',
+      title: 'Главное вчерашнее',
+      text: 'Главная мысль',
+      dayNumber: 2,
+      status: 'published',
+    } as Parameters<typeof touchpointTypeForQuestion>[0];
+    assert.equal(touchpointTypeForQuestion(q), 'extra');
+    assert.equal(questionMatchesExportFilter(q, 'all'), true);
+    assert.equal(questionMatchesExportFilter(q, 'checkin'), false);
   });
 
   it('questionMatchesExportFilter respects filter', () => {

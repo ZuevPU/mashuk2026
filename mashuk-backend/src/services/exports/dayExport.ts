@@ -6,6 +6,8 @@ import {
 } from '../../db/schema.js';
 import { inferReflectionDepth } from '../reflectionDepth.js';
 import { isPublishedStatus } from '../publishStatus.js';
+import { questionMatchesDay } from '../questionAdminHelpers.js';
+import { questionMatchesDay } from '../questionAdminHelpers.js';
 import {
   ANSWER_ROW_HEADERS_RU, addReadmeSheet, answerText, buildAnswerRow, filterAnswersByTouchpoint, formatTs, fullName,
 } from './exportCommon.js';
@@ -19,10 +21,12 @@ import { normalizeExportTouchpointFilter } from './touchpointFilter.js';
 import { createWorkbook, sendWorkbook } from './workbook.js';
 
 export async function loadDayAnswerRows(day: number, shiftId?: number | null) {
-  const dayQuestions = await db.select().from(questions)
-    .where(eq(questions.dayNumber, day));
-  const publishedQ = dayQuestions.filter(q => {
+  const shiftQuestions = shiftId != null && !Number.isNaN(shiftId)
+    ? await db.select().from(questions).where(eq(questions.shiftId, shiftId))
+    : await db.select().from(questions);
+  const publishedQ = shiftQuestions.filter(q => {
     if (!isPublishedStatus(q.status)) return false;
+    if (!questionMatchesDay(q, day)) return false;
     if (shiftId == null || Number.isNaN(shiftId)) return true;
     return q.shiftId == null || q.shiftId === shiftId;
   });
@@ -77,7 +81,7 @@ export async function writeDayWorkbook(
   const wb = await createWorkbook();
   addReadmeSheet(wb, [
     `Выгрузка по дню ${day}, фильтр типа точки: ${type}.`,
-    'Лист «Ответы дня» — сквозные поля ТЗ (11 колонок + depth).',
+    'Лист «Ответы дня» — сквозные поля ТЗ (11 колонок + depth), включая «Дополнительные».',
     'Лист «Итоговая анкета» — evening_ratings + ответы «Итоги дня».',
     `Итоговых анкет: ${eveningPack.rows.length}.`,
     eveningPack.emptyReason || '',
@@ -90,6 +94,15 @@ export async function writeDayWorkbook(
     const text = answerText(r.a.answerData);
     const row = buildAnswerRow(r, { source: 'question' });
     sheetAns.addRow([...row, inferReflectionDepth(text) || '', r.q?.id ?? '', r.q?.block ?? '']);
+  }
+
+  const extraAns = dayAns.filter(r => r.q?.questionKind === 'extra');
+  const sheetExtra = wb.addWorksheet('Дополнительные');
+  sheetExtra.addRow([...ANSWER_ROW_HEADERS_RU, 'Глубина', 'ID вопроса']);
+  for (const r of extraAns) {
+    const text = answerText(r.a.answerData);
+    const row = buildAnswerRow(r, { source: 'question' });
+    sheetExtra.addRow([...row, inferReflectionDepth(text) || '', r.q?.id ?? '']);
   }
 
   const sheetEv = wb.addWorksheet('События');

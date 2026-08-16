@@ -30,7 +30,7 @@ import {
 import { buildKindDaySeries, forumSeriesDays } from './dayComparison.js';
 import { parseAfterBlocksPicks } from '../exports/nestedPickParse.js';
 
-export type KindDashboardMode = 'after_blocks' | 'state_check';
+export type KindDashboardMode = 'after_blocks' | 'state_check' | 'extra';
 
 export type KindAnswerRow = {
   answerId: number;
@@ -98,6 +98,7 @@ export function isStateCheckQuestion(q: typeof questions.$inferSelect): boolean 
 
 export function matchesKind(q: typeof questions.$inferSelect, mode: KindDashboardMode): boolean {
   if (mode === 'after_blocks') return isAfterBlocksQuestion(q) && !isStateCheckQuestion(q);
+  if (mode === 'extra') return q.questionKind === 'extra';
   return isStateCheckQuestion(q);
 }
 
@@ -275,6 +276,31 @@ export async function collectKindAnswerRows(
           createdAt: r.a.createdAt ?? null,
         });
       }
+      continue;
+    }
+
+    if (mode === 'extra') {
+      rows.push({
+        answerId: r.a.id,
+        participantId: r.p.id,
+        name: fullName(r.p),
+        direction,
+        group,
+        day,
+        questionId: q.id,
+        questionTitle: q.title || q.text || `Вопрос #${q.id}`,
+        answer: extractAnswerText(r.a.answerData),
+        eventTitle: null,
+        eventId: null,
+        parentEventTitle: null,
+        parentEventId: null,
+        emotion: null,
+        emotionZone: null,
+        energy: null,
+        timePoint: q.timePoint ?? null,
+        filledAt: r.a.createdAt ? formatTsMsk(r.a.createdAt) : null,
+        createdAt: r.a.createdAt ?? null,
+      });
       continue;
     }
 

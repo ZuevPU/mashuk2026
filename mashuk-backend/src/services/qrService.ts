@@ -75,6 +75,47 @@ export function formatTaskQrDisplayCode(code: string): string {
   return `МШК-${n}`;
 }
 
+/**
+ * Reuse a stored task token so reprint/download does not invalidate printed QR.
+ * Returns null when a new code must be allocated.
+ */
+export function reusableTaskQrToken(
+  existing: string | null | undefined,
+  regenerate = false,
+): string | null {
+  if (regenerate) return null;
+  const raw = (existing || '').trim();
+  if (!raw) return null;
+  return normalizeTaskQrCode(raw) || raw;
+}
+
+export async function ensureTaskQrToken(
+  existing: string | null | undefined,
+  opts?: { regenerate?: boolean },
+): Promise<{ token: string; reused: boolean; needsPersist: boolean }> {
+  const reused = reusableTaskQrToken(existing, opts?.regenerate === true);
+  if (reused) {
+    return {
+      token: reused,
+      reused: true,
+      needsPersist: reused !== (existing || '').trim(),
+    };
+  }
+  return { token: await allocateTaskQrCode(), reused: false, needsPersist: true };
+}
+
+export async function persistTaskQrToken(
+  taskId: number,
+  existing: string | null | undefined,
+  opts?: { regenerate?: boolean },
+): Promise<string> {
+  const result = await ensureTaskQrToken(existing, opts);
+  if (result.needsPersist) {
+    await db.update(tasks).set({ qrToken: result.token }).where(eq(tasks.id, taskId));
+  }
+  return result.token;
+}
+
 /** Allocate a unique short code for tasks.qr_token */
 export async function allocateTaskQrCode(): Promise<string> {
   for (let i = 0; i < 24; i += 1) {

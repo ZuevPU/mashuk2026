@@ -14,7 +14,7 @@ import { deactivateOtherConsents } from './consentsController.js';
 import { evaluateAllMedals, getMedalRuleProgress, parseMedalRule } from '../services/medalEvaluator.js';
 import { clubMatchNightly, synthesizeOutcomes } from '../services/gigachatService.js';
 import {
-  allocateTaskQrCode,
+  persistTaskQrToken,
   generateQrToken,
   buildTaskQrUrl,
   buildEventQrUrl,
@@ -1009,7 +1009,10 @@ export const getQrPack = async (req: AdminRequest, res: Response): Promise<void>
   const base = resolveParticipantAppBase();
   const dayTasks = await db.select().from(tasks).where(and(
     eq(tasks.shiftId, shiftId),
-    eq(tasks.dayNumber, day),
+    or(
+      eq(tasks.dayNumber, day),
+      sql`${tasks.dayNumbers} @> ${JSON.stringify([day])}::jsonb`,
+    ),
     eq(tasks.status, 'published'),
     or(
       sql`${tasks.confirmationMethods} @> ${JSON.stringify(['qr'])}::jsonb`,
@@ -1021,12 +1024,7 @@ export const getQrPack = async (req: AdminRequest, res: Response): Promise<void>
   for (const t of dayTasks) {
     const methods = taskMethodsForParticipant(t);
     if (!methods.includes('qr') && t.confirmationType !== 'qr') continue;
-    let token = t.qrToken;
-    // Prefer short codes for print packs (legacy 32-hex still works until regenerated)
-    if (!token || /^[a-f0-9]{32}$/i.test(token)) {
-      token = await allocateTaskQrCode();
-      await db.update(tasks).set({ qrToken: token }).where(eq(tasks.id, t.id));
-    }
+    const token = await persistTaskQrToken(t.id, t.qrToken);
     const url = buildTaskQrUrl(base, t.id, token);
     items.push({
       title: t.title,
@@ -1071,8 +1069,15 @@ export const generateAndDownloadQr = async (req: AdminRequest, res: Response): P
   let token = '';
   let displayCode: string | undefined;
   if (type === 'task') {
-    token = await allocateTaskQrCode();
-    await db.update(tasks).set({ qrToken: token }).where(eq(tasks.id, id));
+    const { resolveAdminShiftId } = await import('../services/shiftService.js');
+    const shiftId = await resolveAdminShiftId(req);
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
+    if (!task || task.shiftId !== shiftId) {
+      res.status(404).json({ error: 'Задание не найдено в выбранной смене' });
+      return;
+    }
+    const regenerate = (req.body as { regenerate?: boolean })?.regenerate === true;
+    token = await persistTaskQrToken(task.id, task.qrToken, { regenerate });
     url = buildTaskQrUrl(base, id, token);
     displayCode = formatTaskQrDisplayCode(token);
   } else if (type === 'event') {

@@ -6,7 +6,9 @@ import {
   formatTaskQrDisplayCode,
   generateShortQrCode,
   normalizeTaskQrCode,
+  reusableTaskQrToken,
 } from '../services/qrService.js';
+import { isTaskOnForumDay } from '../services/taskAdminHelpers.js';
 
 describe('task short QR codes', () => {
   it('generates 6-char codes from safe alphabet', () => {
@@ -43,5 +45,22 @@ describe('task short QR codes', () => {
   it('buildTaskScanDeepLink opens #/scan for auto-credit', () => {
     const link = buildTaskScanDeepLink('A7K2X9', 42);
     assert.match(link, /#\/scan\?qr=A7K2X9$/);
+  });
+
+  it('reuses an existing token so download does not invalidate printed QR', () => {
+    assert.equal(reusableTaskQrToken('A7K2X9'), 'A7K2X9');
+    assert.equal(reusableTaskQrToken('мшк-a7k2x9'), 'A7K2X9');
+    assert.equal(reusableTaskQrToken('deadbeefdeadbeefdeadbeefdeadbeef'), 'deadbeefdeadbeefdeadbeefdeadbeef');
+    assert.equal(reusableTaskQrToken('A7K2X9', true), null);
+    assert.equal(reusableTaskQrToken(null), null);
+    assert.equal(reusableTaskQrToken(''), null);
+  });
+});
+
+describe('QR pack day filter', () => {
+  it('includes tasks selected via dayNumbers even when dayNumber is stale', () => {
+    assert.equal(isTaskOnForumDay({ dayNumber: 1, dayNumbers: [2] }, 2), true);
+    assert.equal(isTaskOnForumDay({ dayNumber: 1, dayNumbers: [2] }, 1), false);
+    assert.equal(isTaskOnForumDay({ dayNumber: 2, dayNumbers: [] }, 2), true);
   });
 });

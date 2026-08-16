@@ -46,6 +46,7 @@ export function normalizeExportTouchpointFilter(raw: string | null | undefined):
 }
 
 export function touchpointTypeForQuestion(q: typeof questions.$inferSelect): string {
+  if (q.questionKind === 'extra') return 'extra';
   const kind = reflectionKindFromQuestion(q);
   if (kind === 'state_check') return 'checkin';
   if (kind === 'point_a') return 'point_a';
