@@ -23,11 +23,9 @@ export function maxQrSuccessesPerForumDay(
   executionType?: string | null,
   dailyRepeatLimit?: number | null,
 ): number {
-  // `daily` = once per day; only `repeatable`/`multiple` use the numeric limit.
-  if (executionType === 'repeatable' || executionType === 'multiple') {
-    return Math.max(1, dailyRepeatLimit ?? 1);
-  }
-  return 1;
+  const limit = Math.max(1, Number(dailyRepeatLimit) || 1);
+  if ((executionType || 'once') === 'once' && limit <= 1) return 1;
+  return limit;
 }
 
 export async function assertQrScanAllowed(params: {
@@ -40,7 +38,7 @@ export async function assertQrScanAllowed(params: {
 }): Promise<{ ok: true } | { ok: false; error: string; outcome: QrScanOutcome }> {
   const limit = maxQrSuccessesPerForumDay(params.executionType, params.dailyRepeatLimit);
 
-  if ((params.executionType || 'once') === 'once') {
+  if ((params.executionType || 'once') === 'once' && limit <= 1) {
     const [ownSuccess] = await db.select({ id: taskQrScans.id })
       .from(taskQrScans)
       .where(and(

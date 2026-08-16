@@ -221,12 +221,20 @@ export function TaskForm({
             <option value="repeatable">Многоразовое</option>
           </select>
         </label>
-        {(draft.executionType === 'daily' || draft.executionType === 'repeatable') && (
-          <label className="adm-field">
-            <span className="adm-label">Лимит / день</span>
-            <input type="number" className="adm-input" value={draft.dailyRepeatLimit} onChange={e => onChange({ dailyRepeatLimit: Number(e.target.value) })} />
-          </label>
-        )}
+        <label className="adm-field">
+          <span className="adm-label">Лимит прохождений участником</span>
+          <input
+            type="number"
+            min={1}
+            className="adm-input"
+            value={draft.dailyRepeatLimit}
+            onChange={e => onChange({ dailyRepeatLimit: Math.max(1, Number(e.target.value) || 1) })}
+          />
+          <span className="adm-muted" style={{ fontSize: 11, display: 'block', marginTop: 6 }}>
+            Сколько раз один человек может пройти это задание за день. По умолчанию 1.
+            Если поставить 2 — тот же QR можно пробить дважды. «Повтор при отклонении» — только после отказа, не этот лимит.
+          </span>
+        </label>
       </div>
 
       <div className="adm-field">

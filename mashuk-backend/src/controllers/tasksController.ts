@@ -205,7 +205,9 @@ export const listTasks = async (req: ParticipantRequest, res: Response): Promise
         hasQr: Boolean(t.qrToken),
         executionType: t.executionType || 'once',
         dailyRepeatLimit: t.dailyRepeatLimit ?? 1,
-        canSubmitAgain: status === 'available' && isRepeatableExecution(t.executionType),
+        canSubmitAgain: status === 'available' && (
+          isRepeatableExecution(t.executionType) || (t.dailyRepeatLimit ?? 1) > 1
+        ),
         todayCompletedCount,
         status,
         canResubmit,

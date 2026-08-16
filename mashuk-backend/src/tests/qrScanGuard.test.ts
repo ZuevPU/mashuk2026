@@ -3,9 +3,16 @@ import assert from 'node:assert/strict';
 import { maxQrSuccessesPerForumDay } from '../services/qrScanGuard.js';
 
 describe('maxQrSuccessesPerForumDay', () => {
-  it('allows one success for once/daily', () => {
-    assert.equal(maxQrSuccessesPerForumDay('once', 5), 1);
-    assert.equal(maxQrSuccessesPerForumDay('daily', 5), 1);
+  it('once with default limit stays one; once with a higher limit uses that number', () => {
+    assert.equal(maxQrSuccessesPerForumDay('once', 1), 1);
+    assert.equal(maxQrSuccessesPerForumDay('once', null), 1);
+    assert.equal(maxQrSuccessesPerForumDay('once', 2), 2);
+  });
+
+  it('uses dailyRepeatLimit for daily as well as repeatable', () => {
+    assert.equal(maxQrSuccessesPerForumDay('daily', 2), 2);
+    assert.equal(maxQrSuccessesPerForumDay('daily', 1), 1);
+    assert.equal(maxQrSuccessesPerForumDay('daily', null), 1);
   });
 
   it('uses dailyRepeatLimit for repeatable/multiple', () => {

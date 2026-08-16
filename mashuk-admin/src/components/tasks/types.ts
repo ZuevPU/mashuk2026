@@ -281,8 +281,10 @@ export function patchBodyFromDraft(draft: TaskDraft, publish = false): Record<st
       .map((o, i) => ({ label: o.label.trim(), value: o.value || String(i) }))
       .filter(o => o.label),
     requiresModeration: draft.requiresModeration,
-    executionType: draft.executionType,
-    dailyRepeatLimit: Number(draft.dailyRepeatLimit),
+    executionType: Math.max(1, Number(draft.dailyRepeatLimit) || 1) > 1 && draft.executionType === 'once'
+      ? 'repeatable'
+      : draft.executionType,
+    dailyRepeatLimit: Math.max(1, Number(draft.dailyRepeatLimit) || 1),
     teamConfirmHours: Number(draft.teamConfirmHours),
     medalTask: draft.medalTask,
     medalId: draft.medalId === '' ? null : Number(draft.medalId),

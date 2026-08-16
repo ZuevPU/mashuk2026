@@ -182,24 +182,19 @@ export async function assertTaskSubmissionAllowed(
     eq(taskSubmissions.status, 'approved'),
   ));
 
-  if (executionType === 'once') {
+  const limit = Math.max(1, Number(task.dailyRepeatLimit) || 1);
+  if (executionType === 'once' && limit <= 1) {
     if (approved.length > 0 && !(opts?.allowResubmitRejected && opts.existingStatus === 'rejected')) {
       return { ok: false, error: 'Задание уже выполнено (одноразовое)' };
     }
-  } else if (executionType === 'daily') {
-    const todayApproved = approved.filter(s =>
-      s.checkedAt && s.checkedAt >= start && s.checkedAt <= end,
-    );
-    if (todayApproved.length > 0 && !(opts?.allowResubmitRejected && opts.existingStatus === 'rejected')) {
-      return { ok: false, error: 'Задание уже выполнено сегодня' };
-    }
-  } else if (executionType === 'repeatable' || executionType === 'multiple') {
-    const limit = task.dailyRepeatLimit ?? 1;
+  } else if (isRepeatableExecution(executionType) || limit > 1) {
     const todayCount = approved.filter(s =>
       s.checkedAt && s.checkedAt >= start && s.checkedAt <= end,
     ).length;
     if (todayCount >= limit && !(opts?.allowResubmitRejected && opts.existingStatus === 'rejected')) {
-      return { ok: false, error: `Достигнут лимит выполнений на сегодня (${limit})` };
+      return { ok: false, error: limit <= 1
+        ? 'Задание уже выполнено сегодня'
+        : `Достигнут лимит выполнений на сегодня (${limit})` };
     }
   }
 

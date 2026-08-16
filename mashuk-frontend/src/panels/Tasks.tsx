@@ -120,17 +120,12 @@ function repeatableProgressLabel(task: {
   status?: string;
 }): string | null {
   const exec = task.executionType || 'once';
-  if (exec !== 'daily' && exec !== 'repeatable' && exec !== 'multiple') return null;
   const limit = task.dailyRepeatLimit ?? 1;
+  if (exec !== 'daily' && exec !== 'repeatable' && exec !== 'multiple' && limit <= 1) return null;
   const done = task.todayCompletedCount ?? 0;
-  if (exec === 'daily') {
-    if (task.status === 'done') return 'Выполнено сегодня';
-    if (task.status === 'available' && done === 0) return 'Можно выполнить сегодня';
-    return null;
-  }
   if (done >= limit && task.status === 'done') return `Лимит ${limit}/день исчерпан`;
   if (done > 0) return `${done}/${limit} сегодня${task.canSubmitAgain ? ' · можно ещё' : ''}`;
-  if (task.status === 'available') return `До ${limit} раз сегодня`;
+  if (task.status === 'available') return limit > 1 ? `До ${limit} раз сегодня` : 'Можно выполнить сегодня';
   return null;
 }
 
