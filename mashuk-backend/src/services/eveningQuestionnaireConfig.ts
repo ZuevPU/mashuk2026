@@ -160,6 +160,8 @@ export type EveningQuestionnaireConfig = {
   forcePublishedAt?: string;
   /** Admin hid the questionnaire — overrides schedule and forcePublished. */
   forceUnpublished?: boolean;
+  /** No auto-close clock: stays until «Снять с публикации» (empty «активна до»). */
+  noScheduledClose?: boolean;
 };
 
 export const DEFAULT_EVENING_OPENS_AT_MSK = '22:00';
@@ -177,6 +179,7 @@ export function eveningPublishMeta(
   | 'forcePublished'
   | 'forcePublishedAt'
   | 'forceUnpublished'
+  | 'noScheduledClose'
 > {
   const meta: Pick<
     EveningQuestionnaireConfig,
@@ -187,6 +190,7 @@ export function eveningPublishMeta(
     | 'forcePublished'
     | 'forcePublishedAt'
     | 'forceUnpublished'
+    | 'noScheduledClose'
   > = {};
   if (config.opensAtMsk?.trim()) meta.opensAtMsk = config.opensAtMsk.trim();
   if (config.closesAtMsk?.trim()) meta.closesAtMsk = config.closesAtMsk.trim();
@@ -195,6 +199,7 @@ export function eveningPublishMeta(
   if (config.forcePublished) meta.forcePublished = true;
   if (config.forcePublishedAt?.trim()) meta.forcePublishedAt = config.forcePublishedAt.trim();
   if (config.forceUnpublished) meta.forceUnpublished = true;
+  if (config.noScheduledClose) meta.noScheduledClose = true;
   return meta;
 }
 
@@ -234,10 +239,60 @@ export function isForcePublishedActive(
   return !!config?.forcePublished && !config?.forceUnpublished;
 }
 
+/** Merge toolbar flags. A save without flags must keep «Опубликовать сейчас». */
+export function mergeEveningPublishFlags(
+  next: EveningQuestionnaireConfig,
+  existing: EveningQuestionnaireConfig,
+  forcePublishedRaw: unknown,
+  forceUnpublishedRaw: unknown,
+): EveningQuestionnaireConfig {
+  const hasForcePub = forcePublishedRaw === true || forcePublishedRaw === false;
+  const hasForceUnpub = forceUnpublishedRaw === true || forceUnpublishedRaw === false;
+  const {
+    forcePublished: _fp,
+    forcePublishedAt: _fpa,
+    forceUnpublished: _fu,
+    ...rest
+  } = next;
+
+  if (!hasForcePub && !hasForceUnpub) {
+    return {
+      ...rest,
+      ...(existing.forcePublished ? {
+        forcePublished: true as const,
+        ...(existing.forcePublishedAt ? { forcePublishedAt: existing.forcePublishedAt } : {}),
+      } : {}),
+      ...(existing.forceUnpublished && !existing.forcePublished ? { forceUnpublished: true as const } : {}),
+    };
+  }
+
+  let forcePublished = hasForcePub ? forcePublishedRaw === true : !!existing.forcePublished;
+  let forceUnpublished = hasForceUnpub ? forceUnpublishedRaw === true : !!existing.forceUnpublished;
+  if (forcePublishedRaw === true) forceUnpublished = false;
+  if (forceUnpublishedRaw === true) forcePublished = false;
+  if (forcePublishedRaw === false && forceUnpublishedRaw === false) {
+    forcePublished = false;
+    forceUnpublished = false;
+  }
+  const keepAt = forcePublished
+    && forcePublishedRaw !== true
+    && existing.forcePublishedAt
+    ? existing.forcePublishedAt
+    : undefined;
+  return {
+    ...rest,
+    ...(forcePublished ? {
+      forcePublished: true as const,
+      forcePublishedAt: forcePublishedRaw === true ? new Date().toISOString() : keepAt,
+    } : {}),
+    ...(forceUnpublished ? { forceUnpublished: true as const } : {}),
+  };
+}
+
 /** Normalize "21:00" / "9:30" → "HH:MM", or null if invalid. */
 export function normalizeOpensAtMsk(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null;
-  const m = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
+  const m = raw.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
   if (!m) return null;
   const h = Number(m[1]);
   const min = Number(m[2]);
@@ -249,7 +304,12 @@ export function getEveningOpensAtMsk(config: EveningQuestionnaireConfig | null |
   return normalizeOpensAtMsk(config?.opensAtMsk) || DEFAULT_EVENING_OPENS_AT_MSK;
 }
 
+export function hasScheduledClose(config: EveningQuestionnaireConfig | null | undefined): boolean {
+  return !config?.noScheduledClose;
+}
+
 export function getEveningClosesAtMsk(config: EveningQuestionnaireConfig | null | undefined): string {
+  if (!hasScheduledClose(config)) return '';
   return normalizeOpensAtMsk(config?.closesAtMsk) || DEFAULT_EVENING_CLOSES_AT_MSK;
 }
 
@@ -267,8 +327,11 @@ export function getEveningClosesOnDay(
   const explicit = normalizeForumDay(config?.closesOnDay);
   if (explicit != null) return explicit;
   const openDay = getEveningOpensOnDay(config, questionnaireDay);
+  if (!hasScheduledClose(config)) return openDay;
+  const closeClock = getEveningClosesAtMsk(config);
+  if (!closeClock) return openDay;
   const openMinutes = clockToMinutes(getEveningOpensAtMsk(config));
-  const closeMinutes = clockToMinutes(getEveningClosesAtMsk(config));
+  const closeMinutes = clockToMinutes(closeClock);
   if (closeMinutes <= openMinutes) {
     return Math.min(EVENING_SCHEDULE_MAX_DAY, openDay + 1);
   }
@@ -295,7 +358,9 @@ export function resolveEveningScheduleWindow(
   const closesOnDay = getEveningClosesOnDay(config, questionnaireDay);
   const startDate = settings?.startDate ?? null;
   const start = startDate ? forumDayClockMsk(startDate, opensOnDay, opensAtMsk) : null;
-  const end = startDate ? forumDayClockMsk(startDate, closesOnDay, closesAtMsk) : null;
+  const end = startDate && hasScheduledClose(config) && closesAtMsk
+    ? forumDayClockMsk(startDate, closesOnDay, closesAtMsk)
+    : null;
   return { opensAtMsk, closesAtMsk, opensOnDay, closesOnDay, start, end };
 }
 
@@ -303,11 +368,13 @@ export function eveningScheduleApiFields(
   config: EveningQuestionnaireConfig | null | undefined,
   questionnaireDay: number,
 ) {
+  const noClose = !hasScheduledClose(config);
   return {
     opensAtMsk: getEveningOpensAtMsk(config),
-    closesAtMsk: getEveningClosesAtMsk(config),
+    closesAtMsk: noClose ? '' : getEveningClosesAtMsk(config),
     opensOnDay: getEveningOpensOnDay(config, questionnaireDay),
     closesOnDay: getEveningClosesOnDay(config, questionnaireDay),
+    noScheduledClose: noClose,
     scheduleHint: formatEveningScheduleHint(config, questionnaireDay),
   };
 }
@@ -356,6 +423,7 @@ export function mergeEveningScheduleFromRequest(
     closesAtMsk?: unknown;
     opensOnDay?: unknown;
     closesOnDay?: unknown;
+    noScheduledClose?: unknown;
     config?: Partial<EveningQuestionnaireConfig> | null;
   },
   existing: EveningQuestionnaireConfig,
@@ -366,10 +434,30 @@ export function mergeEveningScheduleFromRequest(
     ['opensAtMsk', body.opensAtMsk !== undefined ? body.opensAtMsk : cfg.opensAtMsk, existing.opensAtMsk],
     ['closesAtMsk', body.closesAtMsk !== undefined ? body.closesAtMsk : cfg.closesAtMsk, existing.closesAtMsk],
   ];
+  const closeRaw = clocks[1][1];
+  const explicitNoClose = closeRaw === '' || closeRaw === null
+    || cfg.noScheduledClose === true
+    || body.noScheduledClose === true;
+  if (explicitNoClose) {
+    clocks.pop();
+  }
   for (const [key, raw, prev] of clocks) {
     const applied = applyClockField(current, raw, key, prev);
     if (applied.error) return applied;
     current = applied.config;
+  }
+  if (explicitNoClose) {
+    const { closesAtMsk: _drop, ...rest } = current;
+    current = { ...rest, noScheduledClose: true };
+  } else if (
+    (typeof closeRaw === 'string' && normalizeOpensAtMsk(closeRaw))
+    || body.noScheduledClose === false
+    || cfg.noScheduledClose === false
+  ) {
+    const { noScheduledClose: _n, ...rest } = current;
+    current = rest;
+  } else if (existing.noScheduledClose) {
+    current = { ...current, noScheduledClose: true };
   }
   const days: Array<['opensOnDay' | 'closesOnDay', unknown, number | undefined]> = [
     ['opensOnDay', body.opensOnDay !== undefined ? body.opensOnDay : cfg.opensOnDay, existing.opensOnDay],
@@ -388,8 +476,11 @@ export function formatEveningScheduleHint(
   questionnaireDay: number,
 ): string {
   const opensAt = getEveningOpensAtMsk(config);
-  const closesAt = getEveningClosesAtMsk(config);
   const opensOnDay = getEveningOpensOnDay(config, questionnaireDay);
+  if (!hasScheduledClose(config)) {
+    return `с ${opensAt} дня ${opensOnDay} МСК, без времени снятия`;
+  }
+  const closesAt = getEveningClosesAtMsk(config);
   const closesOnDay = getEveningClosesOnDay(config, questionnaireDay);
   if (opensOnDay === closesOnDay) {
     return `с ${opensAt} до ${closesAt} МСК дня ${opensOnDay}`;
@@ -424,7 +515,11 @@ function isWithinClockWindow(
 ): boolean {
   const { totalMinutes } = getMoscowParts(now);
   const openMinutes = clockToMinutes(getEveningOpensAtMsk(config));
-  const closeMinutes = clockToMinutes(getEveningClosesAtMsk(config));
+  if (!hasScheduledClose(config)) {
+    return totalMinutes >= openMinutes;
+  }
+  const closeClock = getEveningClosesAtMsk(config);
+  const closeMinutes = clockToMinutes(closeClock);
   if (closeMinutes > openMinutes) {
     return totalMinutes >= openMinutes && totalMinutes < closeMinutes;
   }
@@ -465,6 +560,9 @@ export function isEveningOpenForDay(
   if (isForcePublishedActive(config, now)) return true;
   if (opts?.scheduleDayPublished === false) return false;
   const window = resolveEveningScheduleWindow(config, dayNumber, opts?.settings);
+  if (window.start && !window.end) {
+    return now.getTime() >= window.start.getTime();
+  }
   if (window.start && window.end && window.end.getTime() > window.start.getTime()) {
     const t = now.getTime();
     return t >= window.start.getTime() && t < window.end.getTime();

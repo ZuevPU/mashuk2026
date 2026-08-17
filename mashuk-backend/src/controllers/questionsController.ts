@@ -196,6 +196,7 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
         ? participantAnswerSummary(userAnswer.answerData, q.type)
         : '';
       const latePolicy = lateAnswerPolicyForQuestion(q);
+      const isAfterBlocks = q.questionKind === 'after_blocks' || q.reflectionKind === 'after_blocks';
       return {
         ...q,
         publishStatus: q.status,
@@ -211,6 +212,9 @@ export const listForumQuestions = async (req: ParticipantRequest, res: Response)
         reflectionLabel: getReflectionTypeLabel(q),
         timeWindowLabel: formatQuestionTimeWindow(q.publishTime, q.closeTime),
         pathPointsPreview,
+        ...(isAfterBlocks
+          ? { afterBlocksConfig: normalizeAfterBlocksConfig(q.afterBlocksConfig, q.text) }
+          : {}),
       };
     })
       .filter(q => {

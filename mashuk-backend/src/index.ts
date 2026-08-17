@@ -1,15 +1,14 @@
 import http from 'node:http';
 
 const port = Number(process.env.PORT) || 8080;
-// Bind IPv4 so Docker HEALTHCHECK on 127.0.0.1 / /proc/net/tcp always sees the socket.
-// HOST=0.0.0.0 from the panel is the same as "all IPv4".
-const bindHost = process.env.HOST && process.env.HOST !== '0.0.0.0'
-  ? process.env.HOST
-  : '0.0.0.0';
+// Timeweb/panel HOST is often an advertised address, not a bindable NIC.
+// Always listen on IPv4; IPv6 is best-effort so `localhost` / ::1 probes work.
+const bootDelayMs = process.env.NODE_ENV === 'production' ? 2500 : 0;
 
 type NodeHandler = (req: http.IncomingMessage, res: http.ServerResponse) => void;
 
 let appHandler: NodeHandler | null = null;
+let bootStarted = false;
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown) {
   const payload = JSON.stringify(body);
@@ -24,10 +23,7 @@ function isLiveness(urlPath: string): boolean {
   return urlPath === '/' || urlPath === '/health' || urlPath === '/api/health';
 }
 
-// Bind 8080 with zero app imports. Timeweb's healthcheck has ~105s and fails
-// if /health is silent while Express/DB/PDF are still loading — or if dotenv
-// runs first. Platform env vars are already in process.env.
-const server = http.createServer((req, res) => {
+function handler(req: http.IncomingMessage, res: http.ServerResponse) {
   if (appHandler) {
     appHandler(req, res);
     return;
@@ -43,27 +39,59 @@ const server = http.createServer((req, res) => {
     return;
   }
   sendJson(res, 503, { status: 'starting' });
-});
+}
 
-function onListening() {
-  const addr = server.address();
-  const where = typeof addr === 'object' && addr
-    ? `${addr.address}:${addr.port}`
-    : `port ${port}`;
-  console.log(`Server running on ${where}`);
-  console.log('Health: /, /health, /api/health (liveness), /health/ready (DB check after boot)');
-  setImmediate(() => {
-    void boot().catch((err) => {
-      console.error('Boot failed after listen — healthcheck stays up:', err);
+function listen(host: string): Promise<http.Server> {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer(handler);
+    const onErr = (err: Error) => {
+      server.close();
+      reject(err);
+    };
+    server.once('error', onErr);
+    server.listen(port, host, () => {
+      server.off('error', onErr);
+      server.on('error', (err) => {
+        console.error(`Server error on ${host}:${port}:`, err);
+      });
+      const addr = server.address();
+      const where = typeof addr === 'object' && addr
+        ? `${addr.address}:${addr.port}`
+        : `${host}:${port}`;
+      console.log(`Server listening on ${where}`);
+      resolve(server);
     });
   });
 }
 
-server.on('error', (err) => {
-  console.error(`Failed to bind ${bindHost}:${port}:`, err);
-  process.exit(1);
-});
-server.listen(port, bindHost, onListening);
+function scheduleBoot() {
+  if (bootStarted) return;
+  bootStarted = true;
+  console.log('Health: /, /health, /api/health (liveness), /health/ready (DB check after boot)');
+  setTimeout(() => {
+    void boot().catch((err) => {
+      console.error('Boot failed after listen — healthcheck stays up:', err);
+    });
+  }, bootDelayMs);
+}
+
+async function start() {
+  try {
+    await listen('0.0.0.0');
+  } catch (err) {
+    console.error(`Failed to bind 0.0.0.0:${port}:`, err);
+    process.exit(1);
+  }
+  try {
+    await listen('::');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`IPv6 bind skipped for :${port}: ${message}`);
+  }
+  scheduleBoot();
+}
+
+void start();
 
 async function boot() {
   const { env } = await import('./config/env.js');
@@ -105,6 +133,6 @@ async function boot() {
     startPushScheduler();
     startExportJobRunner();
   } catch (err) {
-    console.error('Migrations failed — server stays up for healthchecks, but DB routes will fail until this is fixed and the app is restarted:', err);
+    console.error('Migrations failed — server stays up for healthchecks, but DB/auth routes will fail until this is fixed and the app is restarted:', err);
   }
 }

@@ -26,6 +26,9 @@ type AfterBlocksPreviewPrompt = {
 };
 
 function resolvePreviewPrompts(draft: QuestionDraft): AfterBlocksPreviewPrompt[] {
+  const pickRe = /^(на каком (уроке|блоке)|где вы были|где ты был)/i;
+  const split = (text: string) => text.replace(/\r\n/g, '\n').trim()
+    .split(/\n+|(?<=[?？])\s+/).map(s => s.trim()).filter(Boolean);
   const prompts = (draft.afterBlocksConfig?.prompts || [])
     .filter(p => p.text.trim())
     .map((p, i) => ({
@@ -33,11 +36,18 @@ function resolvePreviewPrompts(draft: QuestionDraft): AfterBlocksPreviewPrompt[]
       text: p.text.trim(),
       answerType: p.answerType || 'text',
       options: Array.isArray(p.options) ? p.options.map(o => o.trim()).filter(Boolean) : [],
-    }));
+    }))
+    .flatMap((p) => {
+      const parts = split(p.text);
+      if (parts.length <= 1) return pickRe.test(p.text.replace(/\s+/g, ' ')) ? [] : [p];
+      const reflection = parts.filter(t => !pickRe.test(t.replace(/\s+/g, ' ')));
+      return reflection.length ? [{ ...p, text: reflection.join(' ').trim() }] : [];
+    });
   if (prompts.length) return prompts;
+  const seedParts = split(draft.text).filter(t => !pickRe.test(t.replace(/\s+/g, ' ')));
   return [{
     id: 'legacy',
-    text: draft.text.trim() || 'Что вынесли из этого блока?',
+    text: seedParts[0] || 'Что вынесли из этого блока?',
     answerType: 'text',
     options: [],
   }];
@@ -235,7 +245,9 @@ function AfterBlocksPreview({
 
       {step === 'event' && (
         <>
-          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Где вы были?</div>
+          <div className="adm-evening-preview-label" style={{ marginBottom: 4 }}>
+            На каком уроке / блоке ты был(а)?
+          </div>
           <div style={{ fontSize: 11, color: '#666', marginBottom: 10, lineHeight: 1.4 }}>
             Выберите событие программы — параллельный блок, в котором вы участвовали.
           </div>

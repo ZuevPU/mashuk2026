@@ -195,14 +195,20 @@ export function serializeAdminQuestion<T extends {
   questionKind?: string | null;
   answerType?: string | null;
   type: string;
+  text?: string | null;
+  afterBlocksConfig?: unknown;
   dayNumber?: number | null;
   dayNumbers?: number[] | null;
 }>(q: T, answerCount = 0) {
+  const questionKind = q.questionKind ?? inferQuestionKind(q);
   return {
     ...q,
     answerCount,
-    questionKind: q.questionKind ?? inferQuestionKind(q),
+    questionKind,
     answerType: q.answerType ?? legacyTypeToAnswerType(q.type),
     dayNumbers: normalizeDayNumbers(q.dayNumbers ?? undefined, q.dayNumber ?? undefined),
+    ...(questionKind === 'after_blocks'
+      ? { afterBlocksConfig: normalizeAfterBlocksConfig(q.afterBlocksConfig, q.text) }
+      : {}),
   };
 }

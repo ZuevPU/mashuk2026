@@ -312,23 +312,35 @@ function practicesFromQuestion(raw: unknown): PracticesConfigDraft {
 
 function afterBlocksFromQuestion(q: AdminQuestion): AfterBlocksConfigDraft {
   const promptsRaw = Array.isArray(q.afterBlocksConfig?.prompts) ? q.afterBlocksConfig!.prompts : [];
-  if (promptsRaw.length) {
-    return {
-      prompts: promptsRaw.map(p => ({
+  const mapped = (promptsRaw.length
+    ? promptsRaw.map(p => ({
         id: p.id || crypto.randomUUID(),
         text: p.text || '',
         answerType: (AFTER_BLOCKS_PROMPT_TYPES.some(t => t.value === p.answerType)
           ? p.answerType
           : 'text') as AfterBlocksPromptType,
         options: Array.isArray(p.options) ? p.options.map(o => String(o || '')).filter(Boolean) : [],
-      })),
-    };
+      }))
+    : [{
+        id: crypto.randomUUID(),
+        text: (q.text || '').trim() || 'Что вынесли из этого блока?',
+        answerType: (AFTER_BLOCKS_PROMPT_TYPES.some(t => t.value === q.answerType)
+          ? q.answerType as AfterBlocksPromptType
+          : 'text'),
+        options: [] as string[],
+      }]);
+  const pickRe = /^(на каком (уроке|блоке)|где вы были|где ты был)/i;
+  const split = (text: string) => text.replace(/\r\n/g, '\n').trim()
+    .split(/\n+|(?<=[?？])\s+/).map(s => s.trim()).filter(Boolean);
+  const kept: AfterBlocksPromptDraft[] = [];
+  for (const p of mapped) {
+    const parts = split(p.text);
+    const reflection = parts.filter(t => !pickRe.test(t.replace(/\s+/g, ' ')));
+    if (!reflection.length) continue;
+    kept.push({ ...p, text: reflection.join(' ').trim() });
   }
-  const seed = (q.text || '').trim() || 'Что вынесли из этого блока?';
-  const answerType = AFTER_BLOCKS_PROMPT_TYPES.some(t => t.value === q.answerType)
-    ? q.answerType as AfterBlocksPromptType
-    : 'text';
-  return { prompts: [emptyAfterBlocksPrompt({ text: seed, answerType })] };
+  if (kept.length) return { prompts: kept };
+  return { prompts: [emptyAfterBlocksPrompt({ text: 'Что вынесли из этого блока?' })] };
 }
 
 function toLocalInput(iso: string | null | undefined): string {

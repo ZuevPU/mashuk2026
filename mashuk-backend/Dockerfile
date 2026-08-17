@@ -58,11 +58,17 @@ COPY assets ./assets
 COPY config ./config
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 COPY healthcheck.cjs ./healthcheck.cjs
+COPY curl-shim.cjs ./curl-shim.cjs
 COPY docker-healthcheck.sh ./docker-healthcheck.sh
 RUN sed -i 's/\r$//' docker-entrypoint.sh docker-healthcheck.sh \
   && chmod +x docker-entrypoint.sh docker-healthcheck.sh \
   && mkdir -p /app/uploads \
-  && ln -sf /usr/local/bin/node /usr/bin/node
+  && ln -sf /usr/local/bin/node /usr/bin/node \
+  && printf '%s\n' '#!/bin/sh' 'exec /usr/local/bin/node /app/curl-shim.cjs "$@"' > /usr/bin/curl \
+  && chmod +x /usr/bin/curl \
+  && cp /usr/bin/curl /usr/bin/wget \
+  && cp /usr/bin/curl /usr/local/bin/curl \
+  && cp /usr/bin/curl /usr/local/bin/wget
 
 ENV PORT=8080 \
     NODE_ENV=production \
@@ -71,8 +77,8 @@ ENV PORT=8080 \
 EXPOSE 8080
 
 # Timeweb fails the deploy if Docker health is not healthy within ~105s.
-# Check that 8080 is bound first — do not wait on a hung HTTP/DNS probe.
-HEALTHCHECK --interval=2s --timeout=3s --start-period=3s --retries=40 \
+# Probe the listen socket only — HTTP GET hangs while boot() loads Express.
+HEALTHCHECK --interval=2s --timeout=5s --start-period=8s --retries=40 \
   CMD ["/bin/sh", "/app/docker-healthcheck.sh"]
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

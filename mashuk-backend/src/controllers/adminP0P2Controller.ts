@@ -449,12 +449,7 @@ export const draftScheduleDay = async (req: AdminRequest, res: Response): Promis
         ...((shift.eveningQuestionnaireByDay as Record<string, Record<string, unknown>> | null) || {}),
       };
       const resolved = resolveEveningConfigForDay(shiftOpsToForumShape(shift) as never, dayNumber);
-      const {
-        forcePublished: _fp,
-        forcePublishedAt: _fpa,
-        ...rest
-      } = resolved;
-      byDay[String(dayNumber)] = { ...rest, forceUnpublished: true };
+      byDay[String(dayNumber)] = { ...resolved, forceUnpublished: true };
       await updateShift(shiftId, { eveningQuestionnaireByDay: byDay });
       eveningUnpublished = true;
     }

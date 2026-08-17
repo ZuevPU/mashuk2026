@@ -13,14 +13,61 @@ import { isPointBQuestion } from '../../utils/eveningSummaryQuestion';
 import { PracticesVoteForm, type PracticesVoteConfig } from './PracticesVoteForm';
 
 /** What the participant should read: admin «Текст вопроса», not the internal title. */
+const BLOCK_PICK_START_RE = /^(на каком (уроке|блоке)|где вы были|где ты был)/i;
+
+function splitPromptSentences(text: string): string[] {
+  const raw = (text || '').replace(/\r\n/g, '\n').trim();
+  if (!raw) return [];
+  const parts = raw
+    .split(/\n+/)
+    .flatMap(line => line.split(/(?<=[?？])\s+/))
+    .map(s => s.trim())
+    .filter(Boolean);
+  return parts.length ? parts : [raw];
+}
+
+function isBlockPickPromptText(text: string): boolean {
+  const t = (text || '').trim().replace(/\s+/g, ' ');
+  return Boolean(t) && BLOCK_PICK_START_RE.test(t);
+}
+
+function isAfterBlocksQuestion(q: {
+  questionKind?: string | null;
+  reflectionKind?: string | null;
+}): boolean {
+  return q.questionKind === 'after_blocks' || q.reflectionKind === 'after_blocks';
+}
+
+function afterBlocksCardHeading(q: {
+  title?: string | null;
+  text?: string | null;
+  afterBlocksConfig?: { prompts?: Array<{ text?: string | null }> } | null;
+}): string {
+  const fromCfg = (q.afterBlocksConfig?.prompts || [])
+    .map(p => (p.text || '').trim())
+    .filter(Boolean)
+    .flatMap(splitPromptSentences)
+    .filter(t => !isBlockPickPromptText(t));
+  if (fromCfg.length) return fromCfg[0];
+  const fromText = splitPromptSentences(q.text || '').filter(t => !isBlockPickPromptText(t));
+  if (fromText.length) return fromText[0];
+  return (q.title || '').trim();
+}
+
 export function participantQuestionPrompt(q: {
   title?: string | null;
   text?: string | null;
   subtitle?: string | null;
+  questionKind?: string | null;
+  reflectionKind?: string | null;
+  afterBlocksConfig?: { prompts?: Array<{ text?: string | null }> } | null;
 }): { subtitle: string; heading: string } {
   const title = (q.title || '').trim();
   const text = (q.text || '').trim();
   const subtitle = (q.subtitle || '').trim();
+  if (isAfterBlocksQuestion(q)) {
+    return { subtitle, heading: afterBlocksCardHeading(q) || text || title };
+  }
   return { subtitle, heading: text || title };
 }
 
@@ -327,11 +374,18 @@ function resolveAfterBlocksPrompts(question: QuestionAnswerFormProps['question']
       text: p.text.trim(),
       answerType: p.answerType || 'text',
       options: Array.isArray(p.options) ? p.options.map(o => String(o || '').trim()).filter(Boolean) : [],
-    }));
+    }))
+    .flatMap((p) => {
+      const parts = splitPromptSentences(p.text);
+      if (parts.length <= 1) return isBlockPickPromptText(p.text) ? [] : [p];
+      const reflection = parts.filter(t => !isBlockPickPromptText(t));
+      return reflection.length ? [{ ...p, text: reflection.join(' ').trim() }] : [];
+    });
   if (prompts.length) return prompts;
+  const fallback = afterBlocksCardHeading(question) || 'Что вынесли из этого блока?';
   return [{
     id: 'legacy',
-    text: (question.text || '').trim() || 'Что вынесли из этого блока?',
+    text: fallback,
     answerType: 'text',
     options: [],
   }];
@@ -577,15 +631,14 @@ const AfterBlocksForm: React.FC<{
 
   return (
     <Div className="q-answer">
-      <QuestionPrompt question={question} />
       <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
         Шаг {stepIndex} из {totalSteps}
       </div>
 
       {step === 'event' && (
         <>
-          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
-            Где вы были?
+          <div className="q-prompt-title" style={{ marginBottom: 8 }}>
+            На каком уроке / блоке ты был(а)?
           </div>
           <div style={{ fontSize: 11, color: '#666', marginBottom: 10, lineHeight: 1.4 }}>
             Выберите событие программы — параллельный блок, в котором вы участвовали.

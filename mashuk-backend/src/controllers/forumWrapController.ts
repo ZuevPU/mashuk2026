@@ -11,6 +11,7 @@ import {
   filterEveningConfigForDirection,
   formatEveningScheduleHint,
   isForcePublishedActive,
+  mergeEveningPublishFlags,
   mergeEveningScheduleFromRequest,
   stripHiddenEveningFieldValues,
   stripPointBFromEveningConfig,
@@ -61,45 +62,6 @@ const draftSchema = z.object({
   form: z.record(z.unknown()).default({}),
 });
 
-function applyPublishFlags(
-  next: EveningQuestionnaireConfig,
-  existing: EveningQuestionnaireConfig,
-  forcePublishedRaw: unknown,
-  forceUnpublishedRaw: unknown,
-): EveningQuestionnaireConfig {
-  const hasForcePub = forcePublishedRaw === true || forcePublishedRaw === false;
-  const hasForceUnpub = forceUnpublishedRaw === true || forceUnpublishedRaw === false;
-  if (!hasForcePub && !hasForceUnpub) return next;
-
-  let forcePublished = hasForcePub ? forcePublishedRaw === true : !!existing.forcePublished;
-  let forceUnpublished = hasForceUnpub ? forceUnpublishedRaw === true : !!existing.forceUnpublished;
-  if (forcePublishedRaw === true) forceUnpublished = false;
-  if (forceUnpublishedRaw === true) forcePublished = false;
-  if (forcePublishedRaw === false && forceUnpublishedRaw === false) {
-    forcePublished = false;
-    forceUnpublished = false;
-  }
-  const {
-    forcePublished: _fp,
-    forcePublishedAt: _fpa,
-    forceUnpublished: _fu,
-    ...rest
-  } = next;
-  const keepAt = forcePublished
-    && forcePublishedRaw !== true
-    && existing.forcePublishedAt
-    ? existing.forcePublishedAt
-    : undefined;
-  return {
-    ...rest,
-    ...(forcePublished ? {
-      forcePublished: true,
-      forcePublishedAt: forcePublishedRaw === true ? new Date().toISOString() : keepAt,
-    } : {}),
-    ...(forceUnpublished ? { forceUnpublished: true } : {}),
-  };
-}
-
 export async function getAdminForumWrapQuestionnaire(req: AdminRequest, res: Response): Promise<void> {
   const shiftId = await resolveAdminShiftId(req);
   const shift = await getShiftById(shiftId);
@@ -139,8 +101,7 @@ export async function patchAdminForumWrapQuestionnaire(req: AdminRequest, res: R
     return;
   }
   next = schedule.config;
-
-  next = applyPublishFlags(next, existing, req.body.forcePublished, req.body.forceUnpublished);
+  next = mergeEveningPublishFlags(next, existing, req.body.forcePublished, req.body.forceUnpublished);
   if (!next.steps?.length) {
     res.status(400).json({ error: 'config.steps required' });
     return;

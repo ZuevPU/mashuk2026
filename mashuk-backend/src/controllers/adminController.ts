@@ -52,6 +52,7 @@ import {
   eveningScheduleApiFields,
   isEveningOpenForDay,
   isForcePublishedActive,
+  mergeEveningPublishFlags,
   mergeEveningScheduleFromRequest,
   resolveEveningConfigForDay,
   stripPointBFromEveningConfig,
@@ -1383,63 +1384,7 @@ export const patchAdminEveningQuestionnaire = async (req: AdminRequest, res: Res
     return;
   }
   next = schedule.config;
-
-  const hasForcePub = forcePublishedRaw === true || forcePublishedRaw === false;
-  const hasForceUnpub = forceUnpublishedRaw === true || forceUnpublishedRaw === false;
-
-  if (hasForcePub || hasForceUnpub) {
-    // Explicit publish controls from admin toolbar — mutually exclusive.
-    let forcePublished = hasForcePub ? forcePublishedRaw === true : !!existing.forcePublished;
-    let forceUnpublished = hasForceUnpub ? forceUnpublishedRaw === true : !!existing.forceUnpublished;
-    if (forcePublishedRaw === true) forceUnpublished = false;
-    if (forceUnpublishedRaw === true) forcePublished = false;
-    if (forcePublishedRaw === false && forceUnpublishedRaw === false) {
-      forcePublished = false;
-      forceUnpublished = false;
-    }
-    const {
-      forcePublished: _fp,
-      forcePublishedAt: _fpa,
-      forceUnpublished: _fu,
-      ...rest
-    } = next;
-    const keepAt = forcePublished
-      && forcePublishedRaw !== true
-      && existing.forcePublishedAt
-      ? existing.forcePublishedAt
-      : undefined;
-    next = {
-      ...rest,
-      ...(forcePublished ? {
-        forcePublished: true,
-        forcePublishedAt: forcePublishedRaw === true ? new Date().toISOString() : keepAt,
-      } : {}),
-      ...(forceUnpublished ? { forceUnpublished: true } : {}),
-    };
-  } else {
-    if (bodyConfig?.forcePublished) {
-      next = {
-        ...next,
-        forcePublished: true,
-        forcePublishedAt: bodyConfig.forcePublishedAt || existing.forcePublishedAt || new Date().toISOString(),
-      };
-    } else if (existing.forcePublished) {
-      next = {
-        ...next,
-        forcePublished: true,
-        ...(existing.forcePublishedAt ? { forcePublishedAt: existing.forcePublishedAt } : {}),
-      };
-    }
-    if (bodyConfig?.forceUnpublished) {
-      const { forcePublished: _fp, forcePublishedAt: _fpa, ...rest } = {
-        ...next,
-        forceUnpublished: true as const,
-      };
-      next = rest;
-    } else if (existing.forceUnpublished && !next.forcePublished) {
-      next = { ...next, forceUnpublished: true };
-    }
-  }
+  next = mergeEveningPublishFlags(next, existing, forcePublishedRaw, forceUnpublishedRaw);
 
   if (!next.steps?.length) {
     res.status(400).json({ error: 'config.steps required' });

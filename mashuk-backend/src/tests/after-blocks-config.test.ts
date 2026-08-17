@@ -15,6 +15,40 @@ describe('afterBlocksConfig', () => {
     assert.match(cfg.prompts[0].text, /вынесли/i);
   });
 
+  it('keeps pick-block + reflection as one after_blocks question', () => {
+    const fromText = normalizeAfterBlocksConfig(
+      null,
+      'На каком уроке / блоке ты был(а)? Что зафиксировал(а)?',
+    );
+    assert.equal(fromText.prompts.length, 1);
+    assert.equal(fromText.prompts[0].text, 'Что зафиксировал(а)?');
+
+    const fromTwoPrompts = normalizeAfterBlocksConfig({
+      prompts: [
+        { id: 'a', text: 'На каком блоке ты был?', answerType: 'text' },
+        { id: 'b', text: 'Что зафиксировал(а)?', answerType: 'text' },
+      ],
+    });
+    assert.equal(fromTwoPrompts.prompts.length, 1);
+    assert.equal(fromTwoPrompts.prompts[0].text, 'Что зафиксировал(а)?');
+
+    const fromCombinedPrompt = normalizeAfterBlocksConfig({
+      prompts: [{
+        id: 'a',
+        text: 'На каком уроке / блоке ты был(а)?\nЧто зафиксировал(а)?',
+        answerType: 'text',
+      }],
+    });
+    assert.equal(fromCombinedPrompt.prompts.length, 1);
+    assert.equal(fromCombinedPrompt.prompts[0].text, 'Что зафиксировал(а)?');
+  });
+
+  it('does not swallow a real evening-slot prompt', () => {
+    const cfg = normalizeAfterBlocksConfig(null, 'Вечерний слот: что уносишь с открытых уроков / практик?');
+    assert.equal(cfg.prompts.length, 1);
+    assert.match(cfg.prompts[0].text, /уносишь/i);
+  });
+
   it('keeps several prompts and drops empty ones', () => {
     const cfg = normalizeAfterBlocksConfig({
       prompts: [

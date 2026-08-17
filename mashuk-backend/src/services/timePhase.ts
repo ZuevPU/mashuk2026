@@ -350,7 +350,7 @@ export function forumDayClockMsk(
   dayNumber: number,
   hhmm: string,
 ): Date | null {
-  const m = String(hhmm || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  const m = String(hhmm || '').trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
   if (!m) return null;
   const hours = Number(m[1]);
   const minutes = Number(m[2]);

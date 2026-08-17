@@ -14,6 +14,8 @@ import {
   isFieldForDirection,
   isFieldVisible,
   isEveningDisplayField,
+  mergeEveningPublishFlags,
+  mergeEveningScheduleFromRequest,
   resolveEveningConfigForDay,
   stripHiddenEveningFieldValues,
   stripPointBFromEveningConfig,
@@ -118,6 +120,64 @@ describe('eveningQuestionnaireConfig', () => {
       }, at2130),
       false,
     );
+  });
+
+  it('save without publish flags keeps «Опубликовать сейчас»', () => {
+    const existing = {
+      steps: [],
+      forcePublished: true,
+      forcePublishedAt: 'keep',
+      noScheduledClose: true,
+    };
+    const merged = mergeEveningPublishFlags({ steps: [], opensAtMsk: '22:00' }, existing, undefined, undefined);
+    assert.equal(merged.forcePublished, true);
+    assert.equal(merged.forcePublishedAt, 'keep');
+    assert.equal(merged.forceUnpublished, undefined);
+  });
+
+  it('empty close time means no auto-unpublish', () => {
+    const settings = { startDate: new Date('2026-07-01T00:00:00.000Z'), currentDay: 1, totalDays: 8 };
+    const cfg = {
+      steps: [] as never[],
+      opensAtMsk: '18:00',
+      noScheduledClose: true,
+      opensOnDay: 1,
+    };
+    assert.equal(isEveningOpenForDay(cfg, 1, new Date('2026-07-01T14:00:00.000Z'), { settings }), false); // 17:00
+    assert.equal(isEveningOpenForDay(cfg, 1, new Date('2026-07-01T15:30:00.000Z'), { settings }), true); // 18:30
+    assert.equal(isEveningOpenForDay(cfg, 1, new Date('2026-07-01T21:30:00.000Z'), { settings }), true); // 00:30
+    assert.equal(isEveningOpenForDay(cfg, 1, new Date('2026-07-02T04:30:00.000Z'), { settings }), true); // 07:30 next
+    assert.equal(getEveningClosesAtMsk(cfg), '');
+
+    const merged = mergeEveningScheduleFromRequest(
+      { steps: [], opensAtMsk: '18:00', closesAtMsk: '23:59' },
+      { closesAtMsk: '' },
+      { steps: [], opensAtMsk: '18:00', closesAtMsk: '23:59' },
+    );
+    assert.equal(merged.error, undefined);
+    assert.equal(merged.config.noScheduledClose, true);
+    assert.equal(merged.config.closesAtMsk, undefined);
+
+    const fromSeconds = mergeEveningScheduleFromRequest(
+      { steps: [] },
+      { closesAtMsk: '23:59:00' },
+      { steps: [] },
+    );
+    assert.equal(fromSeconds.config.closesAtMsk, '23:59');
+    assert.equal(fromSeconds.config.noScheduledClose, undefined);
+  });
+
+  it('23:59 same-day window stays open until that minute', () => {
+    const settings = { startDate: new Date('2026-07-01T00:00:00.000Z'), currentDay: 1, totalDays: 8 };
+    const cfg = {
+      steps: [] as never[],
+      opensAtMsk: '18:00',
+      closesAtMsk: '23:59',
+      opensOnDay: 1,
+      closesOnDay: 1,
+    };
+    assert.equal(isEveningOpenForDay(cfg, 1, new Date('2026-07-01T20:30:00.000Z'), { settings }), true); // 23:30
+    assert.equal(isEveningOpenForDay(cfg, 1, new Date('2026-07-01T20:59:00.000Z'), { settings }), false); // 23:59
   });
 
   it('preserves publish meta when stripping Point B / normalizing experiment', () => {

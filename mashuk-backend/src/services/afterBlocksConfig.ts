@@ -22,8 +22,10 @@ export type AfterBlocksConfig = {
 };
 
 export const DEFAULT_AFTER_BLOCKS_PROMPT_TEXT = 'Что вынесли из этого блока?';
+export const AFTER_BLOCKS_PICK_PROMPT_TEXT = 'На каком уроке / блоке ты был(а)?';
 
 const PROMPT_TYPE_SET = new Set<string>(AFTER_BLOCKS_PROMPT_TYPES);
+const BLOCK_PICK_START_RE = /^(на каком (уроке|блоке)|где вы были|где ты был)/i;
 
 function newPromptId(): string {
   return `abp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -41,8 +43,42 @@ export function emptyAfterBlocksPrompt(
   };
 }
 
+export function splitPromptSentences(text: string): string[] {
+  const raw = (text || '').replace(/\r\n/g, '\n').trim();
+  if (!raw) return [];
+  const parts = raw
+    .split(/\n+/)
+    .flatMap(line => line.split(/(?<=[?？])\s+/))
+    .map(s => s.trim())
+    .filter(Boolean);
+  return parts.length ? parts : [raw];
+}
+
+/** First step of after_blocks is the event picker, not a separate text prompt. */
+export function isBlockPickPromptText(text: string): boolean {
+  const t = (text || '').trim().replace(/\s+/g, ' ');
+  return Boolean(t) && BLOCK_PICK_START_RE.test(t);
+}
+
+export function reflectionTextFromAfterBlocksSource(text?: string | null): string {
+  const parts = splitPromptSentences(text || '');
+  const reflection = parts.filter(p => !isBlockPickPromptText(p));
+  if (reflection.length) return reflection.join(' ').trim();
+  return DEFAULT_AFTER_BLOCKS_PROMPT_TEXT;
+}
+
+function withoutBlockPickPrompt(prompt: AfterBlocksPrompt): AfterBlocksPrompt | null {
+  const parts = splitPromptSentences(prompt.text);
+  if (parts.length <= 1) {
+    return isBlockPickPromptText(prompt.text) ? null : prompt;
+  }
+  const reflection = parts.filter(p => !isBlockPickPromptText(p));
+  if (!reflection.length) return null;
+  return { ...prompt, text: reflection.join(' ').trim() };
+}
+
 export function defaultAfterBlocksConfig(text?: string | null): AfterBlocksConfig {
-  const t = (text || '').trim() || DEFAULT_AFTER_BLOCKS_PROMPT_TEXT;
+  const t = reflectionTextFromAfterBlocksSource(text);
   return {
     prompts: [emptyAfterBlocksPrompt({ text: t, answerType: 'text' })],
   };
@@ -75,7 +111,10 @@ export function normalizeAfterBlocksConfig(
     const id = typeof row.id === 'string' && row.id.trim() ? row.id.trim() : newPromptId();
     prompts.push({ id, text, answerType, options });
   }
-  const kept = prompts.filter(p => p.text);
+  const kept = prompts
+    .filter(p => p.text)
+    .map(withoutBlockPickPrompt)
+    .filter((p): p is AfterBlocksPrompt => Boolean(p));
   return kept.length ? { prompts: kept } : defaultAfterBlocksConfig(fallback);
 }
 

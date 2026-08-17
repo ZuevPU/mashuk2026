@@ -1,37 +1,27 @@
 'use strict';
 
-const http = require('http');
+const net = require('net');
 
 const port = Number(process.env.PORT) || 8080;
-const targets = [
-  { host: '127.0.0.1', path: '/health', family: 4 },
-  { host: '::1', path: '/health', family: 6 },
-];
+const hosts = ['127.0.0.1', '::1'];
 
-function probe(target) {
+function ping(host) {
   return new Promise((resolve) => {
-    const req = http.get(
-      {
-        host: target.host,
-        port,
-        path: target.path,
-        timeout: 400,
-        family: target.family,
-      },
-      (res) => {
-        res.resume();
-        resolve(Boolean(res.statusCode && res.statusCode >= 200 && res.statusCode < 400));
-      },
-    );
-    req.on('error', () => resolve(false));
-    req.on('timeout', () => {
-      req.destroy();
+    const sock = net.connect({ host, port, timeout: 400 }, () => {
+      sock.end();
+      resolve(true);
+    });
+    sock.on('error', () => resolve(false));
+    sock.on('timeout', () => {
+      sock.destroy();
       resolve(false);
     });
   });
 }
 
 (async () => {
-  const hits = await Promise.all(targets.map(probe));
-  process.exit(hits.some(Boolean) ? 0 : 1);
+  for (const host of hosts) {
+    if (await ping(host)) process.exit(0);
+  }
+  process.exit(1);
 })();

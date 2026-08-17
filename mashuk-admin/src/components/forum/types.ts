@@ -58,8 +58,11 @@ export type EveningQuestionnaireConfig = {
   closesOnDay?: number;
   /** Организатор открыл анкету вручную раньше времени */
   forcePublished?: boolean;
+  forcePublishedAt?: string;
   /** Организатор снял анкету с публикации (скрыта даже после opensAtMsk) */
   forceUnpublished?: boolean;
+  /** Пустое «активна до» — не закрывать по часам */
+  noScheduledClose?: boolean;
 };
 
 export type ProfileProgressWeights = {
