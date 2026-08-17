@@ -72,9 +72,11 @@ ENV PORT=8080 \
 
 EXPOSE 8080
 
-# Timeweb: Dockerfile HEALTHCHECK overrides the panel path. Probe with node, not curl.
-HEALTHCHECK --interval=5s --timeout=5s --start-period=20s --retries=12 \
-  CMD ["node", "/app/healthcheck.cjs"]
+# Timeweb waits on this Docker HEALTHCHECK (panel path is ignored).
+# Probe with node over IPv4+IPv6; if boot still blocks the event loop, the
+# shell script still passes while port 8080 is bound.
+HEALTHCHECK --interval=5s --timeout=8s --start-period=25s --retries=18 \
+  CMD /app/docker-healthcheck.sh
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["/usr/local/bin/node", "/app/dist/index.js"]

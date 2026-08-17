@@ -4,9 +4,11 @@ const http = require('http');
 
 const port = Number(process.env.PORT) || 8080;
 const targets = [
-  { host: '127.0.0.1', path: '/health' },
+  { host: '127.0.0.1', path: '/health', family: 4 },
+  { host: '::1', path: '/health', family: 6 },
   { host: 'localhost', path: '/health' },
-  { host: '127.0.0.1', path: '/' },
+  { host: '127.0.0.1', path: '/', family: 4 },
+  { host: '::1', path: '/', family: 6 },
 ];
 
 function probe(target) {
@@ -16,8 +18,8 @@ function probe(target) {
         host: target.host,
         port,
         path: target.path,
-        timeout: 2500,
-        family: target.host === '127.0.0.1' ? 4 : undefined,
+        timeout: 800,
+        family: target.family,
       },
       (res) => {
         res.resume();
@@ -34,11 +36,10 @@ function probe(target) {
 }
 
 (async () => {
-  for (const target of targets) {
-    if (await probe(target)) {
-      process.exit(0);
-    }
+  const hits = await Promise.all(targets.map(probe));
+  if (hits.some(Boolean)) {
+    process.exit(0);
   }
-  console.error(`healthcheck: no 2xx from 127.0.0.1/localhost:${port}/health`);
+  console.error(`healthcheck: no 2xx from 127.0.0.1/::1/localhost:${port}/health`);
   process.exit(1);
 })();

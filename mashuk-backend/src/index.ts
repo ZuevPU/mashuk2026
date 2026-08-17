@@ -46,11 +46,6 @@ const server = http.createServer((req, res) => {
   sendJson(res, 503, { status: 'starting' });
 });
 
-server.on('error', (err) => {
-  console.error(`Failed to bind port ${port}:`, err);
-  process.exit(1);
-});
-
 function onListening() {
   const addr = server.address();
   const where = typeof addr === 'object' && addr
@@ -58,16 +53,40 @@ function onListening() {
     : `port ${port}`;
   console.log(`Server running on ${where}`);
   console.log('Health: /, /health, /api/health (liveness), /health/ready (DB check after boot)');
-  void boot().catch((err) => {
-    console.error('Boot failed after listen — healthcheck stays up:', err);
+  // Yield so Docker HEALTHCHECK can get /health before boot() blocks on imports.
+  setImmediate(() => {
+    void boot().catch((err) => {
+      console.error('Boot failed after listen — healthcheck stays up:', err);
+    });
   });
 }
 
-if (explicitHost) {
-  server.listen(port, explicitHost, onListening);
-} else {
-  server.listen(port, onListening);
+function bind() {
+  const fail = (err: NodeJS.ErrnoException) => {
+    console.error(`Failed to bind port ${port}:`, err);
+    process.exit(1);
+  };
+  if (explicitHost) {
+    server.once('error', fail);
+    server.listen(port, explicitHost, onListening);
+    return;
+  }
+  const onDualStackFail = (err: NodeJS.ErrnoException) => {
+    if (err.code !== 'EAFNOSUPPORT' && err.code !== 'EADDRNOTAVAIL') {
+      fail(err);
+      return;
+    }
+    server.once('error', fail);
+    server.listen(port, '0.0.0.0', onListening);
+  };
+  server.once('error', onDualStackFail);
+  server.listen({ port, host: '::', ipv6Only: false }, () => {
+    server.off('error', onDualStackFail);
+    onListening();
+  });
 }
+
+bind();
 
 async function boot() {
   const { env } = await import('./config/env.js');
