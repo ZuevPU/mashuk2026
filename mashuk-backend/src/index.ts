@@ -1,12 +1,11 @@
 import http from 'node:http';
 
 const port = Number(process.env.PORT) || 8080;
-// Timeweb probes `localhost`, which is often ::1. Binding only 0.0.0.0
-// makes that check fail while the process looks fine. Omit host so Node
-// uses dual-stack (::) when IPv6 exists, otherwise 0.0.0.0.
-const explicitHost = process.env.HOST && process.env.HOST !== '0.0.0.0'
+// Bind IPv4 so Docker HEALTHCHECK on 127.0.0.1 / /proc/net/tcp always sees the socket.
+// HOST=0.0.0.0 from the panel is the same as "all IPv4".
+const bindHost = process.env.HOST && process.env.HOST !== '0.0.0.0'
   ? process.env.HOST
-  : undefined;
+  : '0.0.0.0';
 
 type NodeHandler = (req: http.IncomingMessage, res: http.ServerResponse) => void;
 
@@ -53,7 +52,6 @@ function onListening() {
     : `port ${port}`;
   console.log(`Server running on ${where}`);
   console.log('Health: /, /health, /api/health (liveness), /health/ready (DB check after boot)');
-  // Yield so Docker HEALTHCHECK can get /health before boot() blocks on imports.
   setImmediate(() => {
     void boot().catch((err) => {
       console.error('Boot failed after listen — healthcheck stays up:', err);
@@ -61,32 +59,11 @@ function onListening() {
   });
 }
 
-function bind() {
-  const fail = (err: NodeJS.ErrnoException) => {
-    console.error(`Failed to bind port ${port}:`, err);
-    process.exit(1);
-  };
-  if (explicitHost) {
-    server.once('error', fail);
-    server.listen(port, explicitHost, onListening);
-    return;
-  }
-  const onDualStackFail = (err: NodeJS.ErrnoException) => {
-    if (err.code !== 'EAFNOSUPPORT' && err.code !== 'EADDRNOTAVAIL') {
-      fail(err);
-      return;
-    }
-    server.once('error', fail);
-    server.listen(port, '0.0.0.0', onListening);
-  };
-  server.once('error', onDualStackFail);
-  server.listen({ port, host: '::', ipv6Only: false }, () => {
-    server.off('error', onDualStackFail);
-    onListening();
-  });
-}
-
-bind();
+server.on('error', (err) => {
+  console.error(`Failed to bind ${bindHost}:${port}:`, err);
+  process.exit(1);
+});
+server.listen(port, bindHost, onListening);
 
 async function boot() {
   const { env } = await import('./config/env.js');
