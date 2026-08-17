@@ -12,6 +12,33 @@ import { apiGet, getStoredShiftId } from '../../api/client';
 import { isPointBQuestion } from '../../utils/eveningSummaryQuestion';
 import { PracticesVoteForm, type PracticesVoteConfig } from './PracticesVoteForm';
 
+/** What the participant should read: admin «Текст вопроса», not the internal title. */
+export function participantQuestionPrompt(q: {
+  title?: string | null;
+  text?: string | null;
+  subtitle?: string | null;
+}): { subtitle: string; heading: string } {
+  const title = (q.title || '').trim();
+  const text = (q.text || '').trim();
+  const subtitle = (q.subtitle || '').trim();
+  return { subtitle, heading: text || title };
+}
+
+function QuestionPrompt({
+  question,
+}: {
+  question: { title?: string | null; text?: string | null; subtitle?: string | null };
+}) {
+  const { subtitle, heading } = participantQuestionPrompt(question);
+  if (!heading && !subtitle) return null;
+  return (
+    <div className="q-prompt">
+      {subtitle ? <div className="q-prompt-sub">{subtitle}</div> : null}
+      {heading ? <div className="q-prompt-title">{heading}</div> : null}
+    </div>
+  );
+}
+
 const CHECKIN_EMOTIONS = [
   { id: 'joy', label: 'Радость', icon: '😊' },
   { id: 'calm', label: 'Спокойствие', icon: '😌' },
@@ -49,6 +76,7 @@ interface QuestionAnswerFormProps {
     type: string;
     title: string;
     text?: string;
+    subtitle?: string;
     timePoint?: string;
     block?: string;
     questionKind?: string | null;
@@ -548,8 +576,8 @@ const AfterBlocksForm: React.FC<{
     : 0;
 
   return (
-    <Div>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{question.title}</div>
+    <Div className="q-answer">
+      <QuestionPrompt question={question} />
       <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
         Шаг {stepIndex} из {totalSteps}
       </div>
@@ -655,8 +683,8 @@ const AfterBlocksForm: React.FC<{
               </div>
             )}
           </div>
-          <FormItem top={current.prompt.text}>
-            <AfterBlocksPromptFields
+          <div className="q-prompt-title" style={{ marginBottom: 10 }}>{current.prompt.text}</div>
+          <AfterBlocksPromptFields
               prompt={current.prompt}
               value={currentValue}
               onChange={value => {
@@ -666,7 +694,6 @@ const AfterBlocksForm: React.FC<{
                 }));
               }}
             />
-          </FormItem>
           {current.prompt.answerType === 'text' && (
             <div style={{ fontSize: 11, color: currentOk ? '#888' : '#B8621A', marginBottom: 4 }}>
               {currentTextLen < MIN_LESSON_REFLECTION_CHARS
@@ -750,9 +777,8 @@ const LessonReflectionForm: React.FC<{
   };
 
   return (
-    <Div>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{question.title}</div>
-      {question.text && <div style={{ fontSize: 11, color: '#666', marginBottom: 12 }}>{question.text}</div>}
+    <Div className="q-answer">
+      <QuestionPrompt question={question} />
       <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>Шаг {step + 1} из 2</div>
 
       {step === 0 && (
@@ -868,8 +894,8 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
       : [];
     const alreadyVoted = !!myAnswer;
     return (
-      <Div>
-        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{question.title}</div>
+      <Div className="q-answer">
+        <QuestionPrompt question={question} />
         <PracticesVoteForm
           config={cfg}
           initialLikedIds={initialLiked}
@@ -893,11 +919,8 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
       : null;
     const body = formatStoredAnswer(myAnswer, question.type) || 'Ответ сохранён';
     return (
-      <Div>
-        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{question.title}</div>
-        {question.text && (
-          <div style={{ fontSize: 11, color: '#666', marginBottom: 10, lineHeight: 1.4 }}>{question.text}</div>
-        )}
+      <Div className="q-answer">
+        <QuestionPrompt question={question} />
         <div style={{ fontSize: 12, color: '#2F855A', marginBottom: 8, fontWeight: 600 }}>
           Ваш ответ{when ? ` · ${when}` : ''}
         </div>
@@ -996,9 +1019,8 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
   };
 
   return (
-    <Div>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{question.title}</div>
-      {question.text && <div style={{ fontSize: 11, color: '#666', marginBottom: 12 }}>{question.text}</div>}
+    <Div className="q-answer">
+      <QuestionPrompt question={question} />
 
       {question.type === 'checkin' && (
         <>

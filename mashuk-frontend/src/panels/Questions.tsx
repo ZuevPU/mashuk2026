@@ -3,7 +3,7 @@ import { Panel, PanelHeader, Group, Spinner, Textarea, Button, ModalRoot, ModalP
 import { useActiveVkuiLocation } from '@vkontakte/vk-mini-apps-router';
 import { apiGet, apiPost, ApiError, getHashSearchParams } from '../api/client';
 import { useAppModal } from '../App';
-import { QuestionAnswerForm } from '../components/questions/QuestionAnswerForm';
+import { QuestionAnswerForm, participantQuestionPrompt } from '../components/questions/QuestionAnswerForm';
 import { EveningDaySummaryFlow } from '../components/questions/EveningDaySummaryFlow';
 import { ExchangePeerSection, type ExchangeQuestion } from '../components/questions/ExchangePeerSection';
 import { PriorityAction } from '../components/home/DashboardCards';
@@ -587,7 +587,7 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
             <ModalPageHeader>
               {viewingOwnAnswer
                 ? 'Мой ответ'
-                : (isEveningSummary ? 'Итоговая анкета' : activeQuestion.title)}
+                : (isEveningSummary ? 'Итоговая анкета' : (activeQuestion.reflectionLabel || 'Вопрос'))}
             </ModalPageHeader>
             {isEveningSummary && !viewingOwnAnswer ? (
               <EveningDaySummaryFlow
@@ -663,7 +663,9 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
     return 'Ждёт ответа';
   };
 
-  const renderAnsweredCard = (q: any) => (
+  const renderAnsweredCard = (q: any) => {
+    const prompt = participantQuestionPrompt(q);
+    return (
     <div
       key={q.id}
       className="rq-item m-card rq-done"
@@ -671,7 +673,8 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
       onClick={() => openQuestion(q.id)}
     >
       <div className="rq-tag">{q.reflectionLabel || q.block || q.type}</div>
-      <div className="rq-q">{q.title}</div>
+      {prompt.subtitle ? <div className="q-prompt-sub">{prompt.subtitle}</div> : null}
+      <div className="rq-q">{prompt.heading || q.title}</div>
       {q.dayNumber != null && (
         <div className="rq-from">День {q.dayNumber}</div>
       )}
@@ -680,7 +683,8 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
       )}
       <div className="rq-btn" style={{ marginTop: 8 }}>Смотреть ответ</div>
     </div>
-  );
+    );
+  };
 
   return (
     <Panel id={id}>
@@ -723,10 +727,13 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
             {unanswered.length > 0 && (
               <>
                 <div className="rq-hdr"><span className="rq-hdr-t">Не отвечено · {unanswered.length}</span></div>
-                {unanswered.map(q => (
+                {unanswered.map(q => {
+                  const prompt = participantQuestionPrompt(q);
+                  return (
                   <div key={q.id} className="rq-item m-card" style={{ marginBottom: 8 }}>
                     <div className="rq-tag">{q.reflectionLabel || q.block || q.type}</div>
-                    <div className="rq-q">{q.title}</div>
+                    {prompt.subtitle ? <div className="q-prompt-sub">{prompt.subtitle}</div> : null}
+                    <div className="rq-q">{prompt.heading || q.title}</div>
                     <div className="rq-from" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
                       <span>
                         {q.timeWindowLabel || (q.status === 'overdue'
@@ -743,19 +750,23 @@ export const QuestionsPanel: React.FC<{ id: string; onActivity?: () => void }> =
                       <div className="rq-btn" onClick={() => openQuestion(q.id)}>Ответить</div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </>
             )}
             {locked.length > 0 && (
               <>
                 <div className="rq-hdr" style={{ marginTop: 12 }}><span className="rq-hdr-t">Заморожено</span></div>
-                {locked.map(q => (
+                {locked.map(q => {
+                  const prompt = participantQuestionPrompt(q);
+                  return (
                   <div key={q.id} className="rq-item m-card" style={{ marginBottom: 8, opacity: 0.5 }}>
                     <div className="rq-tag">{q.reflectionLabel || q.block || q.type}</div>
-                    <div className="rq-q">{q.title}</div>
+                    <div className="rq-q">{prompt.heading || q.title}</div>
                     <div className="rq-from">🔒 День закончился</div>
                   </div>
-                ))}
+                  );
+                })}
               </>
             )}
             {unanswered.length === 0 && locked.length === 0 && (

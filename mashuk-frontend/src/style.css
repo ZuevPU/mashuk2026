@@ -1508,7 +1508,35 @@ body {
 /* Questions / exchange */
 .rq-item { color: var(--m-text-main); }
 .rq-tag { display: inline-flex; font-size: 8px; font-weight: 700; text-transform: uppercase; color: var(--m-accent); background: #FFF0E6; border-radius: 5px; padding: 2px 7px; margin-bottom: 4px; }
-.rq-q { font-size: 12px; font-weight: 700; line-height: 1.4; color: var(--m-text-main); }
+.rq-q { font-size: 13px; font-weight: 700; line-height: 1.4; color: var(--m-text-main); white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+
+.q-prompt { margin-bottom: 12px; }
+.q-prompt-sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.q-prompt-title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--m-text-main);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.q-answer .vkuiFormItem__top {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: unset !important;
+  max-width: 100%;
+  line-height: 1.4;
+  word-break: break-word;
+  display: block;
+}
 .rq-from { font-size: 9px; color: #aaa; margin-top: 2px; }
 .rq-btn { display: inline-block; background: var(--m-accent); color: #fff; font-size: 10px; font-weight: 700; border-radius: 8px; padding: 6px 14px; margin-top: 7px; cursor: pointer; border: none; font-family: inherit; }
 
