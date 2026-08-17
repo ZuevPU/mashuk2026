@@ -199,13 +199,19 @@ export async function completeSubmissionRewards(
     /** Admin manual card: allow awarding beyond once/daily task_complete caps. */
     ignoreMaxAccruals?: boolean;
   } = {},
-): Promise<{ pointsLogId: number | null; userMedalId: number | null; lifecycleStage: LifecycleStage }> {
+): Promise<{
+  pointsLogId: number | null;
+  userMedalId: number | null;
+  lifecycleStage: LifecycleStage;
+  newMedals: { id: number; name: string }[];
+}> {
   const pts = await resolveTaskAwardPoints(task);
   const settings = await getForumSettings(task.shiftId);
   const forumDay = resolveTaskAwardForumDay(task, resolveEffectiveCurrentDay(settings));
   const leaderId = participantIds[0];
   let pointsLogId: number | null = null;
   let userMedalId: number | null = null;
+  const newMedals: { id: number; name: string }[] = [];
 
   for (const pid of participantIds) {
     if (pts > 0) {
@@ -217,6 +223,9 @@ export async function completeSubmissionRewards(
     }
     const medal = await awardTaskLinkedMedals(pid, task, submissionId);
     if (pid === leaderId) userMedalId = medal.userMedalId;
+    if (medal.medal && !newMedals.some(m => m.id === medal.medal!.id)) {
+      newMedals.push(medal.medal);
+    }
     await evaluateMedalsForParticipant(pid);
   }
 
@@ -236,7 +245,7 @@ export async function completeSubmissionRewards(
     verificationType: opts.verificationType ?? undefined,
   }).where(eq(taskSubmissions.id, submissionId));
 
-  return { pointsLogId, userMedalId, lifecycleStage };
+  return { pointsLogId, userMedalId, lifecycleStage, newMedals };
 }
 
 export async function markSubmissionRejected(

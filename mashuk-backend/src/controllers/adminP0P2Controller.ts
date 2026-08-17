@@ -935,10 +935,20 @@ export const revokeParticipantPoints = async (req: AdminRequest, res: Response):
   const reason = String(req.body?.reason || 'Аннулировано модератором').slice(0, 500);
   const { revokePointsLogEntry } = await import('../services/pointsService.js');
   const { sendPushNotification } = await import('../services/pushService.js');
+  const [logRow] = await db.select().from(pointsLog).where(eq(pointsLog.id, logId)).limit(1);
   const result = await revokePointsLogEntry(logId, participantId, reason);
   if (!result.ok) {
     res.status(400).json({ error: result.error });
     return;
+  }
+  if (logRow) {
+    const { releaseTaskAfterPointsRevoke } = await import('../services/adminManualTaskService.js');
+    await releaseTaskAfterPointsRevoke({
+      participantId,
+      actionType: logRow.actionType,
+      submissionId: logRow.submissionId,
+      pointsLogId: logId,
+    });
   }
   const { pushCopy } = await import('../services/pushCopy.js');
   await sendPushNotification(
@@ -1019,10 +1029,19 @@ export const revokeSuspiciousParticipantPoints = async (req: AdminRequest, res: 
 
   const { revokePointsLogEntry } = await import('../services/pointsService.js');
   const { sendPushNotification } = await import('../services/pushService.js');
+  const { releaseTaskAfterPointsRevoke } = await import('../services/adminManualTaskService.js');
   let revoked = 0;
   for (const row of toRevoke) {
     const result = await revokePointsLogEntry(row.id, participantId, reason);
-    if (result.ok) revoked += 1;
+    if (result.ok) {
+      revoked += 1;
+      await releaseTaskAfterPointsRevoke({
+        participantId,
+        actionType: row.actionType,
+        submissionId: row.submissionId,
+        pointsLogId: row.id,
+      });
+    }
   }
 
   if (notify && revoked > 0) {

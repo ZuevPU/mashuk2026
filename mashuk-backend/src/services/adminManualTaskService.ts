@@ -162,15 +162,19 @@ export async function stripSubmissionAwards(
   reason = 'Изменение решения модерации',
 ): Promise<number[]> {
   const revokedLogIds = await revokePointsForSubmission(submission, task, reason);
+  await db.update(taskSubmissions).set({
+    userMedalId: null,
+    pointsLogId: null,
+    pointsAwarded: 0,
+  }).where(eq(taskSubmissions.id, submission.id));
   await db.delete(userMedals).where(eq(userMedals.submissionId, submission.id));
   if (submission.userMedalId) {
     await db.delete(userMedals).where(eq(userMedals.id, submission.userMedalId));
   }
-  await db.update(taskSubmissions).set({
-    pointsAwarded: 0,
-    pointsLogId: null,
-    userMedalId: null,
-  }).where(eq(taskSubmissions.id, submission.id));
+  await db.delete(taskQrScans).where(and(
+    eq(taskQrScans.participantId, submission.participantId),
+    eq(taskQrScans.taskId, submission.taskId),
+  ));
 
   const affected = new Set<number>([submission.participantId]);
   ((submission.teamMemberIds as number[]) || []).forEach(id => affected.add(id));
@@ -196,23 +200,7 @@ export async function adminRevokeTaskSubmission(
 
   const revokeReason = reason?.trim() || 'Отмена выполнения администратором';
   const revokedLogIds = await revokePointsForSubmission(existing, task, revokeReason);
-
-  // Medals awarded for this submission must not stay after cancel.
-  await db.delete(userMedals).where(eq(userMedals.submissionId, submissionId));
-  if (existing.userMedalId) {
-    await db.delete(userMedals).where(eq(userMedals.id, existing.userMedalId));
-  }
-
-  // QR success rows block re-scan even after submission delete.
-  await db.delete(taskQrScans).where(and(
-    eq(taskQrScans.participantId, existing.participantId),
-    eq(taskQrScans.taskId, existing.taskId),
-    eq(taskQrScans.outcome, 'success'),
-  ));
-  await db.delete(taskQrScans).where(eq(taskQrScans.submissionId, submissionId));
-
-  await db.delete(taskTeamConfirmations).where(eq(taskTeamConfirmations.submissionId, submissionId));
-  await db.delete(taskSubmissions).where(eq(taskSubmissions.id, submissionId));
+  await releaseTaskProgress(existing);
 
   const affectedParticipants = new Set<number>([existing.participantId]);
   const teamIds = (existing.teamMemberIds as number[]) || [];
@@ -231,4 +219,65 @@ export async function adminRevokeTaskSubmission(
     submissionId,
     revokedLogIds,
   };
+}
+
+/** Drop medals, QR scans and the submission row so the participant can do the task again. */
+export async function releaseTaskProgress(
+  submission: typeof taskSubmissions.$inferSelect,
+): Promise<void> {
+  const submissionId = submission.id;
+
+  // Break possible FK: task_submissions.user_medal_id → user_medals.id
+  await db.update(taskSubmissions).set({
+    userMedalId: null,
+    pointsLogId: null,
+    pointsAwarded: 0,
+  }).where(eq(taskSubmissions.id, submissionId));
+
+  await db.delete(userMedals).where(eq(userMedals.submissionId, submissionId));
+  if (submission.userMedalId) {
+    await db.delete(userMedals).where(eq(userMedals.id, submission.userMedalId));
+  }
+
+  // Any leftover scan (success or blocked_*) keeps QR unique / "already done" guards.
+  await db.delete(taskQrScans).where(and(
+    eq(taskQrScans.participantId, submission.participantId),
+    eq(taskQrScans.taskId, submission.taskId),
+  ));
+  const teamIds = (submission.teamMemberIds as number[]) || [];
+  for (const pid of teamIds) {
+    if (pid === submission.participantId) continue;
+    await db.delete(taskQrScans).where(and(
+      eq(taskQrScans.participantId, pid),
+      eq(taskQrScans.taskId, submission.taskId),
+    ));
+  }
+
+  await db.delete(taskTeamConfirmations).where(eq(taskTeamConfirmations.submissionId, submissionId));
+  await db.delete(taskSubmissions).where(eq(taskSubmissions.id, submissionId));
+}
+
+const TASK_POINT_ACTIONS = new Set(['task_complete', 'admin_manual_task']);
+
+/** After XP revoke from the card / levels tab, also uncomplete the linked task. */
+export async function releaseTaskAfterPointsRevoke(opts: {
+  participantId: number;
+  actionType?: string | null;
+  submissionId?: number | null;
+  pointsLogId: number;
+}): Promise<void> {
+  if (opts.actionType && !TASK_POINT_ACTIONS.has(opts.actionType)) return;
+
+  let submission: typeof taskSubmissions.$inferSelect | undefined;
+  if (opts.submissionId) {
+    const [row] = await db.select().from(taskSubmissions).where(eq(taskSubmissions.id, opts.submissionId)).limit(1);
+    submission = row;
+  }
+  if (!submission) {
+    const [byLog] = await db.select().from(taskSubmissions)
+      .where(eq(taskSubmissions.pointsLogId, opts.pointsLogId)).limit(1);
+    submission = byLog;
+  }
+  if (!submission || submission.participantId !== opts.participantId) return;
+  await releaseTaskProgress(submission);
 }

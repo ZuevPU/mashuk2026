@@ -13,8 +13,9 @@ describe('§9 rating', () => {
     assert.equal(pointsTrackForAction('day_complete_bonus'), 'path');
   });
 
-  it('medal task doubles XP', () => {
-    assert.equal(effectiveTaskPoints({ points: 15, medalTask: true }), 30);
+  it('medal task keeps the card XP (does not double)', () => {
+    assert.equal(effectiveTaskPoints({ points: 40, medalTask: true }), 40);
     assert.equal(effectiveTaskPoints({ points: 15, medalTask: false }), 15);
+    assert.equal(effectiveTaskPoints({ points: 0, medalTask: true }), 0);
   });
 });

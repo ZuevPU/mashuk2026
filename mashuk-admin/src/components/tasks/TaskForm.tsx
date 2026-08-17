@@ -33,6 +33,7 @@ export function TaskForm({
   draft,
   categories,
   places,
+  medals = [],
   totalDays,
   isNew,
   editingKey,
@@ -314,10 +315,18 @@ export function TaskForm({
           Проверка играпрактиком
         </label>
         <label className="adm-forum-check">
-          <input type="checkbox" checked={draft.medalTask} onChange={e => onChange({ medalTask: e.target.checked })} />
+          <input
+            type="checkbox"
+            checked={draft.medalTask}
+            onChange={e => {
+              const on = e.target.checked;
+              onChange({ medalTask: on, medalId: on ? draft.medalId : '' });
+            }}
+          />
           Особое (награда медалью)
         </label>
         <p className="adm-muted" style={{ fontSize: 12, margin: '4px 0 8px' }}>
+          Баллы из поля выше начисляются как есть — медаль их не удваивает.
           Публикация задания не шлёт рассылку. Оповещение — только из «Уведомления → По дням».
         </p>
         <label className="adm-forum-check">
@@ -325,6 +334,27 @@ export function TaskForm({
           Повтор при отклонении
         </label>
       </div>
+
+      {draft.medalTask && (
+        <label className="adm-field">
+          <span className="adm-label">Какую медаль выдать</span>
+          <select
+            className="adm-input"
+            value={draft.medalId === '' ? '' : String(draft.medalId)}
+            onChange={e => onChange({ medalId: e.target.value ? Number(e.target.value) : '' })}
+          >
+            <option value="">— выберите медаль этой смены —</option>
+            {medals.map(m => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+          {medals.length === 0 && (
+            <span className="adm-muted" style={{ fontSize: 11, display: 'block', marginTop: 6 }}>
+              В этой смене нет медалей. Скопируйте каталог из первой смены или создайте медаль во вкладке «Медали».
+            </span>
+          )}
+        </label>
+      )}
 
       <div className="adm-forum-grid-2">
         <label className="adm-field">

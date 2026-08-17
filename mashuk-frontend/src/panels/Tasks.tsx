@@ -306,7 +306,7 @@ const TaskSubmitModal = ({
     autoQrSubmitRef.current = true;
     setSubmitting(true);
     setFormError(null);
-    void apiPost<{ xpAwarded?: number; track?: 'path' | 'experience' }>(`/tasks/${taskId}/submit`, {
+    void apiPost<{ xpAwarded?: number; track?: 'path' | 'experience'; newMedals?: { id: number; name: string }[] }>(`/tasks/${taskId}/submit`, {
       answerText: 'Готово',
       qrToken: effectiveQr,
       deviceKey: getDeviceKey(),
@@ -323,6 +323,7 @@ const TaskSubmitModal = ({
           tone: 'success',
           xpAwarded: xp,
           track: res.track ?? 'experience',
+          newMedals: res.newMedals,
         });
       })
       .catch((err) => {
@@ -401,7 +402,7 @@ const TaskSubmitModal = ({
     setFormError(null);
     try {
       const teamIds = selectedTeam.map(p => p.id);
-      const res = await apiPost<{ xpAwarded?: number; track?: 'path' | 'experience' }>(`/tasks/${taskId}/submit`, {
+      const res = await apiPost<{ xpAwarded?: number; track?: 'path' | 'experience'; newMedals?: { id: number; name: string }[] }>(`/tasks/${taskId}/submit`, {
         answerText: isQr ? 'Готово' : (submitAnswerText() || (isAuto ? 'Готово' : undefined)),
         photoUrl: isQr ? null : photoUrl,
         postUrl: isQr ? undefined : (postUrl || undefined),
@@ -423,6 +424,7 @@ const TaskSubmitModal = ({
         },
         xpAwarded: xp,
         track: res.track ?? 'experience',
+        newMedals: res.newMedals,
       });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Ошибка отправки';

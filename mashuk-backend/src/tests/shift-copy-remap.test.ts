@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { markOnboardingCopiedForReview, remapCopiedShowWhen, remapEveningLinkedEvents, remapLinkedIds } from '../services/shiftCopy.js';
+import { markOnboardingCopiedForReview, remapCopiedMedalId, remapCopiedShowWhen, remapEveningLinkedEvents, remapLinkedIds, shouldSkipCopiedModule } from '../services/shiftCopy.js';
 import { remapAudienceDirectionTree } from '../services/shiftCatalogs.js';
 import { unpublishClonedQuestionnaire } from '../services/eveningQuestionnaireConfig.js';
 
@@ -91,5 +91,21 @@ describe('shift copy id remap', () => {
       [],
     );
     assert.equal(markOnboardingCopiedForReview(null).needsReview, true);
+  });
+});
+
+describe('shift copy medals', () => {
+  it('allows recopy when the previous copy left the target empty', () => {
+    assert.equal(shouldSkipCopiedModule(true, 0), false);
+    assert.equal(shouldSkipCopiedModule(true, 3), true);
+    assert.equal(shouldSkipCopiedModule(true, 3, true), false);
+    assert.equal(shouldSkipCopiedModule(false, 5), false);
+  });
+
+  it('remaps task medal ids onto the copied catalog', () => {
+    const map = new Map<number, number>([[10, 110], [11, 111]]);
+    assert.equal(remapCopiedMedalId(10, map), 110);
+    assert.equal(remapCopiedMedalId(99, map), null);
+    assert.equal(remapCopiedMedalId(null, map), null);
   });
 });

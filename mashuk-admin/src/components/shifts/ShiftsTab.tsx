@@ -249,11 +249,13 @@ export function ShiftsTab({ adminFetch, act, reloadKey }: AdminTabProps) {
     targetCounts?: Record<string, number> | null;
   }) => {
     setCopyPreview(res.summary || 'Предпросмотр недоступен');
+    const counts = res.targetCounts ?? null;
+    // Empty previous copy (0 rows) must stay selectable — otherwise medals never recopy.
     const locked = (res.alreadyCopied || []).filter((m): m is CopyModule =>
-      COPY_MODULES.some(x => x.id === m),
+      COPY_MODULES.some(x => x.id === m) && (counts?.[m] ?? 0) > 0,
     );
     setAlreadyCopied(locked);
-    setTargetCounts(res.targetCounts ?? null);
+    setTargetCounts(counts);
     setCopyModules(COPY_MODULES.map(m => m.id).filter(id => !locked.includes(id)));
     setConfirmReplace(false);
   };

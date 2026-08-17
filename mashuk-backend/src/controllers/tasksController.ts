@@ -509,6 +509,7 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
     }
 
     let xpAwarded = 0;
+    let newMedals: { id: number; name: string }[] = [];
     if (isTeam && submission) {
       await db.delete(taskTeamConfirmations).where(eq(taskTeamConfirmations.submissionId, submission.id));
       await createTeamConfirmations(submission.id, req.participant!.id, teamIds!);
@@ -519,8 +520,8 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
         verificationType: 'auto',
       });
       xpAwarded = (await resolveTaskAwardPoints(task)) || 0;
+      newMedals = rewards.newMedals || [];
       [submission] = await db.select().from(taskSubmissions).where(eq(taskSubmissions.id, submission.id)).limit(1);
-      void rewards;
       if (isQrSubmit && qrMatches && requestDeviceKey) {
         const { recordQrScan } = await import('../services/qrScanGuard.js');
         try {
@@ -568,6 +569,7 @@ export const submitTask = async (req: ParticipantRequest, res: Response): Promis
       submission: submission ? enrichSubmissionRow(submission) : null,
       xpAwarded,
       track: 'experience',
+      newMedals,
     });
   } catch (error) {
     console.error('submitTask:', error);
@@ -687,6 +689,7 @@ export const scanTask = async (req: ParticipantRequest, res: Response): Promise<
       if (res.statusCode >= 400) return originalJson(body);
       const b = body as {
         xpAwarded?: number;
+        newMedals?: { id: number; name: string }[];
         submission?: { id?: number; pointsAwarded?: number | null } | null;
       };
       const points = b.xpAwarded ?? b.submission?.pointsAwarded ?? 0;
@@ -698,6 +701,7 @@ export const scanTask = async (req: ParticipantRequest, res: Response): Promise<
         submissionId: b.submission?.id ?? null,
         xpAwarded: points,
         track: 'experience',
+        newMedals: b.newMedals ?? [],
       });
     }) as typeof res.json;
 

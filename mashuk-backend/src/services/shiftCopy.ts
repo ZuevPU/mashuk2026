@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray, ne } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNotNull, ne } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   adminPushNotifications,
@@ -61,6 +61,25 @@ export function remapLinkedIds(ids: unknown, map: Map<number, number>): number[]
     if (mapped) out.push(mapped);
   }
   return out;
+}
+
+/** Empty previous copy (occupancy 0) must not lock the module forever. */
+export function shouldSkipCopiedModule(
+  alreadyCopied: boolean,
+  occupancy: number,
+  confirmReplace = false,
+): boolean {
+  if (!alreadyCopied) return false;
+  if (occupancy <= 0) return false;
+  return !confirmReplace;
+}
+
+export function remapCopiedMedalId(
+  sourceMedalId: number | null | undefined,
+  medalIdMap: Map<number, number>,
+): number | null {
+  if (!sourceMedalId) return null;
+  return medalIdMap.get(sourceMedalId) ?? null;
 }
 
 type ShowWhen = { questionId: number; optionValues: string[] };
@@ -216,13 +235,19 @@ export async function copyShiftModules(opts: {
     const already = alreadyRows
       .map(r => r.module)
       .filter((m): m is ShiftCopyModule => allowed.has(m));
-    const skipped = requested.filter(m => already.includes(m));
-    const toCopy = requested.filter(m => !already.includes(m));
+    const occupancy = await moduleOccupancy(target.id);
+    const skipped = requested.filter(m =>
+      shouldSkipCopiedModule(already.includes(m), occupancy[m], opts.confirmReplace),
+    );
+    const toCopy = requested.filter(m => !skipped.includes(m));
+    // Tasks keep medalId — copy medals even if the medals checkbox was off / previously empty.
+    if (toCopy.includes('tasks') && !toCopy.includes('medals') && occupancy.medals === 0) {
+      toCopy.push('medals');
+    }
     if (!toCopy.length) {
       return { shift: target, copied: [], replaced: [], skipped };
     }
 
-    const occupancy = await moduleOccupancy(target.id);
     const replaced = toCopy.filter(m => occupancy[m] > 0);
     if (replaced.length && !opts.confirmReplace) {
       throw new Error(
@@ -260,10 +285,37 @@ export async function copyShiftModules(opts: {
         await tx.delete(medals).where(eq(medals.shiftId, target.id));
       }
       const srcMedals = await tx.select().from(medals).where(eq(medals.shiftId, opts.sourceId));
-      for (const m of srcMedals) {
+      const linkedIds = [...new Set(
+        (await tx.select({ medalId: tasks.medalId }).from(tasks).where(and(
+          eq(tasks.shiftId, opts.sourceId),
+          isNotNull(tasks.medalId),
+        ))).map(r => r.medalId).filter((id): id is number => id != null),
+      )].filter(id => !srcMedals.some(m => m.id === id));
+      const extraMedals = linkedIds.length
+        ? await tx.select().from(medals).where(inArray(medals.id, linkedIds))
+        : [];
+      const toInsert = [...srcMedals, ...extraMedals];
+      for (const m of toInsert) {
         const { id: oldId, ...rest } = m;
         const [created] = await tx.insert(medals).values({ ...rest, shiftId: target.id }).returning();
         medalIdMap.set(oldId, created.id);
+      }
+      // Repair tasks already sitting on the target from an earlier copy without medals.
+      if (medalIdMap.size) {
+        const srcTaskMedals = await tx.select({ title: tasks.title, medalId: tasks.medalId })
+          .from(tasks).where(eq(tasks.shiftId, opts.sourceId));
+        const dstTasks = await tx.select({ id: tasks.id, title: tasks.title, medalId: tasks.medalId })
+          .from(tasks).where(eq(tasks.shiftId, target.id));
+        for (const src of srcTaskMedals) {
+          const mapped = remapCopiedMedalId(src.medalId, medalIdMap);
+          if (!mapped) continue;
+          for (const dst of dstTasks) {
+            if (dst.title === src.title && dst.medalId !== mapped) {
+              await tx.update(tasks).set({ medalId: mapped }).where(eq(tasks.id, dst.id));
+              dst.medalId = mapped;
+            }
+          }
+        }
       }
     }
 
@@ -529,7 +581,7 @@ export async function copyShiftModules(opts: {
           qrToken: null,
           status: 'draft',
           isHidden: false,
-          medalId: rest.medalId ? (medalIdMap.get(rest.medalId) ?? null) : null,
+          medalId: remapCopiedMedalId(rest.medalId, medalIdMap),
           programPlaceId: rest.programPlaceId
             ? (catalogs.placeMap.get(rest.programPlaceId) ?? null)
             : null,
