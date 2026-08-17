@@ -43,6 +43,17 @@ describe('afterBlocksConfig', () => {
     assert.equal(fromCombinedPrompt.prompts[0].text, 'Что зафиксировал(а)?');
   });
 
+  it('keeps the full reflection after the pick-block sentence', () => {
+    const cfg = normalizeAfterBlocksConfig(
+      null,
+      'На каком уроке / блоке ты был(а)? Что зафиксировал(а)? Напиши мысль, которую заберёшь с собой.',
+    );
+    assert.equal(
+      cfg.prompts[0].text,
+      'Что зафиксировал(а)? Напиши мысль, которую заберёшь с собой.',
+    );
+  });
+
   it('does not swallow a real evening-slot prompt', () => {
     const cfg = normalizeAfterBlocksConfig(null, 'Вечерний слот: что уносишь с открытых уроков / практик?');
     assert.equal(cfg.prompts.length, 1);

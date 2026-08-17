@@ -47,7 +47,7 @@ function resolvePreviewPrompts(draft: QuestionDraft): AfterBlocksPreviewPrompt[]
   const seedParts = split(draft.text).filter(t => !pickRe.test(t.replace(/\s+/g, ' ')));
   return [{
     id: 'legacy',
-    text: seedParts[0] || 'Что вынесли из этого блока?',
+    text: seedParts.join(' ') || 'Что вынесли из этого блока?',
     answerType: 'text',
     options: [],
   }];

@@ -38,19 +38,21 @@ function isAfterBlocksQuestion(q: {
   return q.questionKind === 'after_blocks' || q.reflectionKind === 'after_blocks';
 }
 
+function afterBlocksPromptBody(text: string): string {
+  return splitPromptSentences(text).filter(s => !isBlockPickPromptText(s)).join(' ').trim();
+}
+
 function afterBlocksCardHeading(q: {
   title?: string | null;
   text?: string | null;
   afterBlocksConfig?: { prompts?: Array<{ text?: string | null }> } | null;
 }): string {
   const fromCfg = (q.afterBlocksConfig?.prompts || [])
-    .map(p => (p.text || '').trim())
-    .filter(Boolean)
-    .flatMap(splitPromptSentences)
-    .filter(t => !isBlockPickPromptText(t));
-  if (fromCfg.length) return fromCfg[0];
-  const fromText = splitPromptSentences(q.text || '').filter(t => !isBlockPickPromptText(t));
-  if (fromText.length) return fromText[0];
+    .map(p => afterBlocksPromptBody(p.text || ''))
+    .filter(Boolean);
+  if (fromCfg.length) return fromCfg.join('\n');
+  const fromText = afterBlocksPromptBody(q.text || '');
+  if (fromText) return fromText;
   return (q.title || '').trim();
 }
 
@@ -338,10 +340,10 @@ const PointBForm: React.FC<{ onSubmit: (data: unknown) => Promise<void> }> = ({ 
               <div style={{ fontSize: 11, color: '#666' }}>{r.keywords}</div>
             </div>
           ))}
-          <FormItem top="Почему выбрал эту роль для развития?">
+          <FormItem top="Почему выбрал эту роль для развития?" topMultiline>
             <Textarea value={growthWhy} onChange={e => setGrowthWhy(e.target.value)} placeholder="Коротко своими словами…" />
           </FormItem>
-          <FormItem top="Следующий эксперимент после программы (опционально)">
+          <FormItem top="Следующий эксперимент после программы (опционально)" topMultiline>
             <Textarea value={nextExperiment} onChange={e => setNextExperiment(e.target.value)} placeholder="Одно конкретное действие…" />
           </FormItem>
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
@@ -629,6 +631,8 @@ const AfterBlocksForm: React.FC<{
     ? String(currentValue || '').trim().length
     : 0;
 
+  const reflectionHeading = afterBlocksCardHeading(question);
+
   return (
     <Div className="q-answer">
       <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
@@ -640,6 +644,9 @@ const AfterBlocksForm: React.FC<{
           <div className="q-prompt-title" style={{ marginBottom: 8 }}>
             На каком уроке / блоке ты был(а)?
           </div>
+          {reflectionHeading ? (
+            <div className="q-prompt-sub" style={{ marginBottom: 8 }}>{reflectionHeading}</div>
+          ) : null}
           <div style={{ fontSize: 11, color: '#666', marginBottom: 10, lineHeight: 1.4 }}>
             Выберите событие программы — параллельный блок, в котором вы участвовали.
           </div>
@@ -880,7 +887,7 @@ const LessonReflectionForm: React.FC<{
               Урок: <b>{selected.title}</b>
             </div>
           )}
-          <FormItem top="Что вынесли из урока?">
+          <FormItem top="Что вынесли из урока?" topMultiline>
             <Textarea
               value={text}
               onChange={e => setText(e.target.value)}
@@ -1095,7 +1102,7 @@ export const QuestionAnswerForm: React.FC<QuestionAnswerFormProps> = ({
           </div>
           <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Энергия: {energy}/10</div>
           <Slider min={0} max={10} step={1} value={energy} onChange={setEnergy} />
-          <FormItem top="С чем связано состояние" style={{ marginTop: 12, paddingLeft: 0, paddingRight: 0 }}>
+          <FormItem top="С чем связано состояние" topMultiline style={{ marginTop: 12, paddingLeft: 0, paddingRight: 0 }}>
             <Textarea
               value={stateReason}
               onChange={e => setStateReason(e.target.value.slice(0, 500))}

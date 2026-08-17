@@ -479,6 +479,17 @@ body {
 .vkuiModalPageHeader__content {
   color: var(--m-text-main) !important;
   background: var(--m-card-bg) !important;
+  white-space: normal;
+  overflow: visible;
+}
+
+.vkuiModalPageHeader__content,
+.vkuiModalPageHeader .vkuiTypography {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: unset !important;
+  -webkit-line-clamp: unset !important;
+  line-clamp: unset !important;
 }
 
 .vkuiModalCard__title,
@@ -499,16 +510,22 @@ body {
 }
 
 /* Evening questionnaire — experiment block */
-/* Итоговая анкета: длинные подписи вопросов переносятся целиком */
+/* Итоговая анкета и форма ответа: подпись вопроса целиком, без ellipsis VKUI */
 .evening-q .vkuiFormItem__top,
+.evening-q .vkuiFormItem__label,
 .evening-q .vkuiFormItem__top .evening-q__label,
 .evening-q .evening-q__label {
   white-space: normal !important;
   overflow: visible !important;
   text-overflow: unset !important;
+  -webkit-line-clamp: unset !important;
+  line-clamp: unset !important;
   max-width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
   line-height: 1.35;
   word-break: break-word;
+  overflow-wrap: anywhere;
   display: block;
 }
 
@@ -1528,13 +1545,19 @@ body {
   word-break: break-word;
   overflow-wrap: anywhere;
 }
-.q-answer .vkuiFormItem__top {
+.q-answer .vkuiFormItem__top,
+.q-answer .vkuiFormItem__label {
   white-space: normal !important;
   overflow: visible !important;
   text-overflow: unset !important;
+  -webkit-line-clamp: unset !important;
+  line-clamp: unset !important;
   max-width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
   line-height: 1.4;
   word-break: break-word;
+  overflow-wrap: anywhere;
   display: block;
 }
 .rq-from { font-size: 9px; color: #aaa; margin-top: 2px; }

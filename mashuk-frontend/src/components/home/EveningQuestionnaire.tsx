@@ -367,7 +367,7 @@ function ProgramEventPicker({
     items.filter(i => i.parentEventId === rootId).length;
 
   return (
-    <FormItem top={<span className="evening-q__label">{field.label}</span>}>
+    <FormItem top={<span className="evening-q__label">{field.label}</span>} topMultiline>
       {nodes.length === 0 ? (
         <div style={{ fontSize: 12, color: '#888', lineHeight: 1.4 }}>
           {emptyReason === 'none_in_program'
@@ -675,7 +675,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     if (field.type === 'scale_1_5' || field.type === 'scale_1_10') {
       const max = field.type === 'scale_1_10' ? 10 : 5;
       return (
-        <FormItem key={field.key} top={fieldTop(field)}>
+        <FormItem key={field.key} top={fieldTop(field)} topMultiline>
           <ScaleButtons max={max} value={form[field.key]} onChange={n => setField(field.key, n)} />
         </FormItem>
       );
@@ -683,7 +683,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     if (field.type === 'yes_no') {
       const raw = form[field.key];
       return (
-        <FormItem key={field.key} top={fieldTop(field)}>
+        <FormItem key={field.key} top={fieldTop(field)} topMultiline>
           <div style={{ display: 'flex', gap: 8 }}>
             <Button mode={raw === true ? 'primary' : 'secondary'} onClick={() => setField(field.key, true)}>Да</Button>
             <Button mode={raw === false ? 'primary' : 'secondary'} onClick={() => setField(field.key, false)}>Нет</Button>
@@ -697,7 +697,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
       const otherOn = !!field.allowOther && raw.length > 0 && !opts.includes(raw);
       const otherLabel = field.otherLabel || 'Свой вариант';
       return (
-        <FormItem key={field.key} top={fieldTop(field)}>
+        <FormItem key={field.key} top={fieldTop(field)} topMultiline>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {opts.map(opt => (
               <button
@@ -765,7 +765,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     if (field.type === 'text' || field.type === 'experiment_text') {
       if (field.type === 'experiment_text' && !experiment) return null;
       return (
-        <FormItem key={field.key} top={fieldTop(field)}>
+        <FormItem key={field.key} top={fieldTop(field)} topMultiline>
           <textarea
             value={String(form[field.key] || '')}
             onChange={e => setField(field.key, e.target.value)}
@@ -792,7 +792,7 @@ export const EveningQuestionnaire: React.FC<EveningQuestionnaireProps> = ({
     if (field.type === 'role_select') {
       if (!questionnaire.askTomorrowRole || surveyDay > 6) return null;
       return (
-        <FormItem key={field.key} top={fieldTop(field)}>
+        <FormItem key={field.key} top={fieldTop(field)} topMultiline>
           <CustomSelect
             options={(questionnaire.roles || []).map(r => ({ label: r.name, value: r.roleKey }))}
             value={tomorrowRole || undefined}

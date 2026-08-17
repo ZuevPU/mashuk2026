@@ -41,6 +41,7 @@ import {
   buildSuppressedVisibilityKeys,
   isSuppressedByHiddenTwin,
 } from '../services/questionVisibilityKeys.js';
+import { normalizeAfterBlocksConfig } from '../services/afterBlocksConfig.js';
 
 export const getHome = async (req: ParticipantRequest, res: Response): Promise<void> => {
   try {
@@ -460,11 +461,15 @@ export const getHome = async (req: ParticipantRequest, res: Response): Promise<v
         const access = getQuestionAccess(q, currentDay, now);
         return access === 'open';
       })
-      .map(q => ({
-        id: q.id,
-        title: q.title,
-        overdue: getQuestionAccess(q, currentDay, now) === 'overdue',
-      }))
+      .map(q => {
+        const cfg = normalizeAfterBlocksConfig(q.afterBlocksConfig, q.text);
+        const heading = cfg.prompts.map(p => p.text.trim()).filter(Boolean).join(' ');
+        return {
+          id: q.id,
+          title: heading || q.text || q.title,
+          overdue: getQuestionAccess(q, currentDay, now) === 'overdue',
+        };
+      })
       .sort((a, b) => Number(b.overdue) - Number(a.overdue) || a.id - b.id);
 
     const practicesVoteQuestions = publishedQuestions

@@ -152,7 +152,9 @@ export const UnansweredAfterBlocksCard: React.FC<{
       </div>
       <ul style={{ margin: '0 0 10px', paddingLeft: 18, fontSize: 12, color: '#742A2A', lineHeight: 1.45 }}>
         {items.slice(0, 4).map(i => (
-          <li key={i.id}>{i.title}{i.overdue ? ' · ожидает ответа' : ''}</li>
+          <li key={i.id} style={{ wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
+            {i.title}{i.overdue ? ' · ожидает ответа' : ''}
+          </li>
         ))}
       </ul>
       <div style={{ fontSize: 12, fontWeight: 700, color: '#E53E3E' }}>
