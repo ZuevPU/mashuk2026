@@ -1,3 +1,7 @@
+# Timeweb App Platform: deploy as type "Dockerfile", project path mashuk-admin.
+# Type "Frontend / React" always apt-get install curl and hangs/fails when
+# Debian mirrors are unreachable.
+#
 # Stage 1: build (Vite static admin)
 #
 # npm network tuning for restricted build environments (e.g. Timeweb Cloud Apps):

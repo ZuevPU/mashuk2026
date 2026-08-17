@@ -1,5 +1,13 @@
 # Чеклист деплоя и ops (Sprint 0)
 
+## Timeweb App Platform
+
+Фронт и админка — статика (Vite). В панели тип должен быть **Dockerfile**, путь проекта `mashuk-frontend` / `mashuk-admin`. Тип «Frontend / React» сам ставит `curl` через `apt-get`; если Debian недоступен, сборка падает или висит, хотя пакет приложению не нужен.
+
+Бэкенд — тоже **Dockerfile**, путь `mashuk-backend`. Healthcheck в образе идёт через `node`, без `apt-get curl`.
+
+В поле «Системные зависимости» не указывайте `curl` и другие apt-пакеты.
+
 ## Перед push в `main`
 
 1. `npm run build` в `mashuk-frontend`, `mashuk-admin`, `mashuk-backend`.

@@ -1,5 +1,9 @@
+# Timeweb App Platform: deploy as type "Dockerfile", project path mashuk-frontend.
+# Type "Frontend / React" always runs apt-get install curl against Debian and
+# fails when deb.debian.org is unreachable (IPv6 down / IPv4 timeout).
+#
 # Stage 1: build
-FROM node:22-slim AS builder
+FROM node:22-alpine AS builder
 
 ENV NPM_CONFIG_FETCH_RETRIES=10 \
     NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
