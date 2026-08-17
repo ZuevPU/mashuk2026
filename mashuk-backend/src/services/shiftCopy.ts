@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray, isNotNull, ne } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, ne } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   adminPushNotifications,
@@ -39,6 +39,7 @@ import {
   remapShiftPlaceRefs,
   remapShiftSpeakerRefs,
 } from './shiftCatalogs.js';
+import { copyMedalCatalog } from './shiftMedals.js';
 
 export { SHIFT_COPY_MODULES, type ShiftCopyModule };
 
@@ -281,25 +282,10 @@ export async function copyShiftModules(opts: {
     };
 
     if (toCopy.includes('medals')) {
-      if (replaced.includes('medals')) {
-        await tx.delete(medals).where(eq(medals.shiftId, target.id));
-      }
-      const srcMedals = await tx.select().from(medals).where(eq(medals.shiftId, opts.sourceId));
-      const linkedIds = [...new Set(
-        (await tx.select({ medalId: tasks.medalId }).from(tasks).where(and(
-          eq(tasks.shiftId, opts.sourceId),
-          isNotNull(tasks.medalId),
-        ))).map(r => r.medalId).filter((id): id is number => id != null),
-      )].filter(id => !srcMedals.some(m => m.id === id));
-      const extraMedals = linkedIds.length
-        ? await tx.select().from(medals).where(inArray(medals.id, linkedIds))
-        : [];
-      const toInsert = [...srcMedals, ...extraMedals];
-      for (const m of toInsert) {
-        const { id: oldId, ...rest } = m;
-        const [created] = await tx.insert(medals).values({ ...rest, shiftId: target.id }).returning();
-        medalIdMap.set(oldId, created.id);
-      }
+      const copied = await copyMedalCatalog(tx, opts.sourceId, target.id, {
+        replace: replaced.includes('medals'),
+      });
+      for (const [from, to] of copied) medalIdMap.set(from, to);
       // Repair tasks already sitting on the target from an earlier copy without medals.
       if (medalIdMap.size) {
         const srcTaskMedals = await tx.select({ title: tasks.title, medalId: tasks.medalId })

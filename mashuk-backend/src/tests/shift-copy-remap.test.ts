@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { markOnboardingCopiedForReview, remapCopiedMedalId, remapCopiedShowWhen, remapEveningLinkedEvents, remapLinkedIds, shouldSkipCopiedModule } from '../services/shiftCopy.js';
+import { planMedalCopy } from '../services/shiftMedals.js';
 import { remapAudienceDirectionTree } from '../services/shiftCatalogs.js';
 import { unpublishClonedQuestionnaire } from '../services/eveningQuestionnaireConfig.js';
 
@@ -107,5 +108,25 @@ describe('shift copy medals', () => {
     assert.equal(remapCopiedMedalId(10, map), 110);
     assert.equal(remapCopiedMedalId(99, map), null);
     assert.equal(remapCopiedMedalId(null, map), null);
+  });
+
+  it('copies missing names and maps existing ones without duplicating', () => {
+    const planned = planMedalCopy(
+      [{ id: 1, name: 'Первый шаг' }, { id: 2, name: 'Чемпион' }, { id: 3, name: 'Первый шаг' }],
+      [{ id: 10, name: 'Первый шаг' }],
+    );
+    assert.equal(planned.existingMap.get(1), 10);
+    assert.equal(planned.existingMap.get(3), 10);
+    assert.equal(planned.existingMap.has(2), false);
+    assert.deepEqual(planned.insertSourceIds, [2]);
+  });
+
+  it('inserts the whole catalog when the target is empty', () => {
+    const planned = planMedalCopy(
+      [{ id: 1, name: 'A' }, { id: 2, name: 'B' }],
+      [],
+    );
+    assert.equal(planned.existingMap.size, 0);
+    assert.deepEqual(planned.insertSourceIds, [1, 2]);
   });
 });

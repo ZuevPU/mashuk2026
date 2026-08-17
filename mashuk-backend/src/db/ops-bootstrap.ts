@@ -195,16 +195,18 @@ async function ensureContent(shiftId: number) {
     }
   }
 
-  if ((await db.select().from(medals).limit(1)).length === 0) {
-    await db.insert(medals).values([...FORUM_MEDALS_CATALOG]);
-    console.log('Medals seeded.');
-  } else {
-    for (const m of FORUM_MEDALS_CATALOG) {
-      const [ex] = await db.select().from(medals).where(eq(medals.name, m.name)).limit(1);
-      if (!ex) await db.insert(medals).values({ ...m });
-    }
-    console.log('Medals ok (catalog upsert).');
+  const { isolateSharedMedals } = await import('../services/shiftMedals.js');
+  const [primaryShift] = await db.select({ id: shifts.id }).from(shifts).orderBy(shifts.id).limit(1);
+  const medalsShiftId = primaryShift?.id ?? shiftId;
+  for (const m of FORUM_MEDALS_CATALOG) {
+    const [ex] = await db.select().from(medals).where(and(
+      eq(medals.name, m.name),
+      eq(medals.shiftId, medalsShiftId),
+    )).limit(1);
+    if (!ex) await db.insert(medals).values({ ...m, shiftId: medalsShiftId });
   }
+  await isolateSharedMedals();
+  console.log('Medals ok (catalog per shift).');
 
   for (const role of ROLE_CATALOG) {
     const [existing] = await db.select().from(pedagogicalRoles).where(eq(pedagogicalRoles.roleKey, role.roleKey)).limit(1);

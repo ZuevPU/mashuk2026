@@ -262,7 +262,15 @@ async function ensureShiftScopedCatalogsSchema(pool: ReturnType<typeof createPoo
     CREATE UNIQUE INDEX IF NOT EXISTS program_block_types_shift_key_unique ON program_block_types (shift_id, key);
     DROP INDEX IF EXISTS thematic_tags_slug_unique;
     CREATE UNIQUE INDEX IF NOT EXISTS thematic_tags_shift_slug_unique ON thematic_tags (shift_id, slug) WHERE slug IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS medals_shift_id_idx ON medals (shift_id);
   `);
+  try {
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS medals_shift_name_unique ON medals (shift_id, name) WHERE shift_id IS NOT NULL;
+    `);
+  } catch (err) {
+    console.warn('medals_shift_name_unique skipped:', err);
+  }
 }
 
 /** Apply after_blocks_config on questions if missing (0066). */

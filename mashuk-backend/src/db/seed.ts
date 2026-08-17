@@ -475,28 +475,34 @@ export async function runSeed() {
     console.log('Participant groups seeded.');
   }
 
-  const existingMedals = await db.select().from(medals).limit(1);
+  const existingMedals = await db.select().from(medals).where(eq(medals.shiftId, shiftId)).limit(1);
   if (existingMedals.length === 0) {
     await db.insert(medals).values([
       {
+        shiftId,
         name: 'Первый шаг', description: 'Выполнено ≥1 задание',
         conditionRule: 'tasks_completed>=1', awardType: 'auto', level: 'bronze', category: 'tasks',
       },
       {
+        shiftId,
         name: 'Копилка идей', description: '≥20 записей в копилке',
         conditionRule: 'piggybank_count>=20', awardType: 'auto', level: 'silver', category: 'piggybank',
       },
       {
+        shiftId,
         name: 'Рефлексивный', description: '≥10 ответов на вопросы',
         conditionRule: 'answers_count>=10', awardType: 'auto', level: 'bronze', category: 'reflection',
       },
       {
+        shiftId,
         name: 'Путь 100', description: '≥100 баллов Пути',
         conditionRule: 'path_points>=100', awardType: 'auto', level: 'gold', category: 'points',
       },
     ]);
     console.log('Medals seeded.');
   }
+  const { isolateSharedMedals } = await import('../services/shiftMedals.js');
+  await isolateSharedMedals();
 
   const existingTpl = await db.select().from(pushTemplates).limit(1);
   if (existingTpl.length === 0) {

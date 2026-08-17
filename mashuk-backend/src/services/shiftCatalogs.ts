@@ -309,4 +309,7 @@ export async function isolateSharedCatalogs() {
     await remapShiftSpeakerRefs(db, shift.id, speakerMap);
     await remapShiftPlaceRefs(db, shift.id, placeMap);
   }
+
+  const { isolateSharedMedals } = await import('./shiftMedals.js');
+  await isolateSharedMedals();
 }
