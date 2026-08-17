@@ -1,7 +1,30 @@
-import { and, eq, isNotNull, isNull, or } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, or, type SQL } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { kbDayUnlocks, materials, participants } from '../db/schema.js';
 import { updateShift } from './shiftService.js';
+
+/**
+ * Participant KB list: always AND shiftId. A bare `eventId IN (today's events)`
+ * leaked another shift's rows whenever ids collided after copy / shared events.
+ */
+export function knowledgeBaseMaterialsWhere(
+  shiftId: number,
+  day: number,
+  dayEventIds: number[],
+): SQL | undefined {
+  const ownShift = eq(materials.shiftId, shiftId);
+  const dayOrGeneral = or(eq(materials.dayNumber, day), eq(materials.isGeneral, true));
+  if (dayEventIds.length === 0) return and(ownShift, dayOrGeneral);
+  return and(ownShift, or(dayOrGeneral, inArray(materials.eventId, dayEventIds)));
+}
+
+export function materialBelongsToParticipantShift(
+  material: { shiftId?: number | null },
+  shiftId: number | null | undefined,
+): boolean {
+  if (shiftId == null || material.shiftId == null) return false;
+  return material.shiftId === shiftId;
+}
 
 export type OpenKnowledgeBaseResult = {
   shiftId: number;

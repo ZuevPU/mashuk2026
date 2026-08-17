@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { eq, and, asc, lte, or, isNull, inArray } from 'drizzle-orm';
+import { eq, and, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { events, eventAttendance, materials, materialTypes, questions, answers, scheduleDays, dayFocus, kbDayUnlocks, participantDayState, participants } from '../db/schema.js';
 import { ParticipantRequest } from '../middlewares/requireParticipant.js';
@@ -595,13 +595,14 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
     const interests = (req.participant!.interests as string[]) || [];
     const direction = req.participant!.direction;
 
-    const dayOrGeneral = and(
-      eq(materials.shiftId, shiftId),
-      or(eq(materials.dayNumber, day), eq(materials.isGeneral, true)),
+    const {
+      knowledgeBaseMaterialsWhere,
+      materialBelongsToParticipantShift,
+      materialVisibleWhenShiftOpen,
+    } = await import('../services/kbOpenShift.js');
+    const mats = await db.select().from(materials).where(
+      knowledgeBaseMaterialsWhere(shiftId, day, dayEventIdList),
     );
-    const mats = dayEventIdList.length > 0
-      ? await db.select().from(materials).where(or(dayOrGeneral, inArray(materials.eventId, dayEventIdList)))
-      : await db.select().from(materials).where(dayOrGeneral);
     const now = new Date();
     const access = await evaluateKbDayAccess(req.participant!.id, day, settings, now);
     const [focus] = await db.select().from(dayFocus).where(and(
@@ -611,6 +612,7 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
     const opensOn = getForumDayDateLabel(settings.startDate ?? null, day);
 
     const filtered = mats.filter(m => {
+      if (!materialBelongsToParticipantShift(m, shiftId)) return false;
       if (!isPublishedStatus(m.status)) return false;
       if (m.isGeneral) return true;
       if (m.direction && direction && m.direction !== direction) return false;
@@ -625,7 +627,6 @@ export const getKnowledgeBase = async (req: ParticipantRequest, res: Response): 
     });
 
     const forumDefaultN = access.requiredTouchpoints;
-    const { materialVisibleWhenShiftOpen } = await import('../services/kbOpenShift.js');
     const unlockedMaterials = filtered.filter(m => materialVisibleWhenShiftOpen(
       access.unlockDisabled,
       access.unlocked,
@@ -705,11 +706,12 @@ export const saveMaterialToPiggybank = async (req: ParticipantRequest, res: Resp
   try {
     const id = Number(req.params.id);
     const [mat] = await db.select().from(materials).where(eq(materials.id, id)).limit(1);
-    if (!mat) {
+    if (!mat || !isPublishedStatus(mat.status)) {
       res.status(404).json({ error: 'Material not found' });
       return;
     }
-    if (!isPublishedStatus(mat.status)) {
+    const { materialBelongsToParticipantShift } = await import('../services/kbOpenShift.js');
+    if (!materialBelongsToParticipantShift(mat, req.participant!.shiftId)) {
       res.status(404).json({ error: 'Material not found' });
       return;
     }
