@@ -9,6 +9,7 @@ import {
 } from '../db/schema.js';
 import type { AdminRequest } from '../middlewares/adminAuth.js';
 import { logAdminAction } from './adminActionsLog.js';
+import { roleCanSection } from './adminPermissionsService.js';
 import {
   filterEveningConfigForDirection,
   isEveningDisplayField,
@@ -21,12 +22,9 @@ import { getForumSettings } from './helpers.js';
 import { questionMatchesDay } from './questionAdminHelpers.js';
 import { listPedagogicalRoleOptions } from './roleService.js';
 
-export function isForumResultsScoreEditor(_login?: string | null): boolean {
-  return false;
-}
-
-export async function canSilentEditEveningForm(_req?: AdminRequest): Promise<boolean> {
-  return false;
+export async function canSilentEditEveningForm(req: AdminRequest): Promise<boolean> {
+  const role = req.adminRole || 'admin';
+  return roleCanSection(role, 'participants', 'update');
 }
 
 function displayName(p: { firstName?: string | null; lastName?: string | null; id: number }): string {
@@ -71,7 +69,7 @@ export async function getAdminEveningForm(participantId: number, req: AdminReque
   });
 
   return {
-    canEdit: false,
+    canEdit: await canSilentEditEveningForm(req),
     participant: {
       id: row.p.id,
       name: displayName(row.p),
